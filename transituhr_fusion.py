@@ -84,9 +84,21 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
     st_liste = stationen(daten)
 
     # --- Bloecke zusammenstellen, Hoehe vorab bestimmen ---------------------
-    bloecke = []
-    for name, unter, transiter, col in THEMEN:
-        zeilen = [r for r in ll if r['transiter'] in transiter]
+    # Ein THEMEN-Eintrag ist (Name, Untertitel, [Transiter], Farbe) oder
+    # (Name, Untertitel, [Transiter], Farbe, [Ziele]). Die Zielliste ist
+    # noetig, sobald EIN laufender Planet zwei Themenkapitel traegt (Pluto auf
+    # der Wertachse vs. Pluto auf der Seelenachse) — ohne sie liefen beide
+    # Kapitel in einen Block mit nur einem der beiden Namen. Jede Zeile geht in
+    # das ERSTE passende Thema; ein Eintrag ohne Zielliste sammelt den Rest.
+    bloecke, vergeben = [], set()
+    for eintrag in THEMEN:
+        name, unter, transiter, col = eintrag[:4]
+        ziele = eintrag[4] if len(eintrag) > 4 else None
+        idx = [i for i, r in enumerate(ll)
+               if i not in vergeben and r['transiter'] in transiter
+               and (ziele is None or r['ziel'] in ziele)]
+        vergeben.update(idx)
+        zeilen = [ll[i] for i in idx]
         if not zeilen:
             continue
         zeilen.sort(key=lambda r: r['start'])

@@ -98,6 +98,10 @@ BALKEN_BETT = '#ece3cf'
 PART_KICKER = set()
 GLYPH_OF = {}
 KOPFZEILE = ''
+# Ornament unter den Teiler-Titeln. Chart-eigen (die tragenden Glyphen aus dem
+# @@DECKBLATT-Block); der Vorgabewert ist nur ein Rueckfall, damit aeltere
+# Builder ohne konfiguriere(part_ornament=…) unveraendert rendern.
+PART_ORNAMENT = '♇ ☉ ☊'
 
 # Aspektname -> Farbschluessel (dieselbe Zuordnung wie radix._ASPECT_DEFS)
 ASPEKT_KLASSE = {'Konjunktion': 'konj', 'Opposition': 'rot', 'Quadrat': 'rot',
@@ -136,7 +140,7 @@ _CFG = {'gr': lambda x: str(x), 'name_of': lambda n: n}
 
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  name_of=None, kopfzeile=None, aspektfarben=None,
-                 balken=None):
+                 balken=None, part_ornament=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
     pal           Palette (Schluessel s. PAL oben)
@@ -149,8 +153,12 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                   Radpalette des Charts, damit Legende und Rad dieselbe Farbe
                   zeigen
     balken        optionale Ueberschreibung einzelner Balkenfarben
+    part_ornament Glyphenzeile unter den Teiler-Titeln — die tragenden
+                  Glyphen des Charts aus dem @@DECKBLATT-Block
     """
-    global PART_KICKER, GLYPH_OF, KOPFZEILE
+    global PART_KICKER, GLYPH_OF, KOPFZEILE, PART_ORNAMENT
+    if part_ornament is not None:
+        PART_ORNAMENT = part_ornament
     if pal:
         PAL.update(pal)
     if part_kicker is not None:
@@ -348,6 +356,12 @@ table.achsen td.ag {{ color:#4c4335; }}
    color:{GOLD}; margin:0.20cm 0 0.14cm 0; break-after:avoid; }}
 .asp-grp.first {{ margin-top:0; }}
 table.aspt {{ width:100%; border-collapse:collapse; }}
+/* Zweizeilige Zeilen (Spiegelklammer, langer Faktorname) wurden am
+   Spaltenwechsel der Aspektseite auseinandergerissen: Beschriftung oben in
+   der zweiten Spalte, Orb allein als letzte Zeile der ersten. Auf der
+   Tabellenzeile greift break-inside — anders als auf dem Multicol-Container
+   selbst. */
+table.aspt tr, table.aspt td {{ break-inside: avoid; }}
 table.aspt td {{ padding:0.075cm 0; border-bottom:0.4pt solid #e7dfcc;
    vertical-align:baseline; }}
 td.ax {{ color:{INK}; }}
@@ -904,7 +918,7 @@ def build_head(it):
 def build_part_head(it):
     kick = f'<div class="kicker">{esc(it["kicker"])}</div>'
     return (f'{kick}<h2 class="chaptitle">{esc(it["title"])}</h2>'
-            f'<div class="part-orn">♇ ☉ ☊</div>')
+            f'<div class="part-orn">{esc(PART_ORNAMENT)}</div>')
 
 
 def build_paragraph(i, j, b, breaks, allow_drop, is_first_block):
@@ -948,7 +962,10 @@ def toc_gruppen(items):
             cur = {'kicker': k, 'titel': it['title'], 'idx': i, 'eintraege': []}
             grp.append(cur)
         elif cur is not None:
-            nr = k.replace('Kapitel', '').strip()
+            # Kicker-Schreibweise ist im Klartext-Standard „KAPITEL 7"
+            # (Versalien) — case-sensitiv gestrippt blieb frueher der ganze
+            # Kicker in der 0,72 cm schmalen Nummernspalte stehen.
+            nr = re.sub(r'(?i)^kapitel\b\.?', '', k).strip()
             cur['eintraege'].append({'nr': nr, 'titel': it['title'], 'idx': i})
     for g in grp:
         if g['kicker'] != 'Teil III':
