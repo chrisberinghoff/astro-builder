@@ -71,6 +71,10 @@ class VerifyError(BuildError):
     """Deterministische PDF-Endprüfung fehlgeschlagen."""
 
 
+class DeckblattError(BuildError):
+    """@@DECKBLATT-Block fehlt oder ist unvollständig (s. lies_deckblatt)."""
+
+
 # ---------------------------------------------------------------------------
 # WeasyPrint-Warnlog-Abfang. WeasyPrint stürzt bei fehlenden Fonts/Bildern
 # oder ungültigem CSS NICHT ab — es loggt eine WARNING und rendert still ein
@@ -631,6 +635,88 @@ def render_sentence_safe(build_html, pdf_path, colon_pairs=None,
 # ---------------------------------------------------------------------------
 # HÄRTUNG 1: Festes Struktur-Schema für analyse.md + deterministischer Parser
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# @@DECKBLATT-Block — die Cover-Bestellung aus dem Datenblatt
+#
+# Der Block steht am Ende von <klient>[_KUERZEL]_chart_data.md, direkt hinter
+# dem @@SELEKTOR-Block. NICHT in der analyse.md — das ist die Verwechslung, die
+# am 2026-07-30 ein komplett falsches Cover erzeugt hat (Schritt 3 suchte nur
+# in der analyse.md, fand nichts, zog die Fallback-Regel und erfand Leitsatz,
+# Motiv, Palette und Glyphen neu).
+#
+# Deshalb wird der Block ab jetzt GELESEN statt abgetippt: der Chart-Builder
+# ruft lies_deckblatt() und traegt Leitsatz/Titelmotiv nirgends von Hand ein.
+# Fehlt der Block, bricht der Lauf ab, statt sich still etwas auszudenken.
+# ---------------------------------------------------------------------------
+
+DECKBLATT_PFLICHT = ('LEITSATZ', 'LEITACHSE', 'TITELMOTIV')
+DECKBLATT_FELDER = DECKBLATT_PFLICHT + ('PALETTE', 'GLYPHEN')
+
+_DB_START_RE = re.compile(r'^@@DECKBLATT\s*$')
+_DB_ENDE_RE = re.compile(r'^@@ENDE\s*$')
+_DB_FELD_RE = re.compile(r'^([A-ZÄÖÜ]{4,20})\s*:\s*(.*)$')
+
+
+def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
+    """@@DECKBLATT-Block aus der chart_data.md lesen.
+
+    pfad    Pfad der <klient>[_KUERZEL]_chart_data.md
+    pflicht True (Vorgabe): fehlender oder unvollstaendiger Block ist ein
+            harter Fehler. False: gibt None zurueck, wenn kein Block da ist —
+            NUR fuer den dokumentierten Fallback, und nur nachdem in BEIDEN
+            Dateien (chart_data.md UND analyse.md) gesucht wurde.
+
+    Mehrzeilige Werte werden zusammengezogen: eine Zeile gehoert zum
+    vorherigen Feld, solange sie nicht selbst mit `FELD:` beginnt. Damit sind
+    umbrochene TITELMOTIV-/PALETTE-Zeilen unproblematisch.
+
+    Rueckgabe: {'LEITSATZ':…, 'LEITACHSE':…, 'TITELMOTIV':…,
+                'PALETTE':… , 'GLYPHEN':…} — die letzten beiden ggf. ''.
+    """
+    try:
+        with open(pfad, encoding='utf-8') as fh:
+            zeilen = fh.read().splitlines()
+    except OSError as e:
+        raise DeckblattError(f'chart_data nicht lesbar: {pfad} ({e})') from e
+
+    start = None
+    for i, z in enumerate(zeilen):
+        if _DB_START_RE.match(z):
+            start = i + 1
+    if start is None:
+        if not pflicht:
+            return None
+        raise DeckblattError(
+            f'@@DECKBLATT-Block fehlt in {os.path.basename(pfad)}.\n'
+            '  Der Block gehoert ans ENDE der chart_data.md, direkt hinter\n'
+            '  den @@SELEKTOR-Block (s. Ultimativ-/Typ-Modul, Schritt 2) —\n'
+            '  NICHT in die analyse.md.\n'
+            '  Bevor die Fallback-Regel des Design-Moduls gezogen wird: in\n'
+            '  BEIDEN Dateien nach "@@DECKBLATT" greppen und das Ergebnis\n'
+            '  nennen. Ein ungeprueftes "fehlt" gilt nicht.')
+
+    felder, key = {}, None
+    for z in zeilen[start:]:
+        if _DB_ENDE_RE.match(z):
+            break
+        m = _DB_FELD_RE.match(z)
+        if m and m.group(1) in DECKBLATT_FELDER:
+            key = m.group(1)
+            felder[key] = m.group(2).strip()
+        elif key and z.strip():
+            felder[key] = (felder[key] + ' ' + z.strip()).strip()
+
+    fehlt = [k for k in DECKBLATT_PFLICHT if not felder.get(k)]
+    if fehlt:
+        raise DeckblattError(
+            f'@@DECKBLATT-Block in {os.path.basename(pfad)} unvollstaendig — '
+            f'leer oder fehlend: {", ".join(fehlt)}. '
+            f'Pflicht sind {", ".join(DECKBLATT_PFLICHT)}.')
+    for k in ('PALETTE', 'GLYPHEN'):
+        felder.setdefault(k, '')
+    return {k: felder[k] for k in DECKBLATT_FELDER}
+
 
 ANALYSE_SCHEMA = """\
 STRUKTUR-SCHEMA für <klient>_analyse.md (v1). Schritt 2 SCHREIBT genau so,
