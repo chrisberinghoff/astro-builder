@@ -167,9 +167,17 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
                                     facecolor=col, alpha=0.42,
                                     edgecolor='none', zorder=2))
         mon = round((b['ende'] - b['start']).days / 30.44)
-        ax.text(min(B - spanne * 0.006, X1 - spanne * 0.006), y,
-                f'{mon} Monate', ha='right', va='center',
-                fontsize=6.8 * sk, color='#fdfaf2', zorder=6)
+        lab = '1 Monat' if mon == 1 else f'{mon} Monate'
+        # Kurze Boegen tragen das Label nicht: dann steht es LINKS daneben in
+        # der Themenfarbe statt weiss im Balken (sonst laeuft es ueber den
+        # Rand hinaus — Themenbloecke am Fensterrand, 2026-07-30).
+        if B - A < spanne * 0.085:
+            ax.text(A - spanne * 0.006, y, lab, ha='right', va='center',
+                    fontsize=6.8 * sk, color=col, zorder=6)
+        else:
+            ax.text(min(B - spanne * 0.006, X1 - spanne * 0.006), y,
+                    lab, ha='right', va='center',
+                    fontsize=6.8 * sk, color='#fdfaf2', zorder=6)
         y -= H_BOGEN
 
         # Detailzeilen
