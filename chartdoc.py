@@ -391,6 +391,12 @@ section.inhalt {{ page: inhalt; break-before: page; }}
 .toc-sub {{ text-transform:uppercase; letter-spacing:0.16em; font-size:6.8pt;
    color:{GOLD}; margin:0.18cm 0 0.08cm 0.35cm; break-after:avoid; }}
 table.toct {{ width:100%; border-collapse:collapse; }}
+/* Zweizeilige Verzeichniseintraege duerfen nicht ueber den Spaltenwechsel
+   brechen (Vorfall 2026-07-30): dort standen Kapitelnummer und
+   Seitenzahl unten in der linken Spalte, der Titel oben in der rechten.
+   Dieselbe Falle wie bei table.aspt — auf der Tabellenzeile greift
+   break-inside, auf dem Multicol-Container nicht. */
+table.toct tr {{ break-inside:avoid; }}
 table.toct td {{ padding:0.028cm 0; vertical-align:baseline; }}
 td.tn {{ width:0.72cm; color:{GOLD}; font-size:7.8pt; }}
 td.tt {{ color:{INK}; }}
