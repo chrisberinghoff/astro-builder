@@ -19,7 +19,7 @@ Drei öffentliche Funktionen:
         (zweite, von den Aspekt-Orben STRIKT getrennte Orb-Ebene).
 
     radix(factors, cusps, asc, mc, out_path=..., title=..., aspects=None,
-          palette=None) -> str
+          palette=None, gradmarke=True) -> str
         Zeichnet das Rad als PNG und gibt den Pfad zurück.
 
 Verwendung als Modul (Schritt 3/4, Design-Konversation):
@@ -184,7 +184,8 @@ def haus_spalte(lon, cusps, orb=HAUS_ORB):
 # --- Zeichnung --------------------------------------------------------------
 
 def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
-          title=None, aspects=None, palette=None, dpi=210, grade=False):
+          title=None, aspects=None, palette=None, dpi=210, grade=False,
+          gradmarke=True):
     """Zeichnet das Chart-Rad (Koch) als PNG, gibt out_path zurück.
 
     Geometrie: AC links (9 Uhr), Zeichen laufen gegen den Uhrzeigersinn;
@@ -196,7 +197,29 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
     Nachbarglyphe, und dieselbe Angabe steht eine Seite weiter in der
     Konstellationstabelle vollständig (Grad, Bogenminute, Laufrichtung). Das
     Rad zeigt seitdem nur noch die Figur. grade=True stellt das alte Verhalten
-    wieder her.
+    wieder her — NICHT zusammen mit gradmarke benutzen, die Zahl landet dann
+    auf der Haarlinie des Nachbarn.
+
+    gradmarke=True (HAUSSTIL seit 2026-07-30, mit Chris abgenommen): jeder
+    Faktor bekommt eine **Positionsmarke auf seinem exakten Grad** — ein
+    kräftiger dunkler Strich am Innenrand des Zeichenbands, dazu eine Haarlinie
+    zur Glyphe, wenn die Kollisionsstaffelung diese nach innen gerückt hat.
+    Grund: die Glyphe steht zwar am richtigen Winkel, ist aber breit und wird
+    bei Häufungen radial nach innen verschoben — im Rad war damit nicht
+    ablesbar, wo ein Faktor GENAU steht und welche Glyphe zu welcher Stelle
+    gehört. Sichtbar wird das immer dann, wenn zwei Faktoren weniger als etwa
+    3° auseinanderliegen: bisher standen dort zwei Glyphen scheinbar
+    nebeneinander ohne jede Gradangabe.
+
+    Damit die Marke nicht mit einem Skalenstrich zu verwechseln ist, wandert
+    die graue 5°/10°-Skala in das farbige Zeichenband (feiner Rand am
+    Innenrand); der Ring zwischen Band und Glyphen gehört seitdem allein den
+    Positionsmarken. Die Glyphen rücken dafür minimal nach innen (0,80 →
+    0,775). AC/DC/MC/IC bekommen KEINE Marke — sie tragen ihre rote Achslinie
+    von R_ASP bis R_OUT und sind damit schon exakt markiert.
+
+    Wer gradmarke=False setzt, bekommt das Rad im Stand vom 2026-07-27 zurück
+    (5°-Skala innen, Glyphen auf 0,80, keine Marken).
 
     Der Hintergrund ist die Papierfarbe des Dokuments (palette['grund']), nicht
     Weiss — sonst steht das Rad als weisses Rechteck auf der cremefarbenen
@@ -234,7 +257,10 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
     ax.set_ylim(-1.16, 1.16)
     ax.set_aspect('equal')
     ax.axis('off')
-    R_OUT, R_SIGN, R_HOUSE, R_PL, R_ASP = 1.0, 0.86, 0.66, 0.80, 0.575
+    R_OUT, R_SIGN, R_HOUSE, R_ASP = 1.0, 0.86, 0.66, 0.575
+    # Mit Positionsmarken rücken die Glyphen etwas nach innen: der freigeräumte
+    # Ring braucht Platz für Marke UND Haarlinie.
+    R_PL = 0.775 if gradmarke else 0.80
     # Ohne Gradzahlen darf die Staffelung enger sein — der frueher noetige
     # Abstand ging fast ganz auf das Gradkaertchen unter der Glyphe.
     TIER_DR, TAG_DR = (0.105 if grade else 0.078), 0.052
@@ -252,9 +278,13 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
         ax.add_patch(plt.Circle((0, 0), r, fill=False, ec=RING, lw=1.0, zorder=2))
     ax.add_patch(plt.Circle((0, 0), R_ASP, fill=False, ec='#c9c9c9', lw=0.8, zorder=2))
 
-    # Grad-Ticks (lang bei 10°)
+    # 5°/10°-Skala. Mit Positionsmarken liegt sie IM farbigen Zeichenband (als
+    # feiner Rand am Innenrand), sonst wie früher innen davor. Grund: läge sie
+    # weiter in demselben Ring wie die Marken, liest sich die Marke als vierter,
+    # aus der Reihe getanzter Skalenstrich.
     for g in range(0, 360, 5):
-        r1 = R_SIGN - (0.035 if g % 10 == 0 else 0.02)
+        d = 0.035 if g % 10 == 0 else 0.02
+        r1 = (R_SIGN + d * 0.80) if gradmarke else (R_SIGN - d)
         x0, y0 = xy(g, R_SIGN)
         x1, y1 = xy(g, r1)
         ax.plot([x0, x1], [y0, y1], color='#8a8a8a', lw=0.6, zorder=2)
@@ -298,7 +328,12 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
             lw, al, ls = 0.9, 0.7, '-'
         ax.plot([x0, x1], [y0, y1], color=col, lw=lw, alpha=al, ls=ls, zorder=1.5)
 
-    # Planeten mit einfacher Kollisionsstaffelung (bei <6° Abstand alternierend)
+    # Planeten mit einfacher Kollisionsstaffelung (bei <6° Abstand alternierend).
+    # Bekannte Grenze, am 2026-07-30 bewusst so gelassen: bei DREI dicht
+    # beieinander stehenden Faktoren springt die Staffelung zurueck auf Stufe 0,
+    # der erste und dritte koennen sich dann beruehren. Die Positionsmarke traegt
+    # in diesem Fall die genaue Stelle, auch wenn die Glyphen eng liegen.
+    ACHSEN = ('AC', 'DC', 'MC', 'IC')
     order = sorted(factors, key=lambda f: f['lon'])
     last, tier = -999.0, 0
     for f in order:
@@ -308,6 +343,20 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
         last = L
         r = R_PL - tier * TIER_DR
         px, py = xy(L, r)
+
+        # Positionsmarke auf dem exakten Grad + Haarlinie zur Glyphe.
+        if gradmarke and f['name'] not in ACHSEN:
+            xa, ya = xy(L, R_SIGN - 0.002)
+            xb, yb = xy(L, R_SIGN - 0.034)
+            ax.plot([xa, xb], [ya, yb], color=INK, lw=1.45,
+                    solid_capstyle='butt', zorder=3.5)
+            r_glyph = r + 0.030
+            if (R_SIGN - 0.034) - r_glyph > 0.004:
+                xc, yc = xy(L, R_SIGN - 0.034)
+                xd, yd = xy(L, r_glyph)
+                ax.plot([xc, xd], [yc, yd], color=INK, lw=0.5, alpha=0.40,
+                        zorder=3.2)
+
         ax.text(px, py, g, ha='center', va='center',
                 fontsize=(13 if len(g) == 1 else 8.5), color=INK, zorder=4)
         if grade:

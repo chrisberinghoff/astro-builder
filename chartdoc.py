@@ -296,6 +296,14 @@ section.front {{ page: front; break-before: page; }}
    vertical-align:0.1cm; }}
 .stroke.voll {{ border-top:1.5pt solid #8a8272; }}
 .stroke.gestr {{ border-top:1.5pt dashed #8a8272; }}
+/* Positionsmarke: kurzer kraeftiger Strich plus feine Fortsetzung — steht
+   senkrecht zur Leserichtung, wie im Rad senkrecht zum Zeichenring. */
+.stroke.marke {{ border-top:none; height:0.30cm; width:0.85cm;
+   vertical-align:-0.06cm; position:relative; }}
+.stroke.marke::before {{ content:""; position:absolute; left:0.30cm; top:0;
+   width:1.6pt; height:0.17cm; background:{C.ink}; }}
+.stroke.marke::after {{ content:""; position:absolute; left:0.335cm;
+   top:0.17cm; width:0.5pt; height:0.13cm; background:{C.ink}; opacity:0.40; }}
 
 /* ---------- Element- / Modus-Verteilung ---------- */
 .dist {{ display:table; width:100%; table-layout:fixed; margin:0 0 0.46cm 0; }}
@@ -536,7 +544,14 @@ legend_html = aspekt_legende
 
 
 def linien_legende():
-    """Legendenkasten „Die Linien im Rad" — erklaert Farbe und Strichart."""
+    """Legendenkasten „Die Linien im Rad" — erklaert Farbe, Strichart und die
+    Positionsmarke.
+
+    Die Zeile zur Positionsmarke gehoert seit dem 2026-07-30 dazu (Hausstil,
+    s. radix.radix(gradmarke=...)). Eine Marke, die niemand erklaert, ist fuer
+    den Leser ein Raetsel — und der Klartext-Standard verlangt, dass jedes
+    sichtbare Zeichen im Dokument einmal benannt wird.
+    """
     A = ASPEKTFARBE
     return f"""<div class="lbox"><h5>Die Linien im Rad</h5>
 <p><span class="swatch" style="background:{A['rot']}"></span>rot — Spannung
@@ -549,8 +564,11 @@ Wahrnehmung (Quincunx, Halbsextil)</p>
 erfüllt)</p>
 <p><span class="stroke gestr"></span>gestrichelt — einseitig (nur der weitere
 Orbis trägt)</p>
+<p><span class="stroke marke"></span>kräftiger Strich am Zeichenring — der
+genaue Grad des Faktors; die feine Linie führt zu seiner Glyphe</p>
 <p class="lgn">Die Konjunktion (gemeinsamer Punkt) wird nicht als Linie
-gezeigt. Der äußere Ring ist nach den vier Elementen eingefärbt.</p></div>"""
+gezeigt. Der äußere Ring ist nach den vier Elementen eingefärbt; die kleinen
+grauen Striche darin sind die 5°-Teilung.</p></div>"""
 
 
 # --- Seite: das Rad ---------------------------------------------------------
