@@ -31,6 +31,16 @@ Transit-Chiron wird automatisch mitgerechnet, WENN die Asteroiden-Ephemeride
 immer Ziel). Hauptplaneten laufen ueber die Moshier-Ephemeride — ohne externe
 Dateien, bogenminutengenau.
 
+SEIT 30.07.2026 (Fehlerkorrektur): Der Ephemeriden-Suchpfad wird beim Import
+gesucht und gesetzt (`ephe_pfad_setzen`). Vorher stand dort ein hartes
+`swe.set_ephe_path(None)` — dadurch fand die Bibliothek `seas_*.se1` NIE, und
+Transit-Chiron war ausnahmslos ausgeklammert, auch bei installierter
+Ephemeride. Der Report meldete das nur als "AUSGEKLAMMERT", ohne Grund; jetzt
+steht der Grund als eigene `[hinweis]`-Zeile darunter, und im Erfolgsfall nennt
+eine `[ephemeride]`-Zeile das benutzte Verzeichnis. Notfalls `--ephe <verz>`
+setzen. Die beiden bisherigen Kopfzeilen bleiben unveraendert (transitdata.py
+parst sie). `_transiters` gibt seither drei statt zwei Werte zurueck.
+
 Radix kommt aus der bereits gerechneten <klient>_chart_data.md (factors/achsen-
 Block) — NIE neu rechnen (Token-Oekonomie, s. Kern). Die Koch-Hausspitzen werden
 aus derselben Datei gelesen, wenn sie dort maschinenlesbar (cusps-Liste) oder als
@@ -41,7 +51,7 @@ CLI:
     python3 transit.py <chart_data.md> [--start YYYY-MM-DD] [--months 24] \\
             [--asof YYYY-MM-DD] [--lookback 6] [--orb 1.5] [--orb-weit 3.0] \\
             [--primary Venus,Mars,Pluto,Saturn,Chiron,Nordknoten] \\
-            [--cusps "175.3,201.0,..."] [--json out.json]
+            [--cusps "175.3,201.0,..."] [--ephe <verzeichnis>] [--json out.json]
 
 Modul:
     from transit import radix_from_chart_data, cusps_from_chart_data, run, format_report
@@ -54,13 +64,95 @@ Modul:
     #        "quarter_bounds","chiron_transit","haeuser","primary", ...}
 """
 import swisseph as swe
-import json, re, sys, argparse
+import json, re, sys, os, glob, site, argparse
 from datetime import date, timedelta
-
-swe.set_ephe_path(None)
 
 MOSEPH = swe.FLG_MOSEPH | swe.FLG_SPEED          # Hauptplaneten: keine ext. Dateien
 SWIEPH = swe.FLG_SWIEPH | swe.FLG_SPEED          # Chiron: braucht seas_*.se1
+
+# ---------------------------------------------------------------------------
+# Ephemeriden-Suchpfad — Voraussetzung fuer Transit-Chiron
+# ---------------------------------------------------------------------------
+# FEHLERKORREKTUR 30.07.2026. Hier stand `swe.set_ephe_path(None)`. Damit hatte
+# die Swiss Ephemeris nur ihren eingebauten Standardpfad (".:/users/ephe2/:
+# /users/ephe/"), und der Chiron-Probeaufruf in `_transiters` schlug IMMER mit
+# "SwissEph file 'seas_18.se1' not found" fehl — auch dann, wenn die
+# Asteroiden-Ephemeride laengst installiert war. Folge: Transit-Chiron wurde
+# ausnahmslos ausgeklammert, der Report meldete brav "AUSGEKLAMMERT", und
+# niemand konnte sehen, dass die Ebene nicht fehlen MUSSTE. In einem Chart mit
+# chart-tragendem Chiron (z. B. Chiron als Arm eines Kosmischen Kreuzes) fehlte
+# damit eine ganze Deutungsebene.
+#
+# Die Hauptplaneten sind davon unberuehrt: sie laufen ueber MOSEPH und lesen
+# keine Dateien. Ein gesetzter Pfad aendert an ihren Zahlen nichts.
+#
+# Reihenfolge der Suche: expliziter Wunsch (--ephe / ephe_pfad_setzen) > Umgebungs-
+# variable SE_EPHE_PATH > Paketverzeichnisse > uebliche Systemorte. Findet sich
+# nichts, bleibt es beim alten Verhalten (Standardpfad) — dann aber MIT lauter
+# Meldung im Report statt stiller Ausklammerung.
+
+EPHE_PFAD = None            # gesetztes Verzeichnis, oder None = nicht gefunden
+
+
+def _ephe_kandidaten():
+    """Verzeichnisse, in denen die Ephemeriden-Dateien liegen koennten.
+    Bewusst KEIN unbegrenzter Dateibaum-Lauf — nur bekannte Orte plus eine
+    flache Suche in den Paketverzeichnissen."""
+    kand = []
+    env = os.environ.get("SE_EPHE_PATH")
+    if env:
+        kand += [x for x in env.split(os.pathsep) if x]
+    try:
+        kand.append(os.path.join(os.path.dirname(swe.__file__), "ephe"))
+    except Exception:
+        pass
+    basen = []
+    for holen in (getattr(site, "getsitepackages", None),
+                  getattr(site, "getusersitepackages", None)):
+        try:
+            got = holen() if holen else None
+            basen += [got] if isinstance(got, str) else list(got or [])
+        except Exception:
+            pass
+    basen += [x for x in sys.path if x.endswith(("site-packages", "dist-packages"))]
+    for b in dict.fromkeys(basen):
+        kand.append(os.path.join(b, "flatlib", "resources", "swefiles"))
+        kand.append(os.path.join(b, "swisseph", "ephe"))
+        kand.append(os.path.join(b, "pyswisseph", "ephe"))
+    kand += ["/usr/share/libswe/ephe", "/usr/share/ephe", "/usr/local/share/ephe",
+             os.path.expanduser("~/.swisseph"), os.path.expanduser("~/swisseph"),
+             os.path.join(os.getcwd(), "swefiles"), os.path.join(os.getcwd(), "ephe")]
+    for b in dict.fromkeys(basen):                      # flache Restsuche
+        for muster in ("*/resources/swefiles", "*/swefiles", "*/ephe"):
+            try:
+                kand += sorted(glob.glob(os.path.join(b, muster)))[:5]
+            except Exception:
+                pass
+    return [k for k in dict.fromkeys(kand) if k]
+
+
+def ephe_pfad_finden(extra=None):
+    """Erstes Verzeichnis, das eine `seas_*.se1` enthaelt (die Asteroiden-Datei
+    mit Chiron). None, wenn keines gefunden wird."""
+    for d in ([extra] if extra else []) + _ephe_kandidaten():
+        try:
+            if d and os.path.isdir(d) and glob.glob(os.path.join(d, "seas_*.se1")):
+                return d
+        except Exception:
+            continue
+    return None
+
+
+def ephe_pfad_setzen(pfad=None):
+    """Setzt den Swiss-Ephemeris-Suchpfad und gibt das Verzeichnis zurueck.
+    None = nichts gefunden; dann gilt der eingebaute Standardpfad wie bisher."""
+    global EPHE_PFAD
+    EPHE_PFAD = ephe_pfad_finden(pfad)
+    swe.set_ephe_path(EPHE_PFAD)      # None ist zulaessig und bedeutet Standard
+    return EPHE_PFAD
+
+
+ephe_pfad_setzen()
 
 ZODIAC = ['Widder','Stier','Zwillinge','Krebs','Loewe','Jungfrau',
           'Waage','Skorpion','Schuetze','Steinbock','Wassermann','Fische']
@@ -183,18 +275,33 @@ def cusps_from_chart_data(path, radix=None, quiet=False):
 # ---------------------------------------------------------------------------
 # Transit-Faktoren (Chiron nur wenn Asteroiden-Ephemeride vorhanden)
 # ---------------------------------------------------------------------------
-def _transiters(mit_mars=False):
+def _transiters(mit_mars=False, probe=None):
+    """Gibt (transiters, chiron_an, grund) zurueck.
+
+    `probe`: Julianische Tage, an denen Chiron geprueft wird — normalerweise die
+    beiden Fensterraender. Vorher wurde an einem festen Datum (01.01.2027)
+    geprueft; eine Bereichsluecke der Ephemeride waere damit erst mitten im Lauf
+    aufgefallen. `grund` ist im Erfolgsfall das benutzte Verzeichnis, sonst der
+    Klartext-Grund fuer die Ausklammerung (wandert in den Report).
+    ACHTUNG: Rueckgabe seit 30.07.2026 dreiteilig statt zweiteilig."""
     base = ([('Mars',swe.MARS,MOSEPH)] if mit_mars else []) + \
            [('Jupiter',swe.JUPITER,MOSEPH),('Saturn',swe.SATURN,MOSEPH),
             ('Uranus',swe.URANUS,MOSEPH),('Neptun',swe.NEPTUNE,MOSEPH),
             ('Pluto',swe.PLUTO,MOSEPH),('Knoten',swe.TRUE_NODE,MOSEPH)]
-    chiron = False
+    jds = list(probe) if probe else [swe.julday(2027,1,1,0.0)]
     try:
-        swe.calc_ut(swe.julday(2027,1,1,0.0), swe.CHIRON, SWIEPH)
-        base.append(('Chiron',swe.CHIRON,SWIEPH)); chiron = True
-    except Exception:
-        pass
-    return base, chiron
+        for jd in jds:
+            swe.calc_ut(jd, swe.CHIRON, SWIEPH)
+        base.append(('Chiron',swe.CHIRON,SWIEPH))
+        return base, True, (EPHE_PFAD or "eingebauter Standardpfad")
+    except Exception as e:
+        kurz = str(e).split("\n")[0][:160]
+        if EPHE_PFAD is None:
+            grund = ("keine seas_*.se1 gefunden — Asteroiden-Ephemeride "
+                     "installieren oder --ephe <verzeichnis> setzen [%s]" % kurz)
+        else:
+            grund = ("Ephemeride %s deckt das Fenster nicht [%s]" % (EPHE_PFAD, kurz))
+        return base, False, grund
 
 # ---------------------------------------------------------------------------
 # Winkel-/Zeit-Helfer
@@ -273,7 +380,9 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     ndays = (end-t0).days
     primary = set(PERSONAL) | set(primary_extra or [])
     spiegel = spiegel_ziele(radix)
-    transiters, chiron_on = _transiters(mit_mars)
+    transiters, chiron_on, chiron_info = _transiters(
+        mit_mars, probe=(swe.julday(t0.year, t0.month, t0.day, 0.0),
+                         swe.julday(end.year, end.month, end.day, 0.0)))
     i_asof = max(0, min(ndays, (asof-t0).days))
 
     def q_of(d):
@@ -584,7 +693,9 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                 events=events, jetzt=jetzt, langlaeufer=langlaeufer,
                 hausdurchgang=hausdurchgang, zeichenaufenthalt=zeichenaufenthalt,
                 hotspots=hotspots, stations=stations, ingress=ingress,
-                chiron_transit=chiron_on, haeuser=bool(cusps), mars=mit_mars,
+                chiron_transit=chiron_on, chiron_info=chiron_info,
+                ephe_pfad=EPHE_PFAD,
+                haeuser=bool(cusps), mars=mit_mars,
                 primary=sorted(primary), quartale=n_q,
                 quarter_bounds=[d.isoformat() for d in qb])
 
@@ -599,6 +710,14 @@ def format_report(res):
                f"Transit-Chiron: {'JA' if res['chiron_transit'] else 'AUSGEKLAMMERT'}   "
                f"Haus-Durchgaenge: {'JA' if res['haeuser'] else 'AUSGEKLAMMERT'}   "
                f"Mars: {'MIT' if res.get('mars') else 'ohne (Standard)'}")
+    # Zusatzzeilen seit 30.07.2026: die Chiron-Ausklammerung war frueher stumm.
+    # Die beiden Kopfzeilen darueber bleiben unveraendert — transitdata.py liest
+    # sie, und §11 der chart_data traegt den Report unveraendert.
+    if res.get('chiron_transit'):
+        if res.get('ephe_pfad'):
+            out.append(f"[ephemeride] Transit-Chiron aus {res['ephe_pfad']}")
+    elif res.get('chiron_info'):
+        out.append(f"[hinweis] Transit-Chiron ausgeklammert: {res['chiron_info']}")
     qb=res['quarter_bounds']
     nq=len(qb)-1
     # qb[k+1] ist der ERSTE Tag des Folgequartals. Gedruckt wird der LETZTE Tag
@@ -738,10 +857,17 @@ if __name__ == "__main__":
     ap.add_argument("--primary", default="", help="zusaetzliche primaere Ziele, kommagetrennt")
     ap.add_argument("--cusps", default=None,
                     help="12 Koch-Spitzen als Dezimalgrad, kommagetrennt (ueberschreibt Datei)")
+    ap.add_argument("--ephe", default=None,
+                    help="Verzeichnis mit den Swiss-Ephemeris-Dateien (seas_*.se1) — "
+                         "nur noetig, wenn die Autosuche sie nicht findet")
     ap.add_argument("--mars", action="store_true",
                     help="Mars als Feintrigger mitrechnen (Opt-in, nicht Standard)")
     ap.add_argument("--json", default=None, help="Ereignisliste als JSON hierhin schreiben")
     args=ap.parse_args()
+    if args.ephe and ephe_pfad_setzen(args.ephe) is None:
+        print(f"[warnung] --ephe {args.ephe}: keine seas_*.se1 darin gefunden — "
+              "Autosuche/Standardpfad greift stattdessen.", file=sys.stderr)
+        ephe_pfad_setzen()
     start = date.fromisoformat(args.start) if args.start else None
     asof  = date.fromisoformat(args.asof)  if args.asof  else None
     extra = [x.strip() for x in args.primary.split(",") if x.strip()]
