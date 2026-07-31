@@ -33,8 +33,11 @@ FARBE = {'Pluto': '#7d3b46', 'Neptun': '#2f6070', 'Uranus': '#4a7a63',
          'Saturn': '#6b5c48', 'Chiron': '#a8553a', 'Jupiter': '#b8862f',
          'Knoten': '#7a6a52'}
 
-# (Themenname, Untertitel, [Transiter], Farbe) — Reihenfolge und Wortlaut wie
-# die Kapitel 30-35 in Teil III B.
+# (Themenname, Untertitel, [Transiter], Farbe) oder
+# (Themenname, Untertitel, [Transiter], Farbe, [Ziele]) — Reihenfolge und
+# Wortlaut wie die Themenkapitel in Teil III B. Ein Eintrag der Zielliste ist
+# entweder ein reiner Zielname ('Mond') oder ein Paar aus Aspekt und Ziel
+# ('Quadrat Sonne'); s. _passt().
 THEMEN = [
     ('Die Tiefenlinie', 'was die Wandlungskraft zwei Jahre lang durcharbeitet',
      ['Pluto'], '#7d3b46'),
@@ -56,6 +59,23 @@ H_BOGEN = 0.85     # dicker Themenbogen
 H_ZEILE = 0.95     # eine Detailzeile
 H_LUFT = 0.35      # Luft nach einem Block
 H_ACHSE = 4.2      # Achse + Stationsleiste unten
+
+
+def _passt(r, ziele):
+    """Trifft eine Langlaeufer-Zeile die Zielliste eines Themas?
+
+    Ein Eintrag der Liste ist entweder ein reiner Zielname ('Mond') oder ein
+    Paar aus Aspekt und Ziel ('Quadrat Sonne'). Das Paar wird gebraucht, sobald
+    EIN laufender Planet zwei Themenkapitel mit DENSELBEN Zielen traegt und die
+    Kapitel sich nur im Winkel unterscheiden — etwa eine harmonische Phase im
+    ersten Jahr und dieselben Punkte im Reibungswinkel im zweiten. Ohne die
+    Aspektangabe zoege das erste Thema beide Phasen an sich, und das zweite
+    Kapitel bliebe ohne Block. Reine Zielnamen bleiben unveraendert gueltig —
+    die Erweiterung ist rueckwaertskompatibel.
+    """
+    if ziele is None:
+        return True
+    return r['ziel'] in ziele or f"{r['aspekt']} {r['ziel']}" in ziele
 
 
 def stationen(daten):
@@ -96,7 +116,7 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
         ziele = eintrag[4] if len(eintrag) > 4 else None
         idx = [i for i, r in enumerate(ll)
                if i not in vergeben and r['transiter'] in transiter
-               and (ziele is None or r['ziel'] in ziele)]
+               and _passt(r, ziele)]
         vergeben.update(idx)
         zeilen = [ll[i] for i in idx]
         if not zeilen:

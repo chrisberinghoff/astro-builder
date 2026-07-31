@@ -977,7 +977,25 @@ def build_paragraph(i, j, b, breaks, allow_drop, is_first_block):
 
 # --- Inhaltsverzeichnis -----------------------------------------------------
 
-def toc_gruppen(items):
+def _ist_jetzt(titel, teil3_a):
+    """Gehoert ein Teil-III-Kapitel in Block A (das Jetzt)?
+
+    Ohne Angabe gilt die alte Vorgabe: nur das Kapitel „Wo du gerade stehst".
+    Charts, die den Stichtag auf MEHRERE Kapitel verteilen (etwa je ein
+    Kapitel fuer die Knotenkontakte, eine am Stichtag exakte Opposition und
+    Nachhall/Anmarsch), geben die Titel oder Titelanfaenge ihrer A-Kapitel als
+    Liste mit — oder eine Funktion titel -> bool. Ohne das landen
+    Momentaufnahme-Kapitel im Inhaltsverzeichnis unter „B — Die langen Linien"
+    und behaupten damit eine Dauer, die sie nicht haben.
+    """
+    if teil3_a is None:
+        return titel.startswith('Wo du gerade stehst')
+    if callable(teil3_a):
+        return bool(teil3_a(titel))
+    return any(titel.startswith(p) for p in teil3_a)
+
+
+def toc_gruppen(items, teil3_a=None):
     """Gliederung aus den geparsten Kapiteln ableiten (nicht hart verdrahtet)."""
     grp, cur = [], None
     for i, it in enumerate(items):
@@ -997,7 +1015,7 @@ def toc_gruppen(items):
         a, b, c = [], [], []
         for e in g['eintraege']:
             t = e['titel']
-            if t.startswith('Wo du gerade stehst'):
+            if _ist_jetzt(t, teil3_a):
                 a.append(e)
             elif re.match(r'^Q\d ', t):
                 c.append(e)
@@ -1019,9 +1037,10 @@ def _toc_rows(eintraege, seiten):
     return '<table class="toct">' + ''.join(out) + '</table>'
 
 
-def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament=''):
+def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament='',
+                teil3_a=None):
     """Inhaltsverzeichnis-Seite (Pflicht bei JEDEM Chart, direkt nach dem
-    Deckblatt)."""
+    Deckblatt). `teil3_a` s. _ist_jetzt()."""
     def zeile(titel, pid, klasse='toc-grp', unter=''):
         p = seiten.get(pid, '')
         us = f' <span class="gs">{esc(unter)}</span>' if unter else ''
@@ -1043,7 +1062,7 @@ def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament=''):
         if eintraege:
             b.append(liste(eintraege))
 
-    for gi, g in enumerate(toc_gruppen(items)):
+    for gi, g in enumerate(toc_gruppen(items, teil3_a)):
         erste = ' first' if (not vorne and gi == 0) else ''
         b.append(zeile(g['kicker'], f"CH_{g['idx']}", 'toc-grp' + erste,
                        unter=g['titel']))
