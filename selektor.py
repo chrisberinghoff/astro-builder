@@ -18,11 +18,22 @@ Hausbloecke und schreibt die Gewichtungsstufe als Deutungsanweisung in die
 referenz.md (Abstand <= 2° -> Nebenhaus fuehrt; 2°-5° -> Nebenhaus als Nebenton).
 Ohne `nebenhaus=` verhaelt sich alles wie zuvor.
 
+FAKTORNAMEN: kanonisch sind die zehn Planeten und die fuenf Spezialfaktoren
+CHIRON, LILITH, MONDKNOTEN, PHOLUS, GLUECKSPUNKT. Gaengige Schreibweisen loest
+FAKTOR_ALIAS auf (KNOTEN/NORDKNOTEN -> MONDKNOTEN, VERMOEGEN -> GLUECKSPUNKT ...).
+Die Knotenachse wird IMMER ueber die Nordknoten-Zeile gefuehrt — eine eigene
+SUEDKNOTEN-Zeile wird uebersprungen und protokolliert, weil die Referenz
+achsenbasiert ist (MONDKNOTEN_HAUS_6 = ☊6/☋12) und eine zweite Zeile mit haus=12
+die GESPIEGELTE Achse zoege. Ein Faktorname, der sich nicht aufloesen laesst, ist
+seit 30.07.2026 ein HARTER Fehler (vorher fiel er lautlos durch, s. Kommentar bei
+FAKTOR_ALIAS).
+
 @@SELEKTOR-Blockformat (Schritt 1 schreibt ihn ins chart_data.md):
     @@SELEKTOR
     FAKTOR SONNE zeichen=Krebs haus=11 nebenhaus=12 abstand=3.22
     FAKTOR MOND zeichen=Krebs haus=12
     ...
+    FAKTOR MONDKNOTEN zeichen=Wassermann haus=6
     FAKTOR PHOLUS zeichen=Fische haus=7 nebenhaus=8 abstand=4.17
     FAKTOR GLUECKSPUNKT zeichen=Fische haus=7
     ACHSE AC zeichen=Loewe
@@ -42,6 +53,35 @@ PLANETS = ['SONNE', 'MOND', 'MERKUR', 'VENUS', 'MARS', 'JUPITER', 'SATURN',
            'URANUS', 'NEPTUN', 'PLUTO']
 PSET = set(PLANETS)
 MARK_RE = re.compile(r'^@@BLOCK key=(\S+)@@$')
+
+# --- Faktornamen: Schreibweisen -> kanonischer Blockschluessel ---------------
+# Grund (Vorfall 30.07.2026): parse_chart normalisierte FAKTOR-Zeilen nur mit
+# norm(); `FAKTOR KNOTEN` blieb also 'KNOTEN' und lag weder in PSET noch in
+# SPEZFILE. Der Faktor fiel LAUTLOS durch — keine Bloecke, keine Fehlstelle,
+# keine Warnung. Die komplette Mondknoten-Deutung (Zeichen UND Haus) fehlte im
+# Referenzschnitt, und der Lauf meldete trotzdem "keine Fehlstelle". Seither:
+# (a) Aliasse werden aufgeloest, (b) ein unbekannter Faktorname ist ein HARTER
+# Fehler wie eine Fehlstelle.
+FAKTOR_ALIAS = {
+    'KNOTEN': 'MONDKNOTEN', 'NORDKNOTEN': 'MONDKNOTEN',
+    'MONDKNOTENACHSE': 'MONDKNOTEN', 'KNOTENACHSE': 'MONDKNOTEN',
+    'AUFSTEIGENDER MONDKNOTEN': 'MONDKNOTEN', 'DRACHENKOPF': 'MONDKNOTEN',
+    'SCHWARZER MOND': 'LILITH', 'LILITH (SCHWARZER MOND)': 'LILITH',
+    'PARS FORTUNAE': 'GLUECKSPUNKT', 'VERMOEGEN': 'GLUECKSPUNKT',
+    'GLUECKSPUNKT (PARS FORTUNAE)': 'GLUECKSPUNKT',
+    'ASZENDENT': 'AC', 'DESZENDENT': 'DC',
+    'MEDIUM COELI': 'MC', 'IMUM COELI': 'IC', 'IMMUM COELI': 'IC',
+}
+
+# Faktoren, die KEINE eigene Deutung bekommen, weil sie der Spiegelpol eines
+# bereits gefuehrten Faktors sind. Der Suedknoten wird ueber die Nordknoten-
+# Zeile mitgedeutet: die Mondknoten-Referenz ist achsenbasiert (MONDKNOTEN_HAUS_6
+# behandelt ☊6/☋12). Eine eigene Suedknoten-Zeile mit haus=12 zoege
+# MONDKNOTEN_HAUS_12 — also die GESPIEGELTE Achse und damit die falsche Deutung.
+SPIEGEL_FAKTOREN = {
+    'SUEDKNOTEN': 'MONDKNOTEN', 'ABSTEIGENDER MONDKNOTEN': 'MONDKNOTEN',
+    'DRACHENSCHWANZ': 'MONDKNOTEN',
+}
 
 # Grenzlagen-Schwellen (Grad vor der naechsten Hausspitze).
 GRENZ_ORB = 5.0      # bis hierher gilt ueberhaupt Grenzlage (= radix.HAUS_ORB)
@@ -75,6 +115,18 @@ def norm(s):
     for a, b in (('Ö', 'OE'), ('Ü', 'UE'), ('Ä', 'AE'), ('ß', 'SS')):
         s = s.replace(a, b)
     return s
+
+
+def norm_faktor(t):
+    """Kanonischer Faktorname fuer FAKTOR-Zeilen (Zeichen-/Hausbloecke).
+
+    Anders als norm_token (das fuer ASPEKT-Zeilen alle Knoten-Schreibweisen auf
+    'KNOTEN' zusammenzieht, weil resolve_aspect diesen Token erwartet) liefert
+    diese Funktion den Schluessel, unter dem PSET/SPEZFILE nachschlagen —
+    fuer die Knotenachse also 'MONDKNOTEN'.
+    """
+    t = norm(t)
+    return FAKTOR_ALIAS.get(t, t)
 
 
 def norm_token(t):
@@ -151,8 +203,9 @@ def signatur_notation(g):
 
 # ---------------------------------------------------------------- Eingabe
 def parse_chart(text):
-    """-> dict: faktoren [{name,zeichen,haus,nebenhaus,abstand}], achsen, aspekte"""
-    faktoren, achsen, aspekte = [], {}, []
+    """-> dict: faktoren [{name,zeichen,haus,nebenhaus,abstand}], achsen, aspekte,
+    spiegel [(rohname, kanonisch)]"""
+    faktoren, achsen, aspekte, spiegel = [], {}, [], []
     inblock = False
     for ln in text.split('\n'):
         s = ln.strip()
@@ -167,7 +220,13 @@ def parse_chart(text):
         parts = s.split()
         kw = parts[0].upper()
         if kw == 'FAKTOR':
-            name = norm(parts[1])
+            roh = norm(' '.join(p for p in parts[1:] if '=' not in p))
+            if roh in SPIEGEL_FAKTOREN:
+                # Spiegelpol: wird ueber die Gegen-Zeile als Achse mitgedeutet.
+                # Eigene Bloecke wuerden die Achse gespiegelt ziehen (s. o.).
+                spiegel.append((roh, SPIEGEL_FAKTOREN[roh]))
+                continue
+            name = norm_faktor(roh)
             zeichen = haus = nebenhaus = abstand = None
             for p in parts[2:]:
                 pl = p.lower()
@@ -191,7 +250,8 @@ def parse_chart(text):
         elif kw == 'ASPEKT':
             if len(parts) >= 3:
                 aspekte.append((norm_token(parts[1]), norm_token(parts[2])))
-    return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte}
+    return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
+            'spiegel': spiegel, 'unbekannt': []}
 
 
 # ---------------------------------------------------------------- Bloecke laden
@@ -332,6 +392,14 @@ def build_requests(chart):
                 got.append('%s_HAUS_%s [Grenzlage]' % (nm, nh))
                 if nm == 'MONDKNOTEN':
                     haeuser.add(int(nh))
+        else:
+            # Weder Planet noch bekannter Spezialfaktor: FRUEHER fiel dieser
+            # Faktor lautlos durch (keine Bloecke, keine Fehlstelle). Jetzt
+            # harter Fehler — eine geschluckte Deutung faellt sonst erst beim
+            # Korrekturlesen des fertigen PDFs auf, wenn ueberhaupt.
+            chart.setdefault('unbekannt', []).append(nm)
+            prot.append('FAKTOR %-13s -> UNBEKANNT (keine Bloecke gezogen!)' % nm)
+            continue
         prot.append('FAKTOR %-13s -> %s' % (nm, ', '.join(got) or '(nur ALLG/SEC)'))
 
     # Haus-Allgemein je belegtem Haus (Grenzlagen-Nebenhaeuser eingeschlossen)
@@ -458,6 +526,21 @@ def main():
     for g in grenz:
         print('   GRENZLAGE %-12s Haus %s -> %s  (%s)'
               % (g['faktor'], g['haus'], g['nebenhaus'], g['stufe']))
+    for roh, ziel in chart.get('spiegel', []):
+        print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
+              'mitgedeutet' % (roh, ziel))
+    unbek = chart.get('unbekannt', [])
+    if unbek:
+        print('UNBEKANNTE FAKTOREN (harter Fehler — frueher fielen sie lautlos durch):')
+        for nm in unbek:
+            print('   UNBEKANNT %s — weder Planet noch Spezialfaktor.' % nm)
+        print('   Erlaubt sind: %s' % ', '.join(PLANETS))
+        print('   sowie:        %s' % ', '.join(sorted(SPEZFILE)))
+        print('   Aliasse:      %s' % ', '.join(
+            '%s->%s' % (k, v) for k, v in sorted(FAKTOR_ALIAS.items())))
+        print('   Spiegelpole (bewusst uebersprungen): %s'
+              % ', '.join(sorted(SPIEGEL_FAKTOREN)))
+        sys.exit(1)
     if missing:
         print('FEHLSTELLEN (harter Fehler):')
         for src, key in missing:
