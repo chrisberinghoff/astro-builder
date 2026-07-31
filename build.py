@@ -1309,8 +1309,17 @@ def _nrm(s: str) -> str:
 
 
 def _dehyph(s: str) -> str:
-    """Löst Silbentrennungen aus dem Seitentext ('Selbstbe- hauptung')."""
-    return re.sub(r'([A-Za-zÄÖÜäöüß])-\s([a-zäöüß])', r'\1\2', s)
+    """Löst Silbentrennungen aus dem Seitentext ('Selbstbe- hauptung').
+
+    Zweite Regel (2026-07-31): ein ECHTER Bindestrich in einem Kompositum darf
+    am Zeilenende stehen ('Nicht-\nDazugehörens'). Er wird nicht geschluckt —
+    nur der Zeilenumbruch dahinter fällt weg, der Bindestrich bleibt. Ohne das
+    verfehlte verify(markers=…) jeden Kapiteltitel, der an einem eigenen
+    Bindestrich umbricht, und meldete ihn als fehlend, obwohl er vollständig
+    im PDF steht.
+    """
+    s = re.sub(r'([A-Za-zÄÖÜäöüß])-\s([a-zäöüß])', r'\1\2', s)
+    return re.sub(r'([A-Za-zÄÖÜäöüß])-\s+([A-ZÄÖÜ])', r'\1-\2', s)
 
 
 def _find_marker(marker, hay, start=0):
