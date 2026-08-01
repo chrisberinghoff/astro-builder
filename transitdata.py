@@ -123,7 +123,11 @@ def parse(pfad=None):
 
     out['quartale'] = [
         (q, _d(a), _d(b), _monatsspanne(_d(a), _d(b))) for q, a, b in
-        re.findall(r'(Q\d) (\d{4}-\d\d-\d\d)–(\d{4}-\d\d-\d\d)', txt)]
+        # Q\d+ statt Q\d: bei Fenstern ueber zwei Jahre gibt es Q10 bis Q12,
+        # und die fielen mit der einstelligen Fassung stillschweigend aus der
+        # Liste — die Uhr zeichnete dann nur acht von zwoelf Quartalen
+        # (gefunden 2026-08-01 beim ersten 36-Monats-Lauf).
+        re.findall(r'(Q\d+) (\d{4}-\d\d-\d\d)–(\d{4}-\d\d-\d\d)', txt)]
 
     stand = _block(txt, 'Transit-Staende:', '\n\n')
     out['stand'] = []

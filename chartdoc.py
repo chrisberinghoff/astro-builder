@@ -629,10 +629,13 @@ def uhr_lead(stichtag):
         'über das Fenster hinaus.')
 
 
+_JAHRWORT = {2: 'zwei', 3: 'drei', 4: 'vier', 5: 'fünf', 6: 'sechs'}
+
+
 def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
-                    titel='Die Transit-Uhr — zwei Jahre auf einen Blick',
-                    anker='PG_uhr', lead=None, bild_breite=None):
-    """Transit-Uhr-Seite (Ultimativ- und Transit-Modus).
+                    titel=None, anker='PG_uhr', lead=None, bild_breite=None,
+                    jahre=2):
+    """Transit-Uhr-Seite (Ultimativ-, Transit- und Themen-Modus).
 
     lead          str ODER Liste von Absaetzen. Die Themenfassung der Uhr
                   braucht mehr Erklaerung als die alte Zeilenfassung — darum
@@ -641,7 +644,19 @@ def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
                   weil Vorspannlaenge und Grafikhoehe gegeneinander laufen: je
                   mehr Text ueber der Uhr steht, desto schmaler muss sie sein,
                   um auf der Seite zu bleiben.
+    jahre         Laenge des Fensters in Jahren; baut den Seitentitel. Der
+                  Vorgabewert 2 entspricht dem Ultimativ-Standard (acht
+                  Kalenderquartale). Bis zum 2026-08-01 stand „zwei Jahre" fest
+                  im Titel — ein Dreijahresfenster bekam damit stillschweigend
+                  eine falsche Ueberschrift. `titel=` setzt den Text weiterhin
+                  vollstaendig selbst und schlaegt `jahre`.
     """
+    if titel is None:
+        if int(jahre) <= 1:
+            titel = 'Die Transit-Uhr — das kommende Jahr'
+        else:
+            wort = _JAHRWORT.get(int(jahre), str(int(jahre)))
+            titel = f'Die Transit-Uhr — {wort} Jahre auf einen Blick'
     txt = lead if lead is not None else uhr_lead(stichtag)
     if isinstance(txt, str):
         txt = [txt]

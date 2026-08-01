@@ -1121,6 +1121,10 @@ def _coverage_charset() -> set:
 # ---------------------------------------------------------------------------
 
 PFLICHT_BAUSTEINE = {
+    # Die '*'-Basis ist die Chart-Basis: sie gilt fuer jedes Dokument, das ein
+    # Geburtsbild ABBILDET. Begleitdokumente, die auf ein bereits geliefertes
+    # Horoskop aufsetzen, setzen "basis": False und bringen ihre eigene Liste
+    # mit (s. 'themen').
     "*": {
         "text": [("Inhalt", "Inhaltsverzeichnis-Seite nach dem Deckblatt"),
                  ("Die Aspekte im Wortlaut", "voll ausgeschriebene Aspekttabelle"),
@@ -1137,15 +1141,39 @@ PFLICHT_BAUSTEINE = {
         "text": [("Bodygraph", "Bodygraph-Grafik im HD/GK-Teil")],
         "html": [],
     },
+    # Themen-Analyse (eingefuehrt 2026-08-01): eigenstaendiges Begleitheft zu
+    # einem bereits ausgelieferten Horoskop, das zwei bis drei Lebensthemen
+    # vertieft. Es zeigt bewusst KEIN Radix-Rad und KEINE Aspekttabelle — beide
+    # stehen im Hauptdokument, und eine zweite Kopie waere Ballast. Statt der
+    # Chartbild-Strecke traegt es eine Uebersicht der Faktoren, die seine
+    # Themen tragen. Die Pflicht bleibt damit erhalten, sie zeigt nur auf
+    # andere Bausteine.
+    "themen": {
+        "basis": False,
+        "text": [("Inhalt", "Inhaltsverzeichnis-Seite nach dem Deckblatt"),
+                 ("Die tragenden Konstellationen",
+                  "Übersicht der Faktoren, auf denen die Themen fußen"),
+                 ("Die Transit-Uhr", "Transit-Uhr über das Themenfenster"),
+                 ("Die Zeitfenster im Überblick", "Anhang: Zeitfenster-Tabelle")],
+        "html": [("_uhr.png", "Transit-Uhr-Grafik (transituhr_fusion.py)")],
+    },
 }
 
 
 def pflicht_bausteine(doctype=None) -> dict:
-    """Pflichtliste fuer einen Dokumenttyp, immer inklusive der '*'-Basis.
-    doctype ist case-insensitiv; unbekannte Typen liefern nur die Basis."""
+    """Pflichtliste fuer einen Dokumenttyp.
+
+    Standardfall: die '*'-Chart-Basis PLUS die typ-eigenen Eintraege.
+    Setzt ein Typ "basis": False, gilt AUSSCHLIESSLICH seine eigene Liste —
+    fuer Begleitdokumente, die kein Geburtsbild abbilden. Unbekannte Typen
+    liefern die Chart-Basis; ein Tippfehler im doctype schwaecht den Guardrail
+    also nicht ab, sondern faellt auf die strengere Liste zurueck.
+    """
     basis = PFLICHT_BAUSTEINE["*"]
     extra = PFLICHT_BAUSTEINE.get((doctype or "").strip().lower(),
                                   {"text": [], "html": []})
+    if extra.get("basis", True) is False:
+        return {"text": list(extra["text"]), "html": list(extra["html"])}
     return {"text": list(basis["text"]) + list(extra["text"]),
             "html": list(basis["html"]) + list(extra["html"])}
 
