@@ -110,8 +110,17 @@ def parse(pfad=None):
                          'setze_quelle(<klient>_Ultimativ_chart_data.md) '
                          'oder parse(pfad=...) aufrufen.')
     raw = open(pfad, encoding='utf-8').read()
-    # §11 liegt in einem eingezäunten Codeblock
-    s = raw.index('Fenster 2')
+    # §11 liegt in einem eingezäunten Codeblock. Der Anker muss auf die
+    # ISO-Fensterzeile IM Codeblock treffen — 'Fenster 2' allein traf bei
+    # Fenstern ab 20 Monaten zuerst die §11-Ueberschrift ("Fenster 24 Monate
+    # bis ..."), txt endete dann vor dem Codeblock und der Fenster-Regex lief
+    # auf None (gefunden 2026-08-03).
+    _m0 = re.search(r'Fenster \d{4}-\d\d-\d\d\s*\.\.\s*\d{4}-\d\d-\d\d', raw)
+    if not _m0:
+        raise ValueError('transitdata: Fensterzeile "Fenster JJJJ-MM-TT .. '
+                         'JJJJ-MM-TT" nicht gefunden — steht §11 als '
+                         'Codeblock in der chart_data?')
+    s = _m0.start()
     e = raw.index('\n```', s)
     txt = raw[s:e]
 

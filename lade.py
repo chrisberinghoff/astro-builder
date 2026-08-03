@@ -22,7 +22,8 @@ Dann nach Schritt:
     lade("transit", "transitdata", "transituhr_fusion")   # Transit / Ultimativ
 
 Im Repo verfuegbar: build, chartdoc, radix, transit, transitdata,
-transituhr_fusion, transituhr (abgeloeste Zeilenfassung), selektor, markiere.
+transituhr_fusion, transituhr (abgeloeste Zeilenfassung), selektor, markiere,
+restyle (Schreibweise-Wechsel, s. Projektanweisung_Erweiterung_Restyle.md).
 NICHT im Repo und weiter per project_read: hd.py (enthaelt Klientendaten),
 REFERENZ_Chart_Builder_Ultimativ.py, blocks_bundle.txt.
 
@@ -39,7 +40,8 @@ REPO = "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/"
 
 BEKANNT = {
     "build", "chartdoc", "radix", "transit", "transitdata",
-    "transituhr_fusion", "transituhr", "selektor", "markiere", "lade",
+    "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
+    "lade",
 }
 
 
