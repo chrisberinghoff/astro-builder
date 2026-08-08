@@ -129,6 +129,43 @@ def huber_aspects(factors, orbs=None):
     return out
 
 
+# --- Zusatzebene: Halb-/Anderthalbquadrate (Beschluss 2026-08-08) -----------
+# Huber kennt diese Aspektklasse nicht; sie läuft deshalb bewusst NICHT durch
+# huber_aspects und NICHT ins Rad (Datenblatt, Aspekttabelle und Rad bleiben
+# Huber-deckungsgleich). Ergebnis wird im chart_data als eigene Tabelle
+# „Untergrund-Aspekte" geführt und niedriger gewichtet gedeutet; gedeutete
+# Kontakte zusätzlich in den ⚠-Schritt-3-Block (manuell aufgenommene Aspekte).
+
+_ZUSATZ_ANGLES = [(45, 'Halbquadrat'), (135, 'Anderthalbquadrat')]
+_PLANETEN = ('Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter',
+             'Saturn', 'Uranus', 'Neptun', 'Pluto')
+
+
+def zusatz_aspekte(factors, orb=2.0, nur_planeten=True):
+    """Halb- (45°) und Anderthalbquadrate (135°), fixer Orb, Default nur
+    Planet–Planet (die zehn klassischen Planeten, keine Achsen/Punkte).
+
+    Rückgabeformat wie huber_aspects; strength='zusatz', Farbe 'rot'
+    (Spannungsfamilie). Getrennt von huber_aspects gehalten — s. Kommentar oben.
+    """
+    pool = [f for f in factors if (not nur_planeten) or f['name'] in _PLANETEN]
+    out = []
+    for i in range(len(pool)):
+        for j in range(i + 1, len(pool)):
+            a, b = pool[i], pool[j]
+            d = abs(a['lon'] - b['lon']) % 360
+            if d > 180:
+                d = 360 - d
+            for angle, name in _ZUSATZ_ANGLES:
+                dev = abs(d - angle)
+                if dev <= orb:
+                    out.append({'a': a['name'], 'b': b['name'], 'angle': angle,
+                                'name': name, 'color': 'rot',
+                                'strength': 'zusatz', 'orb': round(dev, 2)})
+                    break
+    return out
+
+
 # --- Haus-Zuordnung & Grenzlage (einheitliche 5°-Regel) ---------------------
 
 HAUS_ORB = 5   # Grenzlagen-Orb in Grad, planetenunabhängig
