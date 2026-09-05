@@ -1133,9 +1133,37 @@ PFLICHT_BAUSTEINE = {
     },
     "ultimativ": {
         "text": [("Die Transit-Uhr", "Transit-Uhr auf der Chartbild-Strecke"),
+                 ("Die Zeitleiste", "Zeitleisten-Seite am Ende von Teil III"),
                  ("Die langen Linien im Überblick", "Anhang: volle Transit-Tabelle"),
                  ("Der Stichtag im Überblick", "Anhang: Jetzt-Tabelle")],
         "html": [("_transituhr.png", "Transit-Uhr-Grafik (transituhr.py)")],
+    },
+    # Eigenstaendiges Transit-Horoskop. Bis zum 2026-09-05 GAR NICHT
+    # hinterlegt: `doctype='transit'` fiel als unbekannter Typ auf die
+    # Chart-Basis zurueck, und damit waren Transit-Uhr und Anhang in einem
+    # Transit-PDF ueberhaupt nicht erzwungen — obwohl das Transit-Modul beide
+    # ausdruecklich verlangt („nie weglassen"). Die Zeitleiste kommt mit dem
+    # Teil-III-Umbau vom 2026-09-03 dazu; sie ersetzt die acht
+    # Quartalskapitel und ist die einzige Navigationsebene, die davon
+    # uebrigbleibt. Der Titel wird zur Laufzeit aus chartdoc.ZEITLEISTE_TITEL
+    # nachgezogen (chartdoc._pflicht_baustein_angleichen), genau wie der
+    # Aspektseiten-Titel — hier steht nur der Vorgabewert.
+    "transit": {
+        "text": [("Die Transit-Uhr", "Transit-Uhr auf der Chartbild-Strecke"),
+                 ("Die Zeitleiste",
+                  "Zeitleisten-Seite hinter den Themenkapiteln"),
+                 ("Die langen Linien im Überblick", "Anhang: volle Transit-Tabelle"),
+                 ("Der Stichtag im Überblick", "Anhang: Jetzt-Tabelle")],
+        "html": [("_transituhr.png",
+                  "Transit-Uhr-Grafik (transituhr_fusion.py)")],
+    },
+    # EA und das Standard-Geburtshoroskop (doctype=None) haben KEINE
+    # Zeitleiste — sie tragen kein Quartalsraster. Der EA-Eintrag steht
+    # trotzdem hier, damit die Pruefung typabhaengig LESBAR ist und ein
+    # EA-Lauf nicht als „unbekannter Typ" gewarnt wird.
+    "ea": {
+        "text": [],
+        "html": [],
     },
     "hdgk": {
         "text": [("Bodygraph", "Bodygraph-Grafik im HD/GK-Teil")],
@@ -1168,10 +1196,24 @@ def pflicht_bausteine(doctype=None) -> dict:
     fuer Begleitdokumente, die kein Geburtsbild abbilden. Unbekannte Typen
     liefern die Chart-Basis; ein Tippfehler im doctype schwaecht den Guardrail
     also nicht ab, sondern faellt auf die strengere Liste zurueck.
+
+    Der Rueckfall ist aber NICHT harmlos, wenn der Typ echt ist und nur nicht
+    hinterlegt: `doctype='transit'` lief bis zum 2026-09-05 genau so — still,
+    ohne Transit-Uhr- und Anhang-Pflicht. Ein nicht hinterlegter, nicht leerer
+    doctype wird darum jetzt laut gemeldet.
     """
     basis = PFLICHT_BAUSTEINE["*"]
-    extra = PFLICHT_BAUSTEINE.get((doctype or "").strip().lower(),
-                                  {"text": [], "html": []})
+    key = (doctype or "").strip().lower()
+    extra = PFLICHT_BAUSTEINE.get(key)
+    if extra is None:
+        if key:
+            bekannt = ", ".join(sorted(k for k in PFLICHT_BAUSTEINE
+                                       if k != "*"))
+            print(f"  !! doctype={doctype!r} ist in PFLICHT_BAUSTEINE nicht "
+                  f"hinterlegt — es gilt nur die Chart-Basis, die typ-eigenen "
+                  f"Pflichtseiten werden NICHT geprueft. Tippfehler, oder "
+                  f"fehlt der Typ? Bekannt: {bekannt}.")
+        extra = {"text": [], "html": []}
     if extra.get("basis", True) is False:
         return {"text": list(extra["text"]), "html": list(extra["html"])}
     return {"text": list(basis["text"]) + list(extra["text"]),
@@ -1385,10 +1427,62 @@ def pdf_info(pdf_path: str) -> dict:
     return info
 
 
+_FUSS_LABEL_RE = re.compile(r'^\s*B\s?E\s?L\s?E\s?G\s?:')
+_FUSS_ASPEKT_RE = re.compile(r'^\s*[–—]\s')
+
+
+def fuss_signaturen(parsed) -> list:
+    """Alle Kapitel-Signaturen eines geparsten Dokuments.
+
+    Fuer verify(fuss_signaturen=…): eine Signatur ist die einzige Zeile des
+    Kapitelfusses, die sich nicht an ihrer Form erkennen laesst (der Beleg
+    traegt das „BELEG:\"-Label und die eingerueckten „–\"-Zeilen). Ohne diese
+    Liste bleibt genau ein Fall ungedeckt — ein Kapitel MIT Signatur und OHNE
+    Beleg, dessen Streifen eine Seite abschliesst.
+    Nimmt das Ergebnis von parse_analyse() oder prepare_chapters().
+    """
+    kap = parsed.get('chapters', parsed) if hasattr(parsed, 'get') else parsed
+    return [it['signatur'] for it in kap
+            if isinstance(it, dict) and (it.get('signatur') or '').strip()]
+
+
+def _fuss_zeilen(plines, sig_set) -> int:
+    """Wie viele Zeilen am Seitenende gehoeren zu einem Kapitelfuss?
+
+    Von unten: erst die eingerueckten „–\"-Beleg-Zeilen, dann die
+    „BELEG:\"-Kopfzeile, dann die Signaturzeile. Abgezogen wird nur, wenn der
+    Block VERANKERT ist — also die BELEG-Kopfzeile oder eine bekannte Signatur
+    trifft. Eine Prosazeile, die zufaellig mit einem Gedankenstrich beginnt,
+    kann damit nie stillschweigend die Satzende-Probe umgehen.
+    """
+    i, anker = len(plines), False
+    while i > 0 and _FUSS_ASPEKT_RE.match(plines[i - 1]):
+        i -= 1
+    if i > 0 and _FUSS_LABEL_RE.match(plines[i - 1]):
+        i -= 1
+        anker = True
+    if i > 0 and sig_set and _nrm(plines[i - 1]).strip() in sig_set:
+        i -= 1
+        anker = True
+    elif anker and i > 0:
+        # Signatur ohne Liste: sie steht IMMER direkt ueber der
+        # BELEG-Kopfzeile. Abgezogen wird sie nur, wenn sie nicht auf einem
+        # Satzende schliesst — die Zeile ueber dem Streifen ist sonst die
+        # letzte Prosazeile des Kapitels, und die endet bauartbedingt auf
+        # einem Punkt. Ein echter Satzabbruch kann so nicht verdeckt werden.
+        rest = plines[i - 1].strip()
+        while rest and rest[-1] in _CLOSERS:
+            rest = rest[:-1].rstrip()
+        if rest and rest[-1] not in '.!?…:;-':
+            i -= 1
+    return len(plines) - i if anker else 0
+
+
 def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
            aspect_rows=None, aspect_section=None, prose_start=None,
            source_text_chars=None, min_coverage=0.97, min_lines=8,
-           sample_page=1, sample_dpi=80, verbose=True) -> dict:
+           sample_page=1, sample_dpi=80, fuss_signaturen=None,
+           verbose=True) -> dict:
     """Deterministische End-Prüfung des PDFs über pdfinfo/pdftotext.
     KEINE Bildschau außer genau EINER Stichprobenseite (sample_page,
     Standard 1 = Cover; None = keine).
@@ -1404,6 +1498,15 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
                          letzte Textzeile endet auf Satzende (. ! ? …), nie auf
                          : ; oder mitten im Satz/Wort — und keine Seite außer
                          der letzten ist auffällig leer (< min_lines Zeilen)
+      fuss_signaturen    Liste der Kapitel-Signaturen, am einfachsten
+                         build.fuss_signaturen(parsed). Seit dem 2026-09-05
+                         steht der Signatur-/Beleg-Streifen am KAPITELENDE und
+                         kann damit eine Seite abschließen; seine Zeilen sind
+                         keine Prosa und werden für die Satzende-Probe
+                         abgezogen. Ohne die Liste greift nur die
+                         Formerkennung („BELEG:" plus „–"-Zeilen) — ein
+                         Kapitel mit Signatur, aber ohne Beleg meldet dann
+                         fälschlich „endet mitten im Satz"
       source_text_chars  Zeichenzahl der Quelle (Prosa, normalisiert):
                          Textdeckung < min_coverage => verlorene Absätze
       sample_page        genau EINE Seite als PNG rastern (Report['sample_png'])
@@ -1470,6 +1573,8 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
                                  f"gefunden, {aspect_rows} erwartet — Tabelle "
                                  "unvollständig/abgeschnitten?")
 
+    sig_set = {_nrm(s).strip() for s in (fuss_signaturen or ()) if s
+               and str(s).strip()}
     ratio, first_prose = None, None
     if prose_start:
         needle = _dehyph(_nrm(prose_start))
@@ -1495,7 +1600,19 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
             if not is_last and len(plines) < min_lines:
                 warns.append(f"SEITE {pi + 1}: nur {len(plines)} Textzeilen — "
                              "auffällig leer?")
-            tail = plines[-1].strip()
+            # Seit dem 2026-09-05 rendern Signatur und Beleg am KAPITELENDE
+            # (chartdoc.build_fuss). Endet eine Seite mit diesem Streifen, ist
+            # ihre letzte Textzeile eine Beleg-Zeile — sie endet naturgemaess
+            # auf einer Gradminute, nicht auf einem Satzende. Der Streifen ist
+            # keine Prosa und wird fuer die Satzende-Probe abgezogen; fuer die
+            # Textdeckung zaehlt er weiter mit (er steht auch in
+            # source_text_chars). Vor dem Umbau konnte der Fall nicht
+            # auftreten: der Streifen sass im unteilbaren Block Kopf+erster
+            # Absatz.
+            pruef = plines[:len(plines) - _fuss_zeilen(plines, sig_set)]
+            if not pruef:
+                continue                # Seite traegt nur einen Kapitelfuss
+            tail = pruef[-1].strip()
             show = tail[-50:]
             while tail and tail[-1] in _CLOSERS:
                 tail = tail[:-1].rstrip()
@@ -1507,6 +1624,16 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
                 fails.append(f"SEITE {pi + 1} endet im getrennten Wort: {show!r}")
             elif lc not in ".!?…":
                 fails.append(f"SEITE {pi + 1} endet mitten im Satz: {show!r}")
+                if not sig_set:
+                    fails[-1] += (" — Hinweis: verify() lief OHNE "
+                                  "fuss_signaturen=. Seit dem 2026-09-05 "
+                                  "steht der Signatur-/Beleg-Streifen am "
+                                  "Kapitelende; endet eine Seite damit, "
+                                  "meldet die Satzende-Probe ihn "
+                                  "faelschlich. Mit "
+                                  "fuss_signaturen=build.fuss_signaturen("
+                                  "parsed) erneut pruefen, bevor der Befund "
+                                  "als echt gilt.")
         if source_text_chars:
             ratio = prose_chars / source_text_chars
             if ratio < min_coverage:

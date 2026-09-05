@@ -4,8 +4,9 @@
 
 Alles, was bei jedem Horoskop gleich ist, liegt hier als Code, statt in jeder
 Design-Konversation neu geschrieben zu werden: Struktur-CSS (Seitenrahmen,
-Inhaltsverzeichnis, Aspekt-Legende, Aspekttabelle, Kapitelkopf mit Signatur und
-Beleg, Anhangstabellen), der Aufbau von Inhaltsverzeichnis, Radseite,
+Inhaltsverzeichnis, Aspekt-Legende, Aspekttabelle, Kapitelkopf und
+Kapitelfuss mit Signatur und Beleg, Anhangstabellen), der Aufbau von
+Inhaltsverzeichnis, Radseite,
 Konstellationsseite und Aspektseite, der satz-sichere Kapitelbau und der
 Zwei-Pass-Lauf, der die Seitenzahlen fuers Inhaltsverzeichnis aus dem
 gerenderten Dokument holt statt sie zu schaetzen.
@@ -28,6 +29,12 @@ aendert den Hausstil aller kuenftigen Horoskope. Kurzfassung der Beschluesse:
     ohne das Wort „Grenzlage" und ohne Gradangabe.
   * Die Aspektseite passt IMMER auf eine Seite — Tabelle und Legende zusammen
     (aspekt_page skaliert dafuer notfalls die Schriftgroesse, s. `skala`).
+  * Signatur und Beleg rendern seit dem 2026-09-05 am KAPITELENDE, fuer jeden
+    Dokumenttyp: `build_head()` traegt nur noch Kicker, Titel und Regel,
+    `build_fuss()` baut den Streifen hinter den letzten Absatz. Die
+    Kapitel-Schleife des Chart-Builders MUSS ihn aufrufen — `render_mit_inhalt`
+    bricht sonst hart ab (s. `pruefe_kapitelfuss`). Im analyse.md aendert sich
+    nichts.
 
 Chart-spezifisch bleibt im jeweiligen `<klient>_builder.py`: Palette, Cover
 (Motiv + Leitsatz), die Chartdaten selbst und die typ-eigenen Sonderseiten —
@@ -140,7 +147,7 @@ _CFG = {'gr': lambda x: str(x), 'name_of': lambda n: n}
 
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  name_of=None, kopfzeile=None, aspektfarben=None,
-                 balken=None, part_ornament=None):
+                 balken=None, part_ornament=None, beleg_platz=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
     pal           Palette (Schluessel s. PAL oben)
@@ -155,10 +162,17 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
     balken        optionale Ueberschreibung einzelner Balkenfarben
     part_ornament Glyphenzeile unter den Teiler-Titeln — die tragenden
                   Glyphen des Charts aus dem @@DECKBLATT-Block
+    beleg_platz   'fuss' (Standard) oder 'kopf'. 'kopf' NUR fuer Laeufe ohne
+                  die therapeutische Wirkform — s. BELEG_PLATZ.
     """
-    global PART_KICKER, GLYPH_OF, KOPFZEILE, PART_ORNAMENT
+    global PART_KICKER, GLYPH_OF, KOPFZEILE, PART_ORNAMENT, BELEG_PLATZ
     if part_ornament is not None:
         PART_ORNAMENT = part_ornament
+    if beleg_platz is not None:
+        if beleg_platz not in ('fuss', 'kopf'):
+            raise ValueError("beleg_platz muss 'fuss' oder 'kopf' sein, "
+                             f'nicht {beleg_platz!r}')
+        BELEG_PLATZ = beleg_platz
     if pal:
         PAL.update(pal)
     if part_kicker is not None:
@@ -219,6 +233,10 @@ def struktur_css():
 }}
 @page anhang {{
   @top-right {{ content: "ANHANG"; font-family:"EB Garamond";
+               font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
+}}
+@page zeit {{
+  @top-right {{ content: "ZEITLEISTE"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
 }}
 
@@ -439,12 +457,43 @@ tr.sec td {{ color:#8d8371; }}
 .anh-note {{ font-size:7.4pt; color:{STONE}; margin:0.22cm 0 0 0;
    line-height:1.3; }}
 
+/* ---------- Zeitleisten-Seite (nur Transit und Ultimativ) ---------- */
+/* Eine Seite, keine Prosa: je Kalenderquartal eine Zeile. Sie ersetzt seit
+   dem 2026-09-03 die acht Quartalskapitel und bewahrt deren einzige echte
+   Leistung — die Navigation. Alle Werte sind UEBERNOMMEN, nicht gerechnet:
+   Spannen aus `quartale`, Dichte aus `hotspots` (s. zeitleiste_page). */
+section.zeit {{ page: zeit; break-before: page; }}
+table.zl {{ width:100%; border-collapse:collapse; font-size:8.1pt;
+   line-height:1.30; table-layout:fixed; }}
+/* Kopfzeile relativ (0.84em statt 6.8pt), damit sie beim Einmessen mit
+   zeitleiste_page(skala=…) mitskaliert. */
+table.zl th {{ font-family:"EB Garamond"; font-weight:400;
+   text-transform:uppercase; letter-spacing:0.12em; font-size:0.84em;
+   color:{GOLD}; text-align:left; padding:0 0.2cm 0.14cm 0;
+   border-bottom:0.8pt solid #ddd2ba; }}
+table.zl td {{ padding:0.16cm 0.2cm 0.16cm 0;
+   border-bottom:0.4pt solid #ebe3d1; color:{INK}; vertical-align:top; }}
+table.zl tr {{ break-inside:avoid; }}
+table.zl thead {{ display:table-header-group; }}
+td.zq {{ font-family:"EB Garamond Bold"; font-weight:400; color:{DEEP}; }}
+td.zs {{ color:#4c4335; white-space:nowrap; }}
+td.zr {{ color:#8d8371; font-family:"EB Garamond Italic"; font-style:italic; }}
+td.zz {{ color:#4c4335; font-size:0.94em; }}
+.zl-leer {{ color:#a99b80; }}
+
 /* ---------- Kapitel ---------- */
-/* Vorabstand knapper als in BASE_CSS (2.3cm): die Kapitelkoepfe tragen hier
-   zusaetzlich Signatur und Beleg-Streifen. Bei 2.3cm wurde der unteilbare
-   Block Kopf+erster Absatz so hoch, dass Kapitelwechsel regelmaessig
-   Restluecken ueber 30% liessen. 1.7cm haelt die Luft und hebt den
-   Fuellgrad. Beschluss vom 2026-07-27 bestaetigt. */
+/* Vorabstand knapper als in BASE_CSS (2.3cm): die Kapitelkoepfe trugen bis
+   zum 2026-09-05 zusaetzlich Signatur und Beleg-Streifen. Bei 2.3cm wurde der
+   unteilbare Block Kopf+erster Absatz so hoch, dass Kapitelwechsel
+   regelmaessig Restluecken ueber 30% liessen. 1.7cm haelt die Luft und hebt
+   den Fuellgrad. Beschluss vom 2026-07-27 bestaetigt.
+   HINWEIS 2026-09-05: Seit der Beleg-Verlagerung an den Kapitelfuss ist der
+   Kopf deutlich niedriger (nur noch Kicker, Titel, Regel) — der urspruengliche
+   Grund fuer die Kuerzung von 2.3cm auf 1.7cm ist damit entfallen. Der Wert
+   BLEIBT trotzdem bei 1.7cm: er gehoert zum HAUSSTIL und wird nicht en
+   passant im Wartungslauf geaendert. Wer ihn zurueckdreht, aendert den
+   Hausstil aller kuenftigen Horoskope — Beschluss noetig, dann hier UND im
+   Abschnitt „HAUSSTIL" des Design-Moduls nachziehen. */
 .chapter {{ margin-top: {HAUSSTIL['kapitel_vorab']}; }}
 .chapter.chapter-first {{ break-before: page; }}
 .chapter-head {{ margin-bottom:0.34cm; }}
@@ -466,6 +515,31 @@ tr.sec td {{ color:#8d8371; }}
 .beleg-asp {{ padding-left:0.56cm; text-indent:-0.32cm; margin-top:0.04cm;
    break-inside:avoid; }}
 .beleg-asp .mk {{ color:{GOLD}; padding-right:0.07cm; }}
+
+/* ---------- Kapitelfuss (Standard seit 2026-09-05) ---------- */
+/* Signatur und Beleg rendern am KAPITELENDE, unter der letzten Bewegung —
+   nicht mehr im Kopf. Grund s. Innere Arbeit, „Verhaeltnis zum
+   Klartext-Modul", Punkt 2: Ein Kopf aus Gradminuten errichtet eine
+   Fachhierarchie genau dort, wo Wiedererkennung entstehen muesste. Der
+   Kapitelkopf traegt seitdem nur noch Kicker und Titel; der Leser trifft
+   zuerst auf „Woran du es merkst".
+   Der Fuss ist ein EIGENSTAENDIGER BLOCK hinter dem letzten Absatz — kein
+   float, kein seitliches Element: Float plus Seitenumbruch kollidiert mit
+   dem satzsicheren Umbruch (build.render_sentence_safe).
+   break-inside steht auf dem WRAPPER, nicht auf .beleg — bei .beleg.two ist
+   das ein Multicol-Container, und dort ignoriert WeasyPrint break-inside
+   (dieselbe Falle wie bei .lbox und table.aspt). */
+.kapitel-fuss {{ margin:0.60cm 0 0 0; break-inside:avoid; }}
+.kapitel-fuss .beleg {{ margin:0; }}
+/* Die Signaturzeile spannt ueber beide Spalten (column-span:all), traegt aber
+   BEWUSST KEINE Trennlinie: WeasyPrint 69 zeichnet den border-bottom eines
+   column-span:all-Elements ueber die rechte Innenkante des Streifens hinaus —
+   im Einspalter sitzt die Linie richtig, im Zweispalter ragt sie rund 3 mm in
+   den Seitenrand (gemessen 2026-09-05). Getrennt wird darum ueber Abstand und
+   Farbe: kursives Petrol oben, gesperrtes Gold-Label „BELEG:" darunter. */
+.fuss-sig {{ font-family:"EB Garamond Italic"; font-style:italic;
+   color:{PETROL_L}; font-size:8.8pt; line-height:1.34; column-span:all;
+   margin:0 0 0.22cm 0; }}
 
 p {{ margin:0 0 0.5em 0; text-align:justify; hyphens:auto; }}
 p.first {{ margin-top:0.4cm; }}
@@ -673,6 +747,111 @@ def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
 </section>"""
 
 
+# --- Seite: Zeitleiste ------------------------------------------------------
+
+# Seitentitel der Zeitleiste. Steht hier als Konstante, weil er zugleich der
+# Pflicht-Baustein ist, den build.assert_render_ready sucht — dieselbe
+# Konstruktion wie bei ASPEKT_TITEL, damit der Wortlaut nicht an zwei Orten
+# gepflegt werden muss (s. _pflicht_baustein_angleichen).
+ZEITLEISTE_TITEL = 'Die Zeitleiste'
+
+ZL_LEAD = (
+    'Diese Seite ist zum Nachschlagen, nicht zum Lesen. Jede Zeile ist ein '
+    'Quartal des Fensters: daneben steht, welche Themen in diesen drei '
+    'Monaten dicht laufen und welche in derselben Zeit ruhen. Ganz rechts '
+    'steht, wie viele Berührungen die Rechnung je Monat gezählt hat; die Zahl '
+    'in Klammern sind die Tage, an denen ein Winkel exakt steht. Eine hohe '
+    'Zahl heißt nicht, dass viel passiert — sie heißt, dass viel gleichzeitig '
+    'angerührt ist.')
+
+ZL_NOTE = ('Die Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
+           'dieses Horoskop entstanden ist. Spannen und Zahlen sind '
+           'unverändert aus der Rechnung übernommen.')
+
+
+def _zl_liste(x, leer='—'):
+    """Themenliste einer Zelle: str bleibt str, Liste wird gefuegt."""
+    if not x:
+        return f'<span class="zl-leer">{leer}</span>'
+    if isinstance(x, str):
+        return esc(x)
+    return esc(' · '.join(str(t) for t in x))
+
+
+def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
+                    anker='PG_zeit', lead=None, note=None, skala=1.0):
+    """Zeitleisten-Seite (Transit und Ultimativ) — EINE Seite, kein Fließtext.
+
+    Sie ersetzt die acht Quartalskapitel (Umbau 2026-09-03) und ist danach die
+    einzige Stelle, an der das Kalenderraster noch auftaucht.
+
+    zeilen  [(quartal, spanne, dicht, ruht, dichte), ...] — je Kalenderquartal
+            eine Zeile, in der Reihenfolge des Fensters:
+              quartal  'Q1' … 'Q8'            — aus `quartale`
+              spanne   'Jul–Sep 26'           — die Monatsspanne, viertes Feld
+                                                der Quartalstupel aus
+                                                transitdata.parse()
+              dicht    Themenkapitel-Titel, die in diesem Quartal laufen
+                       (Liste oder fertiger String)
+              ruht     die uebrigen Themen desselben Dokuments
+              dichte   'Jul 3 (1) · Aug 5 (2) · Sep 2 (0)' — je Monat
+                       aktiv(exakt) aus `hotspots`
+
+    NICHTS DAVON WIRD HIER GERECHNET. Die Werte kommen unveraendert aus dem
+    Builder-JSON (transit.py -> transitdata.parse()); auch die Monatsdichte
+    wird NICHT zu einer Quartalssumme oder einem Maximum verdichtet — das
+    waere gerechnet, und die Regel lautet uebernehmen. Welches Thema in
+    welchem Quartal dicht ist, ergibt sich aus dem `quartale`-Feld der
+    Kontakte, die das Thema buendelt — dieselbe Zuordnung, die auch
+    transituhr_fusion.THEMEN benutzt; sie kommt aus dem Chart-Builder, nicht
+    von hier.
+
+    Die Themennamen sind WORTGLEICH die Kapiteltitel des Dokuments. Ein
+    erfundener oder gekuerzter Name ist derselbe Fehler wie in der
+    Transit-Uhr: die Seite ist eine Navigationshilfe und taugt nur, wenn der
+    Leser den Namen im Text wiederfindet.
+
+    skala   skaliert die Tabellenschrift. Beim Standardfenster (8 Quartale)
+            passt die Seite bei 1.0; ab etwa elf Quartalen — also bei einem
+            Drei-Jahres-Fenster — nicht mehr. Wie bei der Aspektseite wird
+            dann EINGEMESSEN, nicht geschaetzt:
+
+                zl = chartdoc.passe_ein(lambda s: build_html(zl_skala=s),
+                                        'PG_zeit',
+                                        [1.0, .96, .92, .88, .84, .80],
+                                        was='Zeitleiste')
+
+            Zweiseitig darf die Zeitleiste nicht werden — sie ist die
+            Navigationsseite, und Navigation ueber einen Seitenwechsel hinweg
+            ist keine.
+    """
+    titel = titel or ZEITLEISTE_TITEL
+    rows = []
+    for q, spanne, dicht, ruht, dichte in zeilen:
+        rows.append(
+            f'<tr><td class="zq">{esc(str(q))}</td>'
+            f'<td class="zs">{esc(str(spanne))}</td>'
+            f'<td class="zd">{_zl_liste(dicht, "nichts im Wirkorb")}</td>'
+            f'<td class="zr">{_zl_liste(ruht)}</td>'
+            f'<td class="zz">{_zl_liste(dichte)}</td></tr>')
+    ld = lead if lead is not None else ZL_LEAD
+    nt = note if note is not None else ZL_NOTE
+    return f"""<section class="zeit" id="{anker}">
+<div class="fm-kicker">{esc(kicker)}</div>
+<h2 class="fm-title">{esc(titel)}</h2>
+<div class="fm-rule"></div>
+<p class="fm-lead">{esc(ld)}</p>
+<table class="zl" style="font-size:{8.1 * skala:.2f}pt">
+<colgroup><col style="width:1.0cm"><col style="width:2.35cm">
+<col style="width:5.85cm"><col style="width:4.85cm">
+<col style="width:3.15cm"></colgroup>
+<thead><tr><th>&nbsp;</th><th>Zeitraum</th><th>Dicht</th><th>Ruht</th>
+<th>Dichte je Monat</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table>
+<div class="anh-note">{esc(nt)}</div>
+</section>"""
+
+
 # --- Seite: Konstellationen -------------------------------------------------
 
 ELEMENT_VON_ZEICHEN = ['Feuer', 'Erde', 'Luft', 'Wasser']
@@ -782,7 +961,10 @@ ASPEKT_TITEL = 'Die Aspekte im Einzelnen'
 
 
 def _pflicht_baustein_angleichen():
-    """Den Pflicht-Baustein der Aspektseite auf den hier gesetzten Titel ziehen.
+    """Die Pflicht-Bausteine auf die hier gesetzten Seitentitel ziehen.
+
+    Betrifft zwei Titel: die Aspektseite (Chart-Basis) und die Zeitleiste
+    (Transit und Ultimativ).
 
     build.PFLICHT_BAUSTEINE verlangt seit jeher den WOERTLICHEN Seitentitel im
     sichtbaren Text; bis zum 2026-07-27 hiess die Seite „Die Aspekte im
@@ -799,8 +981,20 @@ def _pflicht_baustein_angleichen():
     for i, eintrag in enumerate(eintraege):
         if eintrag and eintrag[0].startswith('Die Aspekte im '):
             eintraege[i] = (ASPEKT_TITEL, eintrag[1])
-            return
-    eintraege.append((ASPEKT_TITEL, 'voll ausgeschriebene Aspekttabelle'))
+            break
+    else:
+        eintraege.append((ASPEKT_TITEL, 'voll ausgeschriebene Aspekttabelle'))
+    # Zeitleiste: dieselbe Konstruktion, aber in den Typ-Listen. Erkannt wird
+    # der Eintrag an seiner BESCHREIBUNG, nicht am Titel — sonst faende die
+    # Angleichung ihren eigenen Eintrag nicht mehr, sobald der Titel abweicht.
+    for typ in ('transit', 'ultimativ'):
+        liste = build.PFLICHT_BAUSTEINE.get(typ, {}).get('text')
+        if not liste:
+            continue
+        for i, eintrag in enumerate(liste):
+            if eintrag and 'Zeitleist' in eintrag[1]:
+                liste[i] = (ZEITLEISTE_TITEL, eintrag[1])
+                break
 
 
 _pflicht_baustein_angleichen()
@@ -924,17 +1118,38 @@ ASPEKT_WORT = re.compile(
     r'\bOrb\b|[☌☍□△⚹⚻⚺]')
 
 
-def build_head(it):
-    """Kapitelkopf: Titel, Signatur als kursiver Untertitel, Beleg als
-    schmaler Streifen (kein float — sonst kollidiert er mit dem Satz-Schutz)."""
-    kick = (f'<div class="kicker">{esc(it["kicker"])}</div>'
-            if it.get('kicker') else '')
-    sig = (f'<div class="signatur">{esc(it["signatur"])}</div>'
-           if it.get('signatur') else '')
-    bel = ''
-    if it.get('beleg'):
-        segs = [s.strip() for s in re.split(r'\s+·\s+', it['beleg']) if s.strip()]
-        stand, rest, seen_rel = [], [], False
+# Wo Signatur und Beleg rendern. 'fuss' ist seit dem 2026-09-05 der Standard
+# fuer JEDEN Dokumenttyp: beide stehen am Kapitelende, unter der letzten
+# Bewegung. 'kopf' ist der Stand davor und gilt nur noch fuer Laeufe OHNE die
+# therapeutische Wirkform (Innere Arbeit ausdruecklich abbestellt, „klassische
+# Kapitel") — dort gibt es keinen Grund, den Beleg nach hinten zu nehmen.
+# Umschalten ueber konfiguriere(beleg_platz='kopf'), nie durch Zuweisung von
+# aussen. Im analyse.md aendert sich NICHTS: dort stehen Signatur und Beleg in
+# beiden Faellen direkt unter der Kapitel-H2, weil build.parse_analyse() sie
+# nur dort erkennt. Die Verlagerung passiert ausschliesslich beim Rendern.
+BELEG_PLATZ = 'fuss'
+
+
+def _beleg_streifen(it, sig_html=''):
+    """Der helle Streifen: optionale Signaturzeile, dann der Beleg.
+
+    Der Beleg rendert ZEILENWEISE — die Staende VOR der ersten Aspektangabe
+    bilden die Kopfzeile (mit „BELEG:"-Label), jede weitere Angabe bekommt
+    eine eigene eingerueckte „–"-Zeile. Ab sechs Beziehungszeilen laeuft der
+    Streifen zweispaltig, sonst wird er bei transit- oder aspektreichen
+    Kapiteln bis zu 23 Zeilen hoch.
+
+    Gibt '' zurueck, wenn weder Signatur noch Beleg vorliegen — ein Kapitel
+    ohne beides (Auftakt, Teiler, Rechenschafts- und Sammelkapitel,
+    Schlusswort, Fachmodus) erzeugt damit KEINEN leeren Streifen.
+    """
+    bel_txt = (it.get('beleg') or '').strip()
+    if not bel_txt and not sig_html:
+        return ''
+    kopf, zeilen, rest = '', '', []
+    if bel_txt:
+        segs = [s.strip() for s in re.split(r'\s+·\s+', bel_txt) if s.strip()]
+        stand, seen_rel = [], False
         for s in segs:
             if not seen_rel and not ASPEKT_WORT.search(s):
                 stand.append(s)
@@ -943,15 +1158,92 @@ def build_head(it):
                 rest.append(s)
         if not stand and rest:
             stand, rest = [rest[0]], rest[1:]
-        head = (f'<div class="beleg-stand"><span class="lbl">Beleg:</span> '
+        kopf = (f'<div class="beleg-stand"><span class="lbl">Beleg:</span> '
                 f'{esc(" · ".join(stand))}</div>') if stand else ''
-        lines = ''.join(f'<div class="beleg-asp"><span class="mk">–</span>'
-                        f'{esc(r)}</div>' for r in rest)
-        cls = 'beleg two' if len(rest) >= 6 else 'beleg'
-        bel = f'<div class="{cls}">{head}{lines}</div>'
+        zeilen = ''.join(f'<div class="beleg-asp"><span class="mk">–</span>'
+                         f'{esc(r)}</div>' for r in rest)
+    cls = 'beleg two' if len(rest) >= 6 else 'beleg'
+    return f'<div class="{cls}">{sig_html}{kopf}{zeilen}</div>'
+
+
+def build_head(it):
+    """Kapitelkopf: Kicker, Titel, Regel.
+
+    Im Standard (BELEG_PLATZ='fuss') traegt der Kopf NUR das — Signatur und
+    Beleg baut `build_fuss(it)` ans Kapitelende. Steht BELEG_PLATZ auf 'kopf'
+    (Lauf ohne die Innere Arbeit), rendert er wie frueher zweizonig: Signatur
+    als kursiver Untertitel, darunter der Beleg als schmaler Streifen (kein
+    float — sonst kollidiert er mit dem Satz-Schutz).
+    """
+    kick = (f'<div class="kicker">{esc(it["kicker"])}</div>'
+            if it.get('kicker') else '')
+    sig = bel = ''
+    if BELEG_PLATZ == 'kopf':
+        sig = (f'<div class="signatur">{esc(it["signatur"])}</div>'
+               if it.get('signatur') else '')
+        bel = _beleg_streifen(it)
     return (f'<div class="chapter-head">{kick}'
             f'<h2 class="chaptitle">{esc(it["title"])}</h2>{sig}'
             f'<div class="rule"></div>{bel}</div>')
+
+
+def build_fuss(it):
+    """Kapitelfuss: Signatur und Beleg als schmaler heller Streifen.
+
+    Gehoert HINTER den letzten Absatz des Kapitels, innerhalb der
+    <section class="chapter">:
+
+        inner = head + ''.join(body) + chartdoc.build_fuss(it)
+
+    Gibt '' zurueck bei Teiler-Kapiteln, bei BELEG_PLATZ='kopf' und bei jedem
+    Kapitel ohne Signatur UND ohne Beleg — Auftakt, Trenner,
+    Rechenschaftskapitel, Sammelkapitel und Schlusswort laufen also sauber
+    durch, ohne einen leeren Streifen zu erzeugen.
+    """
+    if BELEG_PLATZ != 'fuss' or not _hat_fuss(it):
+        return ''
+    sig_txt = (it.get('signatur') or '').strip()
+    sig = f'<div class="fuss-sig">{esc(sig_txt)}</div>' if sig_txt else ''
+    streifen = _beleg_streifen(it, sig_html=sig)
+    return f'<div class="kapitel-fuss">{streifen}</div>' if streifen else ''
+
+
+def _hat_fuss(it):
+    """Traegt dieses Kapitel einen Fuss? Teiler-Seiten nie (sie laufen ueber
+    build_part_head und tragen weder Signatur noch Beleg)."""
+    if (it.get('kicker') or '') in PART_KICKER:
+        return False
+    return bool((it.get('signatur') or '').strip()
+                or (it.get('beleg') or '').strip())
+
+
+def pruefe_kapitelfuss(html_str, items):
+    """Harte Gegenprobe vor dem Rendern: traegt jedes Kapitel mit Signatur
+    oder Beleg auch seinen Fuss-Block?
+
+    Die Kapitel-Schleife steht im chart-eigenen Builder, und der wird je Chart
+    neu geschrieben — ein vergessener `build_fuss(it)`-Aufruf wuerde Signatur
+    UND Beleg lautlos aus dem ganzen Dokument entfernen. Genau das faengt
+    diese Probe ab: sie bricht hart ab, statt still ein Horoskop ohne
+    Rueckbindung zu liefern (Barnum-Schutz, s. Klartext-Modul).
+    Wird von render_mit_inhalt() selbst aufgerufen.
+    """
+    if BELEG_PLATZ != 'fuss':
+        return
+    soll = sum(1 for it in items if _hat_fuss(it))
+    ist = html_str.count('class="kapitel-fuss"')
+    if ist == soll:
+        return
+    raise RuntimeError(
+        f'Kapitelfuss stimmt nicht: {soll} Kapitel tragen Signatur oder '
+        f'Beleg, im HTML stehen aber {ist} Fuss-Bloecke.\n'
+        'Seit dem 2026-09-05 rendern Signatur und Beleg am KAPITELENDE. Die '
+        'Kapitel-Schleife des Chart-Builders muss den Fuss hinter den letzten '
+        'Absatz setzen:\n'
+        "    inner = head + ''.join(body) + chartdoc.build_fuss(it)\n"
+        'Soll der Beleg ausnahmsweise am Kopf stehen (Lauf ohne die '
+        "therapeutische Wirkform), chartdoc.konfiguriere(beleg_platz='kopf') "
+        'setzen — dann rendert build_head() wieder zweizonig.')
 
 
 def build_part_head(it):
@@ -1128,7 +1420,16 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     must = [(b['text'], f"{it['kicker']} Block {j}")
             for it in items for j, b in enumerate(it['blocks'])
             if b['type'] in ('p', 'li')]
+    # Die Signatur steht seit dem 2026-09-05 im Kapitelfuss. Sie hier in die
+    # Volltext-Probe zu haengen kostet nichts und faengt den Fall ab, dass ein
+    # Fuss zwar gebaut, aber der falschen Quelle entnommen wurde.
+    must += [(it['signatur'], f"{it.get('kicker') or 'Kapitel'} Signatur")
+             for it in items if (it.get('signatur') or '').strip()]
     must += list(extra_must)
+    # Vor dem ersten Render: sitzt der Fuss ueberhaupt im Dokument? Ein
+    # vergessener build_fuss()-Aufruf in der Kapitel-Schleife wuerde sonst
+    # Signatur und Beleg lautlos aus dem ganzen Horoskop entfernen.
+    pruefe_kapitelfuss(build_html(set()), items)
     letzte = None
     for runde in range(1, max_pass + 1):
         doc, breaks, unfix = build.render_sentence_safe(
