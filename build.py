@@ -765,7 +765,13 @@ VERBOTEN (harte Fehler, je mit Zeilennummer):
   - leere Kapitel (H2 ohne Textblöcke); doppelte Kicker/Titel
   - Absätze, die mitten im Satz enden (letztes Zeichen kein . ! ? … : ;)
     oder auf 1-2-stelliger Ordinalzahl ("… ins 3.") enden — typisches
-    Zerreiß-Artefakt aus PDF-Rekonstruktionen
+    Zerreiß-Artefakt aus PDF-Rekonstruktionen.
+    AUSNAHME (seit 2026-09-06): Ein Absatz DARF auf einer Ordinalzahl enden,
+    wenn ein Bezugswort davorsteht — "… steht in Kapitel 10.", "… in den
+    Häusern 3 und 9.". Das ist der Querverweis, den die Ordnungs-Probe der
+    Inneren Arbeit (Prinzip 10) ausdrücklich verlangt; er wird am Bezugswort
+    erkannt (_ORD_REF_WORDS) und durchgelassen. Ohne Bezugswort bleibt es ein
+    Fehler
   - Absätze, die (nach öffnenden Anführungszeichen) klein beginnen —
     ebenfalls Zerreiß-Artefakt: mit dem Vorgänger zusammenführen
 """
@@ -777,6 +783,43 @@ _PLACEHOLDER_RE = re.compile(r'\{\{|\}\}|\bTODO\b|\bFIXME\b|\?\?\?')
 _INLINE_MARKUP_RE = re.compile(r'\*\*|`|\]\(')
 _TABLE_LINE_RE = re.compile(r'^\s*\|')
 _ORD_END_RE = re.compile(r'(?:^|[\s(])\d{1,2}\.$')
+
+# Ein Absatz, der auf einer Ordinalzahl endet, ist normalerweise ein
+# Zerreiss-Artefakt aus einer PDF-Rekonstruktion („… ins 3." — abgerissen von
+# „3. Haus"). Es gibt aber einen legitimen Fall, und er ist im Standardlauf
+# sogar VORGESCHRIEBEN: Die Ordnungs-Probe der Inneren Arbeit (Prinzip 10)
+# verlangt, dass ein Kapitel, das die Rueckseite eines frueheren behandelt,
+# dieses ausdruecklich beim Namen nennt — und das natuerliche Satzende eines
+# solchen Querverweises IST die Kapitelnummer („… steht in Kapitel 2 und
+# Kapitel 10.").
+#
+# Bis 2026-09-06 brach parse_analyse an genau diesen Saetzen ab. Der Ausweg
+# im Prueflauf war, den Verweis unschaerfer zu formulieren („im Kapitel ueber
+# dein Auftreten") — also eine Regel zu verletzen, um eine andere zu
+# erfuellen. Seither wird der Verweis am Bezugswort erkannt und
+# durchgelassen. Ein echtes Artefakt hat kein Bezugswort vor der Zahl.
+_ORD_REF_WORDS = (r'Kapiteln?|Haus|H(?:ae|ä)user[n]?|Teile?[nrs]?|'
+                  r'Abschnitte?[ns]?|Punkte?[ns]?|Prinzip(?:ien)?|'
+                  r'Bewegung(?:en)?|Schritte?[ns]?|R(?:ang|aenge|änge)|'
+                  r'Seiten?|Nr\.?|Nummer|Themen?|Quartale?[ns]?|Stufen?|'
+                  r'Regeln?|Segmente?[ns]?|Anhang|Tabellen?|Zeilen?|'
+                  r'Abs(?:atz|aetze|ätze)|S(?:atz|aetze|ätze)|Fragen?|'
+                  r'(?:Ue|Ü)bung(?:en)?|Aufgaben?|Fu(?:ss|ß)noten?|'
+                  r'B(?:and|aende|ände)')
+# a) Bezugswort unmittelbar vor der Zahl: „… in Kapitel 10."
+_ORD_REF_DIREKT_RE = re.compile(
+    r'(?:^|[\s(„"»])(?:' + _ORD_REF_WORDS + r')\s+\d{1,2}\.$')
+# b) Bezugswort vor einer Zahlenkette: „… in den Kapiteln 2, 7 und 10."
+_ORD_REF_KETTE_RE = re.compile(
+    r'(?:^|[\s(„"»])(?:' + _ORD_REF_WORDS + r')\s+'
+    r'(?:\d{1,2}\s*(?:,|und|oder|bis|/|–|-)\s*)+\d{1,2}\.$')
+
+
+def _ist_kapitelverweis(tail: str) -> bool:
+    """Endet der Absatz auf einem BENANNTEN Verweis statt auf einem
+    abgerissenen Satz? Nur dann ist die Ordinalzahl am Absatzende zulaessig."""
+    return bool(_ORD_REF_DIREKT_RE.search(tail)
+                or _ORD_REF_KETTE_RE.search(tail))
 _OPENERS = '„“"»«(\'‘‚['
 _CLOSERS = '“”"»«)\'’]'
 
@@ -995,10 +1038,13 @@ def parse_analyse(path: str, client: str = None) -> dict:
             if last in ":;":
                 pass
             elif last in ".!?…":
-                if _ORD_END_RE.search(tail):
+                if _ORD_END_RE.search(tail) and not _ist_kapitelverweis(tail):
                     err(b["line"], f"Absatz endet auf Ordinalzahl ({tail[-25:]!r}) — "
                                    "zerrissener Absatz (PDF-Artefakt)? Mit Folgeabsatz "
-                                   "zusammenführen.")
+                                   "zusammenführen. Ein BENANNTER Verweis "
+                                   "(„… in Kapitel 10.\u201c, „… in den Häusern 3 und 9.\u201c) "
+                                   "ist dagegen zulässig und wird durchgelassen — "
+                                   "das Bezugswort vor der Zahl ist die Bedingung.")
             else:
                 err(b["line"], f"Absatz endet mitten im Satz ({tail[-40:]!r}).")
 

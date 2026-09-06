@@ -28,10 +28,18 @@ die GESPIEGELTE Achse zoege. Ein Faktorname, der sich nicht aufloesen laesst, is
 seit 30.07.2026 ein HARTER Fehler (vorher fiel er lautlos durch, s. Kommentar bei
 FAKTOR_ALIAS).
 
+FUEHRT-FELD (seit 2026-09-06): Traegt eine FAKTOR-Zeile `fuehrt=ja`, fuehrt
+dieser Faktor laut Themenliste ein Kapitel. Zwei Wirkungen: (a) bei einem
+Spezialfaktor werden seine Methoden-Segmente (_ALLG/_SEC_*) in die normale
+Gruppe gezogen statt in die ueberspringbare 'Spezialfaktor-Methodik'; (b) der
+Grenzlagen-Warnblock sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob
+beide nur in seiner Zeile im Rechenschaftskapitel stehen. Ohne das Feld
+verhaelt sich alles wie zuvor — das Feld ist optional und additiv.
+
 @@SELEKTOR-Blockformat (Schritt 1 schreibt ihn ins chart_data.md):
     @@SELEKTOR
-    FAKTOR SONNE zeichen=Krebs haus=11 nebenhaus=12 abstand=3.22
-    FAKTOR MOND zeichen=Krebs haus=12
+    FAKTOR SONNE zeichen=Krebs haus=11 nebenhaus=12 abstand=3.22 fuehrt=ja
+    FAKTOR MOND zeichen=Krebs haus=12 fuehrt=ja
     ...
     FAKTOR MONDKNOTEN zeichen=Wassermann haus=6
     FAKTOR PHOLUS zeichen=Fische haus=7 nebenhaus=8 abstand=4.17
@@ -228,6 +236,7 @@ def parse_chart(text):
                 continue
             name = norm_faktor(roh)
             zeichen = haus = nebenhaus = abstand = None
+            fuehrt = False
             for p in parts[2:]:
                 pl = p.lower()
                 if pl.startswith('zeichen='):
@@ -238,8 +247,12 @@ def parse_chart(text):
                     haus = p.split('=', 1)[1]
                 elif pl.startswith('abstand='):
                     abstand = p.split('=', 1)[1]
+                elif pl.startswith('fuehrt='):
+                    fuehrt = p.split('=', 1)[1].strip().lower() in (
+                        'ja', 'j', 'true', '1')
             faktoren.append({'name': name, 'zeichen': zeichen, 'haus': haus,
-                             'nebenhaus': nebenhaus, 'abstand': abstand})
+                             'nebenhaus': nebenhaus, 'abstand': abstand,
+                             'fuehrt': fuehrt})
         elif kw == 'ACHSE':
             ax = norm_token(parts[1])
             z = None
@@ -360,7 +373,8 @@ def build_requests(chart):
         if nh:
             stufe, text = grenz_stufe(ab)
             grenz.append({'faktor': nm, 'haus': h, 'nebenhaus': nh,
-                          'abstand': ab, 'stufe': stufe, 'text': text})
+                          'abstand': ab, 'stufe': stufe, 'text': text,
+                          'fuehrt': bool(f.get('fuehrt'))})
         if nm in PSET:
             if z:
                 add('Planet-in-Zeichen', ZEICHENFILE[nm], '%s_IN_%s' % (nm, z))
@@ -376,8 +390,19 @@ def build_requests(chart):
                 haeuser.add(int(nh))
         elif nm in SPEZFILE:
             src = SPEZFILE[nm]
+            # Die vier Methoden-Segmente eines Spezialfaktors (Quellenlage,
+            # Umlaufzeiten, Deutungsregeln) sind in JEDEM Lauf identisch und
+            # haben keinen Bezug zum konkreten Chart — bei fuenf
+            # Spezialfaktoren rund 700 Zeilen. Sie stehen deshalb seit dem
+            # 2026-09-06 in einer EIGENEN Gruppe ganz am Ende der referenz.md
+            # und sind dort ueberspringbar wie die GRUNDLAGEN_*-Segmente
+            # (Werkzeug-Modul, Punkt 2). Fuehrt der Faktor ein Thema
+            # (`fuehrt=ja` in der FAKTOR-Zeile), traegt seine Methodik die
+            # Deutung mit und wandert in die normale Gruppe, wird also gelesen.
+            gruppe_meth = ('Spezialfaktor' if f.get('fuehrt')
+                           else 'Spezialfaktor-Methodik')
             for suf in ('ALLG', 'SEC_HAUS', 'SEC_ZEICHEN', 'SEC_ASPEKT'):
-                add('Spezialfaktor', src, '%s_%s' % (nm, suf))
+                add(gruppe_meth, src, '%s_%s' % (nm, suf))
             if z:
                 add('Spezialfaktor', src, '%s_IN_%s' % (nm, z))
                 got.append('%s_IN_%s' % (nm, z))
@@ -431,8 +456,17 @@ def build_requests(chart):
 
 
 # ---------------------------------------------------------------- Assemblage
+# Reihenfolge der Abschnitte in der referenz.md. 'Spezialfaktor-Methodik'
+# steht bewusst GANZ HINTEN, direkt vor dem Auswahl-Protokoll: Der Abschnitt
+# ist ueberspringbar (s. build_requests), und was uebersprungen werden darf,
+# gehoert ans Ende, damit der Schnitt ohne Suchen moeglich ist.
 GRUPPEN = ['Grundlagen', 'Sonnenzeichen', 'Planet-in-Zeichen', 'Planet-in-Haus',
-           'Haus-Allgemein', 'Achsen', 'Spezialfaktor', 'Aspekte']
+           'Haus-Allgemein', 'Achsen', 'Spezialfaktor', 'Aspekte',
+           'Spezialfaktor-Methodik']
+
+# Gruppen, die Schritt 2 ueberspringen DARF (nicht muss). Der Kopf der
+# referenz.md weist sie mit Zeilenzahl aus, damit die Ersparnis sichtbar ist.
+UEBERSPRINGBAR = ('Grundlagen', 'Spezialfaktor-Methodik')
 
 
 def select(chart_text, blocks_ref):
@@ -475,21 +509,65 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
     out = ['# Referenzschnitt (Schritt 2) — nur chart-relevante Bloecke', '']
     out.append('> Maschinell aus blocks/ gezogen. Bloecke: %d. '
                'Fehlstellen: %d.' % (len(ordered), len(missing)))
+    # Ueberspringbare Abschnitte mit ihrem Umfang ausweisen. Ohne diese Zeile
+    # ist beim Lesen nicht zu sehen, was der Schnitt kostet — und was er
+    # sparen wuerde. Zahlen aus dem tatsaechlich gezogenen Schnitt, nicht
+    # geschaetzt.
+    _z = {}
+    for gruppe, _s, _k, _n, text in ordered:
+        _z[gruppe] = _z.get(gruppe, 0) + len(text.split('\n')) + 2
+    _skip = [(g, _z[g]) for g in UEBERSPRINGBAR if _z.get(g)]
+    if _skip:
+        out.append('>')
+        out.append('> UEBERSPRINGBAR (s. Werkzeug-Modul, Punkt 2): %s. '
+                   'Zusammen rund %d Zeilen.'
+                   % (' · '.join('%s ~%d Zeilen' % (g, n) for g, n in _skip),
+                      sum(n for _, n in _skip)))
+        out.append('> Sie tragen Methoden- und Grundlagenwissen, das in jedem '
+                   'Lauf identisch ist und')
+        out.append('> keinen Bezug zum konkreten Chart hat. Chart-spezifische '
+                   'Bloecke (Zeichen, Haus,')
+        out.append('> Aspekt, Spezialfaktor-Staende) werden IMMER voll '
+                   'gelesen.')
     out.append('')
     if grenz:
         out.append('\n' + '=' * 70)
         out.append('## ⚠ GRENZLAGEN — Pflichtanweisung fuer die Deutung')
         out.append('=' * 70)
-        out.append('Diese Faktoren stehen 5° oder weniger VOR einer Hausspitze und '
-                   'werden in BEIDEN\nHaeusern gedeutet — die Hausdeutung des '
-                   'Nebenhauses darf nicht wegfallen. Beide\nHausbloecke stehen '
-                   'unten unter "Planet-in-Haus" bzw. "Spezialfaktor". Die '
-                   'fertige\nSignatur-Zeile (Klartext-Modus) steht jeweils dabei '
-                   'und wird 1:1 in den Kapitelkopf\nuebernommen; im Fliesstext '
-                   'erscheinen weder Hausnummer noch Gradzahl.\n')
+        out.append(
+            'Diese Faktoren stehen 5° oder weniger VOR einer Hausspitze. Was '
+            'daraus folgt,\nhaengt seit dem Kern-Umbau vom 2026-09-04 davon ab, '
+            'ob der Faktor ein Thema FUEHRT:\n'
+            '\n'
+            '  - Er FUEHRT ein Thema  -> er wird in BEIDEN Haeusern gedeutet, in '
+            'der unten\n'
+            '    genannten Rangfolge. Die Hausdeutung des Nebenhauses darf dann '
+            'nicht\n'
+            '    wegfallen; sie faellt sonst bei der Deckungsprobe (a) auf wie '
+            'eine fehlende\n'
+            '    Zeichenebene.\n'
+            '  - Er fuehrt KEINES -> seine Zeile im Rechenschaftskapitel traegt '
+            'beide Haeuser\n'
+            '    mit der Stufe („Haus 11/12, Schwellenlage"). Ausgedeutet wird '
+            'dort nichts.\n'
+            '\n'
+            'Bis zum 2026-09-06 stand hier pauschal „werden in BEIDEN Haeusern '
+            'gedeutet" —\ndas war gegenueber dem Kern veraltet und wies bei '
+            'jedem Lauf eine Pflicht an,\ndie fuer nicht fuehrende Faktoren '
+            'nicht gilt.\n'
+            '\n'
+            'Beide Hausbloecke stehen unten unter "Planet-in-Haus" bzw. '
+            '"Spezialfaktor". Die\nfertige Signatur-Zeile (Klartext-Modus) '
+            'steht jeweils dabei und wird 1:1 in den\nKapitelkopf uebernommen; '
+            'im Fliesstext erscheinen weder Hausnummer noch Gradzahl.\n')
         for g in grenz:
-            out.append('- **%s**: Haus %s → Haus %s. %s.'
-                       % (g['faktor'].capitalize(), g['haus'], g['nebenhaus'], g['text']))
+            marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
+                     if g.get('fuehrt')
+                     else ' [fuehrt kein Thema — Zeile im Rechenschaftskapitel, '
+                          'beide Haeuser, keine Ausdeutung]')
+            out.append('- **%s**: Haus %s → Haus %s. %s.%s'
+                       % (g['faktor'].capitalize(), g['haus'], g['nebenhaus'],
+                          g['text'], marke))
             out.append('  `Signatur: %s`' % signatur_notation(g))
         out.append('')
     for g in GRUPPEN:

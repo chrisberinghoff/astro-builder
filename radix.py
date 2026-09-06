@@ -8,7 +8,7 @@ Chart-Daten selbst gezeichnet. Vorteil: Das Rad zeigt exakt dieselben
 Huber-Aspekte wie die Aspekttabelle (beide speisen sich aus `huber_aspects`),
 ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
 
-Drei öffentliche Funktionen:
+Öffentliche Funktionen:
 
     huber_aspects(factors, orbs=None) -> list
         Berechnet die Aspekte nach Huber-Orbis (planetenindividuell). DIESELBE
@@ -21,6 +21,16 @@ Drei öffentliche Funktionen:
     radix(factors, cusps, asc, mc, out_path=..., title=..., aspects=None,
           palette=None, gradmarke=True) -> str
         Zeichnet das Rad als PNG und gibt den Pfad zurück.
+
+    strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None) -> dict
+        ALLE Struktur-Befunde in einem Aufruf: Element-/Modusverteilung in drei
+        Zählungen (auch gewichtet), Rückläufigkeit, Herrscherketten mit Kreisen
+        und Enddispositoren, HAUSHERRSCHER, Rezeptionen, Aspektdichte je Faktor,
+        das Netz der Spezialfaktoren, Aspektfiguren, Zyklusfenster.
+        strukturbild_text(sb) schreibt daraus den fertigen `## Strukturbild`-
+        Abschnitt fürs chart_data.md. Eingeführt 2026-09-06 (Prüfbericht 5.1–5.6);
+        bis dahin wurde das alles von Hand gerechnet, und vier Ebenen fehlten
+        ganz, weil keine Regel nach ihnen fragte.
 
 Verwendung als Modul (Schritt 3/4, Design-Konversation):
     import sys; sys.path.insert(0, "/home/claude")
@@ -413,6 +423,673 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
     return out_path
 
 
+# --- Strukturbild: die Statik unter den Einzeldeutungen ---------------------
+#
+# Eingefuehrt 2026-09-06 nach dem ersten Prueflauf des Standard-Geburtshoroskops
+# (PRUEFBERICHT_Geburtshoroskop_2026-09-05, Rubrik 5). Bis dahin wurde das
+# Strukturbild in Schritt 1 von Hand in Python zusammengerechnet und von Hand
+# ausgeschrieben. Zwei Folgen: Erstens fehlten Ebenen, nach denen keine Regel
+# ausdruecklich fragte — Hausherrscher (Befund 5.2, „die groesste fachliche
+# Luecke\"), Aspektdichte je Faktor (5.1), Rezeption (5.4), das Netz der
+# Spezialfaktoren untereinander (5.5). Zweitens zaehlte die Element-/
+# Modusverteilung eine Sonne wie einen Pholus (5.3). Beides ist reine
+# Arithmetik auf Daten, die nach huber_aspects ohnehin fertig vorliegen; es
+# gehoert deshalb in den Code und nicht in die Handrechnung.
+#
+# strukturbild() rechnet, strukturbild_text() schreibt den fertigen
+# `## Strukturbild`-Abschnitt fuers chart_data. Beides deterministisch und
+# ohne Deutung — die Deutung bleibt Schritt 2.
+
+SIGN_NAMES = ['Widder', 'Stier', 'Zwillinge', 'Krebs', 'Löwe', 'Jungfrau',
+              'Waage', 'Skorpion', 'Schütze', 'Steinbock', 'Wassermann',
+              'Fische']
+_ELEM_NAMES = ['Feuer', 'Erde', 'Luft', 'Wasser']
+_MODUS_NAMES = ['kardinal', 'fix', 'veränderlich']
+
+# Moderne Herrscher (Projekt-Standard, s. Datenblatt-Modul, Strukturbild §3);
+# die klassischen Zweitherrscher laufen als eigene Kette mit, weil sie bei
+# Skorpion/Wassermann/Fische regelmaessig eine ANDERE Kette ergeben — und die
+# Rezeptionen, die es nur klassisch gibt, sonst unsichtbar blieben.
+HERRSCHER = {
+    'Widder': 'Mars', 'Stier': 'Venus', 'Zwillinge': 'Merkur', 'Krebs': 'Mond',
+    'Löwe': 'Sonne', 'Jungfrau': 'Merkur', 'Waage': 'Venus', 'Skorpion': 'Pluto',
+    'Schütze': 'Jupiter', 'Steinbock': 'Saturn', 'Wassermann': 'Uranus',
+    'Fische': 'Neptun',
+}
+HERRSCHER_KLASSISCH = dict(HERRSCHER, **{
+    'Skorpion': 'Mars', 'Wassermann': 'Saturn', 'Fische': 'Jupiter'})
+
+# Zaehlgewichte fuer die dritte, gewichtete Element-/Modusrechnung (Befund 5.3).
+# Grund: Ein schwaechstes Element, das nur von Pholus oder vom Gluueckspunkt
+# getragen wird, ist etwas anderes als eines, das die Sonne traegt — die
+# ungewichtete Zaehlung kann beides nicht unterscheiden und fuehrt die
+# Befundzeile dann in die Irre. DC und IC zaehlen NICHT mit: sie sind die
+# Spiegelpole von AC und MC und wuerden dieselbe Aussage doppelt gewichten.
+GEWICHT = {
+    'Sonne': 2.0, 'Mond': 2.0, 'AC': 2.0, 'MC': 2.0,
+    'Merkur': 1.0, 'Venus': 1.0, 'Mars': 1.0, 'Jupiter': 1.0, 'Saturn': 1.0,
+    'Uranus': 1.0, 'Neptun': 1.0, 'Pluto': 1.0,
+    'Knoten': 0.5, 'Suedknoten': 0.5, 'Chiron': 0.5, 'Lilith': 0.5,
+    'Pholus': 0.5, 'Glueckspunkt': 0.5,
+    'DC': 0.0, 'IC': 0.0,
+}
+
+SPEZIALFAKTOREN = ('Chiron', 'Lilith', 'Pholus', 'Glueckspunkt',
+                   'Knoten', 'Suedknoten')
+WINKEL = ('AC', 'MC', 'DC', 'IC')
+PERSOENLICH = ('Sonne', 'Mond', 'Merkur', 'Venus', 'Mars')
+
+# Aspektgewichte fuer die Dichterechnung (Befund 5.1). Ein voller Hauptaspekt
+# zaehlt eins, alles Schwaechere ein halbes. Die Zahl ist kein Messwert,
+# sondern ein Ordnungsmass: sie sagt, welche Funktionen im Chart viel Verkehr
+# haben und welche isoliert arbeiten — das wird im Alltag ganz anders erlebt
+# als eine Einzeldeutung.
+_DICHTE_GEWICHT = {'voll': 1.0, 'einseitig': 0.5, 'neben': 0.5, 'zusatz': 0.5}
+
+
+def zeichen_index(lon):
+    """Ekliptikale Laenge -> Zeichenindex 0..11 (Widder = 0)."""
+    return int((lon % 360) // 30)
+
+
+def zeichen_name(lon):
+    return SIGN_NAMES[zeichen_index(lon)]
+
+
+def _norm_name(s):
+    """Faktor-/Zeichennamen robust vergleichbar machen (Umlaute, Gross/Klein)."""
+    s = (s or '').strip()
+    for a, b in (('ö', 'oe'), ('ü', 'ue'), ('ä', 'ae'), ('ß', 'ss'),
+                 ('Ö', 'Oe'), ('Ü', 'Ue'), ('Ä', 'Ae')):
+        s = s.replace(a, b)
+    return s.lower()
+
+
+_SIGN_LOOKUP = {_norm_name(n): n for n in SIGN_NAMES}
+
+
+def _sign_kanonisch(name):
+    return _SIGN_LOOKUP.get(_norm_name(name))
+
+
+def verteilung(factors, gewichtet=False, nur_planeten=False):
+    """Element- und Modusverteilung.
+
+    gewichtet=False, nur_planeten=True   -> die Zaehlung der Konstellationsseite
+    gewichtet=False, nur_planeten=False  -> alle uebergebenen Faktoren, je 1
+    gewichtet=True                       -> nach GEWICHT (Lichter/Winkel doppelt,
+                                            Spezialfaktoren halb, DC/IC gar nicht)
+
+    Rueckgabe: {'elemente': {name: wert}, 'modi': {name: wert},
+                'schwaechstes_element': …, 'schwaechster_modus': …,
+                'traeger': {elementname: [Faktornamen]}}
+    """
+    el = {n: 0.0 for n in _ELEM_NAMES}
+    mo = {n: 0.0 for n in _MODUS_NAMES}
+    traeger = {n: [] for n in _ELEM_NAMES}
+    traeger_mo = {n: [] for n in _MODUS_NAMES}
+    for f in factors:
+        nm = f['name']
+        if nur_planeten and nm not in _PLANETEN:
+            continue
+        g = GEWICHT.get(nm, 1.0) if gewichtet else 1.0
+        if g == 0:
+            continue
+        k = zeichen_index(f['lon'])
+        el[_ELEM_NAMES[k % 4]] += g
+        mo[_MODUS_NAMES[k % 3]] += g
+        traeger[_ELEM_NAMES[k % 4]].append(nm)
+        traeger_mo[_MODUS_NAMES[k % 3]].append(nm)
+    schw_el = min(el, key=lambda k: el[k])
+    schw_mo = min(mo, key=lambda k: mo[k])
+    return {'elemente': {k: round(v, 1) for k, v in el.items()},
+            'modi': {k: round(v, 1) for k, v in mo.items()},
+            'schwaechstes_element': schw_el, 'schwaechster_modus': schw_mo,
+            'traeger': traeger, 'traeger_modus': traeger_mo}
+
+
+def aspektdichte(factors, aspects, zusatz=None):
+    """Aspektdichte je Faktor (Befund 5.1 des Prueflaufs).
+
+    Zaehlt je Faktor die Aspekte, gewichtet nach Staerke (_DICHTE_GEWICHT), und
+    teilt in drei Gruppen: dicht verschaltet (oberes Drittel der Spanne), duenn
+    (unteres Drittel) und unaspektiert (kein einziger Kontakt).
+
+    Ein unaspektierter Faktor ist der wichtigste Einzelbefund dieser Rechnung —
+    er arbeitet ohne Verbindung zum Rest des Bildes und wird im Alltag als etwas
+    erlebt, das sich nicht mit dem uebrigen Leben verzahnt. Bis 2026-09-06 fiel
+    er nur auf, wenn er jemandem beim Schreiben zufaellig auffiel.
+    """
+    zaehl = {f['name']: 0.0 for f in factors}
+    anzahl = {f['name']: 0 for f in factors}
+    for a in list(aspects) + list(zusatz or []):
+        g = _DICHTE_GEWICHT.get(a.get('strength'), 0.5)
+        for seite in ('a', 'b'):
+            nm = a[seite]
+            if nm in zaehl:
+                zaehl[nm] += g
+                anzahl[nm] += 1
+    # Die vier Winkel bleiben aus der Gruppierung heraus. Zwei Gruende: DC und
+    # IC tragen die Aspekte ihrer Gegenachse gespiegelt und wuerden doppelt
+    # zaehlen; und alle vier haben mit 9 Grad den weitesten Orb im System und
+    # stehen darum bauartbedingt an der Spitze jeder Dichteliste. Ein Winkel
+    # unter den „dicht verschalteten" Faktoren waere keine Information. Ihre
+    # Werte stehen weiter in 'gewichtet' und werden getrennt ausgewiesen.
+    pool = {k: v for k, v in zaehl.items() if k not in WINKEL}
+    werte = sorted(pool.values())
+    if werte:
+        lo, hi = werte[0], werte[-1]
+        spanne = hi - lo
+        g_dicht = lo + spanne * 2 / 3 if spanne else hi
+        g_duenn = lo + spanne / 3 if spanne else lo
+    else:
+        g_dicht = g_duenn = 0
+    dicht = sorted([k for k, v in pool.items() if v >= g_dicht and v > 0],
+                   key=lambda k: -pool[k])
+    duenn = sorted([k for k, v in pool.items() if 0 < v <= g_duenn],
+                   key=lambda k: pool[k])
+    unaspektiert = sorted([k for k, v in pool.items() if v == 0])
+    return {'gewichtet': {k: round(v, 1) for k, v in zaehl.items()},
+            'anzahl': anzahl, 'dicht': dicht, 'duenn': duenn,
+            'unaspektiert': unaspektiert,
+            'winkel': {k: round(zaehl[k], 1) for k in WINKEL if k in zaehl}}
+
+
+def _kette(faktor, zeichen_von, herrscher_tab):
+    """Herrscherkette ab `faktor`, bis sie sich schliesst oder ausserhalb endet.
+
+    Rueckgabe: (pfad, zyklus)  — zyklus ist die geschlossene Teilkette oder [].
+    """
+    pfad, gesehen = [faktor], {faktor: 0}
+    cur = faktor
+    while True:
+        z = zeichen_von.get(cur)
+        if not z:
+            return pfad, []
+        nxt = herrscher_tab.get(z)
+        if not nxt or nxt not in zeichen_von:
+            if nxt:
+                pfad.append(nxt)
+            return pfad, []
+        if nxt in gesehen:
+            return pfad, pfad[gesehen[nxt]:]
+        gesehen[nxt] = len(pfad)
+        pfad.append(nxt)
+        cur = nxt
+
+
+def herrscherketten(factors, klassisch=False):
+    """Zeichenherrscher-Ketten, geschlossene Kreise und Enddispositoren.
+
+    Ein Enddispositor steht im eigenen Zeichen; bei ihm enden Faeden. Ein
+    geschlossener Kreis ohne Enddispositor bedeutet, dass jedes Glied die
+    Bedingungen des naechsten erbt (Befund 5.4 des Prueflaufs) — daher wird der
+    Kreis mit ausgegeben und nicht nur seine Existenz vermerkt.
+    """
+    tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+    zeichen_von = {f['name']: zeichen_name(f['lon']) for f in factors
+                   if f['name'] in _PLANETEN}
+    ketten, kreise, endd = {}, [], []
+    for nm in zeichen_von:
+        pfad, zyklus = _kette(nm, zeichen_von, tab)
+        ketten[nm] = pfad
+        if len(zyklus) == 1 and zyklus[0] == nm:
+            endd.append(nm)
+        elif zyklus and sorted(zyklus) not in [sorted(k) for k in kreise]:
+            kreise.append(zyklus)
+    return {'zeichen_von': zeichen_von, 'ketten': ketten,
+            'kreise': [k for k in kreise if len(k) > 1],
+            'enddispositoren': sorted(endd)}
+
+
+def hausherrscher(factors, cusps, aspects=None, klassisch=False):
+    """Wo steht der Herrscher jedes Hauses? (Befund 5.2 des Prueflaufs.)
+
+    Bis 2026-09-06 fragte keine Regel danach: Das Strukturbild verlangte
+    Zeichenherrscher-Ketten (wer steht in wessen Zeichen), aber nicht, wo der
+    Herrscher des 7., des 10. oder des 12. Hauses steht. Diese Ebene traegt in
+    der klassischen wie in der psychologischen Schule einen erheblichen Teil
+    der Deutung — sie sagt, wohin ein Lebensbereich seine Geschaefte auslagert.
+
+    Rueckgabe je Haus 1..12:
+        {'haus', 'spitzenzeichen', 'herrscher', 'steht_in_zeichen',
+         'steht_in_haus', 'im_eigenen_haus', 'auf_winkel', 'aspekt_zur_spitze'}
+    'auf_winkel' nennt den Winkel, wenn der Herrscher mit ihm in Konjunktion
+    steht; 'aspekt_zur_spitze' den Aspekt zur Spitze seines eigenen Hauses,
+    soweit die Achsen in `aspects` gefuehrt sind.
+    """
+    tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+    pos = {f['name']: f['lon'] for f in factors}
+    konj_winkel = {}
+    for a in (aspects or []):
+        if a['angle'] == 0:
+            for x, y in ((a['a'], a['b']), (a['b'], a['a'])):
+                if y in WINKEL:
+                    konj_winkel.setdefault(x, []).append(y)
+    out = []
+    for n in range(1, 13):
+        zsp = SIGN_NAMES[zeichen_index(cusps[n - 1])]
+        hr = tab.get(zsp)
+        eintrag = {'haus': n, 'spitzenzeichen': zsp, 'herrscher': hr,
+                   'steht_in_zeichen': None, 'steht_in_haus': None,
+                   'haus_spalte': None, 'grenzlage': False, 'nebenhaus': None,
+                   'im_eigenen_haus': False, 'auf_winkel': None}
+        if hr and hr in pos:
+            hg = haus_und_grenzlage(pos[hr], cusps)
+            eintrag['steht_in_zeichen'] = zeichen_name(pos[hr])
+            eintrag['steht_in_haus'] = hg['haus']
+            # Die Haus-Angabe traegt dieselbe Schreibweise wie die
+            # Konstellationstabelle („11/12", fuehrendes Haus vorn). Ohne sie
+            # stuende hier das rechnerische Haus, waehrend die Faktorenliste
+            # zwei nennt — genau der Drift, den der Grenzlagen-Standard des
+            # Kerns schliessen soll.
+            eintrag['haus_spalte'] = haus_spalte(pos[hr], cusps)
+            eintrag['grenzlage'] = hg['grenzlage']
+            eintrag['nebenhaus'] = hg['nebenhaus']
+            eintrag['im_eigenen_haus'] = (
+                hg['haus'] == n or (hg['grenzlage'] and hg['nebenhaus'] == n))
+            eintrag['auf_winkel'] = ', '.join(konj_winkel.get(hr, [])) or None
+        out.append(eintrag)
+    return out
+
+
+def rezeptionen(factors, klassisch=False):
+    """Gegenseitige und einseitige Zeichenrezeptionen (Befund 5.4).
+
+    Gegenseitig: A steht im Zeichen, dessen Herrscher B ist, UND umgekehrt —
+    die beiden tauschen ihre Wirkung aus. Einseitig: nur eine Richtung; das ist
+    die haeufigere Lage und der Grund, warum Ketten ueberhaupt entstehen.
+    Zusaetzlich wird gemeldet, ob eine Rezeption nur klassisch besteht.
+    """
+    tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+    zv = {f['name']: zeichen_name(f['lon']) for f in factors
+          if f['name'] in _PLANETEN}
+    disp = {nm: tab.get(z) for nm, z in zv.items()}
+    gegen, einseitig = [], []
+    namen = sorted(zv)
+    for i, a in enumerate(namen):
+        for b in namen[i + 1:]:
+            if disp.get(a) == b and disp.get(b) == a:
+                gegen.append((a, b))
+    for a in namen:
+        b = disp.get(a)
+        if b and b in zv and not any(a in p and b in p for p in gegen):
+            einseitig.append((a, b))
+    return {'gegenseitig': gegen, 'einseitig': einseitig, 'dispositor': disp}
+
+
+def spezialfaktor_netz(factors, aspects):
+    """Wie stehen Chiron, Lilith, Pholus, Glueckspunkt und die Knotenachse
+    zueinander und zu den Winkeln? (Befund 5.5 des Prueflaufs.)
+
+    In vielen Charts bilden sie ein eigenes, sehr sprechendes Netz. Das
+    Regelwerk verteilte sie bis 2026-09-06 auf Themen oder ins
+    Rechenschaftskapitel, ohne je zu fragen, wie sie zueinander stehen.
+    Ein Spezialfaktor ganz ausserhalb dieses Netzes ist ebenso ein Befund.
+    """
+    vorhanden = {f['name'] for f in factors}
+    spez = [s for s in SPEZIALFAKTOREN if s in vorhanden]
+    untereinander, an_winkel = [], []
+    beteiligt = set()
+    for a in aspects:
+        x, y = a['a'], a['b']
+        if x in spez and y in spez:
+            untereinander.append(a)
+            beteiligt.update((x, y))
+        elif (x in spez and y in WINKEL) or (y in spez and x in WINKEL):
+            an_winkel.append(a)
+            beteiligt.add(x if x in spez else y)
+    return {'faktoren': spez, 'untereinander': untereinander,
+            'an_winkel': an_winkel,
+            'ohne_netz': [s for s in spez if s not in beteiligt]}
+
+
+def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
+    """Aspektfiguren aus der fertigen Aspektliste: T-Quadrat, Grosskreuz,
+    Grosstrigon, Jod, Stellium (Zeichen und Haus).
+
+    Nur Figuren aus vollen und einseitigen Hauptaspekten; Nebenaspekte tragen
+    ausschliesslich das Jod (das per Definition aus zwei Quincunxen besteht).
+    """
+    def paare(winkel, staerken=('voll', 'einseitig')):
+        """Aspektpaare eines Winkels — OHNE Achse-Achse-Paare.
+
+        AC/DC, MC/IC, AC/MC und ihre Kombinationen sind triviale Geometrie:
+        Sie stehen in jedem Chart und ergeben sonst ein „Grosskreuz AC DC MC IC"
+        und beliebig viele T-Quadrate auf der AC/DC-Opposition. Dieselbe
+        Filterregel wendet das Design-Modul auf die Aspekttabelle an. Eine Figur
+        MIT einem Winkel (Sonne ☍ Mond, beide im Quadrat zum AC) bleibt
+        selbstverstaendlich erhalten — sie ist genau das, was Gewichtungsrang 1
+        des Typmoduls sucht.
+        """
+        s = set()
+        for a in aspects:
+            if a['angle'] != winkel or a['strength'] not in staerken:
+                continue
+            if a['a'] in WINKEL and a['b'] in WINKEL:
+                continue
+            s.add(frozenset((a['a'], a['b'])))
+        return s
+
+    opp, qua, tri = paare(180), paare(90), paare(120)
+    sex = paare(60, ('voll', 'einseitig', 'neben'))
+    qcx = paare(150, ('voll', 'einseitig', 'neben'))
+    namen = sorted({f['name'] for f in factors})
+    verbunden = lambda menge, x, y: frozenset((x, y)) in menge
+
+    tq, gk, gt, jod = [], [], [], []
+    for o in opp:
+        a, b = tuple(o)
+        for c in namen:
+            if c in (a, b):
+                continue
+            if verbunden(qua, a, c) and verbunden(qua, b, c):
+                apex = c
+                gegen = [d for d in namen if d not in (a, b, c)
+                         and verbunden(opp, c, d)
+                         and verbunden(qua, a, d) and verbunden(qua, b, d)]
+                if gegen:
+                    figur = sorted([a, b, c, gegen[0]])
+                    if figur not in gk:
+                        gk.append(figur)
+                else:
+                    eintrag = {'achse': sorted([a, b]), 'apex': apex}
+                    if eintrag not in tq:
+                        tq.append(eintrag)
+    for i, a in enumerate(namen):
+        for b in namen[i + 1:]:
+            if not verbunden(tri, a, b):
+                continue
+            for c in namen:
+                if c in (a, b):
+                    continue
+                if verbunden(tri, a, c) and verbunden(tri, b, c):
+                    figur = sorted([a, b, c])
+                    if figur not in gt:
+                        gt.append(figur)
+    for c in namen:
+        partner = [x for x in namen if x != c and verbunden(qcx, c, x)]
+        for i, a in enumerate(partner):
+            for b in partner[i + 1:]:
+                if verbunden(sex, a, b):
+                    eintrag = {'apex': c, 'basis': sorted([a, b])}
+                    if eintrag not in jod:
+                        jod.append(eintrag)
+
+    stell_z, stell_h = [], []
+    if orb_stellium_zeichen:
+        nach_zeichen = {}
+        for f in factors:
+            if f['name'] in WINKEL:
+                continue
+            nach_zeichen.setdefault(zeichen_name(f['lon']), []).append(f['name'])
+        stell_z = [{'zeichen': z, 'faktoren': sorted(v)}
+                   for z, v in sorted(nach_zeichen.items()) if len(v) >= 3]
+    if cusps:
+        nach_haus = {}
+        for f in factors:
+            if f['name'] in WINKEL:
+                continue
+            h = haus_und_grenzlage(f['lon'], cusps)['haus']
+            nach_haus.setdefault(h, []).append(f['name'])
+        stell_h = [{'haus': h, 'faktoren': sorted(v)}
+                   for h, v in sorted(nach_haus.items()) if len(v) >= 3]
+    return {'t_quadrat': tq, 'grosskreuz': gk, 'grosstrigon': gt, 'jod': jod,
+            'stellium_zeichen': stell_z, 'stellium_haus': stell_h}
+
+
+# --- Zyklusfenster: wann eine Anlage sich erfahrungsgemaess meldet -----------
+#
+# Chris-Entscheidung 2026-09-06 (Prueflauf, Befund 5.6): Das Geburtshoroskop
+# darf sagen, in welchem Lebensalter eine Anlage erfahrungsgemaess laut wird.
+# Das ist EINORDNUNG, keine Prognose — und es ist ausdruecklich KEINE
+# Transitrechnung: Die Fenster unten sind die allgemeinen Zyklen, die fuer
+# jeden Menschen gelten, nicht die Transite dieses Charts. Wer echte Transite
+# will, macht ein Transit-Horoskop.
+#
+# Die Regel, unter der das steht, ist im Typmodul Geburtshoroskop und in der
+# Inneren Arbeit (Prinzip 15) formuliert. Kurz: erlaubt ist „Themen, die Saturn
+# fuehrt, melden sich klassisch um die neunundzwanzig\"; verboten bleibt jede
+# Aussage darueber, was in diesem Alter GESCHIEHT.
+
+ZYKLEN = {
+    'Saturn': [(29.5, 'Saturn-Rückkehr'), (44.0, 'Saturn-Opposition'),
+               (58.9, 'zweite Saturn-Rückkehr'), (14.7, 'erstes Saturn-Quadrat')],
+    'Uranus': [(21.0, 'Uranus-Quadrat'), (42.0, 'Uranus-Opposition'),
+               (63.0, 'zweites Uranus-Quadrat')],
+    'Chiron': [(50.5, 'Chiron-Rückkehr')],
+    'Knoten': [(18.6, 'erste Knoten-Rückkehr'), (37.2, 'zweite Knoten-Rückkehr'),
+               (55.8, 'dritte Knoten-Rückkehr')],
+    'Suedknoten': [(18.6, 'erste Knoten-Rückkehr'), (37.2, 'zweite Knoten-Rückkehr'),
+                   (55.8, 'dritte Knoten-Rückkehr')],
+    'Jupiter': [(11.9, 'Jupiter-Rückkehr'), (23.8, 'Jupiter-Rückkehr'),
+                (35.7, 'Jupiter-Rückkehr'), (47.6, 'Jupiter-Rückkehr'),
+                (59.5, 'Jupiter-Rückkehr')],
+    'Pluto': [(38.0, 'Pluto-Quadrat (jahrgangsabhängig, 36–45)')],
+}
+
+
+def zyklusfenster(faktor, alter=None):
+    """Die Lebensalter, in denen eine von `faktor` gefuehrte Anlage
+    erfahrungsgemaess laut wird.
+
+    alter: das heutige Alter der Person in Jahren (aus dem Geburtsdatum). Ist es
+    angegeben, wird je Fenster vermerkt, ob es zurueckliegt, laeuft (±1,5 Jahre)
+    oder noch bevorsteht — damit ein Kapitel weiss, in welcher Zeitform es
+    schreibt.
+
+    Ein Faktor ohne Eintrag liefert eine leere Liste; das ist der Normalfall
+    (Sonne, Mond, Merkur, Venus, Mars, Neptun haben keinen eigenen Lebenszyklus
+    dieser Art) und ausdruecklich kein Mangel.
+    """
+    out = []
+    for jahre, name in sorted(ZYKLEN.get(faktor, [])):
+        lage = None
+        if alter is not None:
+            if abs(alter - jahre) <= 1.5:
+                lage = 'läuft'
+            elif alter > jahre:
+                lage = 'zurückliegend'
+            else:
+                lage = 'bevorstehend'
+        out.append({'alter': jahre, 'name': name, 'lage': lage})
+    return out
+
+
+def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None):
+    """Alle Struktur-Befunde eines Charts in einem Aufruf.
+
+    factors  Liste {'name','lon',...} inkl. Achsen AC/MC/DC/IC und der
+             Spezialfaktoren — dieselbe Liste, die huber_aspects bekommt.
+    cusps    die zwoelf selbst gerechneten Koch-Spitzen (Dezimalgrad).
+    aspects  Ergebnis von huber_aspects(); wird sonst selbst gerechnet.
+    zusatz   Ergebnis von zusatz_aspekte(); optional, geht nur in die Dichte ein.
+    alter    heutiges Alter der Person in Jahren (fuer die Zyklusfenster).
+
+    Rueckgabe: dict mit den Schluesseln verteilung_planeten, verteilung_alle,
+    verteilung_gewichtet, retro, ketten, ketten_klassisch, hausherrscher,
+    rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen.
+    """
+    if aspects is None:
+        aspects = huber_aspects(factors)
+    retro = [f['name'] for f in factors if f.get('retro')]
+    sb = {
+        'verteilung_planeten': verteilung(factors, nur_planeten=True),
+        'verteilung_alle': verteilung(factors),
+        'verteilung_gewichtet': verteilung(factors, gewichtet=True),
+        'retro': retro,
+        'retro_persoenlich': [n for n in retro if n in ('Merkur', 'Venus', 'Mars')],
+        'ketten': herrscherketten(factors),
+        'ketten_klassisch': herrscherketten(factors, klassisch=True),
+        'hausherrscher': hausherrscher(factors, cusps, aspects),
+        'rezeptionen': rezeptionen(factors),
+        'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
+        'aspektdichte': aspektdichte(factors, aspects, zusatz),
+        'spezialnetz': spezialfaktor_netz(factors, aspects),
+        'konfigurationen': konfigurationen(factors, aspects, cusps=cusps),
+        'zyklen': {f['name']: zyklusfenster(f['name'], alter)
+                   for f in factors if zyklusfenster(f['name'])},
+        'alter': alter,
+    }
+    return sb
+
+
+def _vert_zeile(v):
+    el = ' · '.join(f"{k} {v['elemente'][k]:g}" for k in _ELEM_NAMES)
+    mo = ' · '.join(f"{k} {v['modi'][k]:g}" for k in _MODUS_NAMES)
+    return el, mo
+
+
+def strukturbild_text(sb):
+    """Der fertige `## Strukturbild`-Abschnitt fuers chart_data.md.
+
+    Schreibt AUSSCHLIESSLICH Befunde, keine Deutung — die kommt in Schritt 2.
+    Die Befundzeilen, die das Datenblatt-Modul verlangt, sind als „Befund:\"
+    ausgewiesen und dort von Hand zu vervollstaendigen, wo sie eine Aussage
+    ueber die Person und nicht ueber die Zahl treffen.
+    """
+    L = ['## Strukturbild', '']
+
+    L.append('### 1 · Elemente und Modi')
+    for titel, key in (('zehn klassische Planeten', 'verteilung_planeten'),
+                       ('alle Faktoren inkl. Achsen', 'verteilung_alle'),
+                       ('gewichtet (Lichter/Winkel ×2, Spezialfaktoren ×0,5)',
+                        'verteilung_gewichtet')):
+        v = sb[key]
+        el, mo = _vert_zeile(v)
+        L.append(f'- {titel}: {el} | {mo}')
+    vg = sb['verteilung_gewichtet']
+    vp = sb['verteilung_planeten']
+    L.append(f"- Schwächstes Element: {vg['schwaechstes_element']} "
+             f"(gewichtet {vg['elemente'][vg['schwaechstes_element']]:g}; "
+             f"getragen von "
+             f"{', '.join(vp['traeger'][vg['schwaechstes_element']]) or '—'}).")
+    L.append(f"- Schwächster Modus: {vg['schwaechster_modus']} "
+             f"(gewichtet {vg['modi'][vg['schwaechster_modus']]:g}).")
+    if vp['schwaechstes_element'] != vg['schwaechstes_element']:
+        L.append(f"- ⚠ Ungewichtet wäre {vp['schwaechstes_element']} das "
+                 f"schwächste Element, gewichtet ist es "
+                 f"{vg['schwaechstes_element']} — die Befundzeile richtet sich "
+                 f"nach der GEWICHTETEN Zählung.")
+    L.append('- Befund: <eine Zeile, was das strukturell heißt>')
+    L.append('')
+
+    L.append('### 2 · Rückläufigkeit')
+    L.append(f"- Rückläufig ({len(sb['retro'])}): "
+             f"{', '.join(sb['retro']) or 'keiner'}.")
+    L.append(f"- davon persönliche Planeten: "
+             f"{', '.join(sb['retro_persoenlich']) or 'keiner'}.")
+    L.append('- Befund: <eine Zeile>')
+    L.append('')
+
+    L.append('### 3 · Herrscherketten, Rezeption, Hausherrscher')
+    k = sb['ketten']
+    for kr in k['kreise']:
+        L.append(f"- Geschlossener Kreis: {' → '.join(kr)} → {kr[0]}. "
+                 f"Jedes Glied erbt die Bedingungen des nächsten.")
+    if not k['kreise']:
+        L.append('- Kein geschlossener Kreis unter den modernen Herrschern.')
+    L.append(f"- Enddispositoren: {', '.join(k['enddispositoren']) or 'keiner'}.")
+    kk = sb['ketten_klassisch']
+    if [sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]:
+        L.append(f"- Klassisch gerechnet ergibt sich ein anderes Bild: Kreise "
+                 f"{kk['kreise'] or 'keine'}, Enddispositoren "
+                 f"{', '.join(kk['enddispositoren']) or 'keine'}.")
+    r = sb['rezeptionen']
+    L.append(f"- Gegenseitige Rezeption: "
+             f"{', '.join(a + '↔' + b for a, b in r['gegenseitig']) or 'keine'}.")
+    rk = sb['rezeptionen_klassisch']
+    nur_kl = [p for p in rk['gegenseitig'] if p not in r['gegenseitig']]
+    if nur_kl:
+        L.append(f"- Nur klassisch: "
+                 f"{', '.join(a + '↔' + b for a, b in nur_kl)}.")
+    L.append('- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht):')
+    for h in sb['hausherrscher']:
+        mark = []
+        if h['im_eigenen_haus']:
+            mark.append('im eigenen Haus')
+        if h['auf_winkel']:
+            mark.append(f"auf {h['auf_winkel']}")
+        zusatz_ = f"  ⟵ {', '.join(mark)}" if mark else ''
+        L.append(f"  - Haus {h['haus']:>2} ({h['spitzenzeichen']}) → "
+                 f"{h['herrscher']} in {h['steht_in_zeichen']}, Haus "
+                 f"{h['haus_spalte'] or h['steht_in_haus']}{zusatz_}")
+    L.append('- Befund: <die strukturelle Pointe in einer Zeile>')
+    L.append('')
+
+    L.append('### 4 · Aspektdichte je Faktor')
+    ad = sb['aspektdichte']
+    gw = ad['gewichtet']
+    dicht = ', '.join('%s (%g)' % (n, gw[n]) for n in ad['dicht'])
+    duenn = ', '.join('%s (%g)' % (n, gw[n]) for n in ad['duenn'])
+    L.append('- Dicht verschaltet: %s.' % (dicht or '—'))
+    L.append('- Dünn verschaltet: %s.' % (duenn or '—'))
+    L.append('- Unaspektiert: %s.' % (', '.join(ad['unaspektiert']) or 'keiner'))
+    if ad.get('winkel'):
+        L.append('- Zum Vergleich, außer Konkurrenz (Winkel, Orb 9°): %s.'
+                 % ' · '.join('%s %g' % (k, v) for k, v in ad['winkel'].items()))
+    L.append('- Befund: <welche Funktionen viel Verkehr haben, welche isoliert '
+             'arbeiten>')
+    L.append('')
+
+    L.append('### 5 · Das Netz der Spezialfaktoren')
+    sn = sb['spezialnetz']
+    if sn['untereinander']:
+        for a in sn['untereinander']:
+            L.append(f"- {a['a']} {a['name']} {a['b']} "
+                     f"({a['strength']}, Orb {a['orb']}°)")
+    else:
+        L.append('- Keine Aspekte der Spezialfaktoren untereinander.')
+    for a in sn['an_winkel']:
+        L.append(f"- an der Achse: {a['a']} {a['name']} {a['b']} "
+                 f"({a['strength']}, Orb {a['orb']}°)")
+    L.append(f"- Ganz außerhalb dieses Netzes: "
+             f"{', '.join(sn['ohne_netz']) or 'keiner'}.")
+    L.append('')
+
+    L.append('### 6 · Konfigurationen')
+    kf = sb['konfigurationen']
+    for t in kf['t_quadrat']:
+        L.append(f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
+                 f"{t['apex']}")
+    for g in kf['grosskreuz']:
+        L.append(f"- Großkreuz: {', '.join(g)}")
+    for g in kf['grosstrigon']:
+        L.append(f"- Großtrigon: {', '.join(g)}")
+    for j in kf['jod']:
+        L.append(f"- Jod: Basis {' ⚹ '.join(j['basis'])}, Spitze {j['apex']}")
+    z_gruppen = [tuple(s['faktoren']) for s in kf['stellium_zeichen']]
+    for s in kf['stellium_zeichen']:
+        L.append(f"- Stellium in {s['zeichen']}: {', '.join(s['faktoren'])}")
+    for s in kf['stellium_haus']:
+        # Ein Zeichen-Stellium liegt haeufig ganz in einem Haus. Beide Zeilen
+        # ungekennzeichnet nebeneinander lesen sich als ZWEI Befunde und
+        # verdoppeln das Gewicht einer einzigen Haeufung.
+        doppelt = (' — dieselbe Gruppe wie das Zeichen-Stellium, EIN Befund'
+                   if tuple(s['faktoren']) in z_gruppen else '')
+        L.append(f"- Stellium in Haus {s['haus']}: "
+                 f"{', '.join(s['faktoren'])}{doppelt}")
+    if not any(kf.values()):
+        L.append('- Keine Aspektfigur und kein Stellium.')
+    L.append('')
+
+    if sb['zyklen']:
+        L.append('### 7 · Zyklusfenster (Einordnung, keine Prognose)')
+        if sb['alter'] is not None:
+            L.append(f"- Alter der Person: {sb['alter']:g} Jahre.")
+        for nm, fenster in sorted(sb['zyklen'].items()):
+            teile = []
+            for f in fenster:
+                lage = f" [{f['lage']}]" if f['lage'] else ''
+                teile.append(f"{f['name']} ~{f['alter']:g}{lage}")
+            L.append(f"  - {nm}: " + ' · '.join(teile))
+        L.append('- Verwendung s. Typmodul, Bewegung 7. Erlaubt ist die '
+                 'Einordnung, verboten jede Aussage darüber, was in diesem '
+                 'Alter geschieht.')
+        L.append('')
+    return '\n'.join(L)
+
+
 # --- Selbsttest (neutrales Demo-Chart, KEINE Klientendaten) -----------------
 
 if __name__ == '__main__':
@@ -428,3 +1105,63 @@ if __name__ == '__main__':
     assert haus_spalte(26.5, _c) == '1/2'      # 3°30' vor Spitze -> rechnerisch fuehrt
     print('Grenzlage-Test:', haus_und_grenzlage(28.0, _c)['label'],
           '| Spalte:', haus_spalte(28.5, _c))
+
+    # --- Strukturbild gegen ein anonymes Pruefchart (nur Gradzahlen; kein
+    # Name, kein Datum, keine Zeit, kein Ort — Datenschutz-Guardrail) --------
+    _cu = [131.0, 158.0, 190.0, 226.0, 262.0, 296.0,
+           311.0, 338.0, 10.0, 46.0, 82.0, 116.0]
+    _f = [{'name': 'Sonne', 'lon': 112.5}, {'name': 'Mond', 'lon': 195.2},
+          {'name': 'Merkur', 'lon': 128.9, 'retro': True},
+          {'name': 'Venus', 'lon': 93.4}, {'name': 'Mars', 'lon': 298.7},
+          {'name': 'Jupiter', 'lon': 340.1},
+          {'name': 'Saturn', 'lon': 112.9, 'retro': True},
+          {'name': 'Uranus', 'lon': 262.3, 'retro': True},
+          {'name': 'Neptun', 'lon': 273.8, 'retro': True},
+          {'name': 'Pluto', 'lon': 215.6, 'retro': True},
+          {'name': 'Knoten', 'lon': 318.4}, {'name': 'Chiron', 'lon': 64.2},
+          {'name': 'Lilith', 'lon': 7.9}, {'name': 'Pholus', 'lon': 348.5},
+          {'name': 'Glueckspunkt', 'lon': 213.7},
+          {'name': 'AC', 'lon': 131.0}, {'name': 'MC', 'lon': 46.0},
+          {'name': 'DC', 'lon': 311.0}, {'name': 'IC', 'lon': 226.0}]
+    _a = huber_aspects(_f)
+    _sb = strukturbild(_f, _cu, _a, zusatz_aspekte(_f), alter=40)
+
+    # Gewichtung greift: Merkur steht knapp VOR dem AC -> Haus 12 mit
+    # Grenzlage nach 1; die Hausherrscher-Zeile muss das im Format der
+    # Konstellationstabelle tragen, sonst driftet sie gegen die Faktorenliste.
+    _hh = {h['haus']: h for h in _sb['hausherrscher']}
+    assert _hh[2]['herrscher'] == 'Merkur'
+    assert _hh[2]['haus_spalte'] == '12/1', _hh[2]['haus_spalte']
+    assert _hh[4]['im_eigenen_haus'] is False        # Pluto in Skorpion, Haus 3
+    assert _hh[12]['herrscher'] == 'Mond'
+
+    # Keine trivialen Achsenfiguren: AC/DC/MC/IC bilden in JEDEM Chart ein
+    # Grosskreuz — es darf hier nicht auftauchen.
+    for _g in _sb['konfigurationen']['grosskreuz']:
+        assert not all(x in ('AC', 'DC', 'MC', 'IC') for x in _g), _g
+    for _t in _sb['konfigurationen']['t_quadrat']:
+        assert not all(x in ('AC', 'DC', 'MC', 'IC') for x in _t['achse']), _t
+
+    # Winkel stehen nicht in der Dichte-Rangliste (Orb 9 -> bauartbedingt vorn)
+    for _w in ('AC', 'MC', 'DC', 'IC'):
+        assert _w not in _sb['aspektdichte']['dicht']
+    assert 'AC' in _sb['aspektdichte']['winkel']
+
+    # Gegenseitige Rezeption Mond<->Venus (Mond in Waage, Venus in Krebs)
+    assert ('Mond', 'Venus') in _sb['rezeptionen']['gegenseitig']
+
+    # Gewichtete Zaehlung unterscheidet sich von der ungewichteten
+    assert _sb['verteilung_gewichtet']['elemente'] != \
+        _sb['verteilung_planeten']['elemente']
+
+    # Zyklusfenster: Lage relativ zum Alter
+    _z = zyklusfenster('Saturn', alter=40)
+    assert [x['lage'] for x in _z] == ['zurückliegend', 'zurückliegend',
+                                       'bevorstehend', 'bevorstehend'], _z
+    assert zyklusfenster('Venus') == []          # kein eigener Lebenszyklus
+
+    _txt = strukturbild_text(_sb)
+    assert '## Strukturbild' in _txt and 'Hausherrscher' in _txt
+    print('Strukturbild-Test: OK —', len(_txt), 'Zeichen,',
+          len(_sb['hausherrscher']), 'Hausherrscher,',
+          len(_sb['konfigurationen']['t_quadrat']), 'T-Quadrate')
