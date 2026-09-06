@@ -597,13 +597,56 @@ LEGEND_ROWS = [
 
 LEGEND_TITEL = 'Die Aspekte und was sie bedeuten'
 
+# Aspektarten AUSSERHALB des Huber-Systems, die ein Chart bewusst in die
+# Tabelle haengen kann (Datenblatt-Modul, „Zusatzebene"). Sie stehen nicht im
+# Rad und tragen darum keine der vier Radfarben. Erklaert werden sie
+# trotzdem — der Klartext-Standard verlangt, dass jedes sichtbare Zeichen im
+# Dokument einmal benannt wird (Befund 2026-09-06).
+ZUSATZ_LEGENDE = {
+    'Halbquadrat': ('45°', 'halbe Reibung — ein Spannungspunkt im Untergrund, '
+                    'leiser als ein Quadrat und dauerhafter.'),
+    'Anderthalbquadrat': ('135°', 'dieselbe Reibung aus der Gegenrichtung — '
+                          'sie meldet sich spaeter und in fremder Gestalt.'),
+}
+# Welche davon in DIESEM Chart vorkommen. Wird von aspekt_page() aus der
+# uebergebenen Aspektliste selbst gesetzt, damit Radseite und Aspektseite
+# nicht auseinanderlaufen koennen; setze_zusatzaspekte() ist der Weg, sie im
+# Chart-Builder VOR dem ersten Seitenaufbau bekannt zu machen.
+AKTIVE_ZUSATZ = ()
 
-def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil=''):
+
+def setze_zusatzaspekte(aspekte):
+    """Die Zusatz-Aspektarten dieses Charts aus seiner Aspektliste ableiten.
+
+    Einmal je Chart aufrufen, VOR dem ersten Seitenaufbau — sonst traegt die
+    Legende auf der Radseite (die vor der Aspektseite gebaut wird) im ersten
+    Durchlauf noch keine Zusatzzeile. aspekt_page() ruft es zur Sicherheit
+    selbst noch einmal auf.
+    """
+    global AKTIVE_ZUSATZ
+    namen = []
+    for a in aspekte or ():
+        n = a.get('name')
+        if n in ZUSATZ_LEGENDE and n not in namen:
+            namen.append(n)
+    AKTIVE_ZUSATZ = tuple(namen)
+    return AKTIVE_ZUSATZ
+
+
+def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False):
     """Legendenkasten „Die Aspekte und was sie bedeuten".
 
     Symbol UND Aspektname stehen in der Aspektfarbe (Beschluss 2026-07-27) —
     dieselbe Farbe, die das Rad und die Aspekttabelle verwenden.
     spalten=2 setzt den Kasten zweispaltig (fuer schmale Seitenreste).
+
+    zusatz=True haengt die Erklaerzeilen der Zusatz-Aspektarten an
+    (AKTIVE_ZUSATZ). Sie stehen NUR unter der Aspekttabelle, nicht auf der
+    Radseite: im Rad kommen diese Aspekte gar nicht vor, dort waere die Zeile
+    verwirrend — und sie kostete auf der Radseite rund 1,4 cm Raddurchmesser,
+    weil die eingemessene Bildbreite an der Kastenhoehe haengt
+    (Befund 2026-09-06). Der Klartext-Standard ist erfuellt, weil jedes
+    Zeichen im Dokument einmal benannt wird, nicht zweimal.
     """
     rows = []
     for n, w, t in LEGEND_ROWS:
@@ -611,6 +654,11 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil=''):
         rows.append(
             f'<p><span class="a-sym a-{k}">{ASPEKT_GLYPH[n]}</span> '
             f'<b class="a-{k}">{n}</b> ({w}) — {t}</p>')
+    for n in (AKTIVE_ZUSATZ if zusatz else ()):
+        w, t = ZUSATZ_LEGENDE[n]
+        rows.append(f'<p><span class="a-sym a-konj">·</span> '
+                    f'<b class="a-konj">{esc(n)}</b> ({w}) — {t} '
+                    f'Steht nicht im Rad.</p>')
     cls = 'lbox zwei' if spalten == 2 else 'lbox'
     st = f' style="{stil}"' if stil else ''
     return (f'<div class="{cls}"{st}><h5>{esc(titel)}</h5>'
@@ -951,9 +999,10 @@ ASP_GRUPPEN = [('voll', 'Hauptaspekte'),
                ('einseitig', 'Weitere (einseitige) Aspekte'),
                ('neben', 'Nebenaspekte')]
 
-ASP_LEAD = ('Jede Winkelbeziehung deines Charts, voll ausgeschrieben — dieselbe '
-            'Liste, die auch das Rad zeichnet. „e." markiert einen einseitigen '
-            'Aspekt (nur einer der beiden Faktoren hält den Orbis).')
+ASP_LEAD = ('Jede Winkelbeziehung deines Charts, voll ausgeschrieben. „e." '
+            'markiert einen einseitigen Aspekt (nur einer der beiden Faktoren '
+            'hält den Orbis). Bis auf eigens gekennzeichnete Zeilen zeichnet '
+            'das Rad dieselbe Liste.')
 
 # Seitentitel der Aspektseite. Steht hier als Konstante, weil er zugleich der
 # Pflicht-Baustein ist, den build.assert_render_ready sucht — s. unten.
@@ -1021,6 +1070,18 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
     (s. passe_aspektseite_ein).
     """
     titel = titel or ASPEKT_TITEL
+    setze_zusatzaspekte(aspekte)
+    unerklaert = sorted({a['name'] for a in aspekte
+                         if a['name'] not in ASPEKT_KLASSE
+                         and a['name'] not in ZUSATZ_LEGENDE})
+    if unerklaert:
+        raise RuntimeError(
+            'Aspektarten in der Tabelle, die die Legende nicht erklaert: '
+            + ', '.join(unerklaert) + '.\n'
+            'Der Klartext-Standard verlangt, dass jedes sichtbare Zeichen '
+            'einmal benannt wird. Entweder die Art in chartdoc.ZUSATZ_LEGENDE '
+            'aufnehmen (dann erscheint sie automatisch in BEIDEN '
+            'Legendenkaesten) oder die Zeile aus der Aspektliste nehmen.')
     blocks = []
     for i, (key, label) in enumerate(ASP_GRUPPEN):
         grp = [a for a in aspekte if a['strength'] == key]
@@ -1049,7 +1110,7 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
 <p class="fm-lead">{esc(ASP_LEAD)}</p>
 <div class="asp" style="font-size:{tab_pt:.2f}pt">{''.join(blocks)}</div>
 <div style="height:0.34cm"></div>
-{aspekt_legende(stil=f'font-size:{leg_pt:.2f}pt')}
+{aspekt_legende(stil=f'font-size:{leg_pt:.2f}pt', zusatz=True)}
 </section>"""
 
 
@@ -1315,7 +1376,16 @@ def toc_gruppen(items, teil3_a=None):
             # (Versalien) — case-sensitiv gestrippt blieb frueher der ganze
             # Kicker in der 0,72 cm schmalen Nummernspalte stehen.
             nr = re.sub(r'(?i)^kapitel\b\.?', '', k).strip()
-            cur['eintraege'].append({'nr': nr, 'titel': it['title'], 'idx': i})
+            titel = it['title']
+            if nr and not re.fullmatch(r'[\dIVXivx]+\.?', nr):
+                # Ein WORT-Kicker (Rechenschaft, Hauptthemen, Konfliktfelder,
+                # Lebensaufgaben) passt nicht in die 0,72 cm schmale
+                # Nummernspalte — er lief dort in die Titelspalte hinein.
+                # Er wandert deshalb vor den Titel; die Nummernspalte bleibt
+                # leer. Numerische Kicker bleiben, wo sie waren.
+                titel = f'{nr} — {titel}'
+                nr = ''
+            cur['eintraege'].append({'nr': nr, 'titel': titel, 'idx': i})
     for g in grp:
         if g['kicker'] != 'Teil III':
             continue

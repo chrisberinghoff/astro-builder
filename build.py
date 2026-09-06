@@ -652,6 +652,9 @@ def render_sentence_safe(build_html, pdf_path, colon_pairs=None,
 
 DECKBLATT_PFLICHT = ('LEITSATZ', 'LEITACHSE', 'TITELMOTIV')
 DECKBLATT_FELDER = DECKBLATT_PFLICHT + ('PALETTE', 'GLYPHEN')
+# Abgeleitet, nicht im Block geschrieben: der Erklaerteil hinter den
+# Symbolen der GLYPHEN-Zeile (s. lies_deckblatt).
+DECKBLATT_ABGELEITET = ('GLYPHEN_GRUND',)
 
 _DB_START_RE = re.compile(r'^@@DECKBLATT\s*$')
 _DB_ENDE_RE = re.compile(r'^@@ENDE\s*$')
@@ -672,7 +675,10 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
     umbrochene TITELMOTIV-/PALETTE-Zeilen unproblematisch.
 
     Rueckgabe: {'LEITSATZ':…, 'LEITACHSE':…, 'TITELMOTIV':…,
-                'PALETTE':… , 'GLYPHEN':…} — die letzten beiden ggf. ''.
+                'PALETTE':… , 'GLYPHEN':…, 'GLYPHEN_GRUND':…} — die letzten
+    drei ggf. ''. GLYPHEN traegt NUR die Symbole (genau das, was als Ornament
+    gedruckt wird); eine Begruendung hinter den Symbolen wandert nach
+    GLYPHEN_GRUND und gehoert in kein Dokument.
     """
     try:
         with open(pfad, encoding='utf-8') as fh:
@@ -715,7 +721,44 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
             f'Pflicht sind {", ".join(DECKBLATT_PFLICHT)}.')
     for k in ('PALETTE', 'GLYPHEN'):
         felder.setdefault(k, '')
-    return {k: felder[k] for k in DECKBLATT_FELDER}
+    # GLYPHEN traegt haeufig eine Begruendung hinter den Symbolen
+    # („♅ ⚷ ♃ ♐ — Uranus und Chiron als Gegenpaar …"). Als Ornament darf nur
+    # die Symbolzeile in Dokument und Inhaltsverzeichnis; ungefiltert druckte
+    # sich der ganze Erklaersatz quer ueber die Seite (Befund 2026-09-06).
+    # GLYPHEN traegt darum nur noch die Symbole, GLYPHEN_GRUND den Rest.
+    glyph, grund = _glyphen_trennen(felder['GLYPHEN'])
+    felder['GLYPHEN'] = glyph
+    felder['GLYPHEN_GRUND'] = grund
+    return {k: felder[k] for k in DECKBLATT_FELDER + DECKBLATT_ABGELEITET}
+
+
+_GLYPH_TRENNER_RE = re.compile(r'\s+[—–-]\s+|\s*\((?=[A-ZÄÖÜa-zäöü])')
+
+
+def _glyphen_trennen(wert: str):
+    """GLYPHEN-Feld in Symbolzeile und Begruendung teilen.
+
+    Getrennt wird am ersten Gedankenstrich mit Leerzeichen drumherum oder an
+    der ersten oeffnenden Klammer. Steht kein Trenner drin, ist das ganze Feld
+    die Symbolzeile und die Begruendung leer. Zusaetzlich wird alles nach dem
+    letzten Symbolzeichen abgeschnitten, damit auch ein Feld ohne Trenner
+    („♅ ⚷ ♃ ♐ Uranus und Chiron …") sauber bleibt.
+    """
+    wert = (wert or '').strip()
+    if not wert:
+        return '', ''
+    teil = _GLYPH_TRENNER_RE.split(wert, maxsplit=1)
+    kopf = teil[0].strip()
+    rest = wert[len(kopf):].lstrip(' —–-(').strip() if len(teil) > 1 else ''
+    # Zweite Sicherung: hinter dem letzten Symbol abschneiden.
+    treffer = list(re.finditer(r'[^\sA-Za-zÄÖÜäöüß.,;:0-9()\[\]/]', kopf))
+    if treffer:
+        ende = treffer[-1].end()
+        wort = kopf[ende:].strip()
+        if wort:
+            rest = (wort + (' ' + rest if rest else '')).strip()
+            kopf = kopf[:ende].strip()
+    return kopf, rest.rstrip(')').strip()
 
 
 ANALYSE_SCHEMA = """\
@@ -1676,7 +1719,8 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
             # source_text_chars). Vor dem Umbau konnte der Fall nicht
             # auftreten: der Streifen sass im unteilbaren Block Kopf+erster
             # Absatz.
-            pruef = plines[:len(plines) - _fuss_zeilen(plines, sig_set)]
+            fz = _fuss_zeilen(plines, sig_set)
+            pruef = plines[:len(plines) - fz]
             if not pruef:
                 continue                # Seite traegt nur einen Kapitelfuss
             tail = pruef[-1].strip()
@@ -1690,7 +1734,8 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
             elif lc == "-":
                 fails.append(f"SEITE {pi + 1} endet im getrennten Wort: {show!r}")
             elif lc not in ".!?…":
-                fails.append(f"SEITE {pi + 1} endet mitten im Satz: {show!r}")
+                fails.append(f"SEITE {pi + 1} endet mitten im Satz: {show!r} "
+                             f"[Kapitelfuss-Abzug: {fz} Zeile(n)]")
                 if not sig_set:
                     fails[-1] += (" — Hinweis: verify() lief OHNE "
                                   "fuss_signaturen=. Seit dem 2026-09-05 "
@@ -1701,6 +1746,12 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
                                   "fuss_signaturen=build.fuss_signaturen("
                                   "parsed) erneut pruefen, bevor der Befund "
                                   "als echt gilt.")
+                elif fz == 0:
+                    fails[-1] += (" — Hinweis: auf dieser Seite wurde KEIN "
+                                  "Kapitelfuss erkannt. Endet sie sichtbar "
+                                  "mit dem Signatur-/Beleg-Streifen, liegt "
+                                  "der Fehler in der Fuss-Erkennung "
+                                  "(_fuss_zeilen), nicht im Satz.")
         if source_text_chars:
             ratio = prose_chars / source_text_chars
             if ratio < min_coverage:
