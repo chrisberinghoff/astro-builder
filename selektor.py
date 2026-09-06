@@ -232,7 +232,31 @@ def parse_chart(text):
             if roh in SPIEGEL_FAKTOREN:
                 # Spiegelpol: wird ueber die Gegen-Zeile als Achse mitgedeutet.
                 # Eigene Bloecke wuerden die Achse gespiegelt ziehen (s. o.).
+                #
+                # SEIT 2026-09-06 (Pruefbericht EA 1.1): Uebersprungen werden nur
+                # die BLOECKE. Grenzlage und `fuehrt=ja` gehen NICHT mehr
+                # verloren — im EA fuehrt der Suedknoten ein eigenes Kapitel und
+                # muss dann in BEIDEN Haeusern gedeutet werden. Vorher fiel er
+                # lautlos aus dem ⚠-Grenzlagenblock, obwohl das Datenblatt-Modul
+                # die Zwei-Haeuser-Deutung fuer jeden fuehrenden Faktor verlangt.
+                sp = {'name': norm_faktor(roh), 'zeichen': None, 'haus': None,
+                      'nebenhaus': None, 'abstand': None, 'fuehrt': False,
+                      'spiegel_von': SPIEGEL_FAKTOREN[roh]}
+                for p in parts[2:]:
+                    pl = p.lower()
+                    if pl.startswith('zeichen='):
+                        sp['zeichen'] = norm(p.split('=', 1)[1])
+                    elif pl.startswith('nebenhaus='):
+                        sp['nebenhaus'] = p.split('=', 1)[1]
+                    elif pl.startswith('haus='):
+                        sp['haus'] = p.split('=', 1)[1]
+                    elif pl.startswith('abstand='):
+                        sp['abstand'] = p.split('=', 1)[1]
+                    elif pl.startswith('fuehrt='):
+                        sp['fuehrt'] = p.split('=', 1)[1].strip().lower() in (
+                            'ja', 'j', 'true', '1')
                 spiegel.append((roh, SPIEGEL_FAKTOREN[roh]))
+                faktoren.append(sp)
                 continue
             name = norm_faktor(roh)
             zeichen = haus = nebenhaus = abstand = None
@@ -364,7 +388,9 @@ def build_requests(chart):
     # Sonnenzeichen-Doppelquelle
     if 'SONNE' in fak_by and fak_by['SONNE']['zeichen']:
         sz = fak_by['SONNE']['zeichen']
-        add('Sonnenzeichen', STEM[sz] + '_Sonnenzeichen.txt', 'SONNENZEICHEN_' + sz)
+        gruppe_sz = ('Sonnenzeichen' if fak_by['SONNE'].get('fuehrt')
+                     else 'Sonnenzeichen-Hintergrund')
+        add(gruppe_sz, STEM[sz] + '_Sonnenzeichen.txt', 'SONNENZEICHEN_' + sz)
 
     for f in chart['faktoren']:
         nm, z, h = f['name'], f['zeichen'], f['haus']
@@ -374,7 +400,16 @@ def build_requests(chart):
             stufe, text = grenz_stufe(ab)
             grenz.append({'faktor': nm, 'haus': h, 'nebenhaus': nh,
                           'abstand': ab, 'stufe': stufe, 'text': text,
-                          'fuehrt': bool(f.get('fuehrt'))})
+                          'fuehrt': bool(f.get('fuehrt')),
+                          'spiegel_von': f.get('spiegel_von')})
+        if f.get('spiegel_von'):
+            # Blockanfragen bewusst NICHT stellen: Die Deutung kommt gespiegelt
+            # ueber den Gegenpol. Die Grenzlage oben ist der Teil, der bleibt.
+            prot.append('%-14s -> keine eigenen Bloecke (Spiegelpol von %s); '
+                        'Grenzlage bleibt im ⚠-Block%s'
+                        % (nm, f['spiegel_von'],
+                           ', FUEHRT ein Thema' if f.get('fuehrt') else ''))
+            continue
         if nm in PSET:
             if z:
                 add('Planet-in-Zeichen', ZEICHENFILE[nm], '%s_IN_%s' % (nm, z))
@@ -460,13 +495,25 @@ def build_requests(chart):
 # steht bewusst GANZ HINTEN, direkt vor dem Auswahl-Protokoll: Der Abschnitt
 # ist ueberspringbar (s. build_requests), und was uebersprungen werden darf,
 # gehoert ans Ende, damit der Schnitt ohne Suchen moeglich ist.
-GRUPPEN = ['Grundlagen', 'Sonnenzeichen', 'Planet-in-Zeichen', 'Planet-in-Haus',
-           'Haus-Allgemein', 'Achsen', 'Spezialfaktor', 'Aspekte',
-           'Spezialfaktor-Methodik']
+GRUPPEN = ['Planet-in-Zeichen', 'Planet-in-Haus', 'Haus-Allgemein', 'Achsen',
+           'Spezialfaktor', 'Sonnenzeichen', 'Aspekte',
+           'Sonnenzeichen-Hintergrund', 'Grundlagen', 'Spezialfaktor-Methodik']
 
 # Gruppen, die Schritt 2 ueberspringen DARF (nicht muss). Der Kopf der
 # referenz.md weist sie mit Zeilenzahl aus, damit die Ersparnis sichtbar ist.
-UEBERSPRINGBAR = ('Grundlagen', 'Spezialfaktor-Methodik')
+#
+# SEIT 2026-09-06 (Pruefbericht EA 1.9/4.1 und Rubrik 2): Die drei
+# ueberspringbaren Gruppen stehen jetzt tatsaechlich am ENDE der GRUPPEN-Liste —
+# vorher stand `Grundlagen` an erster Stelle, obwohl Modul und Quellkommentar
+# behaupteten, sie stuenden hinten. `Sonnenzeichen-Hintergrund` ist neu: Das
+# Sonnenzeichen-Kapitel der Bibliothek (Thema, Motivation, Psychologie,
+# Lernaufgabe, Lebensziel, Symbol) ist rund 400 Zeilen Buchtext ueber das ZEICHEN
+# und in jedem Lauf mit demselben Sonnenzeichen identisch; die chart-spezifische
+# Stellung traegt der getrennte Block SONNE_IN_<Zeichen>. Fuehrt die Sonne ein
+# Thema (`fuehrt=ja`), bleibt das Kapitel in der normal zu lesenden Gruppe
+# `Sonnenzeichen` — dort traegt es die Deutung tatsaechlich mit.
+UEBERSPRINGBAR = ('Sonnenzeichen-Hintergrund', 'Grundlagen',
+                  'Spezialfaktor-Methodik')
 
 
 def select(chart_text, blocks_ref):
@@ -523,8 +570,8 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
                    'Zusammen rund %d Zeilen.'
                    % (' · '.join('%s ~%d Zeilen' % (g, n) for g, n in _skip),
                       sum(n for _, n in _skip)))
-        out.append('> Sie tragen Methoden- und Grundlagenwissen, das in jedem '
-                   'Lauf identisch ist und')
+        out.append('> Sie tragen Methoden-, Zeichen- und Grundlagenwissen, das '
+                   'in jedem Lauf identisch ist und')
         out.append('> keinen Bezug zum konkreten Chart hat. Chart-spezifische '
                    'Bloecke (Zeichen, Haus,')
         out.append('> Aspekt, Spezialfaktor-Staende) werden IMMER voll '
@@ -569,6 +616,13 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
                        % (g['faktor'].capitalize(), g['haus'], g['nebenhaus'],
                           g['text'], marke))
             out.append('  `Signatur: %s`' % signatur_notation(g))
+            if g.get('spiegel_von'):
+                out.append('  ACHTUNG Spiegelpol: Deutungstext kommt gespiegelt '
+                           'ueber %s (eigene Bloecke wuerden die Achse '
+                           'verkehrt herum ziehen). Die Haus- und '
+                           'Zeichenangabe oben gilt trotzdem und ist bei einem '
+                           'fuehrenden Faktor auszudeuten.'
+                           % g['spiegel_von'].capitalize())
         out.append('')
     for g in GRUPPEN:
         items = [o for o in ordered if o[0] == g]

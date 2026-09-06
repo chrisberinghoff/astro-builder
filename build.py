@@ -771,6 +771,12 @@ mit Zeilennummer, kein stilles Fehlrendern.
         Klientenname (Identitäts-Guardrail: Name explizit am Dateianfang).
         Beispiel: "# Geburtshoroskop — Alex Muster"
 
+    <Untertitelzeile>
+        OPTIONAL, genau EINE einzeilige Zeile direkt unter der H1 und vor der
+        ersten H2 (Modus, Stand, Fassung). Landet in parsed['untertitel'] und
+        zählt nicht als Absatz. Jede weitere Zeile vor der ersten H2 bleibt ein
+        harter Fehler.
+
     ## <Kicker> — <Kapiteltitel>
         Jede H2 beginnt ein Kapitel. Links vom ersten " — " der Kicker
         (z. B. "Kapitel IV", "Zur Lesart"), rechts der Titel. Ohne " — "
@@ -976,6 +982,7 @@ def parse_analyse(path: str, client: str = None) -> dict:
 
     # 2) Struktur aufbauen
     h1, h1_line, doctype, client_name = None, None, None, None
+    untertitel = None
     chapters, cur = [], None
     if not blocks:
         err(1, "Datei ist leer.")
@@ -1003,7 +1010,18 @@ def parse_analyse(path: str, client: str = None) -> dict:
                     "(nur #, ##, ###).")
         else:  # raw
             if cur is None:
-                err(ln, "Text vor dem ersten Kapitel (##).")
+                # ADDITIV seit 2026-09-06 (Prüfbericht EA 1.12): GENAU EINE
+                # Zeile zwischen H1 und der ersten H2 ist zulässig — die
+                # Untertitelzeile (Modus, Stand, Fassung). Datierte Dokumente
+                # (EA-Jetzt-Teil, Transit) brauchen sie; vorher brach der Lauf
+                # dort mit "Text vor dem ersten Kapitel" ab, ohne dass das
+                # Schema die Zeile irgendwo verboten hätte.
+                if untertitel is None and h1 is not None and "\n" not in text:
+                    untertitel = text.strip()
+                    continue
+                err(ln, "Text vor dem ersten Kapitel (##). Zulässig ist dort "
+                        "genau EINE einzeilige Untertitelzeile direkt unter "
+                        "der H1.")
                 continue
             # Klartext-Kopfblock (ADDITIV): optionale Signatur/Beleg-Zeile direkt
             # unter der H2, VOR dem ersten Fließtextabsatz. Nur solange das
@@ -1099,7 +1117,7 @@ def parse_analyse(path: str, client: str = None) -> dict:
             f"({len(errors)} Fund(e)):\n{listing}\n"
             f"Schema: build.ANALYSE_SCHEMA. Quelle korrigieren statt rendern.")
     return {"h1": h1, "doctype": doctype, "client": client_name,
-            "chapters": chapters}
+            "untertitel": untertitel, "chapters": chapters}
 
 
 def chapter_markers(parsed: dict) -> list:
@@ -1846,3 +1864,111 @@ if __name__ == "__main__":
         setup_fonts(force="--force" in sys.argv)
     else:
         print(__doc__)
+
+
+# --- Aspekt-Heimat-Probe -----------------------------------------------------
+# Neu am 2026-09-06 (Prüfbericht EA, Handlungspunkt 4). Das Datenblatt-Modul
+# verlangt für jeden vollen und einseitigen Aspekt genau EIN Thema als Heimat.
+# Im Prüflauf fielen von Hand zwei Doppelheimaten und sieben ungedeckte Aspekte
+# auf, die sonst durchgegangen wären. Diese Probe macht das mechanisch.
+#
+# Die Auflösung der Regelkollision mit der Auswahlregel steckt in `dokumentiert`:
+# Ein Aspekt darf ohne Heimat bleiben, WENN er im chart_data ausdrücklich als
+# Weglassung geführt ist. Vollständigkeit der Rechenschaft, Auswahl der Deutung.
+
+_AH_GLYPH = "☌☍□△⚹⚻⚺"
+_AH_NAME = r"(?:AC|MC|DC|IC|[A-ZÄÖÜ][a-zäöüß]+)"
+
+
+def aspekt_heimat(chart_data_pfad: str) -> dict:
+    """Prüft die Aspekt-Heimat der Themenliste gegen die Aspekttabellen.
+
+    Liest NUR das chart_data.md — die Themenliste und die Aspekttabellen stehen
+    beide dort, die Probe läuft also schon in Schritt 1, vor der Freigabe.
+
+    Rückgabe: {'tabelle': n, 'mit_heimat': [...], 'ohne_heimat': [...],
+               'dokumentiert': [...], 'offen': [...], 'doppelt': [...],
+               'ok': bool}
+    `offen` ist die Fehlerliste: weder Heimat noch dokumentierte Weglassung.
+    """
+    import re as _re
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+
+    def _paare(block, trenner):
+        out = set()
+        for z in block.splitlines():
+            m = _re.match(r"\|\s*(%s)\s*(?:%s)\s*(%s)\s*\|"
+                          % (_AH_NAME, trenner, _AH_NAME), z)
+            if m and m.group(1) != "Aspekt":
+                out.add(frozenset([m.group(1), m.group(2)]))
+        return out
+
+    tabelle = set()
+    if "### Hauptaspekte" in txt:
+        teil = txt.split("### Hauptaspekte")[1]
+        teil = teil.split("### Achsengeometrie")[0] if "### Achsengeometrie" in teil \
+            else teil.split("### Untergrund")[0]
+        tabelle |= _paare(teil, "[%s]" % _AH_GLYPH)
+    if "### Untergrund-Aspekte" in txt:
+        teil = txt.split("### Untergrund-Aspekte")[1].split("\n**")[0]
+        tabelle |= _paare(teil, "—")
+
+    heimat, doppelt = {}, []
+    if "THEMA 1 |" in txt:
+        tl = "\nTHEMA 1 |" + txt.split("THEMA 1 |")[1]
+        for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:"):
+            tl = tl.split(schluss)[0]
+        for blk in _re.split(r"\nTHEMA \d+ \|", tl):
+            if "aspekte=" not in blk:
+                continue
+            t = _re.search(r"titel=(.+)", blk)
+            titel = (t.group(1).strip()[:40] if t else "?")
+            if "teil=jetzt" in blk:       # Transit-Kapitel: eigene Aspektmenge
+                continue
+            feld = _re.split(r"\|\s*(?:traegt|rang|form|verweis|praxis)=",
+                             blk.split("aspekte=")[1])[0]
+            feld = _re.sub(r"[TR]-\w+", " ", feld)
+            for m in _re.finditer(r"(%s)\s*(?:[%s]|–[A-Za-zä]+–)\s*(%s)"
+                                  % (_AH_NAME, _AH_GLYPH, _AH_NAME), feld):
+                paar = frozenset([m.group(1), m.group(2)])
+                if len(paar) < 2:
+                    continue
+                if paar in heimat and heimat[paar] != titel:
+                    doppelt.append((sorted(paar), heimat[paar], titel))
+                heimat.setdefault(paar, titel)
+
+    dok = set()
+    for marke in ("Aspekte ohne Deutungs-Heimat", "Weglassung", "GESTRICHEN"):
+        if marke in txt:
+            teil = txt.split(marke, 1)[1]
+            dok |= _paare(teil, "[%s—]" % _AH_GLYPH)
+            for m in _re.finditer(r"(%s)\s*(?:[%s]|—)\s*(%s)"
+                                  % (_AH_NAME, _AH_GLYPH, _AH_NAME), teil):
+                dok.add(frozenset([m.group(1), m.group(2)]))
+
+    ohne = sorted(tabelle - set(heimat), key=lambda x: sorted(x))
+    offen = [p for p in ohne if p not in dok]
+    return {
+        "tabelle": len(tabelle),
+        "mit_heimat": sorted(" — ".join(sorted(p)) for p in set(heimat) & tabelle),
+        "ohne_heimat": [" — ".join(sorted(p)) for p in ohne],
+        "dokumentiert": [" — ".join(sorted(p)) for p in ohne if p in dok],
+        "offen": [" — ".join(sorted(p)) for p in offen],
+        "doppelt": [(" — ".join(a), b, c) for a, b, c in doppelt],
+        "ok": not offen and not doppelt,
+    }
+
+
+def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
+    """Einzeiliger Prüftext für Schritt 1; nur Abweichungen werden ausführlich."""
+    r = aspekt_heimat(chart_data_pfad)
+    if r["ok"]:
+        return ("Aspekt-Heimat: %d Aspekte, %d mit Heimat, %d dokumentiert "
+                "weggelassen, keine Doppelheimat, keine offenen."
+                % (r["tabelle"], len(r["mit_heimat"]), len(r["dokumentiert"])))
+    L = ["Aspekt-Heimat: FEHLER (%d Aspekte in der Tabelle)." % r["tabelle"]]
+    for p in r["offen"]:
+        L.append("  OHNE HEIMAT und nicht dokumentiert: %s" % p)
+    for p, a, b in r["doppelt"]:
+        L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (p, a, b))
+    return "\n".join(L)

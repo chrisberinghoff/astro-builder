@@ -865,11 +865,48 @@ ZYKLEN = {
     'Jupiter': [(11.9, 'Jupiter-Rückkehr'), (23.8, 'Jupiter-Rückkehr'),
                 (35.7, 'Jupiter-Rückkehr'), (47.6, 'Jupiter-Rückkehr'),
                 (59.5, 'Jupiter-Rückkehr')],
-    'Pluto': [(38.0, 'Pluto-Quadrat (jahrgangsabhängig, 36–45)')],
+    'Pluto': [(38.0, 'Pluto-Quadrat (Jahrgangsschätzung, 36–45 — '
+                     'wird von pluto_quadrat_alter() überschrieben)')],
 }
 
 
-def zyklusfenster(faktor, alter=None):
+def pluto_quadrat_alter(jd_geburt, pluto_lon, max_alter=70):
+    """Alter beim ERSTEN exakten Quadrat des laufenden Pluto zum Radix-Pluto.
+
+    Neu am 2026-09-06 (Prüfbericht EA 1.4). Der Tabellenwert in ZYKLEN ist ein
+    Jahrgangsmittel und lag im Prüffall zwei Jahre daneben — er wies den
+    aktuell laufenden Transit als „zurückliegend" aus. Weil Plutos Bahn stark
+    exzentrisch ist, schwankt das Alter beim Quadrat je nach Radix-Position
+    zwischen etwa 36 und 45 Jahren; ein Mittelwert ist dafür untauglich.
+
+    Rechnet gegen die Ephemeride, wenn pyswisseph verfügbar ist, sonst None —
+    dann gilt der Tabellenwert weiter und `strukturbild_text()` kennzeichnet ihn
+    ausdrücklich als Schätzung.
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    ziel_a = (pluto_lon + 90.0) % 360.0
+    ziel_b = (pluto_lon - 90.0) % 360.0
+    prev = {}
+    schritt = 30.0                      # Tage; Pluto laeuft langsam genug
+    for i in range(int(max_alter * 365.25 / schritt) + 1):
+        jd = jd_geburt + i * schritt
+        try:
+            lo = swe.calc_ut(jd, swe.PLUTO, swe.FLG_SWIEPH)[0][0]
+        except Exception:
+            return None
+        for lab, ziel in (('a', ziel_a), ('b', ziel_b)):
+            val = ((lo - ziel + 180.0) % 360.0) - 180.0
+            if prev.get(lab) is not None and prev[lab] * val < 0 \
+                    and abs(prev[lab] - val) < 30:
+                return round((jd - jd_geburt) / 365.25, 1)
+            prev[lab] = val
+    return None
+
+
+def zyklusfenster(faktor, alter=None, gerechnet=None):
     """Die Lebensalter, in denen eine von `faktor` gefuehrte Anlage
     erfahrungsgemaess laut wird.
 
@@ -883,7 +920,14 @@ def zyklusfenster(faktor, alter=None):
     dieser Art) und ausdruecklich kein Mangel.
     """
     out = []
-    for jahre, name in sorted(ZYKLEN.get(faktor, [])):
+    eintraege = sorted(ZYKLEN.get(faktor, []))
+    if gerechnet and faktor in gerechnet and gerechnet[faktor] is not None:
+        # Gerechneter Wert schlaegt die Jahrgangstabelle (s. pluto_quadrat_alter).
+        eintraege = [(gerechnet[faktor],
+                      (name.split(' (')[0] + ' (aus der Radix-Position gerechnet)')
+                      if eintraege else '%s-Fenster (gerechnet)' % faktor)
+                     for _j, name in (eintraege or [(None, faktor)])]
+    for jahre, name in eintraege:
         lage = None
         if alter is not None:
             if abs(alter - jahre) <= 1.5:
@@ -896,7 +940,8 @@ def zyklusfenster(faktor, alter=None):
     return out
 
 
-def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None):
+def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
+                 jd_geburt=None):
     """Alle Struktur-Befunde eines Charts in einem Aufruf.
 
     factors  Liste {'name','lon',...} inkl. Achsen AC/MC/DC/IC und der
@@ -905,6 +950,11 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None):
     aspects  Ergebnis von huber_aspects(); wird sonst selbst gerechnet.
     zusatz   Ergebnis von zusatz_aspekte(); optional, geht nur in die Dichte ein.
     alter    heutiges Alter der Person in Jahren (fuer die Zyklusfenster).
+    jd_geburt  Julianisches Datum der Geburt in UT. Nur noetig, damit das
+             Pluto-Quadrat aus der Radix-Position statt aus dem Jahrgangsmittel
+             gerechnet wird (s. pluto_quadrat_alter, Pruefbericht EA 1.4).
+             Ohne Angabe bleibt der Tabellenwert und wird als Schaetzung
+             gekennzeichnet.
 
     Rueckgabe: dict mit den Schluesseln verteilung_planeten, verteilung_alle,
     verteilung_gewichtet, retro, ketten, ketten_klassisch, hausherrscher,
@@ -927,11 +977,161 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None):
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
         'spezialnetz': spezialfaktor_netz(factors, aspects),
         'konfigurationen': konfigurationen(factors, aspects, cusps=cusps),
-        'zyklen': {f['name']: zyklusfenster(f['name'], alter)
-                   for f in factors if zyklusfenster(f['name'])},
+        'zyklen': {},
         'alter': alter,
     }
+    ger = {}
+    if jd_geburt is not None:
+        pl = next((f['lon'] for f in factors if f['name'] == 'Pluto'), None)
+        if pl is not None:
+            a = pluto_quadrat_alter(jd_geburt, pl)
+            if a is not None:
+                ger['Pluto'] = a
+    sb['pluto_quadrat_gerechnet'] = ger.get('Pluto')
+    sb['zyklen'] = {f['name']: zyklusfenster(f['name'], alter, ger)
+                    for f in factors if zyklusfenster(f['name'])}
     return sb
+
+
+# --- Die evolutionaere Achse (EA-Modul, Modus TIEF) --------------------------
+# Neu am 2026-09-06 (Pruefbericht EA 5.1/5.2/5.3). Bis dahin wurden die sechs
+# Punkte, die Knoten-Hausherrscher und die Skipped Steps in jedem EA-Lauf von
+# Hand zusammengesucht; drei Ebenen fielen dabei regelmaessig aus: die Herrscher
+# der beiden Knoten-HAEUSER, die Laufrichtung des Skipped Step und die
+# Ruecklaeufigkeit des Radix-Pluto.
+
+def ea_achse(factors, cusps, deckel=3.0):
+    """Die sechs Punkte der evolutionaeren Achse plus Sekundaermaterial.
+
+    Rueckgabe: dict mit
+      punkte            Liste der sechs Punkte, je {nr,label,name,lon,zeichen,
+                        haus_label,herrscher,retro}
+      haus_herrscher    {'nordknoten': …, 'suedknoten': …} — wer das HAUS des
+                        jeweiligen Knotens regiert und wo er steht
+      skipped           Liste {name,lon,orb,richtung,ueber_deckel} — Quadrate zur
+                        Knotenachse; `richtung` sagt, ob der Planet auf den
+                        Nord- oder auf den Suedknoten zulaeuft (applikativ), was
+                        ueber Wiederholung vs. Vermeidung entscheidet
+      knoten_konj       Faktoren in Konjunktion zu einem Knoten (Orb <= 8°)
+      pluto_aspekte     alle Kontakte zum Radix-Pluto
+    """
+    by = {f['name']: f for f in factors}
+    def sep(a, b): return abs(((a - b + 180) % 360) - 180)
+    nk = by['Mondknoten']['lon']
+    sk = (nk + 180) % 360
+    pl = by['Pluto']['lon']
+    ppp = (pl + 180) % 360
+
+    def herrscher_von(lon, klassisch=False):
+        tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+        return tab[zeichen_name(lon)]
+
+    def punkt(nr, label, name, lon, retro=None):
+        hg = haus_und_grenzlage(lon, cusps)
+        return {'nr': nr, 'label': label, 'name': name, 'lon': lon,
+                'zeichen': zeichen_name(lon), 'haus_label': hg['label'],
+                'haus': hg['haus'], 'nebenhaus': hg.get('nebenhaus'),
+                'herrscher': herrscher_von(lon),
+                'herrscher_klassisch': herrscher_von(lon, True),
+                'retro': retro}
+
+    sk_h = herrscher_von(sk)
+    nk_h = herrscher_von(nk)
+    punkte = [
+        punkt(1, 'Pluto', 'Pluto', pl, by['Pluto'].get('retro')),
+        punkt(2, 'Südknoten', 'Südknoten', sk, by['Mondknoten'].get('retro')),
+        punkt(3, 'Südknoten-Herrscher', sk_h, by[sk_h]['lon'],
+              by[sk_h].get('retro')),
+        punkt(4, 'Pluto-Polaritätspunkt', 'Pluto-Polaritätspunkt', ppp, None),
+        punkt(5, 'Nordknoten', 'Mondknoten', nk, by['Mondknoten'].get('retro')),
+        punkt(6, 'Nordknoten-Herrscher', nk_h, by[nk_h]['lon'],
+              by[nk_h].get('retro')),
+    ]
+
+    # Haus-Herrscher der beiden Knotenhaeuser (Green liest sie mit)
+    hh = hausherrscher(factors, cusps)
+    def hh_fuer(lon):
+        h = haus_und_grenzlage(lon, cusps)['haus']
+        for e in hh:
+            if e.get('haus') == h:
+                return e
+        return None
+    haus_h = {'nordknoten': hh_fuer(nk), 'suedknoten': hh_fuer(sk)}
+
+    # Skipped Steps mit Laufrichtung
+    skipped = []
+    for f in factors:
+        nm = f['name']
+        if nm in ('Mondknoten', 'AC', 'MC', 'DC', 'IC'):
+            continue
+        d = min(sep(f['lon'], (nk + 90) % 360), sep(f['lon'], (nk + 270) % 360))
+        if d <= deckel + 2.0:
+            # applikativ wohin? Kuerzerer Weg im Tierkreis entscheidet.
+            zu_nk, zu_sk = sep(f['lon'], nk), sep(f['lon'], sk)
+            richtung = ('Nordknoten' if zu_nk < zu_sk else 'Südknoten')
+            skipped.append({'name': nm, 'lon': f['lon'], 'orb': d,
+                            'richtung': richtung,
+                            'ueber_deckel': d > deckel})
+    skipped.sort(key=lambda x: x['orb'])
+
+    knoten_konj = []
+    for f in factors:
+        if f['name'] == 'Mondknoten':
+            continue
+        for knoten, knm in ((nk, 'Nordknoten'), (sk, 'Südknoten')):
+            d = sep(f['lon'], knoten)
+            if d <= 8.0:
+                knoten_konj.append({'name': f['name'], 'knoten': knm, 'orb': d})
+
+    return {'punkte': punkte, 'haus_herrscher': haus_h, 'skipped': skipped,
+            'knoten_konj': knoten_konj,
+            'pluto_retro': bool(by['Pluto'].get('retro')),
+            'nordknoten_lon': nk, 'suedknoten_lon': sk, 'ppp_lon': ppp}
+
+
+def ea_achse_text(ea):
+    """Der fertige Abschnitt `## Die evolutionäre Achse` fuers chart_data.md."""
+    def gr(lon):
+        g = lon % 30
+        return '%d°%02d′ %s' % (int(g), round((g - int(g)) * 60), zeichen_name(lon))
+    L = ['## Die evolutionäre Achse — das Rückgrat (Modus TIEF)', '',
+         'Gerechnet mit `radix.ea_achse()`. Alle sechs Punkte sind '
+         'Deckungsauftrag, nicht Gliederung.', '',
+         '| # | Punkt | Stand | Haus | Herrscher | R |',
+         '|---|---|---|---|---|---|']
+    for p in ea['punkte']:
+        L.append('| %d | **%s** | %s | %s | %s | %s |'
+                 % (p['nr'], p['label'], gr(p['lon']), p['haus_label'],
+                    p['herrscher'], 'R' if p['retro'] else '—'))
+    L.append('')
+    L.append('**Herrscher der Knoten-Häuser** (Green liest sie zusätzlich zu den '
+             'Zeichenherrschern):')
+    for k, e in ea['haus_herrscher'].items():
+        if e:
+            L.append('- %s-Haus %s (%s) → %s in %s, Haus %s'
+                     % ('Nordknoten' if k == 'nordknoten' else 'Südknoten',
+                        e.get('haus'), e.get('spitzenzeichen'),
+                        e.get('herrscher'), e.get('steht_in_zeichen'),
+                        e.get('haus_spalte')))
+    L.append('')
+    L.append('**Skipped Steps** (Quadrate zur Knotenachse, Deckel %s°):'
+             % '3')
+    if not ea['skipped']:
+        L.append('- keine.')
+    for sp in ea['skipped']:
+        L.append('- %s, %s, Orb %d°%02d′ — läuft auf den %s zu%s'
+                 % (sp['name'], gr(sp['lon']), int(sp['orb']),
+                    round((sp['orb'] - int(sp['orb'])) * 60), sp['richtung'],
+                    ' · ÜBER DEM DECKEL, Aufnahme begründen'
+                    if sp['ueber_deckel'] else ''))
+    L.append('')
+    L.append('**Radix-Pluto ist %s.** %s'
+             % ('rückläufig' if ea['pluto_retro'] else 'direktläufig',
+                'Eigener Befund der evolutionären Lesart: das Wandlungsgeschehen '
+                'ist stark nach innen gerichtet und meldet sich seltener über '
+                'äußere Anlässe.' if ea['pluto_retro'] else ''))
+    L.append('')
+    return '\n'.join(L) + '\n'
 
 
 def _vert_zeile(v):
