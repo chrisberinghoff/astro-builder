@@ -1475,6 +1475,12 @@ def pdf_info(pdf_path: str) -> dict:
 
 _FUSS_LABEL_RE = re.compile(r'^\s*B\s?E\s?L\s?E\s?G\s?:')
 _FUSS_ASPEKT_RE = re.compile(r'^\s*[–—]\s')
+# Woran eine Zeile des Kapitelfusses erkennbar ist — auch als Fortsetzung
+# einer umgebrochenen Beleg- oder Stand-Zeile (s. _fuss_zeilen).
+_FUSS_ZEILE_RE = re.compile(
+    r'^\s*[–—]\s|\d{1,3}\s*°\s*\d{1,2}\s*[′\']|\bOrb\b|·|'
+    r'Konjunktion|Opposition|Quadrat|Trigon|Sextil|Quincunx|Halbsextil|'
+    r'[☉☽☿♀♂♃♄♅♆♇☊☋⚷⚸⊗♈♉♊♋♌♍♎♏♐♑♒♓]')
 
 
 def fuss_signaturen(parsed) -> list:
@@ -1495,33 +1501,48 @@ def fuss_signaturen(parsed) -> list:
 def _fuss_zeilen(plines, sig_set) -> int:
     """Wie viele Zeilen am Seitenende gehoeren zu einem Kapitelfuss?
 
-    Von unten: erst die eingerueckten „–\"-Beleg-Zeilen, dann die
-    „BELEG:\"-Kopfzeile, dann die Signaturzeile. Abgezogen wird nur, wenn der
-    Block VERANKERT ist — also die BELEG-Kopfzeile oder eine bekannte Signatur
-    trifft. Eine Prosazeile, die zufaellig mit einem Gedankenstrich beginnt,
-    kann damit nie stillschweigend die Satzende-Probe umgehen.
+    Gesucht wird ZUERST der Anker — die „BELEG:\"-Kopfzeile oder eine bekannte
+    Signatur —, danach wird geprueft, ob alles UNTER ihm beleg-typisch ist
+    (fuehrender Gedankenstrich, Gradminute, „Orb\", ein Aspektname, der
+    Segmenttrenner „·\" oder ein Faktor-/Zeichenglyph). Nur dann wird
+    abgezogen. Eine Prosazeile kann die Satzende-Probe damit nicht umgehen:
+    ohne Anker gibt es keinen Abzug, und steht hinter dem Fuss noch Prosa auf
+    derselben Seite, faellt sie durch die Typ-Probe.
+
+    Korrektur 2026-09-06 (Prueflauf Geburtshoroskop): Die frueherer Fassung
+    lief von unten und brach an der ersten Zeile ab, die nicht mit „–\"
+    beginnt. Der Streifen ist aber schmal gesetzt und im Zweispalter erst
+    recht — Beleg-Eintraege UND die mehrzeilige Stand-Kopfzeile brechen
+    regelmaessig um. Damit riss die Kette bei praktisch jedem Chart, und
+    verify() meldete Kapitelfuesse als Satzabbruch.
     """
-    i, anker = len(plines), False
-    while i > 0 and _FUSS_ASPEKT_RE.match(plines[i - 1]):
-        i -= 1
-    if i > 0 and _FUSS_LABEL_RE.match(plines[i - 1]):
-        i -= 1
-        anker = True
-    if i > 0 and sig_set and _nrm(plines[i - 1]).strip() in sig_set:
-        i -= 1
-        anker = True
-    elif anker and i > 0:
-        # Signatur ohne Liste: sie steht IMMER direkt ueber der
-        # BELEG-Kopfzeile. Abgezogen wird sie nur, wenn sie nicht auf einem
-        # Satzende schliesst — die Zeile ueber dem Streifen ist sonst die
-        # letzte Prosazeile des Kapitels, und die endet bauartbedingt auf
-        # einem Punkt. Ein echter Satzabbruch kann so nicht verdeckt werden.
-        rest = plines[i - 1].strip()
-        while rest and rest[-1] in _CLOSERS:
-            rest = rest[:-1].rstrip()
-        if rest and rest[-1] not in '.!?…:;-':
-            i -= 1
-    return len(plines) - i if anker else 0
+    n = len(plines)
+    if not n:
+        return 0
+    sigs = {_dehyph(s) for s in (sig_set or ())}
+    for i in range(n - 1, max(-1, n - 30), -1):
+        zeile = plines[i]
+        ist_label = bool(_FUSS_LABEL_RE.match(zeile))
+        ist_sig = bool(sigs) and _dehyph(_nrm(zeile)) in sigs
+        if not (ist_label or ist_sig):
+            continue
+        einzug = len(zeile) - len(zeile.lstrip())
+        if not all(_FUSS_ZEILE_RE.search(x)
+                   or (len(x) - len(x.lstrip())) > einzug
+                   for x in plines[i + 1:]):
+            continue
+        start = i
+        if ist_label and sigs:
+            # Die Signatur steht direkt ueber der BELEG-Kopfzeile und bricht
+            # ihrerseits um; sie wird als zusammengesetzter Text erkannt.
+            for k in range(1, 7):
+                if i - k < 0:
+                    break
+                if _dehyph(_nrm(' '.join(plines[i - k:i]))) in sigs:
+                    start = i - k
+                    break
+        return n - start
+    return 0
 
 
 def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
