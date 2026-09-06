@@ -65,9 +65,14 @@ Modul:
 """
 import swisseph as swe
 import json, re, sys, os, glob, site, argparse
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:                                  # Python < 3.9
+    ZoneInfo = None
 
-MOSEPH = swe.FLG_MOSEPH | swe.FLG_SPEED          # Hauptplaneten: keine ext. Dateien
+MOSEPH = swe.FLG_MOSEPH | swe.FLG_SPEED          # Rueckfall: keine ext. Dateien
+HAUPT_MODELL = 'Moshier'                         # wird in _transiters() gesetzt
 SWIEPH = swe.FLG_SWIEPH | swe.FLG_SPEED          # Chiron: braucht seas_*.se1
 
 # ---------------------------------------------------------------------------
@@ -284,11 +289,30 @@ def _transiters(mit_mars=False, probe=None):
     aufgefallen. `grund` ist im Erfolgsfall das benutzte Verzeichnis, sonst der
     Klartext-Grund fuer die Ausklammerung (wandert in den Report).
     ACHTUNG: Rueckgabe seit 30.07.2026 dreiteilig statt zweiteilig."""
-    base = ([('Mars',swe.MARS,MOSEPH)] if mit_mars else []) + \
-           [('Jupiter',swe.JUPITER,MOSEPH),('Saturn',swe.SATURN,MOSEPH),
-            ('Uranus',swe.URANUS,MOSEPH),('Neptun',swe.NEPTUNE,MOSEPH),
-            ('Pluto',swe.PLUTO,MOSEPH),('Knoten',swe.TRUE_NODE,MOSEPH)]
     jds = list(probe) if probe else [swe.julday(2027,1,1,0.0)]
+    # EIN Ephemeriden-Modell fuer das ganze Dokument (neu 2026-09-06,
+    # Pruefbericht Transit 4.10). Bis dahin liefen die Hauptplaneten auf Moshier
+    # (MOSEPH, dateifrei) und Chiron auf der Swiss Ephemeris (SWIEPH). Beide
+    # Modelle unterscheiden sich fuer die Langsamen um bis zu einer Bogensekunde
+    # — bei Pluto sind das rund 26 Minuten Laufzeit, genug, um einen Exaktpunkt
+    # dicht an Mitternacht auf den Nachbartag zu kippen. astro.com rechnet mit
+    # der Swiss Ephemeris; liegen deren Dateien vor, rechnet dieser Builder jetzt
+    # ebenso. Ohne sie bleibt Moshier der Rueckfall, damit ein Lauf ohne
+    # Ephemeridendateien weiter moeglich ist.
+    haupt = SWIEPH
+    try:
+        for jd in jds:
+            for pl in (swe.JUPITER, swe.SATURN, swe.URANUS, swe.NEPTUNE,
+                       swe.PLUTO, swe.TRUE_NODE):
+                swe.calc_ut(jd, pl, SWIEPH)
+    except Exception:
+        haupt = MOSEPH
+    base = ([('Mars',swe.MARS,haupt)] if mit_mars else []) + \
+           [('Jupiter',swe.JUPITER,haupt),('Saturn',swe.SATURN,haupt),
+            ('Uranus',swe.URANUS,haupt),('Neptun',swe.NEPTUNE,haupt),
+            ('Pluto',swe.PLUTO,haupt),('Knoten',swe.TRUE_NODE,haupt)]
+    global HAUPT_MODELL
+    HAUPT_MODELL = "Swiss Ephemeris" if haupt is SWIEPH else "Moshier"
     try:
         for jd in jds:
             swe.calc_ut(jd, swe.CHIRON, SWIEPH)
@@ -324,8 +348,45 @@ def deg2sign(lon):
     s=int(lon//30)%12; d=lon-30*(lon//30); dd=int(d); mm=int(round((d-dd)*60))
     if mm==60: dd+=1; mm=0
     return f"{ZODIAC[s]} {dd}°{mm:02d}'"
+ZEITZONE = None          # None = Weltzeit (UT), wie bis 2026-09-06
+
+def setze_zeitzone(name):
+    """Zeitzone fuer die AUSGABE der Exaktdaten setzen (IANA-Name, z. B.
+    'Europe/Berlin'). None = Weltzeit.
+
+    Grund (Pruefbericht Transit 2026-09-06, 4.10, Ursache 2): `swe.revjul()`
+    liefert den WELTZEIT-Kalendertag. astro.com und jede Klientin lesen den
+    ORTSTAG. Faellt ein Exaktpunkt in die letzten Minuten eines UT-Tages, nennt
+    der Report deshalb den Vortag — im Pruefall fuenfmal. Die Rechnung war nie
+    falsch, nur die Beschriftung.
+
+    Rueckgabe: der gesetzte Name oder None. Ein unbekannter Name ist ein harter
+    Fehler; stilles Zurueckfallen auf UT waere genau der Fehler, den diese
+    Funktion behebt."""
+    global ZEITZONE
+    if not name:
+        ZEITZONE = None; return None
+    if ZoneInfo is None:
+        raise RuntimeError("zoneinfo nicht verfuegbar (Python < 3.9) — "
+                           "--tz kann nicht benutzt werden.")
+    try:
+        ZEITZONE = ZoneInfo(name)
+    except Exception as e:
+        raise ValueError("unbekannte Zeitzone %r (%s). IANA-Name erwartet, "
+                         "z. B. Europe/Berlin." % (name, e)) from e
+    return name
+
+
 def d_from_jd(jd):
-    y,m,dd,_=swe.revjul(jd); return date(y,m,dd)
+    """Kalendertag eines julianischen Datums — in ZEITZONE, sonst in Weltzeit."""
+    y,m,dd,ut=swe.revjul(jd)
+    if ZEITZONE is None:
+        return date(y,m,dd)
+    st=int(ut); mi=int((ut-st)*60); se=int(round((((ut-st)*60)-mi)*60))
+    if se>59: se=59
+    if st>23: st=23
+    dt=datetime(y,m,dd,st,mi,se,tzinfo=timezone.utc)
+    return dt.astimezone(ZEITZONE).date()
 def _iso(d): return d.isoformat() if hasattr(d,'isoformat') else d
 def _mon(tage): return round(tage/30.4375,1)
 SPIEGEL_PAAR = {'DC':'AC','IC':'MC','Suedknoten':'Nordknoten'}
@@ -352,12 +413,14 @@ def house_of(lon, cusps):
 # ---------------------------------------------------------------------------
 def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_WEIT,
         lookback_months=LOOKBACK_M, cusps=None, asof=None, lang_tage=LANG_TAGE,
-        mit_mars=False):
+        mit_mars=False, ohne_chiron=False, tz=None):
     """radix: {Name: ekl. Laenge}. start: date (Default heute). months: Fensterlaenge.
     primary_extra: zusaetzliche Radix-Ziele neben den persoenlichen Punkten.
     lookback_months: Rueckblick VOR dem Start (fuer echte Exaktdaten auslaufender
     Kontakte im Jetzt-Teil). cusps: 12 Koch-Spitzen (optional, fuer Haus-Durchgaenge).
     asof: Stichtag der Momentaufnahme (Default = start)."""
+    if tz is not None:
+        setze_zeitzone(tz)
     if start is None:
         start = date.today()
     if asof is None:
@@ -378,11 +441,34 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     end   = qb[-1] - timedelta(days=1)
     t0    = plus_quartale(start, -max(1, int(round(lookback_months/3.0))))
     ndays = (end-t0).days
+    # Namensprobe der zusaetzlichen Ziele (Pruefbericht Transit 2026-09-06, 1.2).
+    # Bis dahin wurde ein unbekannter Name STILL verworfen; im Pruefall fielen
+    # dadurch zwei Langlaeufer von 20 und 17 Monaten aus der primaeren Auswahl,
+    # weil `Knoten` uebergeben wurde, das Radix-Ziel aber `Nordknoten` heisst.
+    unbekannt = [x for x in (primary_extra or []) if x not in radix]
+    if unbekannt:
+        raise ValueError(
+            "unbekannte primaere Ziele: %s\n"
+            "  Erlaubt sind die Namen der Radix-Punkte: %s\n"
+            "  Haeufige Verwechslung: der Mondknoten heisst hier `Nordknoten`, "
+            "nicht `Knoten`." % (", ".join(unbekannt), ", ".join(sorted(radix))))
     primary = set(PERSONAL) | set(primary_extra or [])
     spiegel = spiegel_ziele(radix)
     transiters, chiron_on, chiron_info = _transiters(
         mit_mars, probe=(swe.julday(t0.year, t0.month, t0.day, 0.0),
                          swe.julday(end.year, end.month, end.day, 0.0)))
+    # Chiron-Pflicht (Pruefbericht Transit 2026-09-06, 1.1). Vorher lief ein
+    # Lauf ohne Asteroiden-Ephemeride mit einer blossen Hinweiszeile durch und
+    # verlor im Pruefall 27 Kontakte, darunter den am Stichtag engsten. Wer
+    # bewusst ohne Chiron rechnen will, sagt es jetzt ausdruecklich.
+    if not chiron_on and not ohne_chiron:
+        raise RuntimeError(
+            "Transit-Chiron nicht rechenbar: %s\n"
+            "  Behebung:  pip install flatlib --no-deps --break-system-packages\n"
+            "             danach --ephe <.../flatlib/resources/swefiles> setzen,\n"
+            "             falls die Autosuche das Verzeichnis nicht findet.\n"
+            "  Bewusst ohne Chiron rechnen: ohne_chiron=True bzw. --ohne-chiron."
+            % chiron_info)
     i_asof = max(0, min(ndays, (asof-t0).days))
 
     def q_of(d):
@@ -406,13 +492,49 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     day = lambda i: t0+timedelta(days=i)
 
     def refine_min(pl,flag,rlon,a,jd_lo,jd_hi):
-        best=(None,999.0)
-        for k in range(0,73):
-            jd=jd_lo+(jd_hi-jd_lo)*k/72.0
+        """Exakter Zeitpunkt des Aspekts im Fenster [jd_lo, jd_hi].
+
+        Bis zum 2026-09-06 wurden hier 73 Punkte ueber zwei Tage abgetastet
+        (Schrittweite 40 Minuten) und der kleinste ABGETASTETE Orb genommen.
+        Lag der wahre Exaktpunkt dicht an Mitternacht, kippte das gemeldete
+        Datum auf den Nachbartag — mit wechselndem Vorzeichen, je nachdem,
+        welcher Rasterpunkt naeher lag (Pruefbericht Transit 2026-09-06, 4.10,
+        Ursache 1; im Pruefall vier von 146 Exaktdaten betroffen).
+
+        Jetzt zweistufig: Kreuzt die vorzeichenbehaftete Winkeldifferenz zum
+        Aspektpunkt die Null, wird bis auf rund eine Sekunde bisektiert. Tut
+        sie es nicht (Streifkontakt, Stationsnaehe), wird das Minimum von |f|
+        per Goldenem Schnitt gesucht statt auf einem festen Raster."""
+        mitte=(jd_lo+jd_hi)/2.0
+        l0,_=calc(pl,mitte,flag)
+        ziel=min(((rlon+a)%360.0, (rlon-a)%360.0),
+                 key=lambda z: abs(wrap180(l0-z)))
+        def f(jd):
             lon,_=calc(pl,jd,flag)
-            o=orb_for(lon,rlon,a)
-            if o<best[1]: best=(jd,o)
-        return best
+            return wrap180(lon-ziel)
+        N=48                                   # Vorabtastung, ~1 h bei 2 Tagen
+        js=[jd_lo+(jd_hi-jd_lo)*k/float(N) for k in range(N+1)]
+        vs=[f(j) for j in js]
+        for k in range(N):
+            if (vs[k]<0)!=(vs[k+1]<0) and abs(vs[k])<5.0 and abs(vs[k+1])<5.0:
+                lo,hi=js[k],js[k+1]; slo=(vs[k]<0)
+                for _ in range(40):            # 2 Tage / 2**40 << 1 Sekunde
+                    m=(lo+hi)/2.0
+                    if (f(m)<0)==slo: lo=m
+                    else: hi=m
+                jd=(lo+hi)/2.0
+                lon,_=calc(pl,jd,flag)
+                return jd, orb_for(lon,rlon,a)
+        k=min(range(N+1), key=lambda i: abs(vs[i]))
+        lo,hi=js[max(0,k-1)],js[min(N,k+1)]
+        gr=(5.0**0.5-1.0)/2.0
+        for _ in range(60):                    # Goldener Schnitt auf |f|
+            m1=hi-gr*(hi-lo); m2=lo+gr*(hi-lo)
+            if abs(f(m1))<abs(f(m2)): hi=m2
+            else: lo=m1
+        jd=(lo+hi)/2.0
+        lon,_=calc(pl,jd,flag)
+        return jd, orb_for(lon,rlon,a)
 
     def refine_cross(pl,flag,jd_lo,jd_hi,fn):
         """Bisektion auf ~1h fuer den Zeitpunkt, an dem fn(lon) das Vorzeichen wechselt."""
@@ -694,6 +816,8 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                 hausdurchgang=hausdurchgang, zeichenaufenthalt=zeichenaufenthalt,
                 hotspots=hotspots, stations=stations, ingress=ingress,
                 chiron_transit=chiron_on, chiron_info=chiron_info,
+                zeitzone=(str(ZEITZONE) if ZEITZONE else 'UT'),
+                ephe_modell=HAUPT_MODELL,
                 ephe_pfad=EPHE_PFAD,
                 haeuser=bool(cusps), mars=mit_mars,
                 primary=sorted(primary), quartale=n_q,
@@ -713,6 +837,13 @@ def format_report(res):
     # Zusatzzeilen seit 30.07.2026: die Chiron-Ausklammerung war frueher stumm.
     # Die beiden Kopfzeilen darueber bleiben unveraendert — transitdata.py liest
     # sie, und §11 der chart_data traegt den Report unveraendert.
+    # Zeitzonen-Zeile seit 2026-09-06 (Pruefbericht 4.10). Sie steht BEWUSST
+    # unter den beiden ersten Kopfzeilen, die transitdata.py liest.
+    out.append(f"Ephemeride: {res.get('ephe_modell','?')} fuer alle Faktoren")
+    out.append(f"Exaktdaten in: {res.get('zeitzone','UT')}"
+               + ("   (Weltzeit — bei Bedarf --tz <IANA-Zone> setzen, damit die "
+                  "Daten dem Ortstag der Klientin entsprechen)"
+                  if res.get('zeitzone','UT')=='UT' else ""))
     if res.get('chiron_transit'):
         if res.get('ephe_pfad'):
             out.append(f"[ephemeride] Transit-Chiron aus {res['ephe_pfad']}")
@@ -843,6 +974,169 @@ def format_report(res):
     return "\n".join(out)
 
 # ---------------------------------------------------------------------------
+# Zusatz-Zeitmasse: progressiver Mond, Sonnenbogen, Profektion, Finsternisse
+# Neu am 2026-09-06 (Pruefbericht Transit, Rubrik 5.1 bis 5.4). Ein
+# Transitdokument ueber zwei Jahre ohne diese vier Masse ist fachlich
+# unvollstaendig: Der progressive Mond faerbt das Jahr, der Sonnenbogen ist
+# punktgenauer als jeder Transit, die Profektion nennt das Jahresthema, und
+# eine Finsternis auf einem tragenden Punkt ist die staerkste Einzelmarke, die
+# es gibt. Alles vier optional — sie brauchen das Geburtsdatum, das die
+# blosse Radix-Laengenliste nicht enthaelt (--geburt).
+# ---------------------------------------------------------------------------
+HERRSCHER = {'Widder':'Mars','Stier':'Venus','Zwillinge':'Merkur','Krebs':'Mond',
+             'Loewe':'Sonne','Jungfrau':'Merkur','Waage':'Venus',
+             'Skorpion':'Pluto','Schuetze':'Jupiter','Steinbock':'Saturn',
+             'Wassermann':'Uranus','Fische':'Neptun'}
+KLASSISCH = {'Skorpion':'Mars','Wassermann':'Saturn','Fische':'Jupiter'}
+
+
+def zusatzzeitmasse(radix, jd_geburt, start, end, cusps=None, orb=1.0):
+    """Progressiver Mond, Sonnenbogen-Achsenkontakte, Profektion, Finsternisse.
+
+    radix       {Name: ekl. Laenge} wie fuer run()
+    jd_geburt   julianisches Datum der Geburt in UT
+    start, end  date-Objekte des Rechenfensters
+    cusps       12 Koch-Spitzen (fuer die Profektion noetig)
+    orb         Orb der Sonnenbogen-Kontakte in Grad (Vorgabe 1,0)
+
+    Rueckgabe: dict mit 'prog_mond', 'sonnenbogen', 'profektion', 'finsternisse'.
+    """
+    aus = {}
+    jahr = 365.2422
+
+    def alter(d):
+        return (swe.julday(d.year, d.month, d.day, 12.0) - jd_geburt) / jahr
+
+    # --- 1) progressiver Mond: 1 Tag nach Geburt = 1 Lebensjahr --------------
+    pm = []
+    d = start
+    while d <= end:
+        jd = jd_geburt + alter(d)
+        lon = swe.calc_ut(jd, swe.MOON, SWIEPH)[0][0]
+        eintrag = dict(datum=d.isoformat(), laenge=round(lon, 4),
+                       stand=deg2sign(lon))
+        if cusps:
+            eintrag['haus'] = house_of(lon, cusps)
+        pm.append(eintrag)
+        d = plus_quartale(quartal_start(d), 1)
+    aus['prog_mond'] = pm
+
+    # --- 2) Sonnenbogen: alle Radixpunkte um den Sonnenbogen weitergerueckt --
+    sb = []
+    sonne0 = radix.get('Sonne')
+    if sonne0 is not None:
+        d = start
+        while d <= end:
+            jd = jd_geburt + alter(d)
+            bogen = (swe.calc_ut(jd, swe.SUN, SWIEPH)[0][0] - sonne0) % 360.0
+            for a_name, a_lon in radix.items():
+                if a_name in ('DC', 'IC', 'Suedknoten'):
+                    continue                      # Spiegelziele nie doppelt
+                dir_lon = (a_lon + bogen) % 360.0
+                for z_name, z_lon in radix.items():
+                    for asp_name, asp in (('Konjunktion', 0), ('Opposition', 180),
+                                          ('Quadrat', 90)):
+                        o = orb_for(dir_lon, z_lon, asp)
+                        if o <= orb and not (a_name == z_name and asp == 0):
+                            sb.append(dict(monat=d.isoformat()[:7], punkt=a_name,
+                                           aspekt=asp_name, ziel=z_name,
+                                           orb=round(o, 3),
+                                           bogen=round(bogen, 3)))
+            d = d + timedelta(days=30)
+    # je (Punkt, Aspekt, Ziel) nur den engsten Monat behalten
+    eng = {}
+    for e in sb:
+        k = (e['punkt'], e['aspekt'], e['ziel'])
+        if k not in eng or e['orb'] < eng[k]['orb']:
+            eng[k] = e
+    aus['sonnenbogen'] = sorted(eng.values(), key=lambda e: e['monat'])
+
+    # --- 3) Jahresprofektion: Alter mod 12 -> Haus, dessen Spitzenzeichen ----
+    prof = []
+    if cusps:
+        j0 = int(alter(start))
+        for k in (0, 1, 2):
+            a = j0 + k
+            h = a % 12                                  # 0 = 1. Haus
+            zeichen = ZODIAC[int(cusps[h] // 30) % 12]
+            herr = HERRSCHER.get(zeichen)
+            herr_lon = radix.get(herr)
+            prof.append(dict(alter=a, haus=h + 1, zeichen=zeichen,
+                             herrscher=herr,
+                             herrscher_stand=(deg2sign(herr_lon)
+                                              if herr_lon is not None else None),
+                             herrscher_haus=(house_of(herr_lon, cusps)
+                                             if herr_lon is not None else None),
+                             klassisch=KLASSISCH.get(zeichen)))
+    aus['profektion'] = prof
+
+    # --- 4) Finsternisse im Fenster auf primaeren Punkten -------------------
+    fin = []
+    try:
+        jd = swe.julday(start.year, start.month, start.day, 0.0)
+        jd_end = swe.julday(end.year, end.month, end.day, 0.0)
+        for typ, fn in (('Sonnenfinsternis', swe.sol_eclipse_when_glob),
+                        ('Mondfinsternis', swe.lun_eclipse_when)):
+            j = jd
+            for _ in range(60):
+                try:
+                    r = fn(j, SWIEPH, 0, False)
+                except Exception:
+                    break
+                t = r[1][0]
+                if t > jd_end or t <= j:
+                    break
+                lon = swe.calc_ut(t, swe.SUN, SWIEPH)[0][0]
+                if typ == 'Mondfinsternis':
+                    lon = swe.calc_ut(t, swe.MOON, SWIEPH)[0][0]
+                y, m, dd, _ = swe.revjul(t)
+                treffer = [(n, round(orb_for(lon, l, 0), 3))
+                           for n, l in radix.items()
+                           if orb_for(lon, l, 0) <= 2.0]
+                if treffer:
+                    fin.append(dict(typ=typ, datum=date(y, m, dd).isoformat(),
+                                    stand=deg2sign(lon),
+                                    trifft=[{'ziel': n, 'orb': o}
+                                            for n, o in sorted(treffer,
+                                                               key=lambda x: x[1])]))
+                j = t + 1.0
+    except Exception:
+        pass
+    aus['finsternisse'] = fin
+    return aus
+
+
+def format_zusatz(z):
+    """Der Zusatzblock als Text fuer das Datenblatt."""
+    out = ["", "=" * 70, "ZUSATZ-ZEITMASSE (progressiver Mond, Sonnenbogen, "
+           "Profektion, Finsternisse)", "=" * 70]
+    out.append("\n  -- progressiver Mond, je Quartalsanfang --")
+    for e in z.get('prog_mond', []):
+        out.append("     %s  %s%s" % (e['datum'], e['stand'],
+                                      ("  (H%s)" % e['haus']) if e.get('haus') else ""))
+    out.append("\n  -- Sonnenbogen-Kontakte im Fenster (Orb <= 1°, engster Monat) --")
+    if not z.get('sonnenbogen'):
+        out.append("     keine")
+    for e in z.get('sonnenbogen', []):
+        out.append("     %s  %-12s %-12s %-12s Orb %.2f°"
+                   % (e['monat'], e['punkt'], e['aspekt'], e['ziel'], e['orb']))
+    out.append("\n  -- Jahresprofektion --")
+    for e in z.get('profektion', []):
+        out.append("     Alter %d -> %d. Haus (%s), Herrscher %s%s%s"
+                   % (e['alter'], e['haus'], e['zeichen'], e['herrscher'],
+                      (" in %s" % e['herrscher_stand']) if e['herrscher_stand'] else "",
+                      (", Haus %s" % e['herrscher_haus']) if e['herrscher_haus'] else ""))
+    out.append("\n  -- Finsternisse auf Radixpunkten (Orb <= 2°) --")
+    if not z.get('finsternisse'):
+        out.append("     keine im Fenster")
+    for e in z.get('finsternisse', []):
+        zi = ", ".join("%s %.2f°" % (t['ziel'], t['orb']) for t in e['trifft'])
+        out.append("     %s  %-16s %-18s -> %s"
+                   % (e['datum'], e['typ'], e['stand'], zi))
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -862,6 +1156,16 @@ if __name__ == "__main__":
                          "nur noetig, wenn die Autosuche sie nicht findet")
     ap.add_argument("--mars", action="store_true",
                     help="Mars als Feintrigger mitrechnen (Opt-in, nicht Standard)")
+    ap.add_argument("--tz", default=None,
+                    help="IANA-Zeitzone fuer die AUSGABE der Exaktdaten, z. B. "
+                         "Europe/Berlin. Ohne Angabe Weltzeit (UT) wie bisher.")
+    ap.add_argument("--ohne-chiron", dest="ohne_chiron", action="store_true",
+                    help="bewusst ohne Transit-Chiron rechnen; ohne dieses Flag "
+                         "ist eine fehlende Asteroiden-Ephemeride ein harter Fehler")
+    ap.add_argument("--geburt", default=None,
+                    help="Geburtszeitpunkt in UT als YYYY-MM-DDTHH:MM — schaltet die "
+                         "Zusatz-Zeitmasse frei (progressiver Mond, Sonnenbogen, "
+                         "Jahresprofektion, Finsternisse auf Radixpunkten)")
     ap.add_argument("--json", default=None, help="Ereignisliste als JSON hierhin schreiben")
     args=ap.parse_args()
     if args.ephe and ephe_pfad_setzen(args.ephe) is None:
@@ -880,10 +1184,30 @@ if __name__ == "__main__":
             cusps=None
     else:
         cusps = cusps_from_chart_data(args.chart_data, radix)
-    res = run(radix, start=start, months=args.months, primary_extra=extra,
-              orb=args.orb, orb_weit=args.orb_weit, lookback_months=args.lookback,
-              cusps=cusps, asof=asof, mit_mars=args.mars)
+    try:
+        res = run(radix, start=start, months=args.months, primary_extra=extra,
+                  orb=args.orb, orb_weit=args.orb_weit, lookback_months=args.lookback,
+                  cusps=cusps, asof=asof, mit_mars=args.mars,
+                  ohne_chiron=args.ohne_chiron, tz=args.tz)
+    except (ValueError, RuntimeError) as e:
+        print("[FEHLER] %s" % e, file=sys.stderr)
+        sys.exit(2)
     print(format_report(res))
+    if args.geburt:
+        try:
+            g = args.geburt.replace("T", " ").strip()
+            gd, gt = (g.split(" ") + ["0:00"])[:2]
+            gy, gm, gdd = [int(x) for x in gd.split("-")]
+            gh, gmi = [int(x) for x in (gt.split(":") + ["0"])[:2]]
+            jdg = swe.julday(gy, gm, gdd, gh + gmi / 60.0)
+        except Exception as e:
+            print("[FEHLER] --geburt %r nicht lesbar (%s). Erwartet: "
+                  "YYYY-MM-DDTHH:MM in UT." % (args.geburt, e), file=sys.stderr)
+            sys.exit(2)
+        z = zusatzzeitmasse(radix, jdg, date.fromisoformat(res["start"]),
+                            date.fromisoformat(res["end"]), cusps=cusps)
+        res["zusatz"] = z
+        print(format_zusatz(z))
     if args.json:
         json.dump(res, open(args.json,"w"), indent=1, ensure_ascii=False)
         print(f"\n[json -> {args.json}]")

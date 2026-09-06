@@ -213,7 +213,7 @@ def signatur_notation(g):
 def parse_chart(text):
     """-> dict: faktoren [{name,zeichen,haus,nebenhaus,abstand}], achsen, aspekte,
     spiegel [(rohname, kanonisch)]"""
-    faktoren, achsen, aspekte, spiegel = [], {}, [], []
+    faktoren, achsen, aspekte, spiegel, hinweise = [], {}, [], [], []
     inblock = False
     for ln in text.split('\n'):
         s = ln.strip()
@@ -229,6 +229,23 @@ def parse_chart(text):
         kw = parts[0].upper()
         if kw == 'FAKTOR':
             roh = norm(' '.join(p for p in parts[1:] if '=' not in p))
+            # ACHSEN-RETTUNG (neu 2026-09-06, Pruefbericht Transit 1.8):
+            # Das Schluesselwort ACHSE stand in keinem Modul; das Blockformat
+            # des Datenblatt-Moduls zeigt nur FAKTOR- und ASPEKT-Zeilen. Wer
+            # `FAKTOR AC zeichen=Stier` schrieb, lief in den harten Abbruch
+            # "UNBEKANNTE FAKTOREN". Solche Zeilen werden jetzt als ACHSE
+            # gelesen — nicht still, sondern mit sichtbarem Hinweis samt der
+            # richtigen Zeile, damit der Block korrigiert wird.
+            if norm_token(roh) in ('AC', 'MC', 'DC', 'IC'):
+                ax = norm_token(roh); z = None
+                for q in parts[2:]:
+                    if q.lower().startswith('zeichen='):
+                        z = norm(q.split('=', 1)[1])
+                achsen[ax] = z
+                hinweise.append(
+                    'FAKTOR %s ... -> als ACHSE gelesen. Richtig waere: '
+                    'ACHSE %s zeichen=%s' % (ax, ax, z or '<Zeichen>'))
+                continue
             if roh in SPIEGEL_FAKTOREN:
                 # Spiegelpol: wird ueber die Gegen-Zeile als Achse mitgedeutet.
                 # Eigene Bloecke wuerden die Achse gespiegelt ziehen (s. o.).
@@ -288,7 +305,7 @@ def parse_chart(text):
             if len(parts) >= 3:
                 aspekte.append((norm_token(parts[1]), norm_token(parts[2])))
     return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
-            'spiegel': spiegel, 'unbekannt': []}
+            'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise}
 
 
 # ---------------------------------------------------------------- Bloecke laden
@@ -606,7 +623,11 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
             'Beide Hausbloecke stehen unten unter "Planet-in-Haus" bzw. '
             '"Spezialfaktor". Die\nfertige Signatur-Zeile (Klartext-Modus) '
             'steht jeweils dabei und wird 1:1 in den\nKapitelkopf uebernommen; '
-            'im Fliesstext erscheinen weder Hausnummer noch Gradzahl.\n')
+            'im Fliesstext erscheint KEINE Gradzahl. Die Hausnummer darf '
+            'dort stehen\n(Klartext-Modul, Anker-Regel: "DARF stehen — beim '
+            'ersten Mal mit dem\nLebensbereich dahinter"). Bis zum 2026-09-06 '
+            'stand hier "weder Hausnummer\nnoch Gradzahl" — das widersprach '
+            'dem Klartext-Modul (Pruefbericht Transit 1.7).\n')
         for g in grenz:
             marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
                      if g.get('fuehrt')
@@ -658,6 +679,8 @@ def main():
     for g in grenz:
         print('   GRENZLAGE %-12s Haus %s -> %s  (%s)'
               % (g['faktor'], g['haus'], g['nebenhaus'], g['stufe']))
+    for h in chart.get('hinweise', []):
+        print('   HINWEIS %s' % h)
     for roh, ziel in chart.get('spiegel', []):
         print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
               'mitgedeutet' % (roh, ziel))

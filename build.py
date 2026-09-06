@@ -1895,19 +1895,41 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     txt = open(chart_data_pfad, encoding="utf-8").read()
 
     def _paare(block, trenner):
+        """Aspektpaare aus einer Markdown-Tabelle ziehen.
+
+        Zwei Tabellenformen werden erkannt (zweite neu am 2026-09-06,
+        Prüfbericht Transit 1.4):
+          A  | Sonne ☍ Pluto | 2°30′ |          — Paar in EINER Zelle
+          B  | Sonne | ☍ Opposition | Pluto | 2°30′ |   — Paar über drei Zellen
+        Form B ist die, die Datenblatt- und Typmodul tatsächlich schreiben; sie
+        wurde bis dahin nicht erkannt, weshalb die Probe leer lief."""
         out = set()
+        pa = _re.compile(r"\|\s*(%s)\s*(?:%s)\s*(%s)\s*\|"
+                         % (_AH_NAME, trenner, _AH_NAME))
+        pb = _re.compile(r"\|\s*(%s)\s*\|\s*(?:%s|[A-Za-zÄÖÜäöüß]+)[^|]*\|\s*(%s)\s*\|"
+                         % (_AH_NAME, trenner, _AH_NAME))
         for z in block.splitlines():
-            m = _re.match(r"\|\s*(%s)\s*(?:%s)\s*(%s)\s*\|"
-                          % (_AH_NAME, trenner, _AH_NAME), z)
-            if m and m.group(1) != "Aspekt":
+            m = pa.match(z) or pb.match(z)
+            if m and m.group(1) not in ("Aspekt", "Faktor", "Punkt"):
                 out.add(frozenset([m.group(1), m.group(2)]))
         return out
 
+    # ÜBERSCHRIFTEN (korrigiert 2026-09-06, Prüfbericht Transit 1.4).
+    # Bis dahin wurde ausschließlich "### Hauptaspekte" gesucht. Die
+    # Geburtshoroskop- und Ultimativ-Datenblätter schreiben aber
+    # "### Volle Aspekte" / "### Einseitige Aspekte" / "### Nebenaspekte".
+    # Folge: Die Prüftabelle bestand in JEDEM Standardlauf nur aus den drei
+    # Untergrund-Aspekten, die Probe übersah den Rest und meldete trotzdem
+    # "keine offenen" — ein stiller Freispruch.
     tabelle = set()
-    if "### Hauptaspekte" in txt:
-        teil = txt.split("### Hauptaspekte")[1]
-        teil = teil.split("### Achsengeometrie")[0] if "### Achsengeometrie" in teil \
-            else teil.split("### Untergrund")[0]
+    for kopf in ("### Hauptaspekte", "### Volle Aspekte",
+                 "### Einseitige Aspekte", "### Nebenaspekte"):
+        if kopf not in txt:
+            continue
+        teil = txt.split(kopf, 1)[1]
+        schnitt = _re.search(r"\n#{2,3} ", teil)          # bis zur nächsten Überschrift
+        if schnitt:
+            teil = teil[:schnitt.start()]
         tabelle |= _paare(teil, "[%s]" % _AH_GLYPH)
     if "### Untergrund-Aspekte" in txt:
         teil = txt.split("### Untergrund-Aspekte")[1].split("\n**")[0]
@@ -1948,20 +1970,170 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
 
     ohne = sorted(tabelle - set(heimat), key=lambda x: sorted(x))
     offen = [p for p in ohne if p not in dok]
+    # AUSSAGELOS (neu 2026-09-06, Prüfbericht Transit 1.3): Findet die Probe
+    # keine einzige Aspektzeile, hat sie NICHTS geprüft. Das als "ok" zu melden
+    # ist gefährlicher als ein Fehler, weil es wie eine bestandene Prüfung
+    # aussieht. Typischer Fall: ein Transit-, EA- oder Folgeprodukt-Datenblatt,
+    # das keine Radix-Aspekttabellen trägt — dort ist statt dieser Probe
+    # `kontakt_heimat()` zuständig.
     return {
         "tabelle": len(tabelle),
+        "aussagelos": not tabelle,
         "mit_heimat": sorted(" — ".join(sorted(p)) for p in set(heimat) & tabelle),
         "ohne_heimat": [" — ".join(sorted(p)) for p in ohne],
         "dokumentiert": [" — ".join(sorted(p)) for p in ohne if p in dok],
         "offen": [" — ".join(sorted(p)) for p in offen],
         "doppelt": [(" — ".join(a), b, c) for a, b, c in doppelt],
-        "ok": not offen and not doppelt,
+        "ok": bool(tabelle) and not offen and not doppelt,
     }
+
+
+def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
+                   orb_wirk: float = 1.5) -> dict:
+    """Kontakt-Heimat-Probe für Folgeprodukte (Transit, EA) — neu 2026-09-06.
+
+    Das Gegenstück zu `aspekt_heimat()` für Dokumente, deren Deutung aus
+    TRANSIT-Kontakten besteht und die deshalb keine Radix-Aspekttabellen
+    tragen (Prüfbericht Transit 2026-09-06, 1.3 und 4.3). Geprüft wird
+    dasselbe Prinzip: Jeder Kontakt gehört zu höchstens EINEM Thema, und kein
+    Kontakt verschwindet stillschweigend.
+
+    Gehalten wird die Themenliste des `chart_data` gegen die vom Builder
+    gerechneten Kontakte im JSON. Erwartete Notation in den `aspekte=`-Feldern:
+    `T-Saturn ☌ R-Venus` — der T-/R-Präfix ist zugleich das, woran
+    `aspekt_heimat()` Transit-Kapitel erkennt und überspringt.
+
+    Gezählt werden nur PRIMÄRE Kontakte im Wirkorb innerhalb des Fensters; das
+    ist genau die Menge, für die das Typmodul Rechenschaft verlangt.
+
+    Rückgabe: {'kontakte', 'in_themen', 'rechenschaft', 'ohne_heimat',
+               'doppelt', 'unbekannt', 'ok'}
+    """
+    import json as _json
+    import re as _re2
+
+    GLYPH = {"☌": "Konjunktion", "☍": "Opposition", "□": "Quadrat",
+             "△": "Trigon", "⚹": "Sextil", "⚻": "Quincunx", "⚺": "Halbsextil"}
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+    daten = _json.load(open(events_json_pfad, encoding="utf-8"))
+
+    # 1) Soll-Menge: primäre Wirkorb-Kontakte im Fenster
+    soll, alle = set(), set()
+    for e in daten.get("events", []):
+        if e.get("spiegel"):
+            continue
+        alle.add((e["transit"], e["aspekt"], e["ziel"]))
+        if not e.get("primaer"):
+            continue
+        im_fenster = bool(e.get("exakt_im_fenster")) or (
+            [q for q in (e.get("quartale") or []) if q > 0]
+            and e.get("min_orb_grad") is not None
+            and e["min_orb_grad"] <= orb_wirk)
+        if im_fenster:
+            soll.add((e["transit"], e["aspekt"], e["ziel"]))
+
+    # Namensbrücke: das analyse-/chart_data-Deutsch schreibt Umlaute
+    # (Glückspunkt, Südknoten), der Builder schreibt sie aus (Glueckspunkt).
+    def _norm(n):
+        n = n.lower()
+        for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+            n = n.replace(a, b)
+        return n
+    namen = {}
+    for t, a, z in alle:
+        namen.setdefault(_norm(t), t)
+        namen.setdefault(_norm(z), z)
+    namen.setdefault("mondknoten", "Knoten")
+
+    # 2) Ist-Menge: die aspekte=-Felder der Themenliste
+    heimat, doppelt, unbekannt = {}, [], []
+    if "THEMA 1 |" in txt:
+        tl = "\nTHEMA 1 |" + txt.split("THEMA 1 |", 1)[1]
+        for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:"):
+            tl = tl.split(schluss)[0]
+        for blk in _re2.split(r"\nTHEMA \d+ \|", tl):
+            if "aspekte=" not in blk:
+                continue
+            t = _re2.search(r"titel=(.+)", blk)
+            titel = (t.group(1).strip()[:40] if t else "?")
+            feld = _re2.split(r"\|\s*(?:verweis|spanne|exakt|station|rang|form|"
+                              r"praxis|dicht|haus|hinweis|befund|traegt)=",
+                              blk.split("aspekte=", 1)[1])[0]
+            for m in _re2.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
+                                   % "".join(GLYPH), feld):
+                k = (namen.get(_norm(m.group(1)), m.group(1)),
+                     GLYPH[m.group(2)],
+                     namen.get(_norm(m.group(3)), m.group(3)))
+                # Sekundäre Ziele dürfen ein Thema tragen (Selbst-Transite!),
+                # sie stehen nur nicht in der Rechenschaftspflicht. Gemeldet
+                # wird deshalb nur ein Kontakt, den der Builder gar nicht kennt.
+                if k not in alle:
+                    unbekannt.append((titel, " ".join(k)))
+                    continue
+                if k not in soll:
+                    continue
+                if k in heimat and heimat[k] != titel:
+                    doppelt.append((" ".join(k), heimat[k], titel))
+                heimat.setdefault(k, titel)
+
+    # 3) Rechenschaft: was im Sammelkapitel steht
+    ALIAS = {"Knoten": "(?:mond)?knoten", "Nordknoten": "(?:nord)?knoten",
+             "Glueckspunkt": "gl(?:ue|ü)ckspunkt"}
+    def _mst(n):
+        return ALIAS.get(n, _re2.escape(n.lower()))
+    rech = set()
+    for marke in ("RECHENSCHAFT", "Was sonst noch läuft"):
+        if marke in txt:
+            teil = txt.split(marke, 1)[1].lower()
+            for k in soll:
+                a, b = _mst(k[0]), _mst(k[2])
+                if _re2.search(r"%s[^\n]{0,80}%s" % (a, b), teil) or \
+                   _re2.search(r"%s[^\n]{0,80}%s" % (b, a), teil):
+                    rech.add(k)
+
+    ohne = sorted(soll - set(heimat) - rech)
+    return {
+        "kontakte": len(soll),
+        "in_themen": len(heimat),
+        "rechenschaft": len(rech),
+        "ohne_heimat": [" ".join(k) for k in ohne],
+        "doppelt": doppelt,
+        "unbekannt": unbekannt,
+        "ok": not ohne and not doppelt and not unbekannt,
+    }
+
+
+def kontakt_heimat_bericht(chart_data_pfad: str, events_json_pfad: str,
+                           orb_wirk: float = 1.5) -> str:
+    """Einzeiliger Prüftext für Schritt 1 eines Folgeprodukts."""
+    r = kontakt_heimat(chart_data_pfad, events_json_pfad, orb_wirk)
+    if r["ok"]:
+        return ("Kontakt-Heimat: %d primaere Wirkorb-Kontakte im Fenster, "
+                "%d in Themen, %d in der Rechenschaft, keine Doppelheimat, "
+                "keine offenen." % (r["kontakte"], r["in_themen"],
+                                    r["rechenschaft"]))
+    L = ["Kontakt-Heimat: FEHLER (%d Kontakte im Fenster, %d in Themen, "
+         "%d in der Rechenschaft)." % (r["kontakte"], r["in_themen"],
+                                       r["rechenschaft"])]
+    for k in r["ohne_heimat"]:
+        L.append("  OHNE HEIMAT und nicht in der Rechenschaft: %s" % k)
+    for k, a, b in r["doppelt"]:
+        L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (k, a, b))
+    for titel, k in r["unbekannt"]:
+        L.append("  IM THEMA, aber kein primaerer Wirkorb-Kontakt: %s (%s)"
+                 % (k, titel))
+    return "\n".join(L)
 
 
 def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
     """Einzeiliger Prüftext für Schritt 1; nur Abweichungen werden ausführlich."""
     r = aspekt_heimat(chart_data_pfad)
+    if r.get("aussagelos"):
+        return ("Aspekt-Heimat: KEINE PRUEFUNG MOEGLICH — im chart_data steht "
+                "keine Aspekttabelle (weder Volle/Einseitige/Nebenaspekte noch "
+                "Hauptaspekte). Bei einem Folgeprodukt (Transit, EA) ist das "
+                "normal: dort gilt kontakt_heimat_bericht(chart_data, events_json). "
+                "Bei einem Geburtshoroskop ist es ein Fehler im Datenblatt.")
     if r["ok"]:
         return ("Aspekt-Heimat: %d Aspekte, %d mit Heimat, %d dokumentiert "
                 "weggelassen, keine Doppelheimat, keine offenen."
