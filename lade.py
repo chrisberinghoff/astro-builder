@@ -27,14 +27,25 @@ restyle (Schreibweise-Wechsel, s. Projektanweisung_Erweiterung_Restyle.md).
 NICHT im Repo und weiter per project_read: hd.py (enthaelt Klientendaten),
 REFERENZ_Chart_Builder_Ultimativ.py, blocks_bundle.txt.
 
-transit.py braucht zusaetzlich pyswisseph:
-    pip install pyswisseph --break-system-packages
+transit.py braucht ZWEI Pakete, nicht eines:
+    pip install pyswisseph --break-system-packages -q
+    pip install flatlib --no-deps --break-system-packages -q   # nur die swefiles
+
+Das zweite liefert die Swiss-Ephemeris-Dateien (sepl_*, semo_*, seas_*). Ohne
+sie faellt transit.py fuer die Hauptplaneten auf Moshier zurueck (bis zu einer
+Bogensekunde Abweichung bei den Langsamen) und kann Transit-Chiron gar nicht
+rechnen; seit dem 2026-09-06 bricht es in dem Fall ab. `lade()` warnt darum
+beim Laden von `transit`, wenn keine `seas_*.se1` erreichbar ist — s.
+`ephemeriden_pfad()`.
 """
 
-import urllib.request
+import glob
+import os
 import pathlib
 import py_compile
+import site
 import sys
+import urllib.request
 
 REPO = "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/"
 
@@ -43,6 +54,64 @@ BEKANNT = {
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
     "lade",
 }
+
+
+def ephemeriden_pfad():
+    """Erstes Verzeichnis mit einer `seas_*.se1`, sonst None.
+
+    Sucht in derselben Reihenfolge wie transit.py: Umgebungsvariable
+    SE_EPHE_PATH, dann die Paketverzeichnisse, dann die ueblichen Systemorte.
+    Rein lesend, installiert nichts.
+    """
+    kandidaten = []
+    env = os.environ.get("SE_EPHE_PATH")
+    if env:
+        kandidaten += env.split(os.pathsep)
+    basen = list(site.getsitepackages()) if hasattr(site, "getsitepackages") else []
+    basis = site.getusersitepackages() if hasattr(site, "getusersitepackages") else None
+    if basis:
+        basen.append(basis)
+    for b in basen:
+        kandidaten.append(os.path.join(b, "flatlib", "resources", "swefiles"))
+    kandidaten += ["/usr/share/swisseph", "/usr/local/share/swisseph"]
+    for d in kandidaten:
+        if d and os.path.isdir(d) and glob.glob(os.path.join(d, "seas_*.se1")):
+            return d
+    # Letzter Versuch: irgendwo unter /usr
+    treffer = glob.glob("/usr/**/flatlib/resources/swefiles", recursive=True)
+    return treffer[0] if treffer else None
+
+
+def _ephemeriden_warnung():
+    """Warnt, wenn `transit` geladen wird, ohne dass die swefiles da sind.
+
+    Warum hier (2026-09-07, Prueflauf Transit 4.5): Die Installationszeilen
+    standen in ZWEI Modulen und sind auseinandergelaufen — das Design-Modul
+    nannte nur `pyswisseph`, das Werkzeuge-Modul beide Zeilen. Ein
+    Schritt-3-Lauf liest laut Kern nur das Design-Modul und installiert damit
+    die falsche Menge. `lade()` ist die einzige Stelle, durch die JEDER Lauf
+    geht, egal welches Modul er gelesen hat — die Warnung gehoert deshalb
+    hierher und nicht in eine dritte Modulzeile.
+
+    Bewusst nur eine Warnung, kein Abbruch: ein Schritt-3-Lauf laedt `transit`
+    regelmaessig mit, ohne je zu rechnen (er parst nur den fertigen Report aus
+    der chart_data). Wer wirklich rechnet, bekommt in transit.py den harten
+    Fehler.
+    """
+    if ephemeriden_pfad():
+        return
+    print(
+        "\n[WARNUNG] transit geladen, aber keine Swiss-Ephemeris-Dateien "
+        "gefunden (seas_*.se1).\n"
+        "  Solange nur der fertige Report aus der chart_data geparst wird, ist "
+        "das folgenlos.\n"
+        "  Sobald transit.py RECHNET, fehlt Transit-Chiron und die "
+        "Hauptplaneten laufen auf Moshier:\n"
+        "      pip install pyswisseph --break-system-packages -q\n"
+        "      pip install flatlib --no-deps --break-system-packages -q\n"
+        "  Notfalls --ephe <.../flatlib/resources/swefiles> setzen.\n",
+        file=sys.stderr,
+    )
 
 
 def lade(*module, ziel="/home/claude", frisch=False, still=False):
@@ -102,6 +171,8 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
 
     if not still:
         print("geladen:", ", ".join(geholt))
+    if any((m[:-3] if m.endswith(".py") else m) == "transit" for m in module):
+        _ephemeriden_warnung()
     return [g.split(" ")[0] for g in geholt]
 
 

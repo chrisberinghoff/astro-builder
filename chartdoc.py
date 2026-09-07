@@ -1447,32 +1447,47 @@ def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament='',
             f'<td class="tp">{seiten.get(pid, "")}</td></tr>'
             for t, pid in eintraege) + '</table>'
 
-    b = []
-    for i, (titel, eintraege) in enumerate(vorne):
-        erste = ' first' if i == 0 else ''
-        anker = eintraege[0][1] if eintraege else ''
-        b.append(zeile(titel, anker, 'toc-grp' + erste))
-        if eintraege:
-            b.append(liste(eintraege))
+    # Bloecke erst sammeln, dann NACH SEITENZAHL sortiert setzen.
+    # Grund (2026-09-07, Prueflauf Transit): `hinten` wurde immer zuletzt
+    # gerendert, auch wenn seine Seite vor den Kapitelgruppen liegt. Die
+    # Zeitleisten-Seite steht beim Transit hinter dem Sammelkapitel, aber VOR
+    # dem Schlusswort — und stand im Verzeichnis trotzdem darunter. Ein
+    # Inhaltsverzeichnis, dessen Seitenzahlen nicht monoton steigen, ist
+    # kaputt, egal aus welchem Block die Zeile kommt. Die Sortierung ist
+    # stabil und im ersten Durchlauf (noch keine Seitenzahlen bekannt)
+    # wirkungslos — die Reihenfolge ist dann exakt die frueher gesetzte.
+    def _seite_von(anker):
+        try:
+            return int(seiten.get(anker) or 0) or 10 ** 6
+        except (TypeError, ValueError):
+            return 10 ** 6
 
-    for gi, g in enumerate(toc_gruppen(items, teil3_a)):
-        erste = ' first' if (not vorne and gi == 0) else ''
-        b.append(zeile(g['kicker'], f"CH_{g['idx']}", 'toc-grp' + erste,
-                       unter=g['titel']))
+    bloecke = []            # (anker, titel, untertitel, innerer HTML-Block)
+    for titel, eintraege in vorne:
+        anker = eintraege[0][1] if eintraege else ''
+        bloecke.append((anker, titel, '', liste(eintraege) if eintraege else ''))
+
+    for g in toc_gruppen(items, teil3_a):
         if 'bloecke' in g:
-            for lab, eintraege in g['bloecke']:
-                if not eintraege:
-                    continue
-                b.append(f'<div class="toc-sub">{esc(lab)}</div>')
-                b.append(_toc_rows(eintraege, seiten))
-        elif g['eintraege']:
-            b.append(_toc_rows(g['eintraege'], seiten))
+            inner = ''.join(f'<div class="toc-sub">{esc(lab)}</div>'
+                            + _toc_rows(eintraege, seiten)
+                            for lab, eintraege in g['bloecke'] if eintraege)
+        else:
+            inner = (_toc_rows(g['eintraege'], seiten) if g['eintraege'] else '')
+        bloecke.append((f"CH_{g['idx']}", g['kicker'], g['titel'], inner))
 
     for titel, eintraege in hinten:
         anker = eintraege[0][1] if eintraege else ''
-        b.append(zeile(titel, anker, 'toc-grp'))
-        if eintraege:
-            b.append(liste(eintraege))
+        bloecke.append((anker, titel, '', liste(eintraege) if eintraege else ''))
+
+    bloecke.sort(key=lambda x: _seite_von(x[0]))
+
+    b = []
+    for i, (anker, titel, unter, inner) in enumerate(bloecke):
+        b.append(zeile(titel, anker, 'toc-grp' + (' first' if i == 0 else ''),
+                       unter=unter))
+        if inner:
+            b.append(inner)
 
     orn = f'<div class="toc-orn">{esc(ornament)}</div>' if ornament else ''
     return f"""<section class="inhalt" id="PG_inhalt">
