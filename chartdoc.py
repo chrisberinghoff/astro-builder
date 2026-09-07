@@ -462,7 +462,12 @@ tr.sec td {{ color:#8d8371; }}
    dem 2026-09-03 die acht Quartalskapitel und bewahrt deren einzige echte
    Leistung — die Navigation. Alle Werte sind UEBERNOMMEN, nicht gerechnet:
    Spannen aus `quartale`, Dichte aus `hotspots` (s. zeitleiste_page). */
-section.zeit {{ page: zeit; break-before: page; }}
+/* break-AFTER ist so noetig wie break-before: ohne ihn beginnt das folgende
+   Kapitel (Schlusswort) noch auf der Zeitleisten-Seite, und diese Seite traegt
+   dann den Kolumnentitel „ZEITLEISTE" ueber einem Kapitelanfang — die benannte
+   @page-Regel gilt der ganzen Seite (gefunden 2026-09-07, Prueflauf Transit).
+   Die Zeitleiste ist per Definition ein eigenes Blatt. */
+section.zeit {{ page: zeit; break-before: page; break-after: page; }}
 table.zl {{ width:100%; border-collapse:collapse; font-size:8.1pt;
    line-height:1.30; table-layout:fixed; }}
 /* Kopfzeile relativ (0.84em statt 6.8pt), damit sie beim Einmessen mit
@@ -1371,7 +1376,18 @@ def toc_gruppen(items, teil3_a=None):
         if k in PART_KICKER or k in ('Auftakt', 'Schlusswort'):
             cur = {'kicker': k, 'titel': it['title'], 'idx': i, 'eintraege': []}
             grp.append(cur)
-        elif cur is not None:
+        elif cur is None:
+            # Kein Kapitel traegt 'Auftakt', und PART_KICKER ist leer (Transit,
+            # EA, Themen-Analyse: dort heisst das erste Kapitel z. B.
+            # 'Zur Lesart'). Ohne diesen Zweig blieb `cur` bis zum Schlusswort
+            # None und JEDES Kapitel davor fiel lautlos aus dem Verzeichnis —
+            # das Inhaltsverzeichnis zeigte dann nur das Schlusswort
+            # (gefunden 2026-09-07, Prueflauf Transit). Das erste
+            # Kapitel oeffnet die Gruppe also selbst; das ist genau die
+            # 'schlichte Kapitelliste', die das Design-Modul beschreibt.
+            cur = {'kicker': k, 'titel': it['title'], 'idx': i, 'eintraege': []}
+            grp.append(cur)
+        else:
             # Kicker-Schreibweise ist im Klartext-Standard „KAPITEL 7"
             # (Versalien) — case-sensitiv gestrippt blieb frueher der ganze
             # Kicker in der 0,72 cm schmalen Nummernspalte stehen.

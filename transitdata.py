@@ -230,7 +230,42 @@ def parse(pfad=None):
                                    'start': _d(mm.group(3)), 'ende': _d(mm.group(4)),
                                    'monate': float(mm.group(5)),
                                    'note': (mm.group(6) or '').strip()})
+
+    # --- Monats-Dichte -> hotspots -----------------------------------------
+    # Das Design-Modul und chartdoc.zeitleiste_page() nennen `hotspots` als
+    # Quelle der Spalte „Dichte je Monat"; geparst wurde der Block bis zum
+    # 2026-09-07 nicht — die Zeitleisten-Seite haette ihre fuenfte Spalte
+    # abtippen muessen (gefunden im Prueflauf Transit). Format im Report:
+    #   === MONATS-DICHTE (primaere Wirkorb-Kontakte) ===
+    #     2026-07:15(10) · 2026-08:15(3) · ...
+    out['hotspots'] = []
+    if 'MONATS-DICHTE' in txt:
+        # Endmarker erst NACH der Kopfzeile suchen: die Kopfzeile schliesst
+        # selbst mit '===' ab, ein Start bei 'MONATS-DICHTE' lieferte sonst
+        # nur ' (primaere Wirkorb-Kontakte) '.
+        _i = txt.index('MONATS-DICHTE')
+        _i = txt.index('\n', _i)
+        seg = txt[_i:txt.index('===', _i)]
+        for jahr, mon, aktiv, exakt in re.findall(
+                r'(\d{4})-(\d\d):(\d+)\((\d+)\)', seg):
+            out['hotspots'].append({'jahr': int(jahr), 'monat': int(mon),
+                                    'aktiv': int(aktiv), 'exakt': int(exakt),
+                                    'label': MON_KURZ[int(mon)]})
     return out
+
+
+def dichte_je_monat(daten, a, b, trenner=' · '):
+    """'Jul 15 (10) · Aug 15 (3) · Sep 14 (4)' fuer die Quartalsspanne a..b.
+
+    Reine Auswahl aus `hotspots`, keine Rechnung: die Monatswerte werden
+    weder summiert noch gemittelt noch gerundet (Design-Modul,
+    „Zeitleisten-Seite"). Fehlt der MONATS-DICHTE-Block im Report, kommt ein
+    leerer String zurueck — dann steht die Spalte leer statt falsch.
+    """
+    return trenner.join(
+        f"{h['label']} {h['aktiv']} ({h['exakt']})"
+        for h in daten.get('hotspots', [])
+        if (a.year, a.month) <= (h['jahr'], h['monat']) <= (b.year, b.month))
 
 
 if __name__ == '__main__':
