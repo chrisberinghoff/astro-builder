@@ -230,9 +230,16 @@ def haus_spalte(lon, cusps, orb=HAUS_ORB):
 
 # --- Zeichnung --------------------------------------------------------------
 
+# Farbe der gerechneten Punkte im Rad (kein Ephemeriden-Faktor). Bewusst
+# KEINE der vier Aspektfarben und nicht das Ink der Faktoren — ein gerechneter
+# Punkt darf nicht wie eine Stellung aussehen. Gesetzt 2026-09-08
+# (Pruefbericht EA 5c).
+MARKE_FARBE = '#7d6f93'
+
+
 def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
           title=None, aspects=None, palette=None, dpi=210, grade=False,
-          gradmarke=True):
+          gradmarke=True, marken=()):
     """Zeichnet das Chart-Rad (Koch) als PNG, gibt out_path zurück.
 
     Geometrie: AC links (9 Uhr), Zeichen laufen gegen den Uhrzeigersinn;
@@ -411,6 +418,31 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
             tag = f"{int(f['lon'] % 30)}°" + ("℞" if f.get('retro') else "")
             ax.text(dx, dy, tag, ha='center', va='center',
                     fontsize=6.2, color='#707070', zorder=4)
+
+    # Gerechnete Punkte — z. B. der Pluto-Polaritaetspunkt im EA. Sie sind
+    # KEINE Ephemeriden-Faktoren und bekommen deshalb weder Glyphe im
+    # Faktorring noch Aspektlinien, sondern einen offenen Kreis auf dem
+    # Zeichenring plus einen kurzen Strich nach innen, in eigener Farbe.
+    # marken = [{'lon': float, 'label': '<kurzer Text>'}, ...]
+    # Die Legende MUSS sie benennen (chartdoc.linien_legende(gerechnet=...)) —
+    # Klartext-Standard: jedes sichtbare Zeichen wird einmal erklaert.
+    # Neu 2026-09-08 (Pruefbericht EA 5c): Der Polaritaetspunkt trug im
+    # Pruefdokument Leitachse, Titelmotiv und Schlusswort und war auf keiner
+    # Grafik zu sehen.
+    for m in (marken or ()):
+        L = float(m['lon'])
+        xa, ya = xy(L, R_SIGN - 0.004)
+        xb, yb = xy(L, R_SIGN - 0.052)
+        ax.plot([xa, xb], [ya, yb], color=MARKE_FARBE, lw=1.0,
+                ls=(0, (2.0, 1.8)), zorder=3.4)
+        cx, cy = xy(L, R_SIGN - 0.070)
+        ax.plot([cx], [cy], marker='o', ms=4.6, mfc='none',
+                mec=MARKE_FARBE, mew=1.1, zorder=3.6)
+        lab = m.get('label') or ''
+        if lab:
+            tx, ty = xy(L, R_SIGN - 0.138)
+            ax.text(tx, ty, lab, ha='center', va='center', fontsize=6.6,
+                    color=MARKE_FARBE, zorder=3.6)
 
     if title:
         ax.text(0, -1.115, title, ha='center', va='center',

@@ -633,6 +633,17 @@ LEGEND_ROWS = [
 
 LEGEND_TITEL = 'Die Aspekte und was sie bedeuten'
 
+# Die Orbis-Staffelung als eine Zeile unter der Aspekttabelle. Ohne sie sagt
+# das Dokument „Huber-Orbis, individuell gestaffelt nach Faktor", nennt aber
+# nirgends die Zahlen — bei einem Band, dessen Kapitel mit Gradminuten
+# belegen, ist das die eine Angabe, mit der ein Leser eine Zeile nachpruefen
+# koennte (Pruefbericht EA 5d, 2026-09-08). Sie steht NUR unter der
+# Aspekttabelle, nicht auf der Radseite: dort haengt die eingemessene
+# Radbreite an der Kastenhoehe.
+ORBIS_ZEILE = ('Orbis nach Faktor: Sonne, Mond, Merkur 8° · Venus, Jupiter 6° '
+               '· Mars, Saturn 4° · Achsen 9° · alles Übrige 3°. '
+               'Nebenaspekte enger, auf beide Faktor-Orbis gedeckelt.')
+
 # Aspektarten AUSSERHALB des Huber-Systems, die ein Chart bewusst in die
 # Tabelle haengen kann (Datenblatt-Modul, „Zusatzebene"). Sie stehen nicht im
 # Rad und tragen darum keine der vier Radfarben. Erklaert werden sie
@@ -679,7 +690,8 @@ def setze_zusatzaspekte(aspekte):
     return AKTIVE_ZUSATZ
 
 
-def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False):
+def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False,
+                   orbis=False):
     """Legendenkasten „Die Aspekte und was sie bedeuten".
 
     Symbol UND Aspektname stehen in der Aspektfarbe (Beschluss 2026-07-27) —
@@ -707,6 +719,8 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False):
         rows.append(f'<p>{vor}'
                     f'<b class="a-konj">{esc(n)}</b> ({w}) — {t} '
                     f'Steht nicht im Rad.</p>')
+    if orbis:
+        rows.append(f'<p class="lgn">{esc(ORBIS_ZEILE)}</p>')
     cls = 'lbox zwei' if spalten == 2 else 'lbox'
     st = f' style="{stil}"' if stil else ''
     return (f'<div class="{cls}"{st}><h5>{esc(titel)}</h5>'
@@ -719,7 +733,7 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False):
 legend_html = aspekt_legende
 
 
-def linien_legende():
+def linien_legende(gerechnet=None):
     """Legendenkasten „Die Linien im Rad" — erklaert Farbe, Strichart und die
     Positionsmarke.
 
@@ -729,6 +743,15 @@ def linien_legende():
     sichtbare Zeichen im Dokument einmal benannt wird.
     """
     A = ASPEKTFARBE
+    # Gerechnete Punkte (radix.radix(marken=…)) MUESSEN hier benannt werden.
+    ger = ''
+    if gerechnet:
+        # Farbwert gespiegelt aus radix.MARKE_FARBE — chartdoc importiert
+        # radix nicht. Aendert sich die Farbe dort, hier nachziehen.
+        ger = ('<p><span class="stroke marke" style="background:#7d6f93">'
+               f'</span>offener Kreis — {esc(gerechnet)}: ein GERECHNETER '
+               'Punkt, keine Stellung am Himmel; er bildet deshalb keine '
+               'Aspektlinien.</p>')
     return f"""<div class="lbox"><h5>Die Linien im Rad</h5>
 <p><span class="swatch" style="background:{A['rot']}"></span>rot — Spannung
 (Opposition, Quadrat)</p>
@@ -742,7 +765,7 @@ erfüllt)</p>
 Orbis trägt)</p>
 <p><span class="stroke marke"></span>kräftiger Strich am Zeichenring — der
 genaue Grad des Faktors; die feine Linie führt zu seiner Glyphe</p>
-<p class="lgn">Die Konjunktion (gemeinsamer Punkt) wird nicht als Linie
+{ger}<p class="lgn">Die Konjunktion (gemeinsamer Punkt) wird nicht als Linie
 gezeigt. Der äußere Ring ist nach den vier Elementen eingefärbt; die kleinen
 grauen Striche darin sind die 5°-Teilung.</p></div>"""
 
@@ -991,13 +1014,22 @@ def _balken(reihen):
 def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
                          kicker='Stände & Verteilung',
                          titel='Die Konstellationen', anker='PG_konst',
-                         lead=None):
+                         lead=None, fussnoten=()):
     """Konstellationsseite im Hausstil.
 
     zeilen    [(Glyphe, Name, Zeichenname, Gradtext, Haustext, Lauftext), ...]
               — 'SEP' als Glyphe zieht eine Trennlinie.
               Haustext bei Grenzlage NUR als Doppelzahl, z. B. '12/11'.
     achsen    [(Kuerzel, Name, Zeichenname, Gradtext), ...]
+    fussnoten weitere Zeilen unter der Tabelle, je ein String. Hierher gehoert
+              vor allem der UNASPEKTIERTE Faktor: er taucht in der
+              Aspektliste kein einziges Mal auf und steht in der
+              Konstellationstabelle wie jeder andere — ein unaspektierter
+              Faktor ist aber eine Aussage, kein Loch. Muster:
+              „Lilith bildet im Huber-Orbis keinen Aspekt; naechster
+              Kandidat 4°58' ausserhalb." Der Befund steht im Strukturbild
+              des Datenblatts (Punkt 4) und wird von dort uebernommen, nicht
+              nachgerechnet. Neu 2026-09-08 (Pruefbericht EA 5b).
     elemente  [(Label, Anzahl, [Planeten]), ...]  — s. verteilung()
     modi      dito
     """
@@ -1017,6 +1049,8 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
         for k, n, z, g in achsen)
     ld = f'<p class="fm-lead">{esc(lead)}</p>' if lead else ''
     nt = f'<div class="tabnote">{esc(note)}</div>' if note else ''
+    nt += ''.join(f'<div class="tabnote">{esc(z)}</div>'
+                  for z in (fussnoten or ()) if z)
     return f"""<section class="front" id="{anker}">
 <div class="fm-kicker">{esc(kicker)}</div>
 <h2 class="fm-title">{esc(titel)}</h2>
@@ -1033,10 +1067,10 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
 <table class="achsen"><tr><th>Achse</th><th>&nbsp;</th><th>Zeichen</th>
 <th>Grad</th></tr>{ach}</table>
 </div><div class="cell">
-<h4 class="blockkopf">Modus-Verteilung</h4>
+<h4 class="blockkopf">Modus-Verteilung (ungewichtet)</h4>
 {_balken(modi)}
 </div></div></div>
-<h4 class="blockkopf">Element-Verteilung (zehn klassische Planeten)</h4>
+<h4 class="blockkopf">Element-Verteilung (zehn klassische Planeten, ungewichtet)</h4>
 {_balken(elemente)}
 </section>"""
 
