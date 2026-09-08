@@ -66,7 +66,7 @@ HAUSSTIL = {
     'seitenrand':      '2.15cm 1.9cm 1.95cm 1.9cm',
     'grundschrift':    '10.7pt',
     'zeilenabstand':   '1.5',
-    'kapitel_vorab':   '1.7cm',   # frueher 2.3cm — s. Kommentar bei .chapter
+    'kapitel_vorab':   '2.3cm',   # 08.09.2026 zurueckgedreht (war 1.7cm)
     'rad_breite':      '14.6cm',  # Radseite nutzt die Seitenhoehe wirklich aus
     'uhr_breite':      '17.2cm',
     'titelgrad':       '17pt',
@@ -109,6 +109,12 @@ KOPFZEILE = ''
 # @@DECKBLATT-Block); der Vorgabewert ist nur ein Rueckfall, damit aeltere
 # Builder ohne konfiguriere(part_ornament=…) unveraendert rendern.
 PART_ORNAMENT = '♇ ☉ ☊'
+
+# Bis zu so vielen Verzeichniszeilen wird das Inhaltsverzeichnis einspaltig und
+# groesser gesetzt (.toc.weit). Gemessen am 2026-09-08: einspaltig passen 28
+# Zeilen auf eine Seite, 30 nicht mehr; 26 ist der Wert mit Reserve fuer
+# umbrechende Kapiteltitel. Darueber greift der Zweispalter wie bisher.
+TOC_WEIT_MAX = 26
 
 # Aspektname -> Farbschluessel (dieselbe Zuordnung wie radix._ASPECT_DEFS)
 ASPEKT_KLASSE = {'Konjunktion': 'konj', 'Opposition': 'rot', 'Quadrat': 'rot',
@@ -411,6 +417,21 @@ td.ao {{ text-align:right; white-space:nowrap; color:#4c4335; width:1.75cm;
 /* ---------- Inhaltsverzeichnis (Pflichtseite bei jedem Chart) ---------- */
 section.inhalt {{ page: inhalt; break-before: page; }}
 .toc {{ column-count:2; column-gap:0.9cm; font-size:8.3pt; line-height:1.25; }}
+/* Kurzes Verzeichnis: einspaltig und groesser gesetzt, damit die Seite nicht
+   zu zwei Dritteln leer bleibt (Chris-Entscheidung 2026-09-08, Pruefbericht
+   EA 4.11 — Variante D). inhalt_page() setzt die Klasse selbst, sobald das
+   Verzeichnis TOC_WEIT_MAX Zeilen nicht ueberschreitet; darueber bleibt der
+   Zweispalter, weil einspaltig ab etwa 30 Zeilen auf zwei Seiten laeuft
+   (gemessen 2026-09-08). */
+.toc.weit {{ column-count:1; font-size:10.2pt; line-height:1.45; }}
+.toc.weit .toc-grp {{ font-size:10.4pt; margin:0.72cm 0 0.26cm 0; }}
+.toc.weit .toc-grp.first {{ margin-top:0; }}
+.toc.weit .toc-grp .gs {{ font-size:10pt; }}
+.toc.weit .toc-sub {{ font-size:7.6pt; margin:0.34cm 0 0.14cm 0.4cm; }}
+.toc.weit table.toct td {{ padding:0.115cm 0; }}
+.toc.weit td.tn {{ width:0.95cm; font-size:9.4pt; }}
+.toc.weit td.tp {{ width:1.1cm; font-size:9.6pt; }}
+.toc.weit ~ .toc-orn {{ margin-top:1.4cm; }}
 .toc-grp {{ font-family:"Cinzel"; font-size:8.5pt; color:{DEEP};
    letter-spacing:0.1em; margin:0.27cm 0 0.13cm 0; break-after:avoid; }}
 .toc-grp.first {{ margin-top:0; }}
@@ -1556,18 +1577,22 @@ def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament='',
     bloecke.sort(key=lambda x: _seite_von(x[0]))
 
     b = []
+    zeilen = 0
     for i, (anker, titel, unter, inner) in enumerate(bloecke):
         b.append(zeile(titel, anker, 'toc-grp' + (' first' if i == 0 else ''),
                        unter=unter))
+        zeilen += 1
         if inner:
             b.append(inner)
+            zeilen += inner.count('<tr') + inner.count('toc-sub')
 
+    cls = 'toc weit' if zeilen <= TOC_WEIT_MAX else 'toc'
     orn = f'<div class="toc-orn">{esc(ornament)}</div>' if ornament else ''
     return f"""<section class="inhalt" id="PG_inhalt">
 <div class="fm-kicker">{esc(kopf)}</div>
 <h2 class="fm-title">Inhalt</h2>
 <div class="fm-rule"></div>
-<div class="toc">{''.join(b)}</div>
+<div class="{cls}">{''.join(b)}</div>
 {orn}
 </section>"""
 
