@@ -211,7 +211,17 @@ def struktur_css():
   background: {PAPER};
   @top-left  {{ content: "{KOPF}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.22em; color:{GOLD}; }}
-  @top-right {{ content: string(chapkick); font-family:"EB Garamond";
+  /* `start` statt `last`: Der Kolumnentitel nennt das Kapitel, in dem die
+     Seite BEGINNT. Ohne Schluesselwort liefert WeasyPrint den LETZTEN Wert
+     der Seite — eine Seite, die zu zwei Dritteln das vorige Kapitel traegt,
+     war mit dem naechsten ueberschrieben (Pruefbericht EA 2026-09-08, 4.8).
+     Seit dem Smart-Break ist das der Normalfall, nicht die Ausnahme.
+     `first` behebt es NICHT: es liefert die erste ZUWEISUNG auf der Seite,
+     also ebenfalls das neue Kapitel — an einem Testdokument mit WeasyPrint
+     69.0 am 2026-09-08 gemessen. `start` liefert den Stand am Seitenanfang
+     und faellt nur dann auf eine Zuweisung zurueck, wenn diese vor allem
+     Inhalt steht (Kapitel mit hartem Umbruch) — beide Faelle geprueft. */
+  @top-right {{ content: string(chapkick, start); font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
   @bottom-center {{ content: counter(page); font-family:"EB Garamond";
                font-size:9pt; color:{GOLD}; }}
@@ -613,6 +623,16 @@ ZUSATZ_LEGENDE = {
     'Anderthalbquadrat': ('135°', 'dieselbe Reibung aus der Gegenrichtung — '
                           'sie meldet sich spaeter und in fremder Gestalt.'),
 }
+# Symbole der Zusatz-Aspektarten. Ohne sie stand im gerenderten Kasten vor
+# „Halbquadrat (45°)" ein nackter Mittelpunkt, wo jede andere Zeile ihr
+# Aspektzeichen traegt (Pruefbericht EA 2026-09-08, 4.10). Beide Zeichen sind
+# im Font-Stack gedeckt — am 2026-09-08 gegen build._coverage_charset()
+# geprueft. Sie stehen in der NEUTRALEN Farbe, nicht in einer der vier
+# Radfarben: eine Radfarbe verspraeche eine Linie, die im Rad nicht gezeichnet
+# ist. Eine Zusatzart OHNE Eintrag hier bekommt gar keine Symbolspalte — nie
+# wieder einen Ersatzpunkt.
+ZUSATZ_GLYPH = {'Halbquadrat': '∠', 'Anderthalbquadrat': '⚼'}
+
 # Welche davon in DIESEM Chart vorkommen. Wird von aspekt_page() aus der
 # uebergebenen Aspektliste selbst gesetzt, damit Radseite und Aspektseite
 # nicht auseinanderlaufen koennen; setze_zusatzaspekte() ist der Weg, sie im
@@ -661,7 +681,9 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False):
             f'<b class="a-{k}">{n}</b> ({w}) — {t}</p>')
     for n in (AKTIVE_ZUSATZ if zusatz else ()):
         w, t = ZUSATZ_LEGENDE[n]
-        rows.append(f'<p><span class="a-sym a-konj">·</span> '
+        sym = ZUSATZ_GLYPH.get(n)
+        vor = f'<span class="a-sym a-konj">{sym}</span> ' if sym else ''
+        rows.append(f'<p>{vor}'
                     f'<b class="a-konj">{esc(n)}</b> ({w}) — {t} '
                     f'Steht nicht im Rad.</p>')
     cls = 'lbox zwei' if spalten == 2 else 'lbox'
@@ -1055,13 +1077,23 @@ _pflicht_baustein_angleichen()
 
 
 def _fac(name):
-    """Glyph + Name eines Aspektpartners. Pholus ohne Glyph (keine gedeckte),
-    Achsen als Kuerzel."""
+    """Glyph + Name eines Aspektpartners. Achsen als Kuerzel; ein Faktor ohne
+    font-gedeckte Glyphe erscheint nur mit Namen.
+
+    Was als „keine Glyphe" gilt, haengt seit dem 2026-09-08 nicht mehr am
+    verdrahteten String 'Pho', sondern an der LAENGE: ein Glyphenfeld, das
+    nach Abzug der Variantenselektoren mehr als EIN Zeichen traegt, ist ein
+    Name, kein Symbol. Vorher rutschte jede andere nicht-symbolische Glyphe
+    wortlos durch — `{'name':'Pholus','glyph':'Pholus'}` haette in jeder
+    Aspektzeile „Pholus Pholus" gesetzt (Pruefbericht EA 2026-09-08, 1.3
+    und 4.2). Der Vertrag im Datenblatt-Modul verlangt weiterhin 'Pho'; diese
+    Pruefung ist das Netz darunter, nicht ihr Ersatz.
+    """
     if name in ('AC', 'MC', 'DC', 'IC'):
         return f'<span class="gy">{name}</span>'
-    g = GLYPH_OF.get(name, '')
+    g = (GLYPH_OF.get(name) or '').replace('\ufe0e', '').replace('\ufe0f', '').strip()
     disp = esc(name_of(name))
-    if not g or g == 'Pho':
+    if len(g) != 1:
         return disp
     return f'<span class="gy">{g}</span> {disp}'
 
@@ -1405,18 +1437,22 @@ def toc_gruppen(items, teil3_a=None):
     for g in grp:
         if g['kicker'] != 'Teil III':
             continue
-        a, b, c = [], [], []
+        # Nur noch ZWEI Bloecke. Der dritte („C — Die acht Quartale", erkannt
+        # an re.match(r'^Q\d ', titel)) war seit dem 2026-09-03 toter Code:
+        # Die acht Quartalskapitel sind vollstaendig durch die
+        # Zeitleisten-Seite ersetzt, ein aktuelles Dokument kann kein solches
+        # Kapitel mehr tragen. Sichtbar wurde das nie, weil inhalt_page()
+        # leere Bloecke ueberspringt — es stand eine Struktur im Code und ein
+        # Label, das eine abgeschaffte Gliederung behauptete (Pruefbericht EA
+        # 2026-09-08, 4.7). Entfernt am 2026-09-08.
+        a, b = [], []
         for e in g['eintraege']:
-            t = e['titel']
-            if _ist_jetzt(t, teil3_a):
+            if _ist_jetzt(e['titel'], teil3_a):
                 a.append(e)
-            elif re.match(r'^Q\d ', t):
-                c.append(e)
             else:
                 b.append(e)
         g['bloecke'] = [('A — Wo du jetzt stehst', a),
-                        ('B — Die langen Linien', b),
-                        ('C — Die acht Quartale', c)]
+                        ('B — Die langen Linien', b)]
     return grp
 
 
