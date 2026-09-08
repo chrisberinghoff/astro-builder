@@ -13,7 +13,7 @@ Verwendung — zwei Zeilen am Anfang des Laufs:
         "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/lade.py",
         "/home/claude/lade.py")
     import sys; sys.path.insert(0, "/home/claude")
-    from lade import lade, lade_schritt, uebersicht, pruefe_repo
+    from lade import lade, lade_schritt, ephemeriden, uebersicht, pruefe_repo
 
 Dann EINE Zeile je Schritt — welche Builder das sind, steht in SCHRITTE und
 nirgends sonst:
@@ -41,16 +41,22 @@ trugen — die sind an dem Tag anonymisiert worden). NICHT ueber diesen Weg:
 blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module, die nur im
 Projektwissen liegen.
 
-transit.py braucht ZWEI Pakete, nicht eines:
-    pip install pyswisseph --break-system-packages -q
-    pip install flatlib --no-deps --break-system-packages -q   # nur die swefiles
+Wer wirklich rechnet — Pholus in Schritt 1, transit.py im Transit- und
+Ultimativ-Lauf — braucht die Swiss-Ephemeris-Dateien. EINE Zeile beschafft sie
+und liefert gleich ihr Verzeichnis:
 
-Das zweite liefert die Swiss-Ephemeris-Dateien (sepl_*, semo_*, seas_*). Ohne
-sie faellt transit.py fuer die Hauptplaneten auf Moshier zurueck (bis zu einer
-Bogensekunde Abweichung bei den Langsamen) und kann Transit-Chiron gar nicht
-rechnen; seit dem 2026-09-06 bricht es in dem Fall ab. `lade()` warnt darum
-beim Laden von `transit`, wenn keine `seas_*.se1` erreichbar ist — s.
-`ephemeriden_pfad()`.
+    from lade import ephemeriden
+    ephe = ephemeriden()          # installiert nur, wenn noetig
+    swe.set_ephe_path(ephe)       # bzw. --ephe <ephe> an transit.py
+
+Welche Pakete das sind, steht in PAKETE und nirgends sonst (Chris-Entscheidung
+2026-09-08). Die Zeilen standen vorher in drei Modulen in drei verschieden guten
+Fassungen — Einzelheiten im Kommentar ueber PAKETE.
+
+Ohne die Dateien faellt transit.py fuer die Hauptplaneten auf Moshier zurueck
+(bis zu einer Bogensekunde bei den Langsamen) und kann Transit-Chiron gar nicht
+rechnen; seit dem 2026-09-06 bricht es in dem Fall ab. `lade()` warnt darum beim
+Laden von `transit`, wenn keine `seas_*.se1` erreichbar ist.
 """
 
 import glob
@@ -58,6 +64,7 @@ import os
 import pathlib
 import py_compile
 import site
+import subprocess
 import sys
 import urllib.request
 
@@ -131,6 +138,76 @@ def ephemeriden_pfad():
     return treffer[0] if treffer else None
 
 
+# Die Pakete, die die Swiss-Ephemeris-Dateien beschaffen — DIE EINZIGE
+# VERBINDLICHE FASSUNG (Chris-Entscheidung 2026-09-08).
+#
+# Warum hier: Die Installationszeilen standen an DREI produktiven Stellen —
+# Datenblatt-Modul, Werkzeuge-Modul und Design-Render-Modul — und die drei waren
+# nicht nur doppelt, sondern technisch verschieden gut. Das Datenblatt-Modul rief
+# `sys.executable -m pip`, die anderen beiden das `pip` aus dem PATH; in einer
+# Umgebung mit mehreren Interpretern installiert das ins falsche Ziel. Am
+# 2026-09-06 hatte das Design-Modul ausserdem `flatlib` schlicht nicht genannt,
+# und ein Schritt-3-Lauf liest laut Kern nur dieses eine Modul (Pruefbericht
+# Transit 4.5). Dieselbe Begruendung wie bei SCHRITTE: `lade()` ist die einzige
+# Stelle, durch die jeder Lauf geht.
+#
+# `flatlib` wird nur wegen der mitgelieferten swefiles installiert (sepl_*,
+# semo_*, seas_*), nicht als Bibliothek — daher `--no-deps`.
+PAKETE = (
+    ("pyswisseph", ()),
+    ("flatlib", ("--no-deps",)),
+)
+
+
+def ephemeriden(still=False):
+    """Sorgt dafuer, dass die Swiss-Ephemeris-Dateien da sind, und gibt ihr
+    Verzeichnis zurueck — fuer `swe.set_ephe_path(...)` bzw. `--ephe <...>`.
+
+        from lade import ephemeriden
+        import swisseph as swe
+        swe.set_ephe_path(ephemeriden())
+
+    Installiert nur, wenn die Dateien fehlen; sind sie schon da, kostet der
+    Aufruf nichts. Nimmt `sys.executable -m pip`, trifft also immer den
+    laufenden Interpreter.
+
+    Ersetzt in den Modulen die pip-Zeilen UND die Pfadsuche per
+    `glob.glob("/usr/**/flatlib/resources/swefiles", recursive=True)[0]` — die
+    warf einen IndexError, wenn nichts gefunden wurde, statt zu sagen was fehlt.
+
+    Wirft, wenn die Dateien auch nach der Installation nicht auffindbar sind.
+    Nicht abfangen: Ohne sie rechnet der Builder auf Moshier (bis zu einer
+    Bogensekunde bei den Langsamen, ein Exaktpunkt nahe Mitternacht kann auf den
+    Nachbartag kippen) und Transit-Chiron gar nicht — seit dem 2026-09-06 ein
+    harter Fehler. Bewusst ohne Chiron rechnet man mit `--ohne-chiron`.
+    """
+    pfad = ephemeriden_pfad()
+    if pfad:
+        if not still:
+            print("Ephemeriden schon da:", pfad)
+        return pfad
+
+    for paket, extra in PAKETE:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", paket, *extra,
+             "--break-system-packages", "-q"],
+            check=False,
+        )
+
+    pfad = ephemeriden_pfad()
+    if not pfad:
+        raise RuntimeError(
+            "Swiss-Ephemeris-Dateien (seas_*.se1) auch nach der Installation "
+            "nicht gefunden. Installiert wurden: "
+            + ", ".join(p for p, _ in PAKETE)
+            + ". Pruefen, ob pip durchlief; notfalls das Verzeichnis von Hand "
+              "an --ephe uebergeben."
+        )
+    if not still:
+        print("Ephemeriden installiert:", pfad)
+    return pfad
+
+
 def _ephemeriden_warnung():
     """Warnt, wenn `transit` geladen wird, ohne dass die swefiles da sind.
 
@@ -155,10 +232,10 @@ def _ephemeriden_warnung():
         "  Solange nur der fertige Report aus der chart_data geparst wird, ist "
         "das folgenlos.\n"
         "  Sobald transit.py RECHNET, fehlt Transit-Chiron und die "
-        "Hauptplaneten laufen auf Moshier:\n"
-        "      pip install pyswisseph --break-system-packages -q\n"
-        "      pip install flatlib --no-deps --break-system-packages -q\n"
-        "  Notfalls --ephe <.../flatlib/resources/swefiles> setzen.\n",
+        "Hauptplaneten laufen auf Moshier. Dann:\n"
+        "      from lade import ephemeriden\n"
+        "      ephe = ephemeriden()      # installiert und liefert den Pfad\n"
+        "  Notfalls diesen Pfad an --ephe uebergeben.\n",
         file=sys.stderr,
     )
 
@@ -282,6 +359,9 @@ def uebersicht():
               % (repr(s) + ")", ", ".join(mods), _SCHRITT_TEXT.get(s, "")))
     print("\nAlle bekannten Builder (%d):" % len(BEKANNT - {"lade"}))
     print("  " + ", ".join(sorted(BEKANNT - {"lade"})))
+    print("\nEphemeriden (nur wer rechnet — Pholus, transit.py):")
+    print("  ephe = ephemeriden()   installiert %s und liefert den Pfad"
+          % " + ".join(p for p, _ in PAKETE))
     print("\nNicht ueber diesen Weg, weiter per project_read:")
     print("  blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module.")
 
