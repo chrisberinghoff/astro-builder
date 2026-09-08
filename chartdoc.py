@@ -1315,6 +1315,43 @@ def _hat_fuss(it):
                 or (it.get('beleg') or '').strip())
 
 
+def pruefe_kapitelkopf(items):
+    """Harte Gegenprobe vor dem Rendern: traegt JEDES Kapitel einen Kicker?
+
+    Ueberschriften kommen aus Schritt 2 in genau EINER Form,
+    `## <Kicker> · <Titel>`. `parse_analyse()` toleriert eine Ueberschrift
+    ohne Trenner als Altbestand und setzt einen leeren Kicker — und genau das
+    lief bis zum 2026-09-08 folgenlos durch: `toc_gruppen()` erkennt Auftakt
+    und Schlusswort AM KICKER, bei leerem Kicker rutscht das Schlusswort als
+    gewoehnlicher Eintrag unter die Auftakt-Gruppe. Das Verzeichnis ist dann
+    nicht falsch, sondern flacher als vorgesehen; kein Preflight, kein
+    `verify()` und keine Gegenprobe schlug an (Pruefbericht EA 2026-09-08,
+    1.1). Die Meldung steht deshalb hier, wo sie sichtbar wird, nicht in
+    `parse_analyse()`, wo sie ueberlesen wurde — gebaut wie
+    `pruefe_kapitelfuss()`: harter Abbruch mit der zu aendernden Zeile.
+
+    Vorgesehen sind Zahl-Kicker fuer die deutenden Kapitel und Wort-Kicker
+    fuer alle uebrigen (`Auftakt`, `Rechenschaft`, `Hauptthemen`,
+    `Konfliktfelder`, `Lebensaufgaben`, `Schlusswort`) sowie die
+    Teiler-Kicker aus PART_KICKER.
+    """
+    ohne = [(i, it.get('title') or '(ohne Titel)')
+            for i, it in enumerate(items) if not (it.get('kicker') or '').strip()]
+    if not ohne:
+        return
+    zeilen = '\n'.join(f'    Kapitel {i}: "## {t}"' for i, t in ohne)
+    raise RuntimeError(
+        f'{len(ohne)} Kapitelueberschrift(en) ohne Kicker:\n{zeilen}\n'
+        'Ueberschriften kommen in genau EINER Form: "## <Kicker> · <Titel>".\n'
+        'Die deutenden Kapitel tragen eine Nummer als Kicker, alle uebrigen '
+        'ein sprechendes Wort — Auftakt, Rechenschaft, Hauptthemen, '
+        'Konfliktfelder, Lebensaufgaben, Schlusswort; Teiler ihren '
+        'PART_KICKER.\nDas ist ein Fehler in Schritt 2: die Zeile in der '
+        'analyse.md ergaenzen (Trenner ist " · ", kein Bindestrich), dann '
+        'erneut rendern. Ohne Kicker bildet toc_gruppen() die Gruppen des '
+        'Inhaltsverzeichnisses falsch.')
+
+
 def pruefe_kapitelfuss(html_str, items):
     """Harte Gegenprobe vor dem Rendern: traegt jedes Kapitel mit Signatur
     oder Beleg auch seinen Fuss-Block?
@@ -1566,6 +1603,7 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     # Vor dem ersten Render: sitzt der Fuss ueberhaupt im Dokument? Ein
     # vergessener build_fuss()-Aufruf in der Kapitel-Schleife wuerde sonst
     # Signatur und Beleg lautlos aus dem ganzen Horoskop entfernen.
+    pruefe_kapitelkopf(items)
     pruefe_kapitelfuss(build_html(set()), items)
     letzte = None
     for runde in range(1, max_pass + 1):
