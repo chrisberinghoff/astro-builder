@@ -12,20 +12,34 @@ Verwendung — zwei Zeilen am Anfang des Laufs:
     import urllib.request; urllib.request.urlretrieve(
         "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/lade.py",
         "/home/claude/lade.py")
-    import sys; sys.path.insert(0, "/home/claude"); from lade import lade
+    import sys; sys.path.insert(0, "/home/claude")
+    from lade import lade, lade_schritt, uebersicht, pruefe_repo
 
-Dann nach Schritt:
+Dann EINE Zeile je Schritt — welche Builder das sind, steht in SCHRITTE und
+nirgends sonst:
 
-    lade("radix")                              # Schritt 1, Datenblatt
-    lade("selektor")                           # Schritt 2, Referenzschnitt
-    lade("build", "chartdoc", "radix")         # Schritt 3+4, Design/Render
-    lade("transit", "transitdata", "transituhr_fusion")   # Transit / Ultimativ
+    lade_schritt("1")         # Datenblatt
+    lade_schritt("2")         # Referenzschnitt
+    lade_schritt("3+4")       # Design/Render
+    lade_schritt("transit")   # zusaetzlich beim Transit-/Ultimativ-Lauf
 
-Im Repo verfuegbar: build, chartdoc, radix, transit, transitdata,
-transituhr_fusion, transituhr (abgeloeste Zeilenfassung), selektor, markiere,
-restyle (Schreibweise-Wechsel, s. Projektanweisung_Erweiterung_Restyle.md).
-NICHT im Repo und weiter per project_read: hd.py (enthaelt Klientendaten),
-REFERENZ_Chart_Builder_Ultimativ.py, blocks_bundle.txt.
+`lade("build", "chartdoc")` von Hand geht weiter und ist fuer Einzelproben
+richtig; fuer einen normalen Lauf ist `lade_schritt()` vorzuziehen, weil die
+Liste dann nicht chatweise abweichen kann.
+
+`uebersicht()` druckt, welcher Schritt was zieht — das ist die Antwort auf
+"von wo wird was geholt", und die Anweisungsmodule verweisen darauf, statt
+eigene Listen zu fuehren (Chris-Entscheidung 2026-09-08; die Listen standen
+dreifach und liefen dreifach auseinander).
+
+`pruefe_repo()` haelt BEKANNT gegen das echte Repo — einmal laufen lassen,
+wenn ein Builder sich merkwuerdig verhaelt.
+
+Alle Builder kommen aus dem Repo, hd.py und REFERENZ_Chart_Builder_Ultimativ.py
+seit dem 2026-09-08 ebenfalls (davor per project_read, weil sie Klientendaten
+trugen — die sind an dem Tag anonymisiert worden). NICHT ueber diesen Weg:
+blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module, die nur im
+Projektwissen liegen.
 
 transit.py braucht ZWEI Pakete, nicht eines:
     pip install pyswisseph --break-system-packages -q
@@ -52,7 +66,42 @@ REPO = "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/"
 BEKANNT = {
     "build", "chartdoc", "radix", "transit", "transitdata",
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
+    "hd", "REFERENZ_Chart_Builder_Ultimativ",
     "lade",
+}
+
+# Welche Builder ein Schritt braucht — DIE EINZIGE VERBINDLICHE FASSUNG.
+#
+# Warum hier und nicht in den Anweisungsmodulen (Chris-Entscheidung 2026-09-08):
+# Die Staffelung stand in DREI Fassungen — Werkzeuge-Modul, Design-Render-Modul
+# und im Docstring dieser Datei — und alle drei sind mehrfach auseinandergelaufen.
+# Zuletzt fehlte `restyle` in allen drei Modul-Listen, obwohl es im Repo liegt,
+# und der Docstring hier nannte fuer Schritt 1 nur `radix` ohne `build`, womit
+# `build.aspekt_heimat_bericht()` in der Heimat-Probe ins Leere lief. Dieselbe
+# Begruendung wie bei `_ephemeriden_warnung()`: `lade()` ist die einzige Stelle,
+# durch die JEDER Lauf geht, egal welches Modul er gelesen hat.
+#
+# Die Module nennen ab jetzt keine Dateilisten und keine Aufrufe mehr, sondern
+# verweisen hierher. Wer wissen will, was ein Schritt zieht: `uebersicht()`.
+SCHRITTE = {
+    "1":        ("radix", "build"),
+    "2":        ("selektor",),
+    "3+4":      ("build", "chartdoc", "radix"),
+    "transit":  ("transit", "transitdata", "transituhr_fusion"),
+    "restyle":  ("build", "chartdoc", "radix", "restyle"),
+    "hdgk":     ("hd",),
+    "bibliothek": ("markiere", "selektor"),
+}
+
+# Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
+_SCHRITT_TEXT = {
+    "1":        "Datenblatt (Heimat-Probe braucht build)",
+    "2":        "Referenzschnitt fuer die Analyse",
+    "3+4":      "Design, HTML, Rendern, Pruefen",
+    "transit":  "zusaetzlich bei Transit- und Ultimativ-Lauf",
+    "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
+    "hdgk":     "Human Design / Gene Keys",
+    "bibliothek": "Bibliotheks-Umbau und Selektor-Pflege",
 }
 
 
@@ -176,8 +225,71 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
     return [g.split(" ")[0] for g in geholt]
 
 
+def lade_schritt(schritt, **kw):
+    """Holt genau die Builder, die dieser Schritt braucht — s. SCHRITTE.
+
+        lade_schritt("1")        # Datenblatt
+        lade_schritt("3+4")      # Design/Render
+        lade_schritt("transit")  # zusaetzlich beim Transit-/Ultimativ-Lauf
+
+    Nimmt dieselben Zusatzargumente wie lade() (ziel, frisch, still).
+    Vorzuziehen gegenueber lade("a", "b", ...) von Hand: die Liste steht dann
+    an genau einer Stelle und kann nicht chatweise abweichen.
+    """
+    if schritt not in SCHRITTE:
+        raise ValueError(
+            f"Unbekannter Schritt {schritt!r}. Bekannt: "
+            + ", ".join(sorted(SCHRITTE))
+        )
+    return lade(*SCHRITTE[schritt], **kw)
+
+
+def pruefe_repo(still=False):
+    """Haelt BEKANNT gegen das, was wirklich im Repo liegt.
+
+    Ohne diese Probe faellt eine Divergenz erst auf, wenn ein Lauf bricht —
+    beim `transituhr_fusion`-Fund vom 2026-09-08 hatte sie fuenf Wochen
+    unbemerkt bestanden. Gibt (fehlend, ueberzaehlig) zurueck; beides leer
+    heisst: Liste und Repo sagen dasselbe.
+
+    Rein lesend, aendert nichts. Braucht Netz.
+    """
+    fehlend, da = [], []
+    for name in sorted(BEKANNT):
+        req = urllib.request.Request(REPO + name + ".py", method="HEAD")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                (da if r.status == 200 else fehlend).append(name)
+        except Exception:
+            fehlend.append(name)
+    if not still:
+        if fehlend:
+            print("NICHT im Repo, obwohl in BEKANNT:", ", ".join(fehlend))
+        else:
+            print(f"Repo-Probe: alle {len(da)} Builder aus BEKANNT sind da.")
+    return fehlend, []
+
+
+def uebersicht():
+    """Druckt, welcher Schritt was zieht und woher — die Antwort auf
+    'von wo wird was geholt'. Die Anweisungsmodule verweisen hierher,
+    statt eigene Listen zu fuehren."""
+    print("Ladeweg — Quelle ist immer das Repo:")
+    print(" ", REPO)
+    print("\nJe Schritt:")
+    for s, mods in SCHRITTE.items():
+        print("  lade_schritt(%-12s -> %-42s # %s"
+              % (repr(s) + ")", ", ".join(mods), _SCHRITT_TEXT.get(s, "")))
+    print("\nAlle bekannten Builder (%d):" % len(BEKANNT - {"lade"}))
+    print("  " + ", ".join(sorted(BEKANNT - {"lade"})))
+    print("\nNicht ueber diesen Weg, weiter per project_read:")
+    print("  blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module.")
+
+
 if __name__ == "__main__":
     # Selbsttest: holt alle Builder und meldet, ob jeder ankommt.
     alle = sorted(BEKANNT - {"lade"})
     lade(*alle, ziel="/tmp/ladeselbsttest")
     print(f"\n[Selbsttest bestanden: {len(alle)} Builder geladen und uebersetzbar]")
+    print()
+    uebersicht()

@@ -53,6 +53,16 @@ THEMEN = [
      ['Jupiter', 'Knoten'], '#b8862f'),
 ]
 
+# Beschriftungen der Zeitachse. Nur diese drei Woerter der Grafik sind
+# sprachgebunden; eine zweite Sprachfassung setzt sie vor dem Aufruf von
+# bauen() um: tuhr.LABELS.update({'rueckblick': 'Look-back', ...}).
+# Eingefuehrt 2026-08-01 fuer die englische Zweitfassung eines Ultimativ-
+# Horoskops — vorher standen die Woerter fest im Code und die Grafik blieb
+# im englischen PDF deutsch beschriftet.
+LABELS = {'rueckblick': 'Rückblick', 'stichtag': 'Stichtag',
+          'stationen': 'Stationen', 'sekundaer': 'sekundär',
+          'monat': '1 Monat', 'monate': '{n} Monate'}
+
 # Geometrie in Zeileneinheiten
 H_KOPF = 1.15      # Themenkopf (Name + Untertitel)
 H_BOGEN = 0.85     # dicker Themenbogen
@@ -187,7 +197,8 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
                                     facecolor=col, alpha=0.42,
                                     edgecolor='none', zorder=2))
         mon = round((b['ende'] - b['start']).days / 30.44)
-        lab = '1 Monat' if mon == 1 else f'{mon} Monate'
+        lab = (LABELS['monat'] if mon == 1
+               else LABELS['monate'].format(n=mon))
         # Kurze Boegen tragen das Label nicht: dann steht es LINKS daneben in
         # der Themenfarbe statt weiss im Balken (sonst laeuft es ueber den
         # Rand hinaus — Themenbloecke am Fensterrand, 2026-07-30).
@@ -228,7 +239,7 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
                     fontsize=7.2 * sk, color=INK if prim else '#8d8371',
                     zorder=5)
             if not prim:
-                ax.text(bb + spanne * 0.006, y, 'sekundär', ha='left',
+                ax.text(bb + spanne * 0.006, y, LABELS['sekundaer'], ha='left',
                         va='center', fontsize=6.2 * sk, color='#a99b80',
                         zorder=5)
             y -= H_ZEILE
@@ -246,14 +257,15 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
             ax.text(X, y_ach - 0.42, d.strftime('%m/%y'), ha='center',
                     va='center', fontsize=7.4 * sk, color=STONE, zorder=4)
         d = (d.replace(day=28) + timedelta(days=8)).replace(day=1)
-    ax.text(X0 + spanne * 0.004, y_ach + 0.30, 'Rückblick', ha='left',
-            va='bottom', fontsize=7.6 * sk, color='#9a8f77', zorder=6)
+    ax.text(X0 + spanne * 0.004, y_ach + 0.30, LABELS['rueckblick'],
+            ha='left', va='bottom', fontsize=7.6 * sk, color='#9a8f77',
+            zorder=6)
     ax.text(st + spanne * 0.004, y_ach + 0.30,
-            'Stichtag ' + f['stichtag'].strftime('%d.%m.%Y'), ha='left',
-            va='bottom', fontsize=8.2 * sk, color=GOLD, zorder=6)
+            LABELS['stichtag'] + ' ' + f['stichtag'].strftime('%d.%m.%Y'),
+            ha='left', va='bottom', fontsize=8.2 * sk, color=GOLD, zorder=6)
 
     # --- Stationsleiste (aus der Themen-Uhr) --------------------------------
-    ax.text(X0 - spanne * 0.008, y_ach - 1.05, 'Stationen', ha='right',
+    ax.text(X0 - spanne * 0.008, y_ach - 1.05, LABELS['stationen'], ha='right',
             va='center', fontsize=7.4 * sk, color=GOLD, zorder=5)
     # Beschriftungsbreite in Datumseinheiten schaetzen und je Station die
     # oberste Reihe suchen, in der sie kollisionsfrei sitzt. Der starre
