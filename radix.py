@@ -776,9 +776,61 @@ def spezialfaktor_netz(factors, aspects):
             'ohne_netz': [s for s in spez if s not in beteiligt]}
 
 
+def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
+                 apex_name=None, aspects=None):
+    """Die leere Spitze eines T-Quadrats: der Punkt GEGENUEBER dem Brennpunkt.
+
+    Ein T-Quadrat ist ein Grosskreuz, dem eine Ecke fehlt. Diese fehlende
+    Ecke — Zeichen und Haus des Punktes 180 Grad gegenueber dem Apex — ist in
+    der Deutung die Richtung, in der die Figur entlastet wird: die Qualitaet,
+    die dem Spannungsdreieck fehlt und die es ins Gleichgewicht braechte.
+    Bis zum 2026-09-08 lieferte `konfigurationen()` nur Achse und Apex; die
+    leere Spitze musste im Kopf gerechnet werden und fiel in der Deutung
+    regelmaessig weg (Befund Stilvergleich 2026-09-08, Chris-Entscheidung:
+    Figur-Regel des Typmoduls Geburtshoroskop). Was nicht gerechnet vorliegt,
+    wird nicht gedeutet — deshalb steht sie jetzt im Strukturbild.
+
+    Rueckgabe: {'lon', 'zeichen', 'haus', 'haus_spalte', 'besetzt'} —
+    `besetzt` sind die Faktoren (auch Achsen), die innerhalb von `orb` Grad
+    auf der leeren Spitze stehen, je mit ihrem Abstand. Steht dort etwas
+    (typisch: ein Knoten, eine Achse, ein Spezialfaktor), ist die Spitze nicht
+    wirklich leer, und genau das ist der Befund. Der Orb ist bewusst der
+    Haus-Orb (5 Grad), kein Aspekt-Orb: Es geht um die Nachbarschaft zu einem
+    Punkt, nicht um einen Aspekt. ZUSAETZLICH zaehlt jeder Faktor als
+    besetzt, der laut Aspektliste in Opposition zum Apex steht — er sitzt per
+    Definition auf der leeren Spitze, auch wenn er (mit dem groesseren
+    Huber-Orb der Lichter) mehr als 5 Grad entfernt ist. Dafuer `apex_name`
+    und `aspects` mitgeben; `konfigurationen()` tut das selbst.
+    """
+    lon = (apex_lon + 180.0) % 360
+    out = {'lon': round(lon, 2), 'zeichen': zeichen_name(lon), 'haus': None,
+           'haus_spalte': None, 'besetzt': []}
+    if cusps:
+        out['haus'] = haus_und_grenzlage(lon, cusps)['haus']
+        out['haus_spalte'] = haus_spalte(lon, cusps)
+    per_opposition = set()
+    if apex_name and aspects:
+        for a in aspects:
+            if a.get('angle') != 180:
+                continue
+            if a['a'] == apex_name:
+                per_opposition.add(a['b'])
+            elif a['b'] == apex_name:
+                per_opposition.add(a['a'])
+    for f in factors:
+        d = abs((f['lon'] - lon + 180.0) % 360 - 180.0)
+        if d <= orb or f['name'] in per_opposition:
+            out['besetzt'].append({'name': f['name'], 'orb': round(d, 2)})
+    out['besetzt'].sort(key=lambda x: x['orb'])
+    return out
+
+
 def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
     """Aspektfiguren aus der fertigen Aspektliste: T-Quadrat, Grosskreuz,
     Grosstrigon, Jod, Stellium (Zeichen und Haus).
+
+    Jeder T-Quadrat-Eintrag traegt seit dem 2026-09-08 zusaetzlich
+    `leere_spitze` (s. `leere_spitze()`): Zeichen, Haus und was dort steht.
 
     Nur Figuren aus vollen und einseitigen Hauptaspekten; Nebenaspekte tragen
     ausschliesslich das Jod (das per Definition aus zwei Quincunxen besteht).
@@ -807,6 +859,7 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
     sex = paare(60, ('voll', 'einseitig', 'neben'))
     qcx = paare(150, ('voll', 'einseitig', 'neben'))
     namen = sorted({f['name'] for f in factors})
+    lon_of = {f['name']: f['lon'] for f in factors}
     verbunden = lambda menge, x, y: frozenset((x, y)) in menge
 
     tq, gk, gt, jod = [], [], [], []
@@ -825,7 +878,10 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                     if figur not in gk:
                         gk.append(figur)
                 else:
-                    eintrag = {'achse': sorted([a, b]), 'apex': apex}
+                    eintrag = {'achse': sorted([a, b]), 'apex': apex,
+                               'leere_spitze': leere_spitze(
+                                   lon_of[apex], factors, cusps,
+                                   apex_name=apex, aspects=aspects)}
                     if eintrag not in tq:
                         tq.append(eintrag)
     for i, a in enumerate(namen):
@@ -1282,8 +1338,20 @@ def strukturbild_text(sb):
     L.append('### 6 · Konfigurationen')
     kf = sb['konfigurationen']
     for t in kf['t_quadrat']:
-        L.append(f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
+        zeile = (f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
                  f"{t['apex']}")
+        ls = t.get('leere_spitze')
+        if ls:
+            # Die leere Spitze gehoert zur Figur wie der Apex: Sie ist die
+            # Richtung, in der die Figur entlastet wird (Figur-Regel des
+            # Typmoduls, 2026-09-08). Steht dort ein Faktor, wird er genannt —
+            # dann ist die Spitze nicht leer, und das ist der Befund.
+            haus = f", Haus {ls['haus_spalte']}" if ls.get('haus_spalte') else ''
+            dort = ', '.join(f"{b['name']} ({_gr(b['orb'])})"
+                             for b in ls['besetzt']) or 'nichts'
+            zeile += (f" — leere Spitze {_gr(ls['lon'] % 30)} {ls['zeichen']}"
+                      f"{haus}; dort: {dort}")
+        L.append(zeile)
     for g in kf['grosskreuz']:
         L.append(f"- Großkreuz: {', '.join(g)}")
     for g in kf['grosstrigon']:
@@ -1373,6 +1441,17 @@ if __name__ == '__main__':
         assert not all(x in ('AC', 'DC', 'MC', 'IC') for x in _g), _g
     for _t in _sb['konfigurationen']['t_quadrat']:
         assert not all(x in ('AC', 'DC', 'MC', 'IC') for x in _t['achse']), _t
+        # Leere Spitze: genau gegenueber dem Apex, mit Zeichen und Haus
+        _ls = _t['leere_spitze']
+        _apex_lon = next(x['lon'] for x in _f if x['name'] == _t['apex'])
+        assert abs(((_apex_lon + 180) % 360) - _ls['lon']) < 0.01, _ls
+        assert _ls['zeichen'] and _ls['haus'] in range(1, 13), _ls
+    # Direkter Test der leeren Spitze: Apex 0° Widder -> Spitze 0° Waage,
+    # und ein Faktor 3° daneben wird als besetzt gemeldet, einer 6° weg nicht.
+    _ls2 = leere_spitze(0.0, [{'name': 'X', 'lon': 183.0},
+                              {'name': 'Y', 'lon': 186.0}], _c)
+    assert _ls2['zeichen'] == 'Waage' and _ls2['haus'] == 7, _ls2
+    assert [b['name'] for b in _ls2['besetzt']] == ['X'], _ls2
 
     # Winkel stehen nicht in der Dichte-Rangliste (Orb 9 -> bauartbedingt vorn)
     for _w in ('AC', 'MC', 'DC', 'IC'):
