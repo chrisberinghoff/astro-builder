@@ -36,6 +36,8 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         und vier Ebenen fehlten ganz, weil keine Regel nach ihnen fragte.
 
     konfigurationen(factors, aspects, cusps=None) -> dict
+    gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung, 2026-09-09)
+    glueckspunkt(factors, cusps) -> dict          (Tag/Nacht selbst, 2026-09-09)
         T-Quadrat (mit leerer Spitze), Großkreuz, Großtrigon, Jod, Stellium —
         und seit 2026-09-08 Drachen (Kite) und Mystisches Rechteck. Ein Drachen
         führt sein Großtrigon selbst (EIN Befund).
@@ -758,6 +760,33 @@ def herrscherketten(factors, klassisch=False):
             'enddispositoren': sorted(endd)}
 
 
+def glueckspunkt(factors, cusps, ac=None, sonne=None, mond=None):
+    """Glueckspunkt (Pars Fortunae) mit eingebauter Tag-/Nacht-Entscheidung.
+
+    Tagformel   AC + Mond − Sonne  (Sonne UEBER dem Horizont, Haeuser 7–12)
+    Nachtformel AC + Sonne − Mond  (Sonne UNTER dem Horizont, Haeuser 1–6)
+
+    Neu am 2026-09-09 (Pruefbericht Geburtshoroskop, 5.9). Bis dahin stand nur
+    die Formel im Datenblatt-Modul und wurde in jedem Lauf von Hand gerechnet —
+    mit zwei Fallen: dem Vorzeichenwechsel zwischen beiden Formeln und der
+    Frage, woran „Tag" haengt. Es haengt am HAUS der Sonne (7–12 = ueber dem
+    Horizont), nicht an der Uhrzeit: Dieselbe Abenduhrzeit liegt im Sommer
+    noch im Tagbogen und im Winter laengst nicht mehr.
+
+    -> {'lon', 'tag', 'sonne_haus', 'formel'}
+    """
+    lon = {f['name']: f['lon'] for f in factors}
+    ac = lon['AC'] if ac is None else ac
+    sonne = lon['Sonne'] if sonne is None else sonne
+    mond = lon['Mond'] if mond is None else mond
+    h = haus_und_grenzlage(sonne, cusps)['haus']
+    tag = 7 <= h <= 12
+    p = (ac + mond - sonne) % 360.0 if tag else (ac + sonne - mond) % 360.0
+    return {'lon': p, 'tag': tag, 'sonne_haus': h,
+            'formel': 'AC + Mond − Sonne (Tagformel)' if tag
+                      else 'AC + Sonne − Mond (Nachtformel)'}
+
+
 def hausherrscher(factors, cusps, aspects=None, klassisch=False):
     """Wo steht der Herrscher jedes Hauses? (Befund 5.2 des Prueflaufs.)
 
@@ -1169,6 +1198,74 @@ def _gruppen(pts, min_luecke):
     return gruppen
 
 
+def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
+    """Fasst mehrfach gemeldete T-Quadrate zu Figuren zusammen.
+
+    Neu am 2026-09-09 (Pruefbericht Geburtshoroskop, 5.7). `konfigurationen()`
+    meldet jede Figur einmal je Endpunkt-Kombination. Steht ein Planet in
+    Konjunktion zu einem Winkel, erscheint dasselbe Dreieck deshalb mehrfach —
+    im Pruefall SIEBEN Meldungen fuer VIER Figuren. Das Datenblatt-Modul
+    verlangte dafuer bis dahin Handarbeit („vor der Deutung zusammenfassen und
+    im chart_data sagen, wie viele Figuren es tatsaechlich sind"), und
+    Handarbeit an dieser Stelle ist eine Fehlerquelle in jedem Chart mit
+    Planeten auf Winkeln — also in der Mehrheit.
+
+    Die Funktion GRUPPIERT, sie ENTSCHEIDET NICHT. Zwei Regeln:
+
+    HART — dieselbe Figur: gleicher Apex, und die beiden Achsenenden sind
+    paarweise identisch oder durch eine Konjunktion verbunden. Das ist die
+    reine Achsen-Doppelung; sie wird zusammengefasst.
+
+    WEICH — Kandidat: gleicher Apex und ein gemeinsames Achsenende, aber die
+    zweiten Enden sind weder identisch noch konjunkt. Ob das EINE Figur mit
+    zwei dicht benachbarten Enden ist oder ZWEI Figuren, haengt vom Abstand
+    und von der Deutung ab und bleibt offen. Solche Gruppen tragen
+    `pruefen=True` und werden NICHT zusammengefasst.
+
+    -> {'figuren': [{'achse','apex','leere_spitze','meldungen'}],
+        'kandidaten': [[i, j, ...]],   # Indizes in 'figuren'
+        'meldungen': n, 'anzahl': m}
+    """
+    tq = konf.get('t_quadrat', [])
+    konj = set()
+    for a in aspects or ():
+        if a.get('name') == 'Konjunktion':
+            konj.add(frozenset((a['a'], a['b'])))
+    gleich = lambda x, y: x == y or frozenset((x, y)) in konj
+
+    def deckungsgleich(t1, t2):
+        if t1['apex'] != t2['apex']:
+            return False
+        a1, b1 = t1['achse']
+        a2, b2 = t2['achse']
+        return ((gleich(a1, a2) and gleich(b1, b2))
+                or (gleich(a1, b2) and gleich(b1, a2)))
+
+    figuren = []
+    for t in tq:
+        for f in figuren:
+            if deckungsgleich(f['_erst'], t):
+                f['meldungen'].append(t['achse'])
+                break
+        else:
+            figuren.append({'achse': t['achse'], 'apex': t['apex'],
+                            'leere_spitze': t.get('leere_spitze'),
+                            'meldungen': [t['achse']], '_erst': t})
+    for f in figuren:
+        f.pop('_erst', None)
+
+    kandidaten = []
+    for i, f in enumerate(figuren):
+        for j in range(i + 1, len(figuren)):
+            g = figuren[j]
+            if f['apex'] != g['apex']:
+                continue
+            if set(f['achse']) & set(g['achse']):
+                kandidaten.append([i, j])
+    return {'figuren': figuren, 'kandidaten': kandidaten,
+            'meldungen': len(tq), 'anzahl': len(figuren)}
+
+
 def verteilungsmuster(factors, cusps=None):
     """Hemisphaeren, Quadranten und Jones-Muster der zehn klassischen Planeten.
 
@@ -1537,7 +1634,19 @@ ZYKLEN = {
                 (59.5, 'Jupiter-Rückkehr')],
     'Pluto': [(38.0, 'Pluto-Quadrat (Jahrgangsschätzung, 36–45 — '
                      'wird von pluto_quadrat_alter() überschrieben)')],
+    # Lilith neu am 2026-09-09 (Pruefbericht Geburtshoroskop, 5.8). Die
+    # Lilith-Referenz nennt eine Wiederkehr alle knapp neun Jahre als „stillen
+    # Reifungstakt"; ZYKLEN kannte sie nicht, weshalb ein Lilith-Kapitel nach
+    # Prinzip 15 gar keine Zeitangabe bekommen durfte — eine Deutungsfrage,
+    # die am Fehlen einer Zeile in einer Konstante haengt. Es ist ein TAKT,
+    # keine markante Station wie die Saturn-Rueckkehr; strukturbild_text()
+    # kennzeichnet das.
+    'Lilith': [(8.9, 'erste Lilith-Rückkehr'), (17.7, 'zweite Lilith-Rückkehr'),
+               (26.6, 'dritte Lilith-Rückkehr'), (35.4, 'vierte Lilith-Rückkehr'),
+               (44.3, 'fünfte Lilith-Rückkehr'), (53.1, 'sechste Lilith-Rückkehr'),
+               (62.0, 'siebte Lilith-Rückkehr')],
 }
+ZYKLUS_TAKT = ('Lilith',)   # Takte, keine markanten Stationen — s. ZYKLEN
 
 
 def pluto_quadrat_alter(jd_geburt, pluto_lon, max_alter=70):
@@ -1653,6 +1762,11 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'zyklen': {},
         'alter': alter,
     }
+    # Achsen-Doppelungen gruppieren (neu 2026-09-09, Pruefbericht 5.7): Die
+    # Handarbeit, die das Datenblatt-Modul bisher verlangte, macht jetzt
+    # gruppiere_figuren() — sie fasst zusammen, was zweifelsfrei dieselbe Figur
+    # ist, und markiert den Rest als Kandidat statt zu entscheiden.
+    sb['figurgruppen'] = gruppiere_figuren(sb['konfigurationen'], aspects)
     ger = {}
     if jd_geburt is not None:
         pl = next((f['lon'] for f in factors if f['name'] == 'Pluto'), None)
@@ -1922,6 +2036,29 @@ def strukturbild_text(sb):
 
     L.append('### 6 · Konfigurationen')
     kf = sb['konfigurationen']
+    fg = sb.get('figurgruppen')
+    if fg and fg['meldungen'] != fg['anzahl']:
+        # Achsen-Doppelung aufgeloest (neu 2026-09-09, Pruefbericht 5.7):
+        # Steht ein Planet in Konjunktion zu einem Winkel, meldet
+        # konfigurationen() dasselbe Dreieck mehrfach. Frueher musste das von
+        # Hand zusammengefasst werden; die Zeile hier sagt jetzt, wie viele
+        # Figuren es tatsaechlich sind.
+        L.append('- Achsen-Doppelung: %d T-Quadrat-Meldungen entsprechen %d '
+                 'Figuren (die übrigen sind dieselbe Figur über eine '
+                 'Winkel-Konjunktion).' % (fg['meldungen'], fg['anzahl']))
+    if fg and fg['kandidaten']:
+        # Weiche Gruppe: gleicher Brennpunkt, ein gemeinsames Achsenende, aber
+        # die zweiten Enden sind weder identisch noch konjunkt. Ob das EINE
+        # Figur mit zwei Enden ist oder ZWEI, ist eine Deutungsentscheidung —
+        # die Funktion legt sie vor, statt sie zu treffen.
+        for i, j in fg['kandidaten']:
+            a, b = fg['figuren'][i], fg['figuren'][j]
+            L.append('- Zu prüfen: %s und %s teilen den Brennpunkt %s und ein '
+                     'Achsenende. Ob das eine Figur mit zwei benachbarten '
+                     'Enden ist oder zwei Figuren, entscheidet die Deutung; '
+                     'die Entscheidung gehört ins chart_data.'
+                     % (' ☍ '.join(a['achse']), ' ☍ '.join(b['achse']),
+                        a['apex']))
     for t in kf['t_quadrat']:
         zeile = (f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
                  f"{t['apex']}")
@@ -1980,7 +2117,10 @@ def strukturbild_text(sb):
             for f in fenster:
                 lage = f" [{f['lage']}]" if f['lage'] else ''
                 teile.append(f"{f['name']} ~{f['alter']:g}{lage}")
-            L.append(f"  - {nm}: " + ' · '.join(teile))
+            takt = ('  (Takt, keine markante Station — die Wiederkehr ist '
+                    'kurz und wiederholt sich oft)'
+                    if nm in ZYKLUS_TAKT else '')
+            L.append(f"  - {nm}: " + ' · '.join(teile) + takt)
         L.append('- Verwendung s. Typmodul, Bewegung 7. Erlaubt ist die '
                  'Einordnung, verboten jede Aussage darüber, was in diesem '
                  'Alter geschieht.')
