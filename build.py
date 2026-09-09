@@ -322,10 +322,20 @@ p.first  { orphans: 3; widows: 3; }
    werden pro Chart gemessen, nicht fest verdrahtet. */
 .sbrk { break-before: page; margin-top: 0; }
 
-/* HÄRTUNG (layoutneutral, verhindert kaputte Umbrueche, aendert nichts am
-   Erscheinungsbild): Zwischentitel nie allein am Seitenfuss; Listenpunkte
-   nie ueber die Seitenkante gerissen (Listen laufen nicht durch den
-   Satz-Schutz von render_sentence_safe, darum hier per CSS gesichert). */
+/* HÄRTUNG (layoutneutral): Listenpunkte nie ueber die Seitenkante gerissen
+   (Listen laufen nicht durch den Satz-Schutz von render_sentence_safe, darum
+   hier per CSS gesichert).
+
+   ACHTUNG, korrigiert 2026-09-09: Hier stand die Zusicherung „Zwischentitel nie
+   allein am Seitenfuss". Sie traf nicht zu. **WeasyPrint setzt
+   `break-after: avoid` nicht um** — die Deklaration bleibt stehen, weil sie
+   nach Spezifikation richtig ist und in einer kuenftigen Fassung greifen kann,
+   aber sie traegt heute nichts. Im Pruefdokument vom 09.09. stand ein
+   Zwischentitel allein am Seitenfuss, und `verify()` meldete ihn korrekt als
+   „endet mitten im Satz" — an einer Stelle, die kein Modul erklaerte.
+   Die Bindung leistet `chartdoc.build_bloecke()`: Zwischentitel und
+   Folgeabsatz in einem `.subwrap`-Block mit `break-inside: avoid`, der
+   einzigen Umbruchsperre, die WeasyPrint tatsaechlich umsetzt. */
 .subhead { break-after: avoid; break-inside: avoid; }
 ol li, ul li { break-inside: avoid; }
 """

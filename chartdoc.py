@@ -583,6 +583,12 @@ p.first {{ margin-top:0.4cm; }}
    line-height:0.95; padding:0.02em 0.10em 0 0; }}
 .subhead {{ text-transform:uppercase; letter-spacing:0.16em; font-size:8.6pt;
    color:{PETROL_L}; margin:0.62cm 0 0.36cm 0; }}
+/* Zwischentitel + Folgeabsatz als EINE Einheit. `break-inside: avoid` ist die
+   einzige Umbruchsperre, die WeasyPrint tatsaechlich umsetzt — das
+   `break-after: avoid` auf `.subhead` in build.BASE_CSS wirkt nicht (gemessen
+   2026-09-09, Pruefbericht Geburtshoroskop Schritt 3+4). Gesetzt wird der
+   Wrapper von `build_bloecke()`. */
+.subwrap {{ break-inside: avoid; }}
 ol.lesart {{ margin:0.15cm 0 0 0; padding:0; list-style:none; counter-reset:li; }}
 ol.lesart li {{ position:relative; padding-left:0.85cm; margin:0 0 0.4em 0;
    text-align:justify; hyphens:auto; }}
@@ -1011,11 +1017,64 @@ def _balken(reihen):
     return ''.join(out)
 
 
+# Schriftstufen fuer die Einmessung der Konstellationsseite. Feiner gestaffelt
+# als die Aspektseite, weil hier ganze Balkenbloecke kippen und nicht einzelne
+# Zeilen.
+KONST_STUFEN = (1.0, 0.97, 0.94, 0.91, 0.88, 0.85, 0.82, 0.79)
+
+
+def _konst_skala_css(anker, s):
+    """Lokale Massanpassung der Konstellationsseite, auf ihren Anker begrenzt.
+
+    Nur die Werte, die die Seitenhoehe bestimmen: Schriftgrade, Zeilenpolster,
+    Balkenhoehe und die Abstaende der Bloecke. Spaltenbreiten bleiben, sonst
+    bricht die Tabelle um. Bei skala == 1.0 wird gar nichts ausgegeben — ein
+    Dokument ohne Einmessung ist damit zeichengleich mit dem Stand davor.
+    """
+    if abs(s - 1.0) < 1e-9:
+        return ''
+    q = f'#{anker}'
+    return f"""<style>
+{q} table.konst {{ font-size:{9.3 * s:.2f}pt; }}
+{q} table.konst td {{ padding:{0.078 * s:.3f}cm 0.2cm {0.078 * s:.3f}cm 0; }}
+{q} table.konst td.g {{ font-size:{10 * s:.2f}pt; }}
+{q} table.konst td.lf {{ font-size:{8.6 * s:.2f}pt; }}
+{q} table.konst th {{ padding:0 0.2cm {0.14 * s:.3f}cm 0; }}
+{q} .tabnote {{ font-size:{7.6 * s:.2f}pt;
+   margin:{0.22 * s:.3f}cm 0 {0.46 * s:.3f}cm 0; }}
+{q} table.achsen {{ font-size:{9.2 * s:.2f}pt; }}
+{q} table.achsen td {{ padding:{0.085 * s:.3f}cm 0.2cm {0.085 * s:.3f}cm 0; }}
+{q} h4.blockkopf {{ font-size:{7.4 * s:.2f}pt;
+   margin:0 0 {0.22 * s:.3f}cm 0; }}
+{q} .dist {{ margin:0 0 {0.46 * s:.3f}cm 0; }}
+{q} .vrow {{ margin:0 0 {0.19 * s:.3f}cm 0; }}
+{q} .vlab {{ font-size:{9 * s:.2f}pt; }}
+{q} .track {{ height:{0.34 * s:.3f}cm; line-height:{0.34 * s:.3f}cm; }}
+{q} .fill {{ height:{0.34 * s:.3f}cm; }}
+{q} .vnum {{ font-size:{8 * s:.2f}pt; }}
+{q} .vpl {{ font-size:{7.6 * s:.2f}pt; margin:{0.06 * s:.3f}cm 0 0 0; }}
+</style>"""
+
+
 def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
                          kicker='Stände & Verteilung',
                          titel='Die Konstellationen', anker='PG_konst',
-                         lead=None, fussnoten=()):
+                         lead=None, fussnoten=(), skala=1.0):
     """Konstellationsseite im Hausstil.
+
+    skala     Massfaktor fuer Schriftgrade, Zeilenpolster und Balkenhoehe.
+              **Wird eingemessen, nicht gesetzt** — genau wie Rad-, Aspekt- und
+              Uhrseite (Hausstil: „‚Passt auf eine Seite' wird gemessen, nicht
+              geschaetzt"). Bis zum 2026-09-09 war die Konstellationsseite die
+              einzige Seite mit fester Seitenzahl OHNE Messweg; sie ist zugleich
+              die einzige Frontmatter-Seite, deren Inhalt je Chart waechst
+              (Fussnoten, Grenzlagen, unaspektierte Faktoren, Achsen-
+              Zeichengrenzen). Lief sie ueber, war der Befund stumm: die feste
+              Seitenfolge des Hausstils kaputt, `verify` gruen. Aufruf:
+
+                  ks = chartdoc.passe_ein(lambda s: build_html(konst_skala=s),
+                                          'PG_konst', chartdoc.KONST_STUFEN,
+                                          was='Konstellationsseite')
 
     zeilen    [(Glyphe, Name, Zeichenname, Gradtext, Haustext, Lauftext), ...]
               — 'SEP' als Glyphe zieht eine Trennlinie.
@@ -1052,6 +1111,7 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
     nt += ''.join(f'<div class="tabnote">{esc(z)}</div>'
                   for z in (fussnoten or ()) if z)
     return f"""<section class="front" id="{anker}">
+{_konst_skala_css(anker, skala)}
 <div class="fm-kicker">{esc(kicker)}</div>
 <h2 class="fm-title">{esc(titel)}</h2>
 <div class="fm-rule"></div>
@@ -1470,6 +1530,61 @@ def build_paragraph(i, j, b, breaks, allow_drop, is_first_block):
         ca = f' class="{" ".join(cls)}"' if cls else ''
         out.append(f'<p{ca}>' + ' '.join(spans) + '</p>')
     return '\n'.join(out)
+
+
+def build_bloecke(i, it, breaks, allow_drop=True):
+    """Der KOERPER eines Kapitels — Absaetze, Listen, Zwischentitel.
+
+    Ersetzt die Block-Schleife, die bis zum 2026-09-09 in jedem chart-eigenen
+    Builder von Hand stand. Grund (Pruefbericht Geburtshoroskop Schritt 3+4,
+    Rubrik 2): `build.BASE_CSS` haertet Zwischentitel mit
+    `.subhead { break-after: avoid }` und verspricht im Kommentar „Zwischentitel
+    nie allein am Seitenfuss". **WeasyPrint setzt `break-after: avoid` nicht um.**
+    Im Pruefdokument stand ein Zwischentitel allein am Seitenfuss und
+    `verify()` meldete ihn als „endet mitten im Satz" — richtig, aber an einer
+    Stelle, die kein Modul erklaerte.
+
+    Gegenmittel: Zwischentitel und Folgeabsatz in einen `.subwrap`-Block mit
+    `break-inside: avoid`, das WeasyPrint umsetzt. **Nicht** beim ERSTEN Absatz
+    eines Kapitels — dessen Bindung an den Kapitelkopf haengt an
+    `.chapter > p.first`, einem Kindselektor, den ein Wrapper brechen wuerde.
+
+    Aufruf in der Kapitel-Schleife:
+
+        inner = (chartdoc.build_head(it)
+                 + chartdoc.build_bloecke(i, it, breaks, allow_drop)
+                 + chartdoc.build_fuss(it))
+    """
+    body, first_p_used, n = [], False, len(it['blocks'])
+    j = 0
+    while j < n:
+        b = it['blocks'][j]
+        if b['type'] == 'li':
+            lis = []
+            while j < n and it['blocks'][j]['type'] == 'li':
+                lis.append(it['blocks'][j])
+                j += 1
+            body.append('<ol class="lesart">' + ''.join(
+                f'<li>{esc(x["text"])}</li>' for x in lis) + '</ol>')
+            continue
+        if b['type'] == 'subhead':
+            sub = f'<div class="subhead">{esc(b["text"])}</div>'
+            nxt = it['blocks'][j + 1] if j + 1 < n else None
+            if first_p_used and nxt and nxt['type'] == 'p':
+                body.append('<div class="subwrap">' + sub
+                            + build_paragraph(i, j + 1, nxt, breaks,
+                                              allow_drop, False)
+                            + '</div>')
+                j += 2
+                continue
+            body.append(sub)
+        else:
+            is_first_block = not first_p_used
+            first_p_used = True
+            body.append(build_paragraph(i, j, b, breaks, allow_drop,
+                                        is_first_block))
+        j += 1
+    return ''.join(body)
 
 
 # --- Inhaltsverzeichnis -----------------------------------------------------

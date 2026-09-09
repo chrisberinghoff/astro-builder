@@ -343,7 +343,12 @@ def pruefe_repo(still=False):
         if fehlend:
             print("NICHT im Repo, obwohl in BEKANNT:", ", ".join(fehlend))
         else:
-            print(f"Repo-Probe: alle {len(da)} Builder aus BEKANNT sind da.")
+            # Zaehlung ausdruecklich benannt: BEKANNT enthaelt `lade` selbst,
+            # die Liste in uebersicht() blendet es aus. Bis zum 2026-09-09
+            # sagten beide nur eine Zahl — 13 hier, 12 dort — und keine sagte,
+            # was sie zaehlt (Pruefbericht Geburtshoroskop Schritt 3+4).
+            print(f"Repo-Probe: alle {len(da)} Dateien aus BEKANNT sind da "
+                  f"({len(da) - 1} Builder + lade.py selbst).")
     return fehlend, []
 
 
@@ -357,7 +362,8 @@ def uebersicht():
     for s, mods in SCHRITTE.items():
         print("  lade_schritt(%-12s -> %-42s # %s"
               % (repr(s) + ")", ", ".join(mods), _SCHRITT_TEXT.get(s, "")))
-    print("\nAlle bekannten Builder (%d):" % len(BEKANNT - {"lade"}))
+    print("\nAlle bekannten Builder (%d, ohne lade.py selbst):"
+          % len(BEKANNT - {"lade"}))
     print("  " + ", ".join(sorted(BEKANNT - {"lade"})))
     print("\nEphemeriden (nur wer rechnet — Pholus, transit.py):")
     print("  ephe = ephemeriden()   installiert %s und liefert den Pfad"

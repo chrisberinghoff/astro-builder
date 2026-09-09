@@ -32,14 +32,18 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
   * Der Builder ZEICHNET SEINE GRAFIKEN SELBST, bei jedem Lauf (rad_zeichnen,
     uhr_zeichnen). Ein PNG, das vom letzten Direktaufruf herumliegt, rendert
     still einen alten Datenstand — genau das ist am 2026-07-27 passiert.
-  * Radbreite, Uhrbreite und Aspektskala werden EINGEMESSEN, nicht gesetzt.
+  * Radbreite, Uhrbreite, Aspektskala UND die Skala der Konstellationsseite
+    werden EINGEMESSEN, nicht gesetzt (die letzte seit 2026-09-09).
   * Die Seitenfolge hinter dem Cover ist fest: Inhalt, Radix, Konstellationen,
     Aspekte, Transit-Uhr.
-  * Die Kapitel-Schleife ruft `chartdoc.build_fuss(it)` hinter dem letzten
-    Absatz auf. Signatur und Beleg rendern seit dem 2026-09-05 am KAPITELENDE,
-    nicht mehr im Kopf (Innere Arbeit, „Verhaeltnis zum Klartext-Modul",
-    Punkt 2). Fehlt der Aufruf, bricht render_mit_inhalt() hart ab — sonst
-    verschwaenden Signatur und Beleg lautlos aus dem ganzen Dokument.
+  * Die Kapitel-Schleife baut den Koerper NICHT mehr selbst: seit dem
+    2026-09-09 liefert ihn `chartdoc.build_bloecke(i, it, breaks, allow_drop)`,
+    das Zwischentitel und Folgeabsatz aneinander bindet — `break-after: avoid`
+    wirkt in WeasyPrint nicht. Danach ruft sie `chartdoc.build_fuss(it)`.
+    Signatur und Beleg rendern seit dem 2026-09-05 am KAPITELENDE, nicht mehr
+    im Kopf (Innere Arbeit, „Verhaeltnis zum Klartext-Modul", Punkt 2). Fehlt
+    der Aufruf, bricht render_mit_inhalt() hart ab — sonst verschwaenden
+    Signatur und Beleg lautlos aus dem ganzen Dokument.
 
 Aufruf:  python3 <klient>_builder.py
 Geprueft wird beim Rendern automatisch: build.PFLICHT_BAUSTEINE fuer den
@@ -72,8 +76,11 @@ from build import BASE_CSS                     # noqa: E402
 # Der @@DECKBLATT-Block steht am ENDE der chart_data.md, direkt hinter dem
 # @@SELEKTOR-Block — NICHT in der analyse.md. lies_deckblatt() wirft, wenn er
 # fehlt oder unvollstaendig ist; nur so kann kein Lauf still ein eigenes Motiv
-# erfinden. Einzelheiten s. claude/REGISTER_Leitsaetze.md, Abschnitt „Wo der
-# @@DECKBLATT-Block steht".
+# erfinden. Einzelheiten im Design-Render-Modul, Abschnitt „Woher Leitsatz und
+# Motiv kommen". (Der frueher hier stehende Verweis auf ein
+# `REGISTER_Leitsaetze.md` zeigte ins Leere: Ein Register waere ein Abgleich
+# gegen andere Horoskope, und genau den gibt es seit dem 01.08.2026 nicht mehr.
+# Korrigiert 2026-09-09.)
 DECKBLATT = build.lies_deckblatt(CHARTDATA)
 LEITSATZ = DECKBLATT['LEITSATZ']
 LEITACHSE = DECKBLATT['LEITACHSE']
@@ -261,7 +268,7 @@ def cover_html():
 # Chartbild-Strecke — die Seiten baut chartdoc, hier stehen nur die Daten
 # ===========================================================================
 
-ASPEKTE = cd.aspektliste()
+ASPEKTE = cd.aspektliste()   # -> radix.aspektliste(...), s. chartdata.py
 TD = tdat.parse()
 
 # Zielnamen mit Umlaut brauchen einen Glyphen-Eintrag (der §11-Report schreibt
@@ -370,10 +377,11 @@ UHR_LEAD = [
     f'dreimal exakt wird statt nur einmal.']
 
 
-def chartbild(rad_breite, uhr_breite, skala):
+def chartbild(rad_breite, uhr_breite, skala, konst_skala=1.0):
     return (chartdoc.radix_page(RADPNG, RAD_NOTE, bild_breite=rad_breite)
             + chartdoc.konstellationen_page(konst_zeilen(), achsen_zeilen(),
-                                            ELEMENTE, MODI, note=KONST_NOTE)
+                                            ELEMENTE, MODI, note=KONST_NOTE,
+                                            skala=konst_skala)
             + chartdoc.aspekt_page(ASPEKTE, skala=skala)
             + chartdoc.transituhr_page(UHRPNG, UHR_STICHTAG, UHR_NOTE,
                                        lead=UHR_LEAD, bild_breite=uhr_breite))
@@ -563,7 +571,8 @@ TOC_HINTEN = [('Anhang', [
 SEITEN = {}
 
 
-def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None):
+def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
+               konst_skala=1.0):
     parts = ['<!doctype html><html lang="de"><head><meta charset="utf-8">'
              '<style>', BASE_CSS, chartdoc.struktur_css(), COVER_CSS,
              '</style></head><body>',
@@ -571,7 +580,7 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None):
              chartdoc.inhalt_page(items, SEITEN, f'Horoskop für {VORNAME}',
                                   vorne=TOC_VORNE, hinten=TOC_HINTEN,
                                   ornament=ORNAMENT),
-             chartbild(rad_breite, uhr_breite, skala)]
+             chartbild(rad_breite, uhr_breite, skala, konst_skala)]
     first_chapter = True
     for i, it in enumerate(items):
         is_part = it.get('kicker') in PART_KICKER
@@ -586,33 +595,21 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None):
             cls.append('chapter-first')
         head = (chartdoc.build_part_head(it) if is_part
                 else chartdoc.build_head(it))
-        body, first_p_used, n = [], False, len(it['blocks'])
-        j = 0
-        while j < n:
-            b = it['blocks'][j]
-            if b['type'] == 'li':
-                lis = []
-                while j < n and it['blocks'][j]['type'] == 'li':
-                    lis.append(it['blocks'][j])
-                    j += 1
-                body.append('<ol class="lesart">' + ''.join(
-                    f'<li>{esc(x["text"])}</li>' for x in lis) + '</ol>')
-                continue
-            if b['type'] == 'subhead':
-                body.append(f'<div class="subhead">{esc(b["text"])}</div>')
-            else:
-                is_first_block = not first_p_used
-                first_p_used = True
-                body.append(chartdoc.build_paragraph(i, j, b, breaks,
-                                                     allow_drop, is_first_block))
-            j += 1
+        # Der Kapitelkoerper kommt seit dem 2026-09-09 aus chartdoc, nicht mehr
+        # aus einer hand geschriebenen Block-Schleife: build_bloecke() bindet
+        # Zwischentitel und Folgeabsatz in einen `.subwrap`-Block, weil
+        # `break-after: avoid` in WeasyPrint nicht wirkt und ein Zwischentitel
+        # sonst allein am Seitenfuss stehen bleibt (Pruefbericht
+        # Geburtshoroskop Schritt 3+4, Rubrik 2).
+        #
         # Signatur und Beleg rendern seit dem 2026-09-05 am KAPITELENDE, unter
         # der letzten Bewegung (Innere Arbeit, „Verhaeltnis zum
         # Klartext-Modul", Punkt 2). build_fuss() gibt '' zurueck bei
         # Teiler-Kapiteln und bei jedem Kapitel ohne Signatur UND ohne Beleg —
         # der Aufruf darf also unbedingt stehen. Fehlt er, bricht
         # render_mit_inhalt() hart ab (chartdoc.pruefe_kapitelfuss).
-        inner = head + ''.join(body) + chartdoc.build_fuss(it)
+        inner = (head + chartdoc.build_bloecke(i, it, breaks, allow_drop)
+                 + chartdoc.build_fuss(it))
         if is_part:
             inner = f'<div class="part-inner">{inner}</div>'
         parts.append(f'<section class="{" ".join(cls)}" id="CH_{i}">'
@@ -635,10 +632,18 @@ if __name__ == '__main__':
                              'PG_uhr', BREITEN, was='Transit-Uhr')
     skala = chartdoc.passe_aspektseite_ein(
         lambda s: build_html(skala=s, uhr_breite=uhr, rad_breite=rad), ASPEKTE)
+    # Die Konstellationsseite wird seit dem 2026-09-09 ebenfalls eingemessen —
+    # sie ist die einzige Frontmatter-Seite, deren Inhalt je Chart waechst, und
+    # lief bis dahin still auf zwei Seiten ueber (Pruefbericht Geburtshoroskop
+    # Schritt 3+4, Rubrik 5.2).
+    kskala = chartdoc.passe_ein(
+        lambda ks: build_html(skala=skala, uhr_breite=uhr, rad_breite=rad,
+                              konst_skala=ks),
+        'PG_konst', chartdoc.KONST_STUFEN, was='Konstellationsseite')
 
     # 3. Satzsicher rendern, Seitenzahlen im Inhalt aus dem echten Dokument.
     doc, seiten = chartdoc.render_mit_inhalt(
-        lambda breaks: build_html(breaks, skala, uhr, rad),
+        lambda breaks: build_html(breaks, skala, uhr, rad, kskala),
         OUT, items, colon_pairs, SEITEN,
         required_fields={'Leitsatz': LEITSATZ, 'Titelmotiv': TITELMOTIV},
         extra_must=[(LEITSATZ, 'Leitsatz aufs Cover')],

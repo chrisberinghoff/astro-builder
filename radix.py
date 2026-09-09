@@ -200,6 +200,114 @@ def zusatz_aspekte(factors, orb=2.0, nur_planeten=True):
     return out
 
 
+# --- Die fertige Aspektliste fuer die Aspektseite ---------------------------
+# Bis zum 2026-09-09 stand diese Mechanik als Prosa im Design-Modul und wurde
+# in JEDER chart-eigenen `chartdata.aspektliste()` neu von Hand geschrieben —
+# in genau der einen Datei, die je Chart neu entsteht (Pruefbericht
+# Geburtshoroskop Schritt 3+4, Rubrik 5.5). Die Regel ist eine Festlegung, keine
+# Ableitung, und hat keine chart-eigene Ausnahme; sie gehoert deshalb hierher.
+
+ACHSEN_NAMEN = ('AC', 'MC', 'DC', 'IC')
+_GEGENACHSE = {'AC': 'DC', 'DC': 'AC', 'MC': 'IC', 'IC': 'MC'}
+_STAERKE_RANG = {'voll': 0, 'einseitig': 1, 'neben': 2}
+
+# Welche Seite einer Achsen-Spiegelzeile vorn steht (Design-Modul, festgelegt
+# 2026-09-08): Konjunktion vor Opposition; bei Quadrat/Quadrat AC vor DC und
+# MC vor IC.
+_FUEHRT_QUADRAT = ('AC', 'MC')
+
+
+def ist_achse(name):
+    return name in ACHSEN_NAMEN
+
+
+def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
+                sortieren=True):
+    """Die Aspektliste, wie die Aspektseite sie braucht — gerechnet, nie
+    abgeschrieben.
+
+    Vier Arbeitsgaenge, alle im Design-Modul geregelt:
+
+    1. `huber_aspects(factors)` rechnen.
+    2. Die vier Achse<->Achse-Paare (AC/DC, MC/IC, AC/MC, AC/IC, MC/DC, DC/IC)
+       herausfiltern — triviale Geometrie, sie gehoeren in keine Zeile.
+    3. Echte Achsen-Spiegelzeilen zusammenziehen: Trifft ein Faktor beide Enden
+       derselben Achse UND landen beide in derselben Staerkegruppe, steht die
+       Spiegelseite als `spiegel`-Feld in Klammern statt in einer eigenen Zeile.
+       Zusammengezogen wird NUR Konjunktion/Opposition und Quadrat/Quadrat;
+       Trigon<->Sextil und Quincunx<->Halbsextil sind bei Huber eigene Klassen
+       mit eigenen Orbis und bleiben getrennte Zeilen.
+       Fuehrung: Konjunktion vor Opposition, bei Quadrat/Quadrat AC vor DC und
+       MC vor IC.
+    4. Bewusst aufgenommene Zusatzzeilen anhaengen (Halb-/Anderthalbquadrate
+       aus dem ⚠-Block der chart_data). Sie laufen als `strength='neben'`
+       (`ASP_GRUPPEN` kennt kein 'zusatz'), tragen die NEUTRALE Farbe — eine
+       Radfarbe verspraeche eine Linie, die im Rad nicht gezeichnet ist — und
+       werden im `spiegel`-Feld als „Zusatzebene" gekennzeichnet.
+
+    zusatz_paare  Iterable von Namenspaaren, z. B. [('Merkur', 'Uranus')].
+                  Leer = keine Zusatzebene. Die Reihenfolge im Paar ist egal.
+    sortieren     nach Staerkegruppe, dann nach Orb (wie die chart_data-Tabelle).
+
+    Rueckgabe: Liste von dicts wie `huber_aspects`, zusaetzlich mit optionalem
+    `spiegel`-Feld. Ihre LAENGE ist die Sollzahl fuer `build.verify(aspect_rows=…)`.
+    """
+    roh = [a for a in huber_aspects(factors, orbs=orbs)
+           if not (ist_achse(a['a']) and ist_achse(a['b']))]
+
+    gewollt = {frozenset(p) for p in zusatz_paare}
+    if gewollt:
+        for a in zusatz_aspekte(factors, orb=zusatz_orb):
+            if frozenset((a['a'], a['b'])) in gewollt:
+                b = dict(a)
+                b['strength'] = 'neben'
+                b['color'] = 'konj'
+                b['spiegel'] = 'Zusatzebene'
+                roh.append(b)
+
+    out, verbraucht = [], set()
+    for i, a in enumerate(roh):
+        if i in verbraucht:
+            continue
+        achse = (a['b'] if ist_achse(a['b'])
+                 else (a['a'] if ist_achse(a['a']) else None))
+        gegen = _GEGENACHSE.get(achse) if achse else None
+        treffer = None
+        if gegen and a['name'] in ('Konjunktion', 'Opposition', 'Quadrat'):
+            faktor = a['a'] if achse == a['b'] else a['b']
+            for j in range(i + 1, len(roh)):
+                if j in verbraucht:
+                    continue
+                b = roh[j]
+                if b['strength'] != a['strength']:
+                    continue
+                if {b['a'], b['b']} != {faktor, gegen}:
+                    continue
+                if a['name'] == 'Quadrat' and b['name'] == 'Quadrat':
+                    treffer = (j, b)
+                    break
+                if {a['name'], b['name']} == {'Konjunktion', 'Opposition'}:
+                    treffer = (j, b)
+                    break
+        if treffer is None:
+            out.append(a)
+            continue
+        j, b = treffer
+        verbraucht.add(j)
+        if a['name'] == 'Quadrat':
+            fuehrt, zweit = (a, b) if achse in _FUEHRT_QUADRAT else (b, a)
+        else:
+            fuehrt, zweit = (a, b) if a['name'] == 'Konjunktion' else (b, a)
+        z_achse = zweit['b'] if ist_achse(zweit['b']) else zweit['a']
+        r = dict(fuehrt)
+        r['spiegel'] = f"{zweit['name']} {z_achse}"
+        out.append(r)
+
+    if sortieren:
+        out.sort(key=lambda x: (_STAERKE_RANG.get(x['strength'], 9), x['orb']))
+    return out
+
+
 # --- Haus-Zuordnung & Grenzlage (einheitliche 5°-Regel) ---------------------
 
 HAUS_ORB = 5   # Grenzlagen-Orb in Grad, planetenunabhängig
