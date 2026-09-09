@@ -22,15 +22,37 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
           palette=None, gradmarke=True) -> str
         Zeichnet das Rad als PNG und gibt den Pfad zurück.
 
-    strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None) -> dict
+    strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
+                 jd_geburt=None) -> dict
         ALLE Struktur-Befunde in einem Aufruf: Element-/Modusverteilung in drei
         Zählungen (auch gewichtet), Rückläufigkeit, Herrscherketten mit Kreisen
         und Enddispositoren, HAUSHERRSCHER, Rezeptionen, Aspektdichte je Faktor,
-        das Netz der Spezialfaktoren, Aspektfiguren, Zyklusfenster.
+        das Netz der Spezialfaktoren, Aspektfiguren, Zyklusfenster — und seit
+        dem 2026-09-08 (zweiter Durchgang) das VERTEILUNGSMUSTER (Hemisphären,
+        Quadranten, Jones-Muster) und die MONDPHASE.
         strukturbild_text(sb) schreibt daraus den fertigen `## Strukturbild`-
-        Abschnitt fürs chart_data.md. Eingeführt 2026-09-06 (Prüfbericht 5.1–5.6);
-        bis dahin wurde das alles von Hand gerechnet, und vier Ebenen fehlten
-        ganz, weil keine Regel nach ihnen fragte.
+        Abschnitt fürs chart_data.md (neun Unterpunkte). Eingeführt 2026-09-06
+        (Prüfbericht 5.1–5.6); bis dahin wurde das alles von Hand gerechnet,
+        und vier Ebenen fehlten ganz, weil keine Regel nach ihnen fragte.
+
+    konfigurationen(factors, aspects, cusps=None) -> dict
+        T-Quadrat (mit leerer Spitze), Großkreuz, Großtrigon, Jod, Stellium —
+        und seit 2026-09-08 Drachen (Kite) und Mystisches Rechteck. Ein Drachen
+        führt sein Großtrigon selbst (EIN Befund).
+
+    verteilungsmuster(factors, cusps=None) -> dict
+        Hemisphären und Quadranten nach Häusern (Koch), Muster nach Jones
+        (Bündel, Schüssel, Eimer, Lokomotive, Wippe, Streuung, Spritzer) über
+        die zehn klassischen Planeten. Grenzwerte: Konstanten MUSTER_* / HENKEL_*.
+
+    mondphase(factors) -> dict
+        Winkel Sonne → Mond, Phase in den acht Stufen nach Rudhyar,
+        Finsternisnähe-Flag (nur ein Flag, keine Finsternisrechnung).
+
+    Grundsatz hinter allen dreien (Chris-Entscheidung 2026-09-08): Was das
+    Strukturbild nicht ausgibt, prüft keine Gegenprobe — ein Befund, den die
+    Rechnung nicht kennt, kann in der Deutung nie fehlen. Deshalb stehen die
+    Dinge im Code und nicht in einer Mahnung.
 
 Verwendung als Modul (Schritt 3/4, Design-Konversation):
     import sys; sys.path.insert(0, "/home/claude")
@@ -518,6 +540,68 @@ PERSOENLICH = ('Sonne', 'Mond', 'Merkur', 'Venus', 'Mars')
 # als eine Einzeldeutung.
 _DICHTE_GEWICHT = {'voll': 1.0, 'einseitig': 0.5, 'neben': 0.5, 'zusatz': 0.5}
 
+# --- Verteilungsmuster (Jones) und Hemisphaeren: Grenzwerte -------------------
+# Chris-Entscheidung 2026-09-08, zweiter Durchgang (Strukturbild-Luecken, Prompt A
+# des Stilvergleichs). ALLE Werte sind Setzungen, keine Lehrbuchzahlen: Die
+# Literatur (Jones 1941 und die Sekundaerquellen) nennt nur fuer die Lokomotive
+# eine Toleranz (±12°) und sonst „ungefaehr". Dokumentiert im Datenblatt-Modul,
+# Strukturbild §8. Wer einen Wert aendert, zieht dort nach.
+#
+# Gerechnet wird ausschliesslich ueber die zehn klassischen Planeten (_PLANETEN):
+# keine Knoten, keine Spezialfaktoren, kein Glueckspunkt, keine Achsen.
+MUSTER_BUENDEL = 120.0          # Buendel: alle Planeten innerhalb dieser Spanne
+MUSTER_SCHUESSEL = 180.0        # Schuessel: innerhalb einer Haelfte
+MUSTER_LOKOMOTIVE = 240.0       # Lokomotive: innerhalb zweier Drittel
+                                #   (= leerer Bogen von mindestens 120°)
+MUSTER_WIPPE_LUECKE = 60.0      # Wippe: zwei Luecken von je mindestens so viel,
+                                #   beide Gruppen mindestens zwei Planeten
+MUSTER_STREUUNG_LUECKE = 60.0   # Streuung: groesste Luecke hoechstens so gross
+MUSTER_SPRITZER_LUECKE = 30.0   # Spritzer: mindestens drei Gruppen, getrennt
+                                #   durch Luecken von mindestens so viel
+MUSTER_TOLERANZ = 6.0           # Grenzfall: Spanne bis zu so viel ueber dem
+                                #   Grenzwert -> „auch lesbar als", nie erste Wahl
+HENKEL_KONJUNKTION = 8.0        # Eimer: zwei Planeten bis zu diesem Abstand
+                                #   zaehlen als EIN Henkel (weitester Huber-Orb)
+HENKEL_RANDABSTAND = 15.0       # Eimer: der Henkel steht mindestens so weit von
+                                #   BEIDEN Raendern der Schuessel — sonst ist es
+                                #   eine Schuessel mit Ueberhang, kein Eimer
+HEMISPHAERE_BETONT = 7          # Befund „betont" ab so vielen von zehn
+QUADRANT_BETONT = 5             # Befund „betont" ab so vielen von zehn
+STELLIUM_MIN = 3                # Stellium: ab so vielen Faktoren in Zeichen/Haus
+STELLIUM_MIN_PLANETEN = 2       # ... davon mindestens so viele klassische
+                                #   Planeten (Spezialfaktoren zaehlen nur mit)
+
+# Reihenfolge, in der ein Muster erste Wahl wird, wenn mehrere passen
+# (das engste zuerst). Spritzer wird nie als „auch lesbar" gefuehrt — es ist
+# die positiv definierte letzte Stufe vor „kein eindeutiges Muster";
+# Streuung schliesst die Spannen-Muster geometrisch aus und erscheint als
+# Zweitlesart nur im Grenzfall (groesste Luecke genau am Wippe-Grenzwert).
+_MUSTER_RANG = ('Bündel', 'Schüssel', 'Eimer', 'Lokomotive', 'Wippe',
+                'Streuung', 'Spritzer')
+
+# Hemisphaeren und Quadranten nach HAEUSERN (Koch, wie das ganze Projekt),
+# nicht nach Graden: ueber dem Horizont = Haeuser 7–12, oestlich = die
+# Haeuser um den AC (10, 11, 12, 1, 2, 3). Die Spitzen von Haus 1, 4, 7 und 10
+# sind AC, IC, DC und MC — genau die Grenzen der vier Hemisphaeren.
+_HEMI_OBEN = (7, 8, 9, 10, 11, 12)
+_HEMI_OST = (10, 11, 12, 1, 2, 3)
+_QUADRANT_VON_HAUS = {1: 1, 2: 1, 3: 1, 4: 2, 5: 2, 6: 2,
+                      7: 3, 8: 3, 9: 3, 10: 4, 11: 4, 12: 4}
+_WINKEL_HINTER_HAUS = {12: 'AC', 3: 'IC', 6: 'DC', 9: 'MC'}   # Spitze, die folgt
+
+# --- Mondphase: die acht Stufen nach Rudhyar --------------------------------
+# Je 45°, beginnend bei 0° (Winkel Sonne -> Mond, gegen den Uhrzeigersinn).
+MONDPHASEN = ('Neumond', 'zunehmende Sichel', 'erstes Viertel',
+              'zunehmender Dreiviertelmond', 'Vollmond',
+              'abnehmender Dreiviertelmond', 'letztes Viertel', 'Balsamisch')
+MONDPHASE_SCHRITT = 45.0
+FINSTERNIS_SYZYGIE_ORB = 8.0    # Lichter in Konjunktion/Opposition bis zu diesem
+                                #   Orb (= Huber-Orb der Lichter, s. HUBER_ORB)
+FINSTERNIS_KNOTEN_ORB = 15.0    # ... UND ein Licht so nah an der Knotenachse:
+                                #   Finsternisnaehe. Ein Flag, keine Rechnung —
+                                #   die echten Grenzen liegen bei ~18° (Sonne)
+                                #   und ~12° (Mond) und braeuchten die Mondbreite.
+
 
 def zeichen_index(lon):
     """Ekliptikale Laenge -> Zeichenindex 0..11 (Widder = 0)."""
@@ -827,13 +911,34 @@ def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
 
 def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
     """Aspektfiguren aus der fertigen Aspektliste: T-Quadrat, Grosskreuz,
-    Grosstrigon, Jod, Stellium (Zeichen und Haus).
+    Grosstrigon, Jod, Stellium (Zeichen und Haus) — und seit dem 2026-09-08
+    (zweiter Durchgang) DRACHEN und MYSTISCHES RECHTECK.
 
     Jeder T-Quadrat-Eintrag traegt seit dem 2026-09-08 zusaetzlich
     `leere_spitze` (s. `leere_spitze()`): Zeichen, Haus und was dort steht.
 
+    Drachen (Kite): ein Grosstrigon plus ein Faktor (der Kopf) in Opposition zu
+    einer Ecke und im Sextil zu den beiden anderen. Eintrag: {'trigon',
+    'kopf', 'achse' (Kopf ☍ Ecke), 'sextile'}. EIN-Befund-Regel: Ein Drachen
+    fuehrt sein Grosstrigon selbst — das Trigon erscheint dann NICHT mehr in
+    'grosstrigon', genauso wie ein T-Quadrat nicht neben seinem Grosskreuz
+    steht. Tragen zwei Koepfe dasselbe Trigon, gibt es zwei Drachen-Eintraege
+    mit demselben 'trigon'.
+
+    Mystisches Rechteck: zwei Oppositionen, deren Enden durch zwei Trigone und
+    zwei Sextile (abwechselnd) verbunden sind. Eintrag: {'achsen', 'trigone',
+    'sextile'}. Alle vier Seiten muessen im Orb stehen; bei drei von vier ist
+    es kein Rechteck (und wird nicht „grosszuegig" gemeldet).
+
+    Staerken: Oppositionen und Trigone voll oder einseitig; Sextile als
+    Nebenaspekt (Orb 6°) — dieselben Staerken, die das Jod schon benutzt.
+
     Nur Figuren aus vollen und einseitigen Hauptaspekten; Nebenaspekte tragen
-    ausschliesslich das Jod (das per Definition aus zwei Quincunxen besteht).
+    ausschliesslich Jod, Drachen und Rechteck (ueber ihre Sextile). Der
+    Winkel-Ausschluss von `paare()` (kein Achse-Achse-Paar) greift fuer die
+    neuen Figuren genauso: Ein Drachen mit AC in der Basis und DC als Kopf und
+    ein Rechteck auf der AC/DC- oder MC/IC-Achse werden nicht gemeldet, weil
+    ihre tragende Opposition triviale Geometrie waere.
     """
     def paare(winkel, staerken=('voll', 'einseitig')):
         """Aspektpaare eines Winkels — OHNE Achse-Achse-Paare.
@@ -904,6 +1009,74 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                     if eintrag not in jod:
                         jod.append(eintrag)
 
+    # Drachen: Grosstrigon + Kopf in Opposition zu EINER Ecke und im Sextil zu
+    # den beiden anderen. Das Trigon wandert aus der Grosstrigon-Liste in den
+    # Drachen (EIN Befund) — Datenebene, nicht nur Textzeile, damit auch die
+    # Synthese-Gegenprobe (a) einen Befund sieht und nicht zwei.
+    drachen = []
+    for trig in gt:
+        for kopf in namen:
+            if kopf in trig:
+                continue
+            for ecke in trig:
+                if not verbunden(opp, ecke, kopf):
+                    continue
+                andere = [x for x in trig if x != ecke]
+                if all(verbunden(sex, kopf, x) for x in andere):
+                    eintrag = {'trigon': list(trig), 'kopf': kopf,
+                               'achse': [kopf, ecke],
+                               'sextile': [[kopf, x] for x in andere]}
+                    if eintrag not in drachen:
+                        drachen.append(eintrag)
+    getragen = [d['trigon'] for d in drachen]
+    gt = [t for t in gt if t not in getragen]
+
+    # Mystisches Rechteck: zwei Oppositionen ohne gemeinsamen Faktor, deren
+    # vier Seiten abwechselnd Trigon und Sextil sind. Geometrisch folgt aus
+    # a ☍ c und b ☍ d, dass a–b und c–d denselben Winkel haben (und b–c, d–a den
+    # Gegenwinkel) — mit Orben kann eine Seite trotzdem herausfallen, dann ist
+    # es kein Rechteck.
+    def _seite(x, y):
+        if verbunden(tri, x, y):
+            return 'Trigon'
+        if verbunden(sex, x, y):
+            return 'Sextil'
+        return None
+
+    rechteck = []
+    opps = sorted(sorted(o) for o in opp)
+    for i, o1 in enumerate(opps):
+        for o2 in opps[i + 1:]:
+            if set(o1) & set(o2):
+                continue
+            a, c = o1
+            b, d = o2
+            seiten = [(a, b), (b, c), (c, d), (d, a)]
+            typen = [_seite(x, y) for x, y in seiten]
+            if None in typen:
+                continue
+            if typen[0] == typen[2] and typen[1] == typen[3] \
+                    and typen[0] != typen[1]:
+                eintrag = {
+                    'achsen': [list(o1), list(o2)],
+                    'trigone': [sorted(s) for s, t in zip(seiten, typen)
+                                if t == 'Trigon'],
+                    'sextile': [sorted(s) for s, t in zip(seiten, typen)
+                                if t == 'Sextil']}
+                if eintrag not in rechteck:
+                    rechteck.append(eintrag)
+
+    # Stellium: mindestens STELLIUM_MIN Faktoren in einem Zeichen bzw. Haus,
+    # darunter mindestens STELLIUM_MIN_PLANETEN klassische Planeten (seit
+    # 2026-09-08, zweiter Durchgang). Vorher zaehlten alle Nicht-Winkel-
+    # Faktoren gleich, und drei Spezialfaktoren (Knoten, Chiron, Lilith) in
+    # einem Haus ergaben ein „Stellium" ohne einen einzigen Planeten — eine
+    # Verdichtung, in der niemand die Hand heben kann (Figur-Regel, Stellium).
+    # Spezialfaktoren zaehlen weiter MIT, sobald zwei Planeten dabei sind.
+    def _stellium(gruppe):
+        return (len(gruppe) >= STELLIUM_MIN and
+                sum(1 for x in gruppe if x in _PLANETEN) >= STELLIUM_MIN_PLANETEN)
+
     stell_z, stell_h = [], []
     if orb_stellium_zeichen:
         nach_zeichen = {}
@@ -912,7 +1085,7 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                 continue
             nach_zeichen.setdefault(zeichen_name(f['lon']), []).append(f['name'])
         stell_z = [{'zeichen': z, 'faktoren': sorted(v)}
-                   for z, v in sorted(nach_zeichen.items()) if len(v) >= 3]
+                   for z, v in sorted(nach_zeichen.items()) if _stellium(v)]
     if cusps:
         nach_haus = {}
         for f in factors:
@@ -921,9 +1094,418 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
             h = haus_und_grenzlage(f['lon'], cusps)['haus']
             nach_haus.setdefault(h, []).append(f['name'])
         stell_h = [{'haus': h, 'faktoren': sorted(v)}
-                   for h, v in sorted(nach_haus.items()) if len(v) >= 3]
+                   for h, v in sorted(nach_haus.items()) if _stellium(v)]
     return {'t_quadrat': tq, 'grosskreuz': gk, 'grosstrigon': gt, 'jod': jod,
+            'drachen': drachen, 'rechteck': rechteck,
             'stellium_zeichen': stell_z, 'stellium_haus': stell_h}
+
+
+# --- Verteilungsmuster: Hemisphaeren, Quadranten, Jones-Muster ---------------
+# Neu am 2026-09-08, zweiter Durchgang (Chris-Entscheidung; Befund Stilvergleich
+# §7, Prompt A). Bis dahin rechnete das Strukturbild keine Verteilung — und was
+# es nicht rechnete, konnte in der Deutung nie fehlen. Grenzwerte: s. die
+# MUSTER_*- und HENKEL_*-Konstanten oben, dokumentiert im Datenblatt-Modul §8.
+#
+# ZUR LOKOMOTIVE UND IHREM „LOKFUEHRER" — die Quellen sind uneins, und zwar
+# woertlich: „der erste Planet im Uhrzeigersinn nach der Luecke" (Kerykeion,
+# Great Almanac) meint den Planeten, der dem leeren Bogen im Tierkreis
+# VORAUSGEHT; „der Planet, der die Gruppe in der taeglichen Drehung anfuehrt"
+# (Understanding Astrology, auf Jones zurueckgefuehrt) meint den, der dem
+# leeren Bogen im Tierkreis FOLGT — er ist der erste, der nach acht Stunden
+# Leere ueber den Horizont steigt; eine Quelle (Esoteric Meanings) schreibt
+# sogar „gegen den Uhrzeigersinn". Diese Funktion legt sich deshalb NICHT
+# fest: Sie gibt beide Randplaneten mit geometrischen Namen aus —
+#   'rand_nach_luecke' = der Planet, an dem der leere Bogen (in
+#                        Tierkreisrichtung gezaehlt) ENDET; er folgt der Luecke
+#   'rand_vor_luecke'  = der Planet, hinter dem der leere Bogen BEGINNT
+# Die Deutungsregel (Typmodul Geburtshoroskop, Getriebe-Kapitel) entscheidet,
+# welcher fuehrt. Sie liest seit dem 2026-09-08 'rand_nach_luecke' als
+# Lokfuehrer und 'rand_vor_luecke' als Schlusslicht — nach ueberwiegender
+# Lesart Jones' Bild von der taeglichen Drehung; als Zitat ist das nicht
+# gesichert, deshalb steht es hier als Konvention und nicht als Faktum.
+
+def _winkelabstand(a, b):
+    """Kleinster Winkel zwischen zwei Laengen, 0..180."""
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
+def _bogen_daten(pts):
+    """Luecken und Spanne einer sortierten Punktliste [(lon, name), ...].
+
+    Rueckgabe: (luecken, groesste, spanne) — luecken je {'von','bis','grad'} in
+    Tierkreisrichtung (von -> bis = zunehmende Laenge), groesste = die groesste
+    Luecke, spanne = 360 - groesste (der kleinste Bogen, der alle Punkte traegt).
+    """
+    n = len(pts)
+    luecken = []
+    for i in range(n):
+        lon_i, nm_i = pts[i]
+        lon_j, nm_j = pts[(i + 1) % n]
+        g = (lon_j - lon_i) % 360.0 if n > 1 else 360.0
+        luecken.append({'von': nm_i, 'bis': nm_j, 'grad': round(g, 2),
+                        'von_lon': lon_i, 'bis_lon': lon_j})
+    groesste = max(luecken, key=lambda x: x['grad'])
+    return luecken, groesste, round(360.0 - groesste['grad'], 2)
+
+
+def _gruppen(pts, min_luecke):
+    """Zerlegt die sortierten Punkte an jeder Luecke >= min_luecke in Gruppen.
+
+    Rueckgabe: Liste von Gruppen (je Liste von Namen, in Tierkreisrichtung),
+    beginnend hinter der groessten Luecke.
+    """
+    luecken, groesste, _ = _bogen_daten(pts)
+    n = len(pts)
+    start = (luecken.index(groesste) + 1) % n
+    gruppen, aktuell = [], []
+    for k in range(n):
+        idx = (start + k) % n
+        aktuell.append(pts[idx][1])
+        if luecken[idx]['grad'] >= min_luecke or k == n - 1:
+            gruppen.append(aktuell)
+            aktuell = []
+    if aktuell:
+        gruppen.append(aktuell)
+    return gruppen
+
+
+def verteilungsmuster(factors, cusps=None):
+    """Hemisphaeren, Quadranten und Jones-Muster der zehn klassischen Planeten.
+
+    factors  dieselbe Liste wie fuer huber_aspects; gezaehlt werden nur die
+             Namen aus _PLANETEN (Sonne bis Pluto).
+    cusps    die zwoelf Koch-Spitzen; ohne sie entfallen Hemisphaeren und
+             Quadranten (sie werden nach Haeusern gezaehlt), das Muster nach
+             Jones wird trotzdem gerechnet (es haengt nur an den Graden).
+
+    Rueckgabe (alles Befund, keine Deutung):
+      'planeten'        die gezaehlten Namen in Tierkreisrichtung
+      'hemisphaeren'    {'oben','unten','ost','west': [Namen]}
+      'quadranten'      {1..4: [Namen]}  (I = Haeuser 1–3, … IV = 10–12)
+      'betont'/'leer'   Befundzeilen-Rohmaterial nach HEMISPHAERE_BETONT und
+                        QUADRANT_BETONT; leer = 0 von 10
+      'wechsler'        Planeten in Grenzlage ueber eine Winkel-Spitze (AC, IC,
+                        DC, MC) — sie koennten die Hemisphaere wechseln
+      'spanne'          kleinster Bogen, der alle zehn traegt
+      'groesste_luecke' {'von','bis','grad'}
+      'luecken'         alle Luecken, absteigend
+      'muster'          erste Wahl nach _MUSTER_RANG oder None
+      'auch_lesbar'     [{'muster','grund'}] — echte Zweitlesarten und
+                        Grenzfaelle innerhalb MUSTER_TOLERANZ
+      'details'         das Muster-spezifische Material der ersten Wahl:
+          Buendel     'raender' (erster, letzter Planet), 'mitte' (lon,
+                      zeichen, haus)
+          Schuessel   'raender', 'leere_mitte' (Mitte der leeren Haelfte)
+          Eimer       'henkel' [{'name','zeichen','haus'}] (ein oder zwei),
+                      'schuessel_raender', 'schuessel_spanne',
+                      'henkel_zur_leeren_mitte' (Grad Abstand)
+          Lokomotive  'leerer_bogen' (Grad), 'rand_nach_luecke',
+                      'rand_vor_luecke' (je name/zeichen/haus; Konvention
+                      s. Kommentar ueber dieser Funktion), 'leere_mitte'
+          Wippe       'gruppen' (zwei Namenslisten), 'luecken' (die zwei)
+          Streuung    'groesste_luecke', 'zeichen_besetzt', 'haeuser_besetzt'
+          Spritzer    'gruppen' (drei oder mehr)
+    „Kein eindeutiges Muster" ist ein legitimer Befund (muster=None) — die
+    Bogenmasse stehen dann trotzdem da, damit die Deutung die Geometrie sieht.
+    """
+    pool = [(f['lon'] % 360.0, f['name']) for f in factors
+            if f['name'] in _PLANETEN]
+    pool.sort()
+    out = {'planeten': [nm for _, nm in pool], 'hemisphaeren': None,
+           'quadranten': None, 'betont': [], 'leer': [], 'wechsler': [],
+           'spanne': None, 'groesste_luecke': None, 'luecken': [],
+           'muster': None, 'auch_lesbar': [], 'details': {}}
+    if len(pool) < 3:
+        return out
+
+    def ort(lon):
+        d = {'lon': round(lon % 360.0, 2), 'zeichen': zeichen_name(lon),
+             'haus': None, 'haus_spalte': None}
+        if cusps:
+            d['haus'] = haus_und_grenzlage(lon, cusps)['haus']
+            d['haus_spalte'] = haus_spalte(lon, cusps)
+        return d
+
+    lon_of = {nm: lon for lon, nm in pool}
+
+    def planet_ort(nm):
+        d = ort(lon_of[nm])
+        d['name'] = nm
+        return d
+
+    # --- Hemisphaeren und Quadranten nach Haeusern ---------------------------
+    if cusps:
+        hemi = {'oben': [], 'unten': [], 'ost': [], 'west': []}
+        quad = {1: [], 2: [], 3: [], 4: []}
+        for lon, nm in pool:
+            hg = haus_und_grenzlage(lon, cusps)
+            h = hg['haus']
+            hemi['oben' if h in _HEMI_OBEN else 'unten'].append(nm)
+            hemi['ost' if h in _HEMI_OST else 'west'].append(nm)
+            quad[_QUADRANT_VON_HAUS[h]].append(nm)
+            if hg['grenzlage'] and h in _WINKEL_HINTER_HAUS:
+                out['wechsler'].append({
+                    'name': nm, 'haus': h, 'nebenhaus': hg['nebenhaus'],
+                    'abstand': hg['abstand_spitze'],
+                    'winkel': _WINKEL_HINTER_HAUS[h]})
+        out['hemisphaeren'] = hemi
+        out['quadranten'] = quad
+        n = len(pool)
+        for key, label in (('oben', 'über dem Horizont'),
+                           ('unten', 'unter dem Horizont'),
+                           ('ost', 'östlich'), ('west', 'westlich')):
+            k = len(hemi[key])
+            if k == 0:
+                out['leer'].append(f'Hemisphäre {label}')
+            elif k >= HEMISPHAERE_BETONT:
+                out['betont'].append(f'Hemisphäre {label} ({k} von {n})')
+        for q in (1, 2, 3, 4):
+            k = len(quad[q])
+            if k == 0:
+                out['leer'].append(f'Quadrant {"I II III IV".split()[q - 1]}')
+            elif k >= QUADRANT_BETONT:
+                out['betont'].append(
+                    f'Quadrant {"I II III IV".split()[q - 1]} ({k} von {n})')
+
+    # --- Bogenmasse ----------------------------------------------------------
+    luecken, groesste, spanne = _bogen_daten(pool)
+    out['spanne'] = spanne
+    out['groesste_luecke'] = {k: groesste[k] for k in ('von', 'bis', 'grad')}
+    out['luecken'] = sorted(({k: x[k] for k in ('von', 'bis', 'grad')}
+                             for x in luecken), key=lambda x: -x['grad'])
+    rand_nach = groesste['bis']      # Planet, an dem der leere Bogen endet
+    rand_vor = groesste['von']       # Planet, hinter dem er beginnt
+    leere_mitte = ort((groesste['von_lon'] + groesste['grad'] / 2.0) % 360.0)
+    tol = MUSTER_TOLERANZ
+
+    # --- Kandidaten: (Muster, strikt?, Details, Grund) -------------------------
+    kandidaten = []
+
+    def melde(name, strikt, details, grund):
+        kandidaten.append({'muster': name, 'strikt': strikt,
+                           'details': details, 'grund': grund})
+
+    # Buendel / Schuessel / Lokomotive: reine Spannenfrage
+    for name, grenze in (('Bündel', MUSTER_BUENDEL),
+                         ('Schüssel', MUSTER_SCHUESSEL),
+                         ('Lokomotive', MUSTER_LOKOMOTIVE)):
+        if spanne <= grenze:
+            strikt, grund = True, f'Spanne {_gr(spanne)} ≤ {grenze:g}°'
+        elif spanne <= grenze + tol:
+            strikt = False
+            grund = (f'grenzwertig: Spanne {_gr(spanne)} über {grenze:g}°, '
+                     f'innerhalb der Toleranz von {tol:g}°')
+        else:
+            continue
+        if name == 'Bündel':
+            mitte = ort((lon_of[rand_nach] + spanne / 2.0) % 360.0)
+            det = {'raender': [planet_ort(rand_nach), planet_ort(rand_vor)],
+                   'spanne': spanne, 'mitte': mitte}
+        elif name == 'Schüssel':
+            det = {'raender': [planet_ort(rand_nach), planet_ort(rand_vor)],
+                   'spanne': spanne, 'leere_mitte': leere_mitte}
+        else:
+            det = {'leerer_bogen': groesste['grad'],
+                   'rand_nach_luecke': planet_ort(rand_nach),
+                   'rand_vor_luecke': planet_ort(rand_vor),
+                   'leere_mitte': leere_mitte, 'spanne': spanne}
+        melde(name, strikt, det, grund)
+
+    # Eimer: ein Henkel (ein Planet, oder zwei innerhalb HENKEL_KONJUNKTION)
+    # allein in der leeren Haelfte, mindestens HENKEL_RANDABSTAND von beiden
+    # Raendern der Schuessel entfernt.
+    namen = [nm for _, nm in pool]
+    henkel_kandidaten = [[nm] for nm in namen]
+    for i, a in enumerate(namen):
+        for b in namen[i + 1:]:
+            if _winkelabstand(lon_of[a], lon_of[b]) <= HENKEL_KONJUNKTION:
+                henkel_kandidaten.append([a, b])
+    beste = None
+    for hk in henkel_kandidaten:
+        # Stehen alle zehn zusammen in einer Haelfte, ist das eine Schuessel
+        # und kein Eimer — der „Henkel" waere nur ihr Rand.
+        if spanne <= MUSTER_SCHUESSEL:
+            break
+        rest = [(lon, nm) for lon, nm in pool if nm not in hk]
+        if len(rest) < 3:
+            continue
+        r_luecken, r_groesste, r_spanne = _bogen_daten(rest)
+        if r_spanne > MUSTER_SCHUESSEL + tol:
+            continue
+        r_strikt = r_spanne <= MUSTER_SCHUESSEL
+        r_anfang, r_ende = r_groesste['bis'], r_groesste['von']
+        # Henkel muss AUSSERHALB des Schuessel-Bogens liegen …
+        h_lon = lon_of[hk[0]] if len(hk) == 1 else (
+            lon_of[hk[0]] + ((lon_of[hk[1]] - lon_of[hk[0]] + 180.0) % 360.0
+                             - 180.0) / 2.0) % 360.0
+        if (h_lon - lon_of[r_anfang]) % 360.0 <= r_spanne:
+            continue
+        # … in der der Schuessel GEGENUEBERLIEGENDEN Haelfte (hoechstens 90°
+        # von der Mitte der leeren Haelfte; sonst ist ein Planet 40° hinter
+        # dem Rand einer engen Schuessel schon ein „Henkel") …
+        r_leere_mitte = (lon_of[r_anfang] + r_spanne / 2.0 + 180.0) % 360.0
+        if _winkelabstand(h_lon, r_leere_mitte) > 90.0:
+            continue
+        # … und von beiden Raendern mindestens HENKEL_RANDABSTAND entfernt
+        # (bei zwei Henkelplaneten zaehlt der jeweils naehere)
+        d_ende = min((lon_of[x] - lon_of[r_ende]) % 360.0 for x in hk)
+        d_anfang = min((lon_of[r_anfang] - lon_of[x]) % 360.0 for x in hk)
+        if min(d_ende, d_anfang) < HENKEL_RANDABSTAND:
+            continue
+        det = {'henkel': [planet_ort(x) for x in hk],
+               'schuessel_raender': [planet_ort(r_anfang), planet_ort(r_ende)],
+               'schuessel_spanne': r_spanne,
+               'henkel_zur_leeren_mitte': round(
+                   _winkelabstand(h_lon, r_leere_mitte), 2),
+               'leere_mitte': ort(r_leere_mitte)}
+        if beste is None or r_spanne < beste[1]:
+            beste = (det, r_spanne, r_strikt)
+    if beste:
+        det, r_spanne, r_strikt = beste
+        henkel_txt = ' + '.join(h['name'] for h in det['henkel'])
+        if r_strikt:
+            grund = (f'Schüssel-Spanne {_gr(r_spanne)} ≤ {MUSTER_SCHUESSEL:g}°, '
+                     f'Henkel {henkel_txt} allein in der leeren Hälfte')
+        else:
+            grund = (f'grenzwertig: Schüssel-Spanne {_gr(r_spanne)} über '
+                     f'{MUSTER_SCHUESSEL:g}°, innerhalb der Toleranz; Henkel '
+                     f'{henkel_txt}')
+        melde('Eimer', r_strikt, det, grund)
+
+    # Wippe: genau zwei Luecken >= MUSTER_WIPPE_LUECKE, zwei Gruppen mit je
+    # mindestens zwei Planeten
+    for strikt, schwelle in ((True, MUSTER_WIPPE_LUECKE),
+                             (False, MUSTER_WIPPE_LUECKE - tol)):
+        grosse = [x for x in luecken if x['grad'] >= schwelle]
+        if len(grosse) != 2:
+            continue
+        gruppen = _gruppen(pool, schwelle)
+        if len(gruppen) != 2 or min(len(g) for g in gruppen) < 2:
+            continue
+        det = {'gruppen': gruppen,
+               'luecken': [{k: x[k] for k in ('von', 'bis', 'grad')}
+                           for x in grosse]}
+        grund = ('zwei Lücken von ' +
+                 ' und '.join(_gr(x['grad']) for x in grosse) +
+                 (f' (je ≥ {MUSTER_WIPPE_LUECKE:g}°)' if strikt else
+                  f' (grenzwertig, Toleranz {tol:g}°)'))
+        melde('Wippe', strikt, det, grund)
+        break
+
+    # Streuung: groesste Luecke <= MUSTER_STREUUNG_LUECKE
+    if groesste['grad'] <= MUSTER_STREUUNG_LUECKE + tol:
+        strikt = groesste['grad'] <= MUSTER_STREUUNG_LUECKE
+        det = {'groesste_luecke': out['groesste_luecke'],
+               'zeichen_besetzt': len({zeichen_index(lon) for lon, _ in pool}),
+               'haeuser_besetzt': (len({haus_und_grenzlage(lon, cusps)['haus']
+                                        for lon, _ in pool}) if cusps else None)}
+        grund = (f'größte Lücke {_gr(groesste["grad"])} '
+                 + (f'≤ {MUSTER_STREUUNG_LUECKE:g}°' if strikt else
+                    f'(grenzwertig, Toleranz {tol:g}°)'))
+        melde('Streuung', strikt, det, grund)
+
+    # Spritzer: drei oder mehr Gruppen, getrennt durch Luecken >=
+    # MUSTER_SPRITZER_LUECKE, und keine Streuung (groesste Luecke > 60°)
+    gruppen_s = _gruppen(pool, MUSTER_SPRITZER_LUECKE)
+    if len(gruppen_s) >= 3 and groesste['grad'] > MUSTER_STREUUNG_LUECKE:
+        melde('Spritzer', True, {'gruppen': gruppen_s},
+              f'{len(gruppen_s)} Gruppen, getrennt durch Lücken ≥ '
+              f'{MUSTER_SPRITZER_LUECKE:g}°')
+
+    # --- Erste Wahl und Zweitlesarten ------------------------------------------
+    strikte = [k for k in kandidaten if k['strikt']]
+    erste = None
+    for name in _MUSTER_RANG:
+        treffer = [k for k in strikte if k['muster'] == name]
+        if treffer:
+            erste = treffer[0]
+            break
+    # Spritzer ist nur erste Wahl, wenn nichts Engeres passt — nie Zweitlesart
+    verdeckt = set()
+    if erste:
+        out['muster'] = erste['muster']
+        out['details'] = erste['details']
+        # trivial mitgeltende Obermengen (jedes Buendel ist auch eine
+        # Schuessel und eine Lokomotive) werden nicht als Zweitlesart genannt
+        if erste['muster'] == 'Bündel':
+            verdeckt = {'Schüssel', 'Lokomotive', 'Spritzer'}
+        elif erste['muster'] == 'Schüssel':
+            verdeckt = {'Lokomotive', 'Spritzer'}
+        else:
+            verdeckt = {'Spritzer'}
+    for k in kandidaten:
+        if erste is not None and k is erste:
+            continue
+        if k['muster'] in verdeckt:
+            continue
+        if k['muster'] == 'Spritzer':
+            continue
+        out['auch_lesbar'].append({'muster': k['muster'], 'grund': k['grund'],
+                                   'details': k['details'],
+                                   'strikt': k['strikt']})
+    return out
+
+
+# --- Mondphase ---------------------------------------------------------------
+
+def mondphase(factors):
+    """Winkel Sonne -> Mond, Rudhyar-Phase, Finsternisnaehe-Flag.
+
+    Neu am 2026-09-08, zweiter Durchgang (Chris-Entscheidung; Befund
+    Stilvergleich §7). Der Sonne-Mond-ASPEKT steht schon in der Aspektliste;
+    die Phase ist die Ergaenzung fuer die Winkel dazwischen — eine Geburt bei
+    100° Sonne-Mond ist eine Erstes-Viertel-Geburt, auch wenn kein Quadrat im
+    Orb steht.
+
+    Rueckgabe:
+      'winkel'       Sonne -> Mond in Tierkreisrichtung, 0..360
+      'phase'        Name aus MONDPHASEN, 'phase_index' 1..8,
+      'von'/'bis'    das 45°-Fenster der Phase
+      'zunehmend'    True unter 180°
+      'syzygie'      {'art': 'Konjunktion'|'Opposition', 'orb'} innerhalb
+                     FINSTERNIS_SYZYGIE_ORB, sonst None
+      'finsternis'   nur bei Syzygie und vorhandenem Knoten: {'naehe': bool,
+                     'art', 'sonne_knoten': (Knotenname, Grad),
+                     'mond_knoten': (Knotenname, Grad)} — ein FLAG nach
+                     FINSTERNIS_KNOTEN_ORB, keine Finsternisrechnung (dafuer
+                     fehlt die Mondbreite in den Daten)
+    Ohne Sonne oder Mond in `factors`: None.
+    """
+    pos = {f['name']: f['lon'] % 360.0 for f in factors}
+    if 'Sonne' not in pos or 'Mond' not in pos:
+        return None
+    winkel = (pos['Mond'] - pos['Sonne']) % 360.0
+    idx = int(winkel // MONDPHASE_SCHRITT) % len(MONDPHASEN)
+    out = {'winkel': round(winkel, 2), 'phase': MONDPHASEN[idx],
+           'phase_index': idx + 1,
+           'von': idx * MONDPHASE_SCHRITT, 'bis': (idx + 1) * MONDPHASE_SCHRITT,
+           'zunehmend': winkel < 180.0, 'syzygie': None, 'finsternis': None}
+    d_konj = min(winkel, 360.0 - winkel)
+    d_opp = abs(180.0 - winkel)
+    if d_konj <= FINSTERNIS_SYZYGIE_ORB:
+        out['syzygie'] = {'art': 'Konjunktion', 'orb': round(d_konj, 2)}
+    elif d_opp <= FINSTERNIS_SYZYGIE_ORB:
+        out['syzygie'] = {'art': 'Opposition', 'orb': round(d_opp, 2)}
+    if out['syzygie'] and 'Knoten' in pos:
+        kn = pos['Knoten']
+
+        def naechster_knoten(lon):
+            d_nord = _winkelabstand(lon, kn)
+            d_sued = _winkelabstand(lon, kn + 180.0)
+            return (('Nordknoten', round(d_nord, 2)) if d_nord <= d_sued
+                    else ('Südknoten', round(d_sued, 2)))
+
+        s_kn = naechster_knoten(pos['Sonne'])
+        m_kn = naechster_knoten(pos['Mond'])
+        naehe = min(s_kn[1], m_kn[1]) <= FINSTERNIS_KNOTEN_ORB
+        art = None
+        if naehe:
+            art = ('Sonnenfinsternis-Nähe'
+                   if out['syzygie']['art'] == 'Konjunktion'
+                   else 'Mondfinsternis-Nähe')
+        out['finsternis'] = {'naehe': naehe, 'art': art,
+                             'sonne_knoten': s_kn, 'mond_knoten': m_kn}
+    return out
 
 
 # --- Zyklusfenster: wann eine Anlage sich erfahrungsgemaess meldet -----------
@@ -1046,7 +1628,8 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
 
     Rueckgabe: dict mit den Schluesseln verteilung_planeten, verteilung_alle,
     verteilung_gewichtet, retro, ketten, ketten_klassisch, hausherrscher,
-    rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen.
+    rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen — und seit
+    dem 2026-09-08 (zweiter Durchgang) verteilungsmuster und mondphase.
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -1065,6 +1648,8 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
         'spezialnetz': spezialfaktor_netz(factors, aspects),
         'konfigurationen': konfigurationen(factors, aspects, cusps=cusps),
+        'verteilungsmuster': verteilungsmuster(factors, cusps),
+        'mondphase': mondphase(factors),
         'zyklen': {},
         'alter': alter,
     }
@@ -1356,6 +1941,19 @@ def strukturbild_text(sb):
         L.append(f"- Großkreuz: {', '.join(g)}")
     for g in kf['grosstrigon']:
         L.append(f"- Großtrigon: {', '.join(g)}")
+    for d in kf.get('drachen', []):
+        # Der Drachen fuehrt sein Grosstrigon selbst: konfigurationen() hat es
+        # aus der Grosstrigon-Liste genommen — EIN Befund, nicht zwei (dieselbe
+        # Regel wie beim Zeichen-/Haus-Stellium unten).
+        L.append(f"- Drachen: Großtrigon {', '.join(d['trigon'])} — Kopf "
+                 f"{d['kopf']} (Opposition zu {d['achse'][1]}; Sextile zu "
+                 f"{' und '.join(s[1] for s in d['sextile'])}). Trägt sein "
+                 f"Großtrigon selbst, EIN Befund.")
+    for r in kf.get('rechteck', []):
+        L.append(f"- Mystisches Rechteck: Achsen "
+                 f"{' ☍ '.join(r['achsen'][0])} und {' ☍ '.join(r['achsen'][1])}"
+                 f" — Trigone {', '.join('–'.join(s) for s in r['trigone'])}; "
+                 f"Sextile {', '.join('–'.join(s) for s in r['sextile'])}.")
     for j in kf['jod']:
         L.append(f"- Jod: Basis {' ⚹ '.join(j['basis'])}, Spitze {j['apex']}")
     z_gruppen = [tuple(s['faktoren']) for s in kf['stellium_zeichen']]
@@ -1386,6 +1984,145 @@ def strukturbild_text(sb):
         L.append('- Verwendung s. Typmodul, Bewegung 7. Erlaubt ist die '
                  'Einordnung, verboten jede Aussage darüber, was in diesem '
                  'Alter geschieht.')
+        L.append('')
+
+    # §8 und §9 seit dem 2026-09-08 (zweiter Durchgang). Beide tragen eine
+    # Befundzeile: Was hier nicht steht, prueft keine Gegenprobe.
+    vm = sb.get('verteilungsmuster')
+    if vm and vm.get('planeten'):
+        L.append('### 8 · Verteilung (zehn klassische Planeten)')
+        n = len(vm['planeten'])
+        hemi, quad = vm.get('hemisphaeren'), vm.get('quadranten')
+        if hemi:
+            def _h(key):
+                return f"{len(hemi[key])} — {', '.join(hemi[key]) or 'keiner'}"
+            L.append(f"- Über dem Horizont (Häuser 7–12): {_h('oben')}; "
+                     f"unter dem Horizont (1–6): {_h('unten')}.")
+            L.append(f"- Östlich (Häuser 10–3): {_h('ost')}; "
+                     f"westlich (4–9): {_h('west')}.")
+            L.append('- Quadranten: ' + ' · '.join(
+                f"{roem} (Häuser {h}) {len(quad[q])}"
+                for q, roem, h in ((1, 'I', '1–3'), (2, 'II', '4–6'),
+                                   (3, 'III', '7–9'), (4, 'IV', '10–12'))))
+            marken = [f"{b} ⟵ betont" for b in vm['betont']] + \
+                     [f"{l} ⟵ leer" for l in vm['leer']]
+            L.append('- Betonung: ' + ('; '.join(marken) if marken else
+                     f'keine (kein Bereich mit {HEMISPHAERE_BETONT} von {n} '
+                     f'oder {QUADRANT_BETONT} je Quadrant, keiner leer)') + '.')
+            if vm['wechsler']:
+                L.append('- Hemisphären-Wechsler (Grenzlage über eine '
+                         'Winkel-Spitze): ' + '; '.join(
+                             f"{w['name']} {_gr(w['abstand'])} vor {w['winkel']} "
+                             f"(Haus {w['haus']} → {w['nebenhaus']})"
+                             for w in vm['wechsler']) + '.')
+            else:
+                L.append('- Hemisphären-Wechsler (Grenzlage über eine '
+                         'Winkel-Spitze): keiner.')
+        else:
+            L.append('- Hemisphären und Quadranten: nicht gerechnet (keine '
+                     'Hausspitzen übergeben).')
+
+        gl = vm['groesste_luecke']
+        det = vm.get('details') or {}
+
+        def _ortstr(o):
+            if not o:
+                return '?'
+            haus = f", Haus {o['haus_spalte']}" if o.get('haus_spalte') else ''
+            return f"{_gr(o['lon'] % 30)} {o['zeichen']}{haus}"
+
+        def _pl(o):
+            return f"{o['name']} ({o['zeichen']}" + (
+                f", Haus {o['haus_spalte']})" if o.get('haus_spalte') else ')')
+
+        m = vm['muster']
+        if m == 'Bündel':
+            zeile = (f"- Muster nach Jones: Bündel — Spanne {_gr(det['spanne'])} "
+                     f"von {_pl(det['raender'][0])} bis {_pl(det['raender'][1])}, "
+                     f"Mitte {_ortstr(det['mitte'])}.")
+        elif m == 'Schüssel':
+            zeile = (f"- Muster nach Jones: Schüssel — Spanne {_gr(det['spanne'])} "
+                     f"von {_pl(det['raender'][0])} bis {_pl(det['raender'][1])}; "
+                     f"Mitte der leeren Hälfte {_ortstr(det['leere_mitte'])}.")
+        elif m == 'Eimer':
+            hk = det['henkel']
+            zeile = (f"- Muster nach Jones: Eimer — Henkel "
+                     f"{' + '.join(_pl(h) for h in hk)}"
+                     f"{' (zwei Planeten in enger Konjunktion, EIN Henkel)' if len(hk) > 1 else ''}, "
+                     f"{_gr(det['henkel_zur_leeren_mitte'])} neben der Mitte der "
+                     f"leeren Hälfte; Schüssel {_gr(det['schuessel_spanne'])} von "
+                     f"{_pl(det['schuessel_raender'][0])} bis "
+                     f"{_pl(det['schuessel_raender'][1])}.")
+        elif m == 'Lokomotive':
+            zeile = (f"- Muster nach Jones: Lokomotive — leerer Bogen "
+                     f"{_gr(det['leerer_bogen'])} von "
+                     f"{det['rand_vor_luecke']['name']} bis "
+                     f"{det['rand_nach_luecke']['name']}, Mitte "
+                     f"{_ortstr(det['leere_mitte'])}; Ränder: "
+                     f"{_pl(det['rand_nach_luecke'])} folgt dem leeren Bogen "
+                     f"(Lokführer nach Deutungsregel), "
+                     f"{_pl(det['rand_vor_luecke'])} geht ihm voraus "
+                     f"(Schlusslicht). Konvention s. radix.verteilungsmuster().")
+        elif m == 'Wippe':
+            zeile = (f"- Muster nach Jones: Wippe — Gruppen "
+                     f"{', '.join(det['gruppen'][0])} gegen "
+                     f"{', '.join(det['gruppen'][1])}; Lücken "
+                     f"{' und '.join(_gr(x['grad']) for x in det['luecken'])}.")
+        elif m == 'Streuung':
+            zeile = (f"- Muster nach Jones: Streuung — größte Lücke "
+                     f"{_gr(gl['grad'])} ({gl['von']} → {gl['bis']}); "
+                     f"{det['zeichen_besetzt']} Zeichen"
+                     + (f", {det['haeuser_besetzt']} Häuser" if det.get('haeuser_besetzt') else '')
+                     + " besetzt.")
+        elif m == 'Spritzer':
+            zeile = (f"- Muster nach Jones: Spritzer — {len(det['gruppen'])} Gruppen: "
+                     + '; '.join(', '.join(g) for g in det['gruppen'])
+                     + f". Größte Lücke {_gr(gl['grad'])}.")
+        else:
+            zeile = (f"- Muster nach Jones: kein eindeutiges Muster — Spanne "
+                     f"{_gr(vm['spanne'])}, größte Lücke {_gr(gl['grad'])} "
+                     f"({gl['von']} → {gl['bis']}). Das ist ein legitimer "
+                     f"Befund, kein Fehler.")
+        L.append(zeile)
+        if vm['auch_lesbar']:
+            L.append('- Auch lesbar als: ' + '; '.join(
+                f"{z['muster']} ({z['grund']})" for z in vm['auch_lesbar']) + '.')
+        L.append('- Befund: <eine Zeile — was Hemisphäre und Muster als Statik '
+                 'heißen; Henkelplanet oder Lokführer als Brennpunkt (Typmodul, '
+                 'Rang 5) oder ins Getriebe>')
+        L.append('')
+
+    mp = sb.get('mondphase')
+    if mp:
+        L.append('### 9 · Mondphase')
+        L.append(f"- Winkel Sonne → Mond: {_gr(mp['winkel'])} — "
+                 f"{mp['phase']} ({mp['von']:g}°–{mp['bis']:g}°, "
+                 f"{mp['phase_index']}. von acht Stufen nach Rudhyar), "
+                 f"{'zunehmend' if mp['zunehmend'] else 'abnehmend'}.")
+        sy = mp.get('syzygie')
+        if sy:
+            wort = 'Neumond' if sy['art'] == 'Konjunktion' else 'Vollmond'
+            L.append(f"- Lichter in {sy['art']} (Orb {_gr(sy['orb'])}): "
+                     f"{wort}-Geburt — darf über Rang 5 ein Thema tragen "
+                     f"(Typmodul).")
+            fi = mp.get('finsternis')
+            if fi:
+                L.append(f"- Finsternisnähe: Sonne {_gr(fi['sonne_knoten'][1])} "
+                         f"vom {fi['sonne_knoten'][0]}, Mond "
+                         f"{_gr(fi['mond_knoten'][1])} vom {fi['mond_knoten'][0]}"
+                         + (f" — innerhalb {FINSTERNIS_KNOTEN_ORB:g}°: {fi['art']} "
+                            f"(Flag, keine Finsternisrechnung)." if fi['naehe']
+                            else f" — keine (Grenze {FINSTERNIS_KNOTEN_ORB:g}°)."))
+            else:
+                L.append('- Finsternisnähe: nicht prüfbar (kein Knoten in der '
+                         'Faktorenliste).')
+        else:
+            L.append(f"- Lichter weder in Konjunktion noch in Opposition "
+                     f"(Orb {FINSTERNIS_SYZYGIE_ORB:g}°) — keine Neumond-/"
+                     f"Vollmond-Geburt, Finsternisnähe entfällt.")
+        L.append('- Befund: <ein Satz für den Mond-Block des '
+                 'Instrument-Kapitels: wie diese Phase beginnt, erntet oder '
+                 'loslässt — Anlage, keine Biografie>')
         L.append('')
     return '\n'.join(L)
 
@@ -1476,3 +2213,157 @@ if __name__ == '__main__':
     print('Strukturbild-Test: OK —', len(_txt), 'Zeichen,',
           len(_sb['hausherrscher']), 'Hausherrscher,',
           len(_sb['konfigurationen']['t_quadrat']), 'T-Quadrate')
+
+    # --- Seit 2026-09-08 (zweiter Durchgang): Verteilungsmuster, Drachen,
+    # Rechteck, Mondphase — ALLE Staende unten sind ERFUNDEN (synthetische
+    # Faelle, je Muster einer), kein echtes Chart. -----------------------------
+    _P = list(_PLANETEN)
+
+    def _synth(lons):
+        """Zehn Planeten auf frei gewaehlte Laengen setzen."""
+        return [{'name': n, 'lon': float(l)} for n, l in zip(_P, lons)]
+
+    # Buendel: alle innerhalb 100°
+    _v = verteilungsmuster(_synth([0, 10, 20, 35, 45, 60, 70, 80, 90, 100]), _c)
+    assert _v['muster'] == 'Bündel' and _v['spanne'] == 100.0, _v['muster']
+    assert _v['auch_lesbar'] == [], _v['auch_lesbar']   # keine trivialen Obermengen
+    # Buendel grenzwertig (124°): Schuessel erste Wahl, Buendel als Zweitlesart
+    _v = verteilungsmuster(_synth([0, 10, 20, 35, 45, 60, 70, 80, 90, 124]), _c)
+    assert _v['muster'] == 'Schüssel', _v['muster']
+    assert [z['muster'] for z in _v['auch_lesbar']] == ['Bündel'], _v['auch_lesbar']
+    # Schuessel: innerhalb 170°
+    _v = verteilungsmuster(_synth([0, 20, 40, 60, 80, 100, 120, 140, 160, 170]), _c)
+    assert _v['muster'] == 'Schüssel' and _v['auch_lesbar'] == [], _v
+    assert _v['details']['raender'][0]['name'] == 'Sonne'
+    assert _v['details']['raender'][1]['name'] == 'Pluto'
+    # Eimer: neun innerhalb 150°, Henkel gegenueber (255°)
+    _v = verteilungsmuster(_synth([0, 20, 40, 60, 80, 100, 120, 140, 150, 255]), _c)
+    assert _v['muster'] == 'Eimer', _v['muster']
+    assert [h['name'] for h in _v['details']['henkel']] == ['Pluto'], _v['details']
+    assert _v['details']['henkel_zur_leeren_mitte'] == 0.0
+    assert _v['details']['henkel'][0]['zeichen'] == 'Schütze'
+    assert _v['details']['henkel'][0]['haus_spalte'] == '9'
+    # Eimer mit Doppel-Henkel (zwei Planeten 6° auseinander = EIN Henkel)
+    _v = verteilungsmuster(_synth([0, 20, 40, 60, 80, 100, 120, 150, 250, 256]), _c)
+    assert _v['muster'] == 'Eimer', _v['muster']
+    assert sorted(h['name'] for h in _v['details']['henkel']) == ['Neptun', 'Pluto']
+    # KEIN Eimer: ein Planet 40° hinter dem Rand einer engen Schuessel
+    _v = verteilungsmuster(_synth([0, 10, 20, 30, 40, 50, 60, 70, 90, 130]), _c)
+    assert _v['muster'] == 'Schüssel', _v['muster']
+    assert not any(z['muster'] == 'Eimer' for z in _v['auch_lesbar']), _v['auch_lesbar']
+    # Lokomotive: innerhalb 230°, leerer Bogen 130°
+    _v = verteilungsmuster(_synth([0, 25, 50, 75, 100, 125, 150, 175, 200, 230]), _c)
+    assert _v['muster'] == 'Lokomotive', _v['muster']
+    assert _v['details']['leerer_bogen'] == 130.0
+    assert _v['details']['rand_nach_luecke']['name'] == 'Sonne'    # folgt der Luecke
+    assert _v['details']['rand_vor_luecke']['name'] == 'Pluto'     # geht ihr voraus
+    assert _v['details']['leere_mitte']['zeichen'] == 'Steinbock'  # 295°
+    # Wippe: zwei Gruppen, Luecken 100° und 110°
+    _v = verteilungsmuster(_synth([0, 20, 40, 55, 70, 170, 190, 210, 230, 250]), _c)
+    assert _v['muster'] == 'Wippe', _v['muster']
+    assert sorted(len(g) for g in _v['details']['gruppen']) == [5, 5]
+    # Streuung: alle 36°
+    _v = verteilungsmuster(_synth([i * 36 for i in range(10)]), _c)
+    assert _v['muster'] == 'Streuung', _v['muster']
+    assert _v['details']['zeichen_besetzt'] == 10
+    # Spritzer: drei Gruppen, Luecken je 100°
+    _v = verteilungsmuster(_synth([0, 10, 20, 120, 130, 140, 240, 250, 255, 260]), _c)
+    assert _v['muster'] == 'Spritzer', _v['muster']
+    assert len(_v['details']['gruppen']) == 3
+    # Kein eindeutiges Muster: Luecken 110° und 50°, sonst 25°
+    _v = verteilungsmuster(_synth([0, 25, 50, 75, 100, 125, 150, 175, 200, 250]), _c)
+    assert _v['muster'] is None and _v['auch_lesbar'] == [], _v
+    assert _v['spanne'] == 250.0
+    # Eimer, der zugleich Lokomotive ist: Eimer erste Wahl, Lokomotive Zweitlesart
+    _v = verteilungsmuster(_synth([0, 15, 30, 45, 60, 75, 90, 105, 120, 240]), _c)
+    assert _v['muster'] == 'Eimer', _v['muster']
+    assert 'Lokomotive' in [z['muster'] for z in _v['auch_lesbar']], _v['auch_lesbar']
+    # Hemisphaeren nach Haeusern: Spitzen bei 0, 30, … -> 100° = Haus 4
+    _v = verteilungsmuster(_synth([100, 105, 110, 115, 120, 125, 130, 135, 140, 88]), _c)
+    assert 'Sonne' in _v['hemisphaeren']['unten'] and 'Sonne' in _v['hemisphaeren']['west']
+    assert 'Sonne' in _v['quadranten'][2]
+    assert _v['wechsler'] and _v['wechsler'][0]['name'] == 'Pluto'      # 88°: 2° vor IC
+    assert _v['wechsler'][0]['winkel'] == 'IC' and _v['wechsler'][0]['nebenhaus'] == 4
+    assert any(b.startswith('Hemisphäre unter dem Horizont') for b in _v['betont'])
+    assert any(b.startswith('Quadrant II') for b in _v['betont'])
+    assert 'Hemisphäre über dem Horizont' in _v['leer']
+
+    # Drachen: Grosstrigon 0/120/240, Kopf 180 (Opposition zu 0, Sextile zu
+    # 120 und 240). Das Trigon darf danach NICHT mehr als Grosstrigon stehen.
+    _fd = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+           {'name': 'Jupiter', 'lon': 240.0}, {'name': 'Venus', 'lon': 180.0}]
+    _kd = konfigurationen(_fd, huber_aspects(_fd))
+    assert len(_kd['drachen']) == 1, _kd['drachen']
+    assert _kd['drachen'][0]['kopf'] == 'Venus'
+    assert _kd['drachen'][0]['achse'] == ['Venus', 'Sonne']
+    assert sorted(_kd['drachen'][0]['trigon']) == ['Jupiter', 'Mond', 'Sonne']
+    assert _kd['grosstrigon'] == [], _kd['grosstrigon']      # EIN Befund
+    assert _kd['rechteck'] == []
+    # Winkel-Ausschluss: dasselbe mit AC in der Basis und DC als Kopf -> kein
+    # Drachen (die AC/DC-Opposition ist triviale Geometrie), das Trigon bleibt
+    _fw = [{'name': 'AC', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+           {'name': 'Jupiter', 'lon': 240.0}, {'name': 'DC', 'lon': 180.0}]
+    _kw = konfigurationen(_fw, huber_aspects(_fw))
+    assert _kw['drachen'] == [] and len(_kw['grosstrigon']) == 1, _kw
+    # Mystisches Rechteck: Oppositionen 0/180 und 60/240, Seiten 60/120/60/120
+    _fr = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 180.0},
+           {'name': 'Venus', 'lon': 60.0}, {'name': 'Jupiter', 'lon': 240.0}]
+    _kr = konfigurationen(_fr, huber_aspects(_fr))
+    assert len(_kr['rechteck']) == 1, _kr['rechteck']
+    assert sorted(_kr['rechteck'][0]['achsen']) == [['Jupiter', 'Venus'],
+                                                    ['Mond', 'Sonne']]
+    assert len(_kr['rechteck'][0]['trigone']) == 2
+    assert len(_kr['rechteck'][0]['sextile']) == 2
+    assert _kr['drachen'] == [] and _kr['grosstrigon'] == []
+    # Winkel-Ausschluss: AC/DC als eine der beiden Achsen -> kein Rechteck
+    _fx = [{'name': 'AC', 'lon': 0.0}, {'name': 'DC', 'lon': 180.0},
+           {'name': 'Venus', 'lon': 60.0}, {'name': 'Jupiter', 'lon': 240.0}]
+    assert konfigurationen(_fx, huber_aspects(_fx))['rechteck'] == []
+    # Drei von vier Seiten sind kein Rechteck (Jupiter 12° zu weit)
+    _f3 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 180.0},
+           {'name': 'Venus', 'lon': 60.0}, {'name': 'Jupiter', 'lon': 252.0}]
+    assert konfigurationen(_f3, huber_aspects(_f3))['rechteck'] == []
+
+    # Stellium: drei Spezialfaktoren allein sind keins, zwei Planeten plus
+    # ein Spezialfaktor schon
+    _fs = [{'name': 'Knoten', 'lon': 10.0}, {'name': 'Chiron', 'lon': 15.0},
+           {'name': 'Lilith', 'lon': 20.0}, {'name': 'Sonne', 'lon': 100.0},
+           {'name': 'Mars', 'lon': 105.0}, {'name': 'Pholus', 'lon': 110.0}]
+    _ks = konfigurationen(_fs, huber_aspects(_fs), cusps=_c)
+    assert [s['zeichen'] for s in _ks['stellium_zeichen']] == ['Krebs'], _ks
+    assert [s['haus'] for s in _ks['stellium_haus']] == [4], _ks
+
+    # Mondphase: alle acht Stufen, dann Finsternisnaehe
+    for _w, _erw in ((10, 'Neumond'), (50, 'zunehmende Sichel'),
+                     (100, 'erstes Viertel'), (140, 'zunehmender Dreiviertelmond'),
+                     (190, 'Vollmond'), (230, 'abnehmender Dreiviertelmond'),
+                     (280, 'letztes Viertel'), (330, 'Balsamisch')):
+        _mp = mondphase([{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': _w}])
+        assert _mp['phase'] == _erw and _mp['winkel'] == _w, _mp
+    _mp = mondphase([{'name': 'Sonne', 'lon': 300.0}, {'name': 'Mond', 'lon': 5.0}])
+    assert _mp['winkel'] == 65.0 and _mp['zunehmend'] is True
+    _mp = mondphase([{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 5.0},
+                     {'name': 'Knoten', 'lon': 10.0}])
+    assert _mp['syzygie']['art'] == 'Konjunktion' and _mp['finsternis']['naehe']
+    assert _mp['finsternis']['art'] == 'Sonnenfinsternis-Nähe'
+    assert _mp['finsternis']['sonne_knoten'] == ('Nordknoten', 10.0)
+    _mp = mondphase([{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 177.0},
+                     {'name': 'Knoten', 'lon': 190.0}])
+    assert _mp['syzygie']['art'] == 'Opposition' and _mp['finsternis']['naehe']
+    assert _mp['finsternis']['art'] == 'Mondfinsternis-Nähe'
+    assert _mp['finsternis']['mond_knoten'] == ('Nordknoten', 13.0)
+    _mp = mondphase([{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 5.0},
+                     {'name': 'Knoten', 'lon': 100.0}])
+    assert _mp['finsternis']['naehe'] is False and _mp['finsternis']['art'] is None
+    _mp = mondphase([{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 100.0},
+                     {'name': 'Knoten', 'lon': 5.0}])
+    assert _mp['syzygie'] is None and _mp['finsternis'] is None
+
+    # Die neuen Abschnitte stehen im Text des anonymen Pruefcharts
+    assert '### 8 · Verteilung' in _txt and '### 9 · Mondphase' in _txt
+    assert 'Muster nach Jones' in _txt and 'Winkel Sonne → Mond' in _txt
+    print('Verteilung/Figuren/Mondphase-Test: OK —',
+          _sb['verteilungsmuster']['muster'], '|',
+          _sb['mondphase']['phase'], '|',
+          len(_sb['konfigurationen']['drachen']), 'Drachen,',
+          len(_sb['konfigurationen']['rechteck']), 'Rechtecke')
