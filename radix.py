@@ -23,17 +23,38 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         Zeichnet das Rad als PNG und gibt den Pfad zurück.
 
     strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
-                 jd_geburt=None) -> dict
+                 jd_geburt=None, lat=None, lon=None) -> dict
         ALLE Struktur-Befunde in einem Aufruf: Element-/Modusverteilung in drei
         Zählungen (auch gewichtet), Rückläufigkeit, Herrscherketten mit Kreisen
         und Enddispositoren, HAUSHERRSCHER, Rezeptionen, Aspektdichte je Faktor,
         das Netz der Spezialfaktoren, Aspektfiguren, Zyklusfenster — und seit
         dem 2026-09-08 (zweiter Durchgang) das VERTEILUNGSMUSTER (Hemisphären,
-        Quadranten, Jones-Muster) und die MONDPHASE.
+        Quadranten, Jones-Muster) und die MONDPHASE. Seit dem 2026-09-12
+        (Änderungspaket „Zugang statt Thema") dazu die zweite Etage der
+        Hausherrscher: alle VIER Sonderfälle je Haus, HÄUSER-KREISE,
+        HERRSCHER-EINLAUF, SPITZEN-KONTAKTE und die KIPPMINUTE je Spitze
+        (dafür jd_geburt, lat und lon mitgeben).
         strukturbild_text(sb) schreibt daraus den fertigen `## Strukturbild`-
         Abschnitt fürs chart_data.md (neun Unterpunkte). Eingeführt 2026-09-06
         (Prüfbericht 5.1–5.6); bis dahin wurde das alles von Hand gerechnet,
         und vier Ebenen fehlten ganz, weil keine Regel nach ihnen fragte.
+
+    hausherrscher(factors, cusps, aspects=None) -> list
+    haus_kreise(factors, cusps, klassisch=False) -> dict
+    herrscher_einlauf(factors, cusps) -> dict
+    herrscher_spitzen_kontakt(factors, cusps, orb=3.0) -> list
+    kippminuten(jd, lat, lon, hsys=b"K") -> list | None
+        Die Hausherrscher-Ebene (Strukturbild §3). Seit 2026-09-12 markiert
+        `hausherrscher()` alle vier Sonderfälle (`im_eigenen_haus`, `auf_winkel`,
+        `spannung_zur_spitze`, `wechselseitig`); `haus_kreise()` findet die
+        Zyklen der Haus-Herrscher, `herrscher_einlauf()` zählt je Haus die
+        hineinzeigenden Herrscher, `herrscher_spitzen_kontakt()` misst den
+        Winkel Herrscher ↔ eigene Spitze (Orb 3°, nur §3), und `kippminuten()`
+        rechnet je Spitze, wie viele Minuten früherer oder späterer Geburt das
+        Zeichen der Spitze wechseln (braucht pyswisseph). Grund: Im Prüffall vom
+        12.09. hingen drei von fünf Hausherrscher-Deutungen an vier Minuten
+        Geburtszeit — die Ebene ist eine Koch-Aussage mit Kippminute, nie
+        „rechnungsunabhängig".
 
     konfigurationen(factors, aspects, cusps=None) -> dict
     gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung, 2026-09-09)
@@ -68,7 +89,10 @@ Verwendung als Modul (Schritt 3/4, Design-Konversation):
 WICHTIG: matplotlib wird bei Bedarf automatisch nachinstalliert. Der Container
 wird zwischen Sessions zurückgesetzt — diese Datei liegt darum im Projektwissen.
 Braucht KEIN pyswisseph (bekommt fertige Positionen); die Ephemeride-Rechnung
-(Pholus, True Node) passiert in Schritt 1, s. Datenblatt-Modul.
+(Pholus, True Node) passiert in Schritt 1, s. Datenblatt-Modul. Einzige
+Ausnahmen: `pluto_quadrat_alter()` und `kippminuten()` rechnen selbst mit
+pyswisseph, wenn es da ist — sonst geben sie None zurück, und
+`strukturbild_text()` sagt das ausdrücklich.
 """
 
 import subprocess
@@ -895,7 +919,274 @@ def glueckspunkt(factors, cusps, ac=None, sonne=None, mond=None):
                       else 'AC + Sonne − Mond (Nachtformel)'}
 
 
-def hausherrscher(factors, cusps, aspects=None, klassisch=False):
+# --- Die zweite Etage der Hausherrscher (Aenderungspaket „Zugang statt Thema",
+# 2026-09-12). Grund, Pruefffall vom 12.09.: Von fuenf ausgeschriebenen
+# Hausherrscher-Struktur-Deutungen trug eine; drei der vier gefallenen hingen
+# an knapp vier Minuten Geburtszeit (Spitze 3/9 lief mit 21′ je Minute), und
+# der Vorlauf nannte sie „rechnungsunabhaengig". In Placidus regierte die Sonne
+# desselben Charts das achte Haus statt keines. Die Ebene ist eine Koch-Aussage
+# mit Kippminute — deshalb rechnet der Code jetzt alle vier Sonderfaelle, die
+# Haeuser-Kreise, den Herrscher-Einlauf, die Spitzen-Kontakte und die
+# Kippminute selbst, statt sie der Handarbeit zu ueberlassen. Dokumentiert im
+# Datenblatt-Modul, Strukturbild §3; Leseanweisung im Typmodul (Gewichtungsrang
+# 2, Getriebe-Kapitel sechste Auflage, Abschnitt „Der Zugang").
+
+_WINKEL_VON_HAUS = {1: 'AC', 4: 'IC', 7: 'DC', 10: 'MC'}   # Spitze = Winkel
+SPITZEN_ORB = 3.0               # Herrscher <-> eigene Spitze: Orb der sensitiven
+                                #   Punkte; Setzung 2026-09-12 ohne Rueckhalt in
+                                #   der Huber-Schule (nur Strukturbild §3)
+_SPITZEN_ASPEKTE = (0, 60, 90, 120, 180)   # Konjunktion, Sextil, Quadrat,
+                                            #   Trigon, Opposition
+_HART = (90, 180)
+KIPP_SCHWELLE = 10              # Minuten: eine Spitze, die frueher als das ihr
+                                #   Zeichen wechselt, gehoert in den ⚠-Block und
+                                #   den Datenblatt-Kopf (Gegenprobe g)
+KIPP_MAX = 180                  # Minuten: weiter wird nicht gesucht
+
+
+def haus_kreise(factors, cusps, klassisch=False):
+    """Zyklen der Haus-Herrscher: Haus A -> sein Herrscher steht in Haus B ->
+    dessen Herrscher steht in Haus A ... (neu 2026-09-12).
+
+    Gerechnet ueber das RECHNERISCHE Haus des Herrschers. Zweier-Kreise sind
+    der Sonderfall „wechselseitig"; laengere werden als Kreis ausgegeben.
+    Ein Herrscher im eigenen Haus ist ein Einer-Kreis und steht NICHT in
+    'kreise' (er ist der Sonderfall `im_eigenen_haus`), sondern in 'selbst'.
+
+    klassisch=True rechnet mit den klassischen Herrschern (Mars fuer Skorpion,
+    Saturn fuer Wassermann, Jupiter fuer Fische) — die Gegenrechnung, die das
+    Datenblatt-Modul verlangt.
+
+    Rueckgabe:
+      'ziel'          {haus: haus_in_dem_sein_herrscher_steht} (rechnerisch)
+      'ziel_fuehrend' dieselbe Abbildung nach dem FUEHRENDEN Haus (bei einer
+                      Schwellenlage <= 2° fuehrt das Nebenhaus, haus_spalte())
+      'kreise'        [{'haeuser', 'laenge', 'wechselseitig', 'glieder',
+                       'grenzlagen', 'haelt_bei_schwellenlage'}], laengste zuerst;
+                      'glieder' je Haus {haus, spitzenzeichen, herrscher,
+                      steht_in_haus, haus_spalte, grenzlage, nebenhaus, abstand}
+      'wechselseitig' die Haus-Paare der Zweier-Kreise
+      'selbst'        Haeuser, deren Herrscher im eigenen Haus steht
+      'ohne_herrscher' Haeuser, deren Herrscher nicht in `factors` ist
+    'haelt_bei_schwellenlage' sagt, ob derselbe Kreis auch nach der fuehrenden
+    Hausangabe besteht — steht ein Glied in Schwellenlage, kann der Kreis an
+    zwei Grad haengen, und das gehoert in die Befundzeile.
+    """
+    tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+    pos = {f['name']: f['lon'] for f in factors}
+    ziel, ziel_f, glied, ohne = {}, {}, {}, []
+    for n in range(1, 13):
+        zsp = SIGN_NAMES[zeichen_index(cusps[n - 1])]
+        hr = tab.get(zsp)
+        if not hr or hr not in pos:
+            ohne.append(n)
+            continue
+        hg = haus_und_grenzlage(pos[hr], cusps)
+        ziel[n] = hg['haus']
+        ziel_f[n] = int(haus_spalte(pos[hr], cusps).split('/')[0])
+        glied[n] = {'haus': n, 'spitzenzeichen': zsp, 'herrscher': hr,
+                    'steht_in_zeichen': zeichen_name(pos[hr]),
+                    'steht_in_haus': hg['haus'],
+                    'haus_spalte': haus_spalte(pos[hr], cusps),
+                    'grenzlage': hg['grenzlage'], 'nebenhaus': hg['nebenhaus'],
+                    'abstand': hg['abstand_spitze']}
+
+    def _zyklen(abb):
+        gefunden, gesehen = [], set()
+        for start in sorted(abb):
+            pfad, cur = [start], start
+            while True:
+                nxt = abb.get(cur)
+                if nxt is None:
+                    break
+                if nxt in pfad:
+                    z = pfad[pfad.index(nxt):]
+                    key = frozenset(z)
+                    if len(z) >= 2 and key not in gesehen:
+                        gesehen.add(key)
+                        i = z.index(min(z))
+                        gefunden.append(z[i:] + z[:i])
+                    break
+                pfad.append(nxt)
+                cur = nxt
+        return gefunden
+
+    kreise_f = {frozenset(z) for z in _zyklen(ziel_f)}
+    kreise = []
+    for z in _zyklen(ziel):
+        kreise.append({
+            'haeuser': z, 'laenge': len(z), 'wechselseitig': len(z) == 2,
+            'glieder': [glied[h] for h in z],
+            'grenzlagen': [h for h in z if glied[h]['grenzlage']],
+            'haelt_bei_schwellenlage': frozenset(z) in kreise_f})
+    kreise.sort(key=lambda k: (-k['laenge'], k['haeuser']))
+    return {'ziel': ziel, 'ziel_fuehrend': ziel_f, 'kreise': kreise,
+            'wechselseitig': [k['haeuser'] for k in kreise if k['laenge'] == 2],
+            'selbst': sorted(n for n, m in ziel.items() if n == m),
+            'ohne_herrscher': ohne}
+
+
+def herrscher_einlauf(factors, cusps, klassisch=False):
+    """Je Haus: welche Herrscher zeigen hinein? (neu 2026-09-12)
+
+    'einlauf'      {haus: [Haeuser, deren Herrscher hier stehen]} — Haus 8 mit
+                   [2, 5, 11] heisst: die Herrscher des 2., 5. und 11. Hauses
+                   stehen im 8.; drei Bereiche lagern ihre Geschaefte hierher aus
+    'anzahl'       {haus: n}
+    'ohne_einlauf' Haeuser, in die kein Herrscher zeigt — Bereiche, die keinen
+                   Verwalter empfangen
+    'buendelung'   [(haus, n), ...] absteigend, nur Haeuser mit Einlauf
+    'schwerpunkt'  die kleinste Gruppe von Haeusern, die zusammen mindestens die
+                   Haelfte aller Herrscher empfaengt — „sechs Bereiche aus Haus
+                   8 und 9" —, mit ihrer Summe
+    Gerechnet ueber das rechnerische Haus (wie haus_kreise); die Grenzlage steht
+    in den Gliedern von haus_kreise() und wird hier nicht ein zweites Mal
+    gefuehrt.
+    """
+    hk = haus_kreise(factors, cusps, klassisch=klassisch)
+    ziel = hk['ziel']
+    einlauf = {m: sorted(n for n, z in ziel.items() if z == m)
+               for m in range(1, 13)}
+    anzahl = {m: len(v) for m, v in einlauf.items()}
+    buendel = sorted(((m, k) for m, k in anzahl.items() if k),
+                     key=lambda x: (-x[1], x[0]))
+    gesamt = sum(anzahl.values())
+    schwer, summe = [], 0
+    for m, k in buendel:
+        if summe * 2 >= gesamt and gesamt:
+            break
+        schwer.append(m)
+        summe += k
+    return {'einlauf': einlauf, 'anzahl': anzahl,
+            'ohne_einlauf': [m for m in range(1, 13) if not einlauf[m]],
+            'buendelung': buendel,
+            'schwerpunkt': {'haeuser': schwer, 'anzahl': summe, 'von': gesamt},
+            'ohne_herrscher': hk['ohne_herrscher']}
+
+
+def herrscher_spitzen_kontakt(factors, cusps, orb=SPITZEN_ORB, klassisch=False):
+    """Winkel zwischen dem Herrscher eines Hauses und seiner EIGENEN Spitze —
+    gemeldet bei Konjunktion, Sextil, Quadrat, Trigon, Opposition innerhalb
+    `orb` (Vorgabe 3°, der Orb der sensitiven Punkte). Neu 2026-09-12.
+
+    Das ist die schmale Spitzen-Pruefung (Entscheidung 6 der Runde vom
+    10.–12.09.: KEINE Aspekte zu allen zwoelf Spitzen). Ein harter Kontakt
+    (Quadrat, Opposition) an einer ZWISCHENSPITZE ist der Sonderfall „in
+    Spannung zur Spitze seines eigenen Hauses"; an den vier Winkeln gilt weiter
+    die Aspektliste mit ihren Huber-Orbis, der Eintrag hier ist dort nur
+    Gegenprobe. Die Kontakte stehen NUR in Strukturbild §3 — kein Eintrag in
+    Aspekttabellen, Aspekt-Heimat, Ressourcen-Block oder Rechenschaft. Das ist
+    eine Setzung ohne Rueckhalt in der Huber-Schule; Zwischenspitzen sind zeit-
+    und breitenabhaengiger als die Winkel, deshalb steht die Kippminute daneben.
+
+    -> [{'haus', 'herrscher', 'aspekt', 'angle', 'orb', 'hart', 'winkel',
+         'spitze_lon'}], nach Haus sortiert; 'winkel' ist AC/IC/DC/MC bei den
+        Haeusern 1/4/7/10, sonst None.
+    """
+    tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
+    pos = {f['name']: f['lon'] for f in factors}
+    out = []
+    for n in range(1, 13):
+        hr = tab.get(SIGN_NAMES[zeichen_index(cusps[n - 1])])
+        if not hr or hr not in pos:
+            continue
+        d = _winkelabstand(pos[hr], cusps[n - 1])
+        for angle in _SPITZEN_ASPEKTE:
+            dev = abs(d - angle)
+            if dev <= orb:
+                out.append({'haus': n, 'herrscher': hr,
+                            'aspekt': _ANG_NAME[angle], 'angle': angle,
+                            'orb': round(dev, 2), 'hart': angle in _HART,
+                            'winkel': _WINKEL_VON_HAUS.get(n),
+                            'spitze_lon': round(cusps[n - 1] % 360.0, 4)})
+                break
+    return out
+
+
+def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
+    """Je Spitze: wie viele Minuten fruehere und spaetere Geburt das Zeichen
+    der Spitze wechseln (neu 2026-09-12). Braucht pyswisseph; ohne es None.
+
+    Die Spitzen liegen aus Schritt 1 ohnehin vor; die Funktion rechnet sie fuer
+    jd ± k Minuten neu (k = 1 .. max_min) und merkt sich je Spitze das erste k,
+    bei dem der Zeichenindex von dem der Geburtsminute abweicht. In Koch sind
+    die Spitzen 7–12 die Gegenpunkte von 1–6; ihre Kippminuten sind darum
+    paarweise gleich, und strukturbild_text() gibt sie als Paare aus.
+
+    -> Liste von zwoelf dicts, Haus 1..12:
+       {'haus', 'lon', 'zeichen', 'frueher', 'spaeter', 'min', 'richtung',
+        'zeichen_frueher', 'zeichen_spaeter', 'grad_je_minute'}
+       'frueher'/'spaeter' in Minuten oder None (kein Wechsel bis max_min);
+       'min' das kleinere von beiden, 'richtung' die zugehoerige Seite;
+       'grad_je_minute' die Laufgeschwindigkeit der Spitze an der Geburtsminute.
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    c0 = swe.houses_ex(jd, lat, lon, hsys)[0][:12]
+    basis = [zeichen_index(c) for c in c0]
+    frueher, spaeter = [None] * 12, [None] * 12
+    z_f, z_s = [None] * 12, [None] * 12
+    schritt = 1.0 / 1440.0
+    c_m1 = swe.houses_ex(jd - schritt, lat, lon, hsys)[0][:12]
+    c_p1 = swe.houses_ex(jd + schritt, lat, lon, hsys)[0][:12]
+    speed = [abs(((c_p1[i] - c_m1[i] + 180.0) % 360.0) - 180.0) / 2.0
+             for i in range(12)]
+    for k in range(1, max_min + 1):
+        if all(f is not None for f in frueher) and \
+                all(s is not None for s in spaeter):
+            break
+        cf = c_m1 if k == 1 else swe.houses_ex(jd - k * schritt, lat, lon, hsys)[0][:12]
+        cs = c_p1 if k == 1 else swe.houses_ex(jd + k * schritt, lat, lon, hsys)[0][:12]
+        for i in range(12):
+            if frueher[i] is None and zeichen_index(cf[i]) != basis[i]:
+                frueher[i] = k
+                z_f[i] = SIGN_NAMES[zeichen_index(cf[i])]
+            if spaeter[i] is None and zeichen_index(cs[i]) != basis[i]:
+                spaeter[i] = k
+                z_s[i] = SIGN_NAMES[zeichen_index(cs[i])]
+    out = []
+    for i in range(12):
+        kand = [(frueher[i], 'früher'), (spaeter[i], 'später')]
+        kand = [k for k in kand if k[0] is not None]
+        mn, ri = min(kand) if kand else (None, None)
+        out.append({'haus': i + 1, 'lon': round(c0[i] % 360.0, 4),
+                    'zeichen': SIGN_NAMES[basis[i]],
+                    'frueher': frueher[i], 'spaeter': spaeter[i],
+                    'min': mn, 'richtung': ri,
+                    'zeichen_frueher': z_f[i], 'zeichen_spaeter': z_s[i],
+                    'grad_je_minute': round(speed[i], 4)})
+    return out
+
+
+def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
+    """Die Spitzen unter der Schwelle (Gegenprobe g), als Paare 1/7 .. 6/12.
+
+    -> [{'paar': (n, n+6), 'minuten', 'richtung', 'von': (zeichen_n, zeichen_n6),
+         'nach': (…, …)}], die knappste zuerst. Leer, wenn nichts unter der
+        Schwelle liegt; None, wenn kipp None ist.
+    """
+    if kipp is None:
+        return None
+    out = []
+    for i in range(6):
+        a, b = kipp[i], kipp[i + 6]
+        if a['min'] is None or a['min'] >= schwelle:
+            continue
+        nach_a = a['zeichen_frueher'] if a['richtung'] == 'früher' else a['zeichen_spaeter']
+        nach_b = b['zeichen_frueher'] if a['richtung'] == 'früher' else b['zeichen_spaeter']
+        out.append({'paar': (a['haus'], b['haus']), 'minuten': a['min'],
+                    'richtung': a['richtung'],
+                    'von': (a['zeichen'], b['zeichen']),
+                    'nach': (nach_a, nach_b),
+                    'grad_je_minute': a['grad_je_minute']})
+    out.sort(key=lambda w: w['minuten'])
+    return out
+
+
+def hausherrscher(factors, cusps, aspects=None, klassisch=False,
+                  spitzen_orb=SPITZEN_ORB):
     """Wo steht der Herrscher jedes Hauses? (Befund 5.2 des Prueflaufs.)
 
     Bis 2026-09-06 fragte keine Regel danach: Das Strukturbild verlangte
@@ -906,19 +1197,51 @@ def hausherrscher(factors, cusps, aspects=None, klassisch=False):
 
     Rueckgabe je Haus 1..12:
         {'haus', 'spitzenzeichen', 'herrscher', 'steht_in_zeichen',
-         'steht_in_haus', 'im_eigenen_haus', 'auf_winkel', 'aspekt_zur_spitze'}
-    'auf_winkel' nennt den Winkel, wenn der Herrscher mit ihm in Konjunktion
-    steht; 'aspekt_zur_spitze' den Aspekt zur Spitze seines eigenen Hauses,
-    soweit die Achsen in `aspects` gefuehrt sind.
+         'steht_in_haus', 'haus_spalte', 'grenzlage', 'nebenhaus',
+         'im_eigenen_haus', 'auf_winkel', 'spannung_zur_spitze',
+         'wechselseitig', 'kreis'}
+    Die VIER Sonderfaelle des Typmoduls (Gewichtungsrang 2), seit 2026-09-12
+    alle markiert — bis dahin nur die ersten beiden:
+      'im_eigenen_haus'      der Herrscher steht im eigenen Haus (rechnerisch
+                             oder als Grenzlage-Nebenhaus)
+      'auf_winkel'           die Winkel, mit denen er in Konjunktion steht
+                             (aus `aspects`), oder None
+      'spannung_zur_spitze'  Quadrat oder Opposition zur Spitze des eigenen
+                             Hauses: bei den Haeusern 1/4/7/10 aus `aspects`
+                             (Huber-Orbis, die Spitze ist ein Winkel), bei den
+                             Zwischenspitzen aus herrscher_spitzen_kontakt()
+                             mit `spitzen_orb` — als Text („Quadrat AC, voll,
+                             Orb 2°10′" bzw. „Quadrat zur Spitze 8, Orb 0°37′
+                             (3°-Regel)"), sonst None
+      'wechselseitig'        das Haus, mit dem er einen Zweier-Kreis bildet
+                             (haus_kreise()), sonst None
+      'kreis'                die Haeuser eines laengeren Kreises, in dem das
+                             Haus steht, sonst None
     """
     tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
     pos = {f['name']: f['lon'] for f in factors}
-    konj_winkel = {}
+    konj_winkel, spann_winkel = {}, {}
     for a in (aspects or []):
         if a['angle'] == 0:
             for x, y in ((a['a'], a['b']), (a['b'], a['a'])):
                 if y in WINKEL:
                     konj_winkel.setdefault(x, []).append(y)
+        elif a['angle'] in _HART:
+            for x, y in ((a['a'], a['b']), (a['b'], a['a'])):
+                if y in WINKEL and x not in WINKEL:
+                    spann_winkel[(x, y)] = a
+    kontakte = {k['haus']: k for k in
+                herrscher_spitzen_kontakt(factors, cusps, orb=spitzen_orb,
+                                          klassisch=klassisch)}
+    hk = haus_kreise(factors, cusps, klassisch=klassisch)
+    wechsel = {}
+    for paar in hk['wechselseitig']:
+        wechsel[paar[0]], wechsel[paar[1]] = paar[1], paar[0]
+    kreis_von = {}
+    for kr in hk['kreise']:
+        if kr['laenge'] > 2:
+            for h in kr['haeuser']:
+                kreis_von.setdefault(h, kr['haeuser'])
     out = []
     for n in range(1, 13):
         zsp = SIGN_NAMES[zeichen_index(cusps[n - 1])]
@@ -926,7 +1249,9 @@ def hausherrscher(factors, cusps, aspects=None, klassisch=False):
         eintrag = {'haus': n, 'spitzenzeichen': zsp, 'herrscher': hr,
                    'steht_in_zeichen': None, 'steht_in_haus': None,
                    'haus_spalte': None, 'grenzlage': False, 'nebenhaus': None,
-                   'im_eigenen_haus': False, 'auf_winkel': None}
+                   'im_eigenen_haus': False, 'auf_winkel': None,
+                   'spannung_zur_spitze': None, 'wechselseitig': None,
+                   'kreis': None}
         if hr and hr in pos:
             hg = haus_und_grenzlage(pos[hr], cusps)
             eintrag['steht_in_zeichen'] = zeichen_name(pos[hr])
@@ -942,6 +1267,22 @@ def hausherrscher(factors, cusps, aspects=None, klassisch=False):
             eintrag['im_eigenen_haus'] = (
                 hg['haus'] == n or (hg['grenzlage'] and hg['nebenhaus'] == n))
             eintrag['auf_winkel'] = ', '.join(konj_winkel.get(hr, [])) or None
+            # Sonderfall 3: Spannung zur eigenen Spitze. An den Winkeln zaehlt
+            # die Aspektliste (Huber-Orbis); an den Zwischenspitzen die schmale
+            # 3°-Regel aus herrscher_spitzen_kontakt().
+            w = _WINKEL_VON_HAUS.get(n)
+            if w and (hr, w) in spann_winkel:
+                a = spann_winkel[(hr, w)]
+                eintrag['spannung_zur_spitze'] = (
+                    f"{a['name']} {w}, {a['strength']}, Orb {_gr(a['orb'])}")
+            elif not w and n in kontakte and kontakte[n]['hart']:
+                k = kontakte[n]
+                eintrag['spannung_zur_spitze'] = (
+                    f"{k['aspekt']} zur Spitze {n}, Orb {_gr(k['orb'])} "
+                    f"({SPITZEN_ORB:g}°-Regel)")
+            # Sonderfall 4: wechselseitig (Zweier-Kreis) — und laengere Kreise
+            eintrag['wechselseitig'] = wechsel.get(n)
+            eintrag['kreis'] = kreis_von.get(n)
         out.append(eintrag)
     return out
 
@@ -1828,7 +2169,7 @@ def zyklusfenster(faktor, alter=None, gerechnet=None):
 
 
 def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
-                 jd_geburt=None):
+                 jd_geburt=None, lat=None, lon=None):
     """Alle Struktur-Befunde eines Charts in einem Aufruf.
 
     factors  Liste {'name','lon',...} inkl. Achsen AC/MC/DC/IC und der
@@ -1837,16 +2178,23 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     aspects  Ergebnis von huber_aspects(); wird sonst selbst gerechnet.
     zusatz   Ergebnis von zusatz_aspekte(); optional, geht nur in die Dichte ein.
     alter    heutiges Alter der Person in Jahren (fuer die Zyklusfenster).
-    jd_geburt  Julianisches Datum der Geburt in UT. Nur noetig, damit das
+    jd_geburt  Julianisches Datum der Geburt in UT. Noetig, damit das
              Pluto-Quadrat aus der Radix-Position statt aus dem Jahrgangsmittel
-             gerechnet wird (s. pluto_quadrat_alter, Pruefbericht EA 1.4).
+             gerechnet wird (s. pluto_quadrat_alter, Pruefbericht EA 1.4) — und
+             seit 2026-09-12 zusammen mit lat/lon fuer die Kippminute.
              Ohne Angabe bleibt der Tabellenwert und wird als Schaetzung
              gekennzeichnet.
+    lat, lon  geografische Breite und Laenge des Geburtsorts (Dezimalgrad,
+             dieselben Werte wie beim swe.houses_ex-Aufruf in Schritt 1). Nur
+             mit jd_geburt, lat UND lon rechnet kippminuten(); sonst bleibt
+             sb['kippminuten'] None, und strukturbild_text() sagt das.
 
     Rueckgabe: dict mit den Schluesseln verteilung_planeten, verteilung_alle,
     verteilung_gewichtet, retro, ketten, ketten_klassisch, hausherrscher,
-    rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen — und seit
-    dem 2026-09-08 (zweiter Durchgang) verteilungsmuster und mondphase.
+    rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen — seit
+    dem 2026-09-08 (zweiter Durchgang) verteilungsmuster und mondphase — und
+    seit dem 2026-09-12 haus_kreise, haus_kreise_klassisch, herrscher_einlauf,
+    spitzen_kontakte, kippminuten, kipp_warnungen, kippminuten_abweichung.
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -1860,6 +2208,13 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'ketten': herrscherketten(factors),
         'ketten_klassisch': herrscherketten(factors, klassisch=True),
         'hausherrscher': hausherrscher(factors, cusps, aspects),
+        'haus_kreise': haus_kreise(factors, cusps),
+        'haus_kreise_klassisch': haus_kreise(factors, cusps, klassisch=True),
+        'herrscher_einlauf': herrscher_einlauf(factors, cusps),
+        'spitzen_kontakte': herrscher_spitzen_kontakt(factors, cusps),
+        'kippminuten': None,
+        'kipp_warnungen': None,
+        'kippminuten_abweichung': None,
         'rezeptionen': rezeptionen(factors),
         'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
@@ -1870,6 +2225,18 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'zyklen': {},
         'alter': alter,
     }
+    # Kippminute je Spitze (neu 2026-09-12): braucht jd, lat, lon und
+    # pyswisseph. Die neu gerechneten Spitzen werden gegen die uebergebenen
+    # gehalten — weichen sie um mehr als 0,05° ab, passen jd/lat/lon nicht zu
+    # den cusps (anderer Ort, andere Zeit, anderes Haeusersystem), und die
+    # Kippminuten waeren die eines anderen Charts. Das steht dann in §3.
+    if jd_geburt is not None and lat is not None and lon is not None:
+        kipp = kippminuten(jd_geburt, lat, lon)
+        if kipp:
+            sb['kippminuten'] = kipp
+            sb['kipp_warnungen'] = kipp_warnungen(kipp)
+            sb['kippminuten_abweichung'] = round(max(
+                _winkelabstand(k['lon'], cusps[i]) for i, k in enumerate(kipp)), 3)
     # Achsen-Doppelungen gruppieren (neu 2026-09-09, Pruefbericht 5.7): Die
     # Handarbeit, die das Datenblatt-Modul bisher verlangte, macht jetzt
     # gruppiere_figuren() — sie fasst zusammen, was zweifelsfrei dieselbe Figur
@@ -2098,18 +2465,154 @@ def strukturbild_text(sb):
     if nur_kl:
         L.append(f"- Nur klassisch: "
                  f"{', '.join(a + '↔' + b for a, b in nur_kl)}.")
-    L.append('- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht):')
+    L.append('- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht; die vier '
+             'Sonderfälle des Typmoduls stehen hinter ⟵):')
+    beteiligt = set()          # Haeuser, deren Spitze an einem Sonderfall haengt
     for h in sb['hausherrscher']:
         mark = []
         if h['im_eigenen_haus']:
             mark.append('im eigenen Haus')
         if h['auf_winkel']:
             mark.append(f"auf {h['auf_winkel']}")
-        zusatz_ = f"  ⟵ {', '.join(mark)}" if mark else ''
+        if h.get('spannung_zur_spitze'):
+            mark.append(f"in Spannung zur eigenen Spitze: {h['spannung_zur_spitze']}")
+        if h.get('wechselseitig'):
+            mark.append(f"wechselseitig mit Haus {h['wechselseitig']}")
+        if mark:
+            beteiligt.add(h['haus'])
+        zusatz_ = f"  ⟵ {'; '.join(mark)}" if mark else ''
         L.append(f"  - Haus {h['haus']:>2} ({h['spitzenzeichen']}) → "
                  f"{h['herrscher']} in {h['steht_in_zeichen']}, Haus "
                  f"{h['haus_spalte'] or h['steht_in_haus']}{zusatz_}")
-    L.append('- Befund: <die strukturelle Pointe in einer Zeile>')
+
+    # --- Haeuser-Kreise (neu 2026-09-12): die zweite Etage der Kreise --------
+    hk = sb.get('haus_kreise')
+    if hk is not None:
+        def _kreis_text(kr):
+            teile = []
+            for g in kr['glieder']:
+                teile.append(f"Haus {g['haus']} ({g['spitzenzeichen']}) → "
+                             f"{g['herrscher']} in Haus {g['haus_spalte']}")
+            txt = ' → '.join(teile) + f" → zurück zu Haus {kr['haeuser'][0]}"
+            if kr['grenzlagen']:
+                txt += (f"; Grenzlage bei Haus "
+                        f"{', '.join(str(x) for x in kr['grenzlagen'])}"
+                        + ('' if kr['haelt_bei_schwellenlage'] else
+                           ' — nach der Schwellenlage-Regel (Nebenhaus führt) '
+                           'schließt sich der Kreis NICHT'))
+            return txt
+        if hk['kreise']:
+            for kr in hk['kreise']:
+                art = ('wechselseitig (Sonderfall 4)' if kr['wechselseitig']
+                       else f"{kr['laenge']} Glieder")
+                L.append(f"- Häuser-Kreis, {art}: {_kreis_text(kr)}.")
+                beteiligt.update(kr['haeuser'])
+        else:
+            L.append('- Häuser-Kreise: keine — kein Zyklus unter den Haus-Herrschern '
+                     '(modern gerechnet).')
+        hkk = sb.get('haus_kreise_klassisch')
+        if hkk is not None:
+            mod = {frozenset(k['haeuser']) for k in hk['kreise']}
+            kla = {frozenset(k['haeuser']) for k in hkk['kreise']}
+            if mod != kla:
+                L.append('- Klassisch gerechnet (Mars/Saturn/Jupiter für Skorpion/'
+                         'Wassermann/Fische) ergeben sich andere Häuser-Kreise: '
+                         + ('; '.join(_kreis_text(k) for k in hkk['kreise'])
+                            or 'keine') + '.')
+
+    # --- Herrscher-Einlauf (neu 2026-09-12) ------------------------------------
+    he = sb.get('herrscher_einlauf')
+    if he is not None:
+        L.append('- Herrscher-Einlauf (welche Herrscher zeigen in ein Haus): '
+                 + ' · '.join(
+                     f"{m}: {he['anzahl'][m]}"
+                     + (f" (aus Haus {', '.join(str(x) for x in he['einlauf'][m])})"
+                        if he['einlauf'][m] else '')
+                     for m in range(1, 13)) + '.')
+        L.append('- Ohne Einlauf (Bereiche, die keinen Verwalter empfangen): '
+                 + (', '.join(f"Haus {m}" for m in he['ohne_einlauf']) or 'keiner')
+                 + '.')
+        sp = he['schwerpunkt']
+        if sp['haeuser']:
+            hs = [str(x) for x in sp['haeuser']]
+            hs_txt = hs[0] if len(hs) == 1 else ', '.join(hs[:-1]) + ' und ' + hs[-1]
+            L.append(f"- Bündelung: {sp['anzahl']} von {sp['von']} Bereichen "
+                     f"lagern nach Haus {hs_txt} aus.")
+
+    # --- Spitzen-Kontakte (neu 2026-09-12, schmale Pruefung, nur §3) -----------
+    sk = sb.get('spitzen_kontakte')
+    if sk is not None:
+        if sk:
+            for k in sk:
+                if k['winkel']:
+                    note = (f" — Spitze ist {k['winkel']}, hier gilt die "
+                            f"Aspektliste; die Zeile ist nur Gegenprobe")
+                elif k['hart']:
+                    note = ' — harter Kontakt an einer Zwischenspitze: Sonderfall ' \
+                           '„in Spannung zur eigenen Spitze"'
+                    beteiligt.add(k['haus'])
+                else:
+                    note = ''
+                L.append(f"- Spitzen-Kontakt: {k['herrscher']} {k['aspekt']} zur "
+                         f"Spitze {k['haus']} (Orb {_gr(k['orb'])}){note}.")
+        else:
+            L.append(f'- Spitzen-Kontakte (Herrscher zur eigenen Spitze, Orb '
+                     f'{SPITZEN_ORB:g}°): keine.')
+        L.append(f'  Die Spitzen-Kontakte gelten NUR hier (Setzung 2026-09-12, Orb '
+                 f'{SPITZEN_ORB:g}°, kein Rückhalt in der Huber-Schule) — kein '
+                 f'Eintrag in Aspekttabelle, Aspekt-Heimat, Ressourcen-Block oder '
+                 f'Rechenschaft.')
+
+    # --- Kippminuten (neu 2026-09-12): Koch-Aussage mit Zeitmass ----------------
+    kipp = sb.get('kippminuten')
+    if kipp:
+        def _kipp_paar(i):
+            a, b = kipp[i], kipp[i + 6]
+            f = 'nie (>%d)' % KIPP_MAX if a['frueher'] is None else str(a['frueher'])
+            s = 'nie (>%d)' % KIPP_MAX if a['spaeter'] is None else str(a['spaeter'])
+            return (f"{a['haus']}/{b['haus']} ({a['zeichen']}/{b['zeichen']}): "
+                    f"früher {f}, später {s}")
+        paare_bet = sorted({((h - 1) % 6) for h in beteiligt})
+        if paare_bet and len(paare_bet) < 6:
+            L.append('- Kippminuten der Spitzen, die an einem Sonderfall, Kreis oder '
+                     'Spitzen-Kontakt hängen (Minuten früherer/späterer Geburt bis '
+                     'zum Zeichenwechsel): '
+                     + ' · '.join(_kipp_paar(i) for i in paare_bet) + '.')
+        L.append('- Kippminuten aller Spitzen: '
+                 + ' · '.join(_kipp_paar(i) for i in range(6)) + '.')
+        L.append('- Laufgeschwindigkeit je Minute: '
+                 + ' · '.join(f"{kipp[i]['haus']}/{kipp[i + 6]['haus']} "
+                              f"{_gr(kipp[i]['grad_je_minute'])}"
+                              for i in range(6)) + '.')
+        abw = sb.get('kippminuten_abweichung')
+        if abw is not None and abw > 0.05:
+            L.append(f"- ⚠ Die für die Kippminute neu gerechneten Spitzen weichen bis "
+                     f"zu {_gr(abw)} von den übergebenen cusps ab — jd/lat/lon passen "
+                     f"nicht zu den Spitzen des Datenblatts; Kippminuten prüfen, "
+                     f"bevor sie verwendet werden.")
+        for w in (sb.get('kipp_warnungen') or []):
+            L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: Spitzen "
+                     f"{w['paar'][0]}/{w['paar'][1]} wechseln bei {w['minuten']} "
+                     f"{'Minute' if w['minuten'] == 1 else 'Minuten'} "
+                     f"{w['richtung']}er Geburt das Zeichen "
+                     f"({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} → "
+                     f"{w['nach'][1]}; {_gr(w['grad_je_minute'])} je Minute). "
+                     f"Gehört in den ⚠-Block und den Datenblatt-Kopf (Gegenprobe "
+                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe; ein "
+                     f"Sonderfall an dieser Spitze führt ein Thema nur mit "
+                     f"Begründung (Typmodul, Gewichtungsrang 2).")
+        if not sb.get('kipp_warnungen'):
+            L.append(f'- Keine Spitze unter {KIPP_SCHWELLE} Kippminuten.')
+    else:
+        L.append('- Kippminuten: nicht gerechnet — strukturbild() braucht dafür '
+                 'jd_geburt, lat und lon (und pyswisseph). Ohne sie ist jede '
+                 'Hausherrscher-Deutung eine Behauptung mit unbekannter '
+                 'Reichweite (Datenblatt-Modul, §3 und Gegenprobe g).')
+    L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
+             'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
+             'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
+             'Zeit-Einschränkung, wo eine beteiligte Spitze unter zehn '
+             'Kippminuten liegt>')
     L.append('')
 
     L.append('### 4 · Aspektdichte je Faktor')
@@ -2615,3 +3118,149 @@ if __name__ == '__main__':
           _sb['mondphase']['phase'], '|',
           len(_sb['konfigurationen']['drachen']), 'Drachen,',
           len(_sb['konfigurationen']['rechteck']), 'Rechtecke')
+
+    # --- Seit 2026-09-12 (Aenderungspaket „Zugang statt Thema"): die zweite
+    # Etage der Hausherrscher — Haeuser-Kreise, Herrscher-Einlauf,
+    # Spitzen-Kontakte, vier Sonderfaelle, Kippminute. ALLE Werte unten sind
+    # ERFUNDEN (gleichmaessige Spitzen bei 0°, 30°, …; frei gesetzte Laengen;
+    # als Geburtsmoment die J2000.0-Epoche als Standardwert, runde
+    # Koordinaten) — kein echtes Chart, kein Klient. ----------------------------
+    # Spitzen 0,30,60,… -> Haus 1 Widder (Mars), 2 Stier (Venus), 3 Zwillinge
+    # (Merkur), 4 Krebs (Mond), 5 Loewe (Sonne), 6 Jungfrau (Merkur), 7 Waage
+    # (Venus), 8 Skorpion (Pluto), 9 Schuetze (Jupiter), 10 Steinbock (Saturn),
+    # 11 Wassermann (Uranus), 12 Fische (Neptun).
+    _fk = [{'name': 'Mars', 'lon': 45.0},      # Herrscher 1 steht in Haus 2 ...
+           {'name': 'Venus', 'lon': 15.0},     # ... Herrscher 2 in Haus 1: Zweier
+           {'name': 'Merkur', 'lon': 135.0},   # Herrscher 3 (und 6) in Haus 5
+           {'name': 'Sonne', 'lon': 255.0},    # Herrscher 5 in Haus 9
+           {'name': 'Jupiter', 'lon': 75.0},   # Herrscher 9 in Haus 3: Dreier
+           {'name': 'Mond', 'lon': 100.0},     # Herrscher 4 im eigenen Haus
+           {'name': 'Pluto', 'lon': 200.0},    # Herrscher 8 in Haus 7
+           {'name': 'Saturn', 'lon': 330.0},   # Herrscher 10 in Haus 12
+           {'name': 'Uranus', 'lon': 300.0},   # Herrscher 11 im eigenen Haus
+           {'name': 'Neptun', 'lon': 10.0},    # Herrscher 12 in Haus 1
+           {'name': 'AC', 'lon': 0.0}, {'name': 'MC', 'lon': 270.0},
+           {'name': 'DC', 'lon': 180.0}, {'name': 'IC', 'lon': 90.0}]
+    _hk = haus_kreise(_fk, _c)
+    assert [k['haeuser'] for k in _hk['kreise']] == [[3, 5, 9], [1, 2]], _hk['kreise']
+    assert _hk['wechselseitig'] == [[1, 2]]
+    assert _hk['kreise'][1]['wechselseitig'] and not _hk['kreise'][0]['wechselseitig']
+    assert _hk['selbst'] == [4, 11], _hk['selbst']
+    assert _hk['ohne_herrscher'] == []
+    assert all(k['haelt_bei_schwellenlage'] for k in _hk['kreise'])
+    assert _hk['kreise'][0]['glieder'][0]['herrscher'] == 'Merkur'
+    # klassisch: Skorpion -> Mars (in Haus 2), Wassermann -> Saturn (Haus 12),
+    # Fische -> Jupiter (Haus 3) — andere Abbildung, dieselben beiden Kreise
+    _hkk = haus_kreise(_fk, _c, klassisch=True)
+    assert _hkk['ziel'][8] == 2 and _hkk['ziel'][11] == 12 and _hkk['ziel'][12] == 3
+    assert [k['haeuser'] for k in _hkk['kreise']] == [[3, 5, 9], [1, 2]]
+    # Schwellenlage bricht einen Kreis: Venus 1°30' vor Spitze 2 -> rechnerisch
+    # Haus 1 (Kreis 1<->2 besteht), fuehrend aber Haus 2 (Kreis besteht nicht)
+    _fk2 = [dict(f) for f in _fk]
+    _fk2[1]['lon'] = 28.5
+    _hk2 = haus_kreise(_fk2, _c)
+    _zw = [k for k in _hk2['kreise'] if k['haeuser'] == [1, 2]][0]
+    assert _zw['grenzlagen'] == [2] and _zw['haelt_bei_schwellenlage'] is False, _zw
+
+    _he = herrscher_einlauf(_fk, _c)
+    assert _he['einlauf'][1] == [2, 7, 12], _he['einlauf']
+    assert _he['einlauf'][5] == [3, 6] and _he['einlauf'][3] == [9]
+    assert _he['ohne_einlauf'] == [6, 8, 10], _he['ohne_einlauf']
+    assert sum(_he['anzahl'].values()) == 12
+    assert _he['buendelung'][0] == (1, 3)
+    assert _he['schwerpunkt']['haeuser'][0] == 1 and _he['schwerpunkt']['anzahl'] >= 6
+
+    # Spitzen-Kontakte: Pluto 120.6° zur Spitze 8 (210°) = 89,4° -> Quadrat,
+    # Orb 0,6 -> harter Kontakt an einer Zwischenspitze (Sonderfall 3);
+    # Venus 89° zur Spitze 2 (30°) = 59° -> Sextil, nicht hart;
+    # Mars 92° zur Spitze 1 = AC -> Quadrat, aber Winkel: Aspektliste massgeblich.
+    _fs2 = [{'name': 'Pluto', 'lon': 120.6}, {'name': 'Venus', 'lon': 89.0},
+            {'name': 'Mars', 'lon': 92.0},
+            {'name': 'AC', 'lon': 0.0}, {'name': 'MC', 'lon': 270.0},
+            {'name': 'DC', 'lon': 180.0}, {'name': 'IC', 'lon': 90.0}]
+    _sk = {k['haus']: k for k in herrscher_spitzen_kontakt(_fs2, _c)}
+    assert _sk[8]['aspekt'] == 'Quadrat' and _sk[8]['hart'] and _sk[8]['winkel'] is None
+    assert abs(_sk[8]['orb'] - 0.6) < 1e-6, _sk[8]
+    assert _sk[2]['aspekt'] == 'Sextil' and not _sk[2]['hart']
+    # Venus regiert auch Haus 7: 89° zur Spitze 7 (DC, 180°) = 91° -> Quadrat am Winkel
+    assert _sk[7]['aspekt'] == 'Quadrat' and _sk[7]['winkel'] == 'DC'
+    assert _sk[1]['aspekt'] == 'Quadrat' and _sk[1]['winkel'] == 'AC'
+    assert 4 not in _sk and 5 not in _sk                # kein Herrscher in der Liste
+    # Orb-Grenze: 3,0° innerhalb, 3,1° draussen
+    assert herrscher_spitzen_kontakt([{'name': 'Pluto', 'lon': 123.0}], _c)[0]['orb'] == 3.0
+    assert herrscher_spitzen_kontakt([{'name': 'Pluto', 'lon': 123.1}], _c) == []
+
+    # Die vier Sonderfaelle an der Hausherrscher-Zeile
+    _hh2 = {h['haus']: h for h in hausherrscher(_fs2, _c, huber_aspects(_fs2))}
+    assert _hh2[8]['spannung_zur_spitze'].startswith('Quadrat zur Spitze 8'), _hh2[8]
+    assert _hh2[1]['spannung_zur_spitze'].startswith('Quadrat AC'), _hh2[1]
+    assert _hh2[7]['spannung_zur_spitze'].startswith('Quadrat DC'), _hh2[7]
+    assert _hh2[2]['spannung_zur_spitze'] is None
+    _hh3 = {h['haus']: h for h in hausherrscher(_fk, _c, huber_aspects(_fk))}
+    assert _hh3[1]['wechselseitig'] == 2 and _hh3[2]['wechselseitig'] == 1
+    assert _hh3[3]['kreis'] == [3, 5, 9] and _hh3[9]['kreis'] == [3, 5, 9]
+    assert _hh3[4]['im_eigenen_haus'] and _hh3[4]['wechselseitig'] is None
+    assert _hh3[7]['wechselseitig'] is None and _hh3[7]['kreis'] is None
+
+    # Kippminute — gegen die Ephemeride, wenn pyswisseph da ist. Geburtsmoment:
+    # J2000.0-Epoche (Standardwert, kein Geburtsdatum), runde Koordinaten.
+    _JD, _LAT, _LON = 2451545.0, 50.0, 10.0
+    _kp = kippminuten(_JD, _LAT, _LON)
+    if _kp is None:
+        print('Kippminuten-Test: uebersprungen (kein pyswisseph)')
+    else:
+        import swisseph as _swe
+        assert len(_kp) == 12 and [k['haus'] for k in _kp] == list(range(1, 13))
+        for _k in _kp:
+            assert _k['min'] is not None and 1 <= _k['min'] <= KIPP_MAX, _k
+            assert _k['grad_je_minute'] > 0
+        # Koch: Spitzen 7–12 sind die Gegenpunkte von 1–6 -> gleiche Kippminuten
+        for i in range(6):
+            assert (_kp[i]['frueher'], _kp[i]['spaeter']) == \
+                   (_kp[i + 6]['frueher'], _kp[i + 6]['spaeter']), (i, _kp[i], _kp[i + 6])
+        # Das gemeldete k ist die ERSTE Minute mit anderem Zeichen: eine Minute
+        # davor steht die Spitze noch im Geburtszeichen.
+        for i, _k in enumerate(_kp):
+            for key, vz in (('frueher', -1), ('spaeter', +1)):
+                if _k[key] is None:
+                    continue
+                _c_kipp = _swe.houses_ex(_JD + vz * _k[key] / 1440.0, _LAT, _LON, b"K")[0]
+                _c_davor = _swe.houses_ex(_JD + vz * (_k[key] - 1) / 1440.0, _LAT, _LON, b"K")[0]
+                assert zeichen_name(_c_kipp[i]) != _k['zeichen'], (i, key, _k)
+                assert zeichen_name(_c_davor[i]) == _k['zeichen'], (i, key, _k)
+        _kw = kipp_warnungen(_kp, schwelle=KIPP_MAX + 1)
+        assert len(_kw) == 6 and _kw == sorted(_kw, key=lambda w: w['minuten'])
+        assert kipp_warnungen(_kp, schwelle=0) == []
+        assert kipp_warnungen(None) is None
+        # Das Strukturbild traegt die Kippminuten und die Abweichungsprobe
+        _cu_kipp = list(_swe.houses_ex(_JD, _LAT, _LON, b"K")[0][:12])
+        _fkp = [{'name': 'Sonne', 'lon': 280.0}, {'name': 'Mond', 'lon': 100.0},
+                {'name': 'Mars', 'lon': 45.0}, {'name': 'Venus', 'lon': 15.0},
+                {'name': 'AC', 'lon': _cu_kipp[0]}, {'name': 'MC', 'lon': _cu_kipp[9]},
+                {'name': 'DC', 'lon': (_cu_kipp[0] + 180) % 360},
+                {'name': 'IC', 'lon': (_cu_kipp[9] + 180) % 360}]
+        _sbk = strukturbild(_fkp, _cu_kipp, jd_geburt=_JD, lat=_LAT, lon=_LON)
+        assert _sbk['kippminuten'] is not None and _sbk['kipp_warnungen'] is not None
+        assert _sbk['kippminuten_abweichung'] < 0.001, _sbk['kippminuten_abweichung']
+        _tk = strukturbild_text(_sbk)
+        assert 'Kippminuten aller Spitzen' in _tk and 'Laufgeschwindigkeit' in _tk
+        assert 'nicht gerechnet' not in _tk.split('### 4')[0]
+        # Ohne lat/lon: keine Kippminute, und der Text sagt es
+        _sbo = strukturbild(_fkp, _cu_kipp, jd_geburt=_JD)
+        assert _sbo['kippminuten'] is None
+        assert 'Kippminuten: nicht gerechnet' in strukturbild_text(_sbo)
+        print('Kippminuten-Test: OK —', ' · '.join(
+            f"{_kp[i]['haus']}/{_kp[i + 6]['haus']} {_kp[i]['min']}" for i in range(6)),
+            '| Warnungen unter', KIPP_SCHWELLE, ':', len(_sbk['kipp_warnungen']))
+
+    # Der Text des anonymen Pruefcharts traegt die neuen Bloecke von §3
+    _txt = strukturbild_text(_sb)
+    assert 'Häuser-Kreis' in _txt and 'Herrscher-Einlauf' in _txt
+    assert 'Spitzen-Kontakt' in _txt and 'Kippminuten: nicht gerechnet' in _txt
+    assert 'Ohne Einlauf' in _txt
+    _t3 = strukturbild_text(strukturbild(_fk, _c))
+    assert 'wechselseitig (Sonderfall 4)' in _t3 and '3 Glieder' in _t3, _t3
+    assert 'wechselseitig mit Haus 2' in _t3
+    print('Hausherrscher-Etage-Test: OK —', len(_hk['kreise']), 'Häuser-Kreise,',
+          len(_he['ohne_einlauf']), 'Häuser ohne Einlauf,',
+          len(herrscher_spitzen_kontakt(_fs2, _c)), 'Spitzen-Kontakte')
