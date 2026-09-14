@@ -124,6 +124,12 @@ ASPEKT_GLYPH = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□',
                 'Trigon': '△', 'Sextil': '⚹', 'Quincunx': '⚻',
                 'Halbsextil': '⚺'}
 
+# Farbe der gerechneten Punkte im Rad. GESPIEGELT aus `radix.MARKE_FARBE` —
+# chartdoc importiert radix bewusst nicht. Aendert sich die Farbe dort, hier
+# nachziehen. Steht seit dem 2026-09-14 als Konstante statt zweimal als
+# verdrahteter Hexwert (einmal im CSS, einmal in linien_legende()).
+MARKE_FARBE = '#7d6f93'
+
 
 class _Farben:
     """Palette ohne Anfuehrungszeichen im Zugriff: `C.gold` statt PAL['gold'].
@@ -338,6 +344,18 @@ section.front {{ page: front; break-before: page; }}
    width:1.6pt; height:0.17cm; background:{C.ink}; }}
 .stroke.marke::after {{ content:""; position:absolute; left:0.335cm;
    top:0.17cm; width:0.5pt; height:0.13cm; background:{C.ink}; opacity:0.40; }}
+/* Gerechneter Punkt: OFFENER Kreis — dieselbe Form, die radix.radix(marken=…)
+   ins Rad zeichnet. Bis zum 2026-09-14 lief diese Zeile ueber `.stroke.marke`
+   mit ueberschriebener Hintergrundfarbe und zeigte damit einen violetten
+   BALKEN, waehrend im Rad ein Kreis stand — jede andere Zeile des Kastens
+   zeigt das Zeichen, das sie erklaert (Pruefbericht EA Schritt 3+4, 5.5;
+   dieselbe Regel, die 2026-09-08 die Zusatz-Aspektglyphen erzwungen hat). */
+.stroke.kreis {{ border-top:none; width:0.85cm; height:0.30cm;
+   vertical-align:-0.06cm; position:relative; }}
+.stroke.kreis::before {{ content:""; position:absolute; left:0.265cm;
+   top:0.035cm; width:0.20cm; height:0.20cm; border-radius:50%;
+   border:1.1pt solid {MARKE_FARBE}; background:transparent;
+   box-sizing:border-box; }}
 
 /* ---------- Element- / Modus-Verteilung ---------- */
 .dist {{ display:table; width:100%; table-layout:fixed; margin:0 0 0.46cm 0; }}
@@ -518,18 +536,21 @@ td.zz {{ color:#4c4335; font-size:0.94em; }}
 .zl-leer {{ color:#a99b80; }}
 
 /* ---------- Kapitel ---------- */
-/* Vorabstand knapper als in BASE_CSS (2.3cm): die Kapitelkoepfe trugen bis
-   zum 2026-09-05 zusaetzlich Signatur und Beleg-Streifen. Bei 2.3cm wurde der
-   unteilbare Block Kopf+erster Absatz so hoch, dass Kapitelwechsel
-   regelmaessig Restluecken ueber 30% liessen. 1.7cm haelt die Luft und hebt
-   den Fuellgrad. Beschluss vom 2026-07-27 bestaetigt.
-   HINWEIS 2026-09-05: Seit der Beleg-Verlagerung an den Kapitelfuss ist der
-   Kopf deutlich niedriger (nur noch Kicker, Titel, Regel) — der urspruengliche
-   Grund fuer die Kuerzung von 2.3cm auf 1.7cm ist damit entfallen. Der Wert
-   BLEIBT trotzdem bei 1.7cm: er gehoert zum HAUSSTIL und wird nicht en
-   passant im Wartungslauf geaendert. Wer ihn zurueckdreht, aendert den
-   Hausstil aller kuenftigen Horoskope — Beschluss noetig, dann hier UND im
-   Abschnitt „HAUSSTIL" des Design-Moduls nachziehen. */
+/* Vorabstand vor Kapiteln: HAUSSTIL['kapitel_vorab'], seit dem 2026-09-08
+   wieder 2.3cm.
+   Geschichte in zwei Zeilen: Bis zum 2026-09-05 trug der Kapitelkopf auch
+   Signatur und Beleg; der unteilbare Block Kopf+erster Absatz wurde damit so
+   hoch, dass 2.3cm regelmaessig Restluecken ueber 30% liessen — daher die
+   Kuerzung auf 1.7cm. Mit der Beleg-Verlagerung an den Kapitelfuss ist dieser
+   Grund entfallen, und der gemessene Fuellgrad des EA-Laufs lag bei 100%: die
+   0.6cm haetten nichts gekostet. Chris-Beschluss vom 2026-09-08
+   (Pruefbericht EA 4.9), Modul nachgezogen.
+   BERICHTIGT 2026-09-14: Hier stand bis dahin weiter „Der Wert BLEIBT
+   trotzdem bei 1.7cm … Beschluss noetig" — ein Kommentar, der dem Wert
+   darunter widersprach und den bereits gefallenen Beschluss verschwieg
+   (Pruefbericht EA Schritt 3+4, 5.4).
+   Wer den Wert erneut aendert, braucht wieder einen Beschluss und zieht hier
+   UND im Abschnitt „HAUSSTIL" des Design-Moduls nach. */
 .chapter {{ margin-top: {HAUSSTIL['kapitel_vorab']}; }}
 .chapter.chapter-first {{ break-before: page; }}
 .chapter-head {{ margin-bottom:0.34cm; }}
@@ -711,6 +732,18 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False,
     weil die eingemessene Bildbreite an der Kastenhoehe haengt
     (Befund 2026-09-06). Der Klartext-Standard ist erfuellt, weil jedes
     Zeichen im Dokument einmal benannt wird, nicht zweimal.
+
+    orbis=True haengt ORBIS_ZEILE an (die Orbis-Staffelung nach Faktor). Sie
+    steht aus demselben Grund NUR unter der Aspekttabelle: auf der Radseite
+    haengt die eingemessene Radbreite an der Kastenhoehe. Gesetzt wird sie
+    allein von aspekt_page().
+    **Bis zum 2026-09-14 setzte aspekt_page() sie NICHT** — der Parameter und
+    die Zeile lagen seit dem 2026-09-08 im Code, der Aufruf uebergab nur
+    zusatz=True, und die Zeile stand folglich in keinem gerenderten Dokument
+    (Pruefbericht EA Schritt 3+4, 5.2). Derselbe Fehlertyp wie das
+    `vorne=`-Versaeumnis: ein fehlendes Element, das kein Preflight findet,
+    weil nichts es zaehlt. Dagegen steht seit demselben Tag die Gegenprobe in
+    render_mit_inhalt() (s. pruefe_orbis_zeile).
     """
     rows = []
     for n, w, t in LEGEND_ROWS:
@@ -752,10 +785,10 @@ def linien_legende(gerechnet=None):
     # Gerechnete Punkte (radix.radix(marken=…)) MUESSEN hier benannt werden.
     ger = ''
     if gerechnet:
-        # Farbwert gespiegelt aus radix.MARKE_FARBE — chartdoc importiert
-        # radix nicht. Aendert sich die Farbe dort, hier nachziehen.
-        ger = ('<p><span class="stroke marke" style="background:#7d6f93">'
-               f'</span>offener Kreis — {esc(gerechnet)}: ein GERECHNETER '
+        # Das Zeichen im Kasten ist dasselbe, das im Rad steht: ein offener
+        # Kreis (`.stroke.kreis`), nicht der Balken der Positionsmarke.
+        ger = ('<p><span class="stroke kreis"></span>'
+               f'offener Kreis — {esc(gerechnet)}: ein GERECHNETER '
                'Punkt, keine Stellung am Himmel; er bildet deshalb keine '
                'Aspektlinien.</p>')
     return f"""<div class="lbox"><h5>Die Linien im Rad</h5>
@@ -779,7 +812,7 @@ grauen Striche darin sind die 5°-Teilung.</p></div>"""
 # --- Seite: das Rad ---------------------------------------------------------
 
 def radix_page(bild, unterzeile, kicker='Das Chart im Bild', titel='Die Radix',
-               anker='PG_rad', bild_breite=None):
+               anker='PG_rad', bild_breite=None, gerechnet=None):
     """Radseite im Hausstil: grosses Rad, darunter die beiden Legendenkaesten.
 
     bild        Dateiname des von radix.py erzeugten PNG. Das PNG traegt seit
@@ -789,6 +822,15 @@ def radix_page(bild, unterzeile, kicker='Das Chart im Bild', titel='Die Radix',
                 Schrift. Alles Erklaerende steht jetzt in `unterzeile`.
     unterzeile  kursive Zeile unter dem Rad, in der Dokumentschrift
     bild_breite ueberschreibt HAUSSTIL['rad_breite'] fuer diese Seite
+    gerechnet   Name des gerechneten Punktes, sobald das Rad mit
+                `radix.radix(marken=…)` einen zeichnet — z. B.
+                'der Pluto-Polaritaetspunkt'. Wird an linien_legende()
+                durchgereicht und ist dann PFLICHT: ein sichtbares Zeichen
+                ohne Erklaerung verstoesst gegen den Klartext-Standard.
+                Neu 2026-09-14 (Pruefbericht EA Schritt 3+4, 5.1): Das
+                Design-Modul verlangte die Zeile seit dem 2026-09-08, diese
+                Funktion hatte aber keinen Weg, sie zu setzen — jeder Lauf mit
+                gerechnetem Punkt musste den Kasten von Hand austauschen.
     """
     stil = f' style="width:{bild_breite}"' if bild_breite else ''
     return f"""<section class="front" id="{anker}">
@@ -797,7 +839,8 @@ def radix_page(bild, unterzeile, kicker='Das Chart im Bild', titel='Die Radix',
 <div class="fm-rule"></div>
 <div class="radwrap"><img src="{bild}" alt="Radix"{stil}></div>
 <div class="radnote">{esc(unterzeile)}</div>
-<div class="legs"><div class="row"><div class="cell links">{linien_legende()}</div>
+<div class="legs"><div class="row">
+<div class="cell links">{linien_legende(gerechnet=gerechnet)}</div>
 <div class="cell">{aspekt_legende()}</div></div></div>
 </section>"""
 
@@ -1262,7 +1305,7 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
 <p class="fm-lead">{esc(ASP_LEAD)}</p>
 <div class="asp" style="font-size:{tab_pt:.2f}pt">{''.join(blocks)}</div>
 <div style="height:0.34cm"></div>
-{aspekt_legende(stil=f'font-size:{leg_pt:.2f}pt', zusatz=True)}
+{aspekt_legende(stil=f'font-size:{leg_pt:.2f}pt', zusatz=True, orbis=True)}
 </section>"""
 
 
@@ -1494,6 +1537,38 @@ def pruefe_kapitelfuss(html_str, items):
         'Soll der Beleg ausnahmsweise am Kopf stehen (Lauf ohne die '
         "therapeutische Wirkform), chartdoc.konfiguriere(beleg_platz='kopf') "
         'setzen — dann rendert build_head() wieder zweizonig.')
+
+
+def pruefe_orbis_zeile(html_str):
+    """Harte Gegenprobe vor dem Rendern: traegt eine vorhandene Aspektseite
+    auch die Orbis-Staffelung?
+
+    Neu 2026-09-14 (Pruefbericht EA Schritt 3+4, 5.2 und 5.7). Das
+    Design-Modul macht ORBIS_ZEILE seit dem 2026-09-08 zur Pflicht unter der
+    Aspekttabelle, `aspekt_page()` setzte sie sechs Tage lang nicht, und
+    NICHTS hat es gemerkt: kein Preflight, kein verify(), keine Gegenprobe —
+    weil nichts sie zaehlt. Dieselbe Bauart wie `pruefe_kapitelfuss()`, aus
+    demselben Grund: ein fehlendes Element, das lautlos durchlaeuft, ist
+    teurer als ein Abbruch.
+
+    Geprueft wird nur, WENN eine Aspektseite im Dokument steht — Einzelseiten
+    und Sonderfaelle ohne sie laufen unberuehrt durch.
+    """
+    if ASPEKT_TITEL not in html_str:
+        return
+    if ORBIS_ZEILE[:40] in html_str:
+        return
+    raise RuntimeError(
+        'Aspektseite ohne Orbis-Staffelung: Das Dokument enthaelt '
+        f'„{ASPEKT_TITEL}", aber nicht chartdoc.ORBIS_ZEILE.\n'
+        'Sie ist seit dem 2026-09-08 Pflicht unter der Aspekttabelle '
+        '(Design-Modul, Aspekt-Legende) — bei einem Band, dessen Kapitel mit '
+        'Gradminuten belegen, ist sie die eine Angabe, mit der ein Leser eine '
+        'Zeile nachpruefen kann.\n'
+        'Gesetzt wird sie von aspekt_page() selbst:\n'
+        "    aspekt_legende(stil=…, zusatz=True, orbis=True)\n"
+        'Baut der Chart-Builder die Aspektseite ausnahmsweise selbst, gehoert '
+        'derselbe Aufruf dorthin.')
 
 
 def build_part_head(it):
@@ -1778,7 +1853,9 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     # vergessener build_fuss()-Aufruf in der Kapitel-Schleife wuerde sonst
     # Signatur und Beleg lautlos aus dem ganzen Horoskop entfernen.
     pruefe_kapitelkopf(items)
-    pruefe_kapitelfuss(build_html(set()), items)
+    _erstes_html = build_html(set())
+    pruefe_kapitelfuss(_erstes_html, items)
+    pruefe_orbis_zeile(_erstes_html)
     letzte = None
     for runde in range(1, max_pass + 1):
         doc, breaks, unfix = build.render_sentence_safe(

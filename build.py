@@ -1592,6 +1592,22 @@ def _fuss_zeilen(plines, sig_set) -> int:
     recht — Beleg-Eintraege UND die mehrzeilige Stand-Kopfzeile brechen
     regelmaessig um. Damit riss die Kette bei praktisch jedem Chart, und
     verify() meldete Kapitelfuesse als Satzabbruch.
+
+    Korrektur 2026-09-14 (Prueflauf EA Schritt 3+4, Rubrik 2 und 5.3): Die
+    Korrektur von 2026-09-06 deckte die umgebrochene BELEG-Kopfzeile nur ab,
+    solange ihre Fortsetzung zufaellig einen Typ-Marker trug (Gradminute,
+    „Orb\", Aspektname, Glyphe, „·\"). Eine Fortsetzung aus reinem Text —
+    gemessen an einer umgebrochenen Stand-Kopfzeile, deren zweite Zeile nur
+    aus Wortmaterial und einer Anzahl bestand — traegt keinen davon, hat
+    denselben Einzug wie das Label und liess die Probe reissen; verify()
+    meldete eine
+    regelkonforme Seite als Satzabbruch, und zwar mit dem Hinweis, der Fehler
+    liege in genau dieser Funktion. Die ERSTE Zeile unter dem Label gehoert
+    definitionsgemaess zur Kopfzeile und zaehlt jetzt unbedingt als
+    Fortsetzung. Das oeffnet keine Luecke: Prosa steht nie unmittelbar unter
+    einer BELEG-Kopfzeile, und alle weiteren Zeilen laufen unveraendert durch
+    die Typ- und Einzugsprobe. Die Ausnahme gilt NUR fuer den Label-Anker,
+    nicht fuer den Signatur-Anker.
     """
     n = len(plines)
     if not n:
@@ -1604,9 +1620,14 @@ def _fuss_zeilen(plines, sig_set) -> int:
         if not (ist_label or ist_sig):
             continue
         einzug = len(zeile) - len(zeile.lstrip())
+        # Die erste Zeile unter dem BELEG-Label ist die Fortsetzung seiner
+        # Kopfzeile und wird nicht auf Typ oder Einzug geprueft (s. o.).
+        rest = plines[i + 1:]
+        if ist_label and rest:
+            rest = rest[1:]
         if not all(_FUSS_ZEILE_RE.search(x)
                    or (len(x) - len(x.lstrip())) > einzug
-                   for x in plines[i + 1:]):
+                   for x in rest):
             continue
         start = i
         if ist_label and sigs:
