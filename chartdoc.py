@@ -124,11 +124,26 @@ ASPEKT_GLYPH = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□',
                 'Trigon': '△', 'Sextil': '⚹', 'Quincunx': '⚻',
                 'Halbsextil': '⚺'}
 
-# Farbe der gerechneten Punkte im Rad. GESPIEGELT aus `radix.MARKE_FARBE` —
-# chartdoc importiert radix bewusst nicht. Aendert sich die Farbe dort, hier
-# nachziehen. Steht seit dem 2026-09-14 als Konstante statt zweimal als
-# verdrahteter Hexwert (einmal im CSS, einmal in linien_legende()).
+# Farbe der gerechneten Punkte im Rad. Steht seit dem 2026-09-14 als Konstante
+# statt zweimal als verdrahteter Hexwert (einmal im CSS, einmal in
+# linien_legende()).
+#
+# QUELLE IST `radix.MARKE_FARBE`, nicht dieser Wert (geaendert 2026-09-14,
+# Pruefbericht Geburtshoroskop Schritt 3+4, Rubrik 5.8): Der Hexwert stand
+# wortgleich in beiden Dateien, mit der Bitte, ihn von Hand nachzuziehen —
+# genau die Zweifach-Pflege, die der Drift-Schutz sonst ueberall abschafft
+# (vgl. ASPEKT_TITEL, das sich beim Import selbst bei build anmeldet).
+# chartdoc importiert radix weiterhin NICHT hart: radix zieht matplotlib,
+# numpy und swisseph nach, und chartdoc soll ohne sie importierbar bleiben.
+# Der Abgleich laeuft deshalb weich — ist radix erreichbar (im Chart-Lauf
+# immer), gilt sein Wert; sonst bleibt die Spiegelung unten stehen.
 MARKE_FARBE = '#7d6f93'
+try:
+    import radix as _radix                                        # noqa: E402
+    if getattr(_radix, 'MARKE_FARBE', None):
+        MARKE_FARBE = _radix.MARKE_FARBE
+except Exception:                       # radix nicht geladen -> Spiegelwert
+    pass
 
 
 class _Farben:

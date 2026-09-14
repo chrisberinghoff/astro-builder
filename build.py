@@ -1575,6 +1575,35 @@ def fuss_signaturen(parsed) -> list:
             if isinstance(it, dict) and (it.get('signatur') or '').strip()]
 
 
+def _sig_anfang(plines, i, sigs, max_zeilen=6):
+    """Index der ERSTEN Zeile einer Kapitel-Signatur, die auf Zeile `i` endet.
+
+    Neu 2026-09-14 (Pruefbericht Geburtshoroskop Schritt 3+4, Rubrik 2.4). Der
+    Signatur-Anker in `_fuss_zeilen()` verglich bis dahin Zeile FUER Zeile
+    gegen den vollen Signaturtext. Eine Signatur, die im schmalen Streifen
+    umbricht — und das ist der Normalfall, nicht die Ausnahme —, steht in
+    keiner EINZELNEN Zeile und wurde damit gar nicht als Anker erkannt.
+    Betroffen war genau die Kapitelart, die Signatur OHNE Beleg traegt: die
+    drei Buendel-Kapitel (Hauptthemen, Konfliktfelder, Lebensaufgaben) des
+    Geburtshoroskops. Dort fehlt die „BELEG:"-Kopfzeile, die den Anker sonst
+    rettet, und `verify()` meldete eine regelkonforme Seite als „endet mitten
+    im Satz" — mit dem Hinweis, der Fehler liege in genau dieser Funktion.
+    Derselbe Fehlertyp wie die Korrektur vom selben Tag an der umgebrochenen
+    BELEG-Kopfzeile, eine Stufe weiter.
+
+    Die Zusammensetzung oeffnet keine Luecke: Zurueckgegeben wird nur, wenn
+    der zusammengefuegte Text EXAKT einer bekannten Signatur entspricht.
+    Rueckgabe: Startindex oder None.
+    """
+    for k in range(max_zeilen):
+        s = i - k
+        if s < 0:
+            break
+        if _dehyph(_nrm(' '.join(plines[s:i + 1]))) in sigs:
+            return s
+    return None
+
+
 def _fuss_zeilen(plines, sig_set) -> int:
     """Wie viele Zeilen am Seitenende gehoeren zu einem Kapitelfuss?
 
@@ -1616,10 +1645,16 @@ def _fuss_zeilen(plines, sig_set) -> int:
     for i in range(n - 1, max(-1, n - 30), -1):
         zeile = plines[i]
         ist_label = bool(_FUSS_LABEL_RE.match(zeile))
-        ist_sig = bool(sigs) and _dehyph(_nrm(zeile)) in sigs
+        # Der Signatur-Anker wird MEHRZEILIG gesucht (s. _sig_anfang):
+        # eine umgebrochene Signatur steht in keiner einzelnen Zeile.
+        sig_start = _sig_anfang(plines, i, sigs) if sigs else None
+        ist_sig = sig_start is not None
         if not (ist_label or ist_sig):
             continue
-        einzug = len(zeile) - len(zeile.lstrip())
+        # Der Einzug wird an der ERSTEN Zeile des Ankers gemessen, nicht an
+        # seiner letzten — sonst gilt die Fortsetzungszeile als Bezug.
+        kopf = zeile if ist_label else plines[sig_start]
+        einzug = len(kopf) - len(kopf.lstrip())
         # Die erste Zeile unter dem BELEG-Label ist die Fortsetzung seiner
         # Kopfzeile und wird nicht auf Typ oder Einzug geprueft (s. o.).
         rest = plines[i + 1:]
@@ -1629,7 +1664,7 @@ def _fuss_zeilen(plines, sig_set) -> int:
                    or (len(x) - len(x.lstrip())) > einzug
                    for x in rest):
             continue
-        start = i
+        start = i if ist_label else sig_start
         if ist_label and sigs:
             # Die Signatur steht direkt ueber der BELEG-Kopfzeile und bricht
             # ihrerseits um; sie wird als zusammengesetzter Text erkannt.
