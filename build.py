@@ -668,7 +668,11 @@ DECKBLATT_ABGELEITET = ('GLYPHEN_GRUND',)
 
 _DB_START_RE = re.compile(r'^@@DECKBLATT\s*$')
 _DB_ENDE_RE = re.compile(r'^@@ENDE\s*$')
-_DB_FELD_RE = re.compile(r'^([A-ZÄÖÜ]{4,20})\s*:\s*(.*)$')
+# ERGAENZT 14.09.2026 (Pruefbericht EA Schritt 1+2, 1.7): Der Unterstrich
+# fehlte in der Zeichenklasse, weshalb eine eigene `GLYPHEN_GRUND:`-Zeile gar
+# nicht als Feld erkannt wurde und sich stumm an den GLYPHEN-Wert anhaengte
+# (heraus kam '♇ ♂ ☊ ☋ GLYPHEN_').
+_DB_FELD_RE = re.compile(r'^([A-ZÄÖÜ][A-ZÄÖÜ_]{3,24})\s*:\s*(.*)$')
 
 
 def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
@@ -717,7 +721,7 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
         if _DB_ENDE_RE.match(z):
             break
         m = _DB_FELD_RE.match(z)
-        if m and m.group(1) in DECKBLATT_FELDER:
+        if m and m.group(1) in DECKBLATT_FELDER + DECKBLATT_ABGELEITET:
             key = m.group(1)
             felder[key] = m.group(2).strip()
         elif key and z.strip():
@@ -738,7 +742,9 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
     # GLYPHEN traegt darum nur noch die Symbole, GLYPHEN_GRUND den Rest.
     glyph, grund = _glyphen_trennen(felder['GLYPHEN'])
     felder['GLYPHEN'] = glyph
-    felder['GLYPHEN_GRUND'] = grund
+    # Eine ausdrueckliche GLYPHEN_GRUND-Zeile schlaegt die abgeleitete
+    # Trennung, wird aber von ihr ergaenzt (14.09.2026, s. o.).
+    felder['GLYPHEN_GRUND'] = grund or felder.get('GLYPHEN_GRUND', '')
     return {k: felder[k] for k in DECKBLATT_FELDER + DECKBLATT_ABGELEITET}
 
 
@@ -2092,13 +2098,24 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     def _mst(n):
         return ALIAS.get(n, _re2.escape(n.lower()))
     rech = set()
+    # VERSCHAERFT 14.09.2026 (Pruefbericht EA Schritt 1+2, 1.5, Nebenbefund):
+    # Bis dahin galt ein Kontakt als "in der Rechenschaft", sobald Transiter-
+    # und Zielname irgendwo innerhalb von 80 Zeichen auf EINER Zeile standen.
+    # Im EA-Prueflauf traf der reine RADIX-Rechenschaftsblock, der kein
+    # einziges Transit-Wort enthaelt, so zufaellig 18 von 45 Kontakten — ein
+    # Freispruch, der nichts prueft. Gezaehlt werden jetzt nur noch Zeilen, die
+    # sich auch als Transit-Zeile zu erkennen geben: T-Praefix, das Wort
+    # Transit, oder "laufend".
+    _TR_MARKE = _re2.compile(r"(?:\bt-|transit|laufend)")
     for marke in ("RECHENSCHAFT", "Was sonst noch läuft"):
         if marke in txt:
             teil = txt.split(marke, 1)[1].lower()
+            zeilen_tr = "\n".join(z for z in teil.splitlines()
+                                  if _TR_MARKE.search(z))
             for k in soll:
                 a, b = _mst(k[0]), _mst(k[2])
-                if _re2.search(r"%s[^\n]{0,80}%s" % (a, b), teil) or \
-                   _re2.search(r"%s[^\n]{0,80}%s" % (b, a), teil):
+                if _re2.search(r"%s[^\n]{0,80}%s" % (a, b), zeilen_tr) or \
+                   _re2.search(r"%s[^\n]{0,80}%s" % (b, a), zeilen_tr):
                     rech.add(k)
 
     ohne = sorted(soll - set(heimat) - rech)

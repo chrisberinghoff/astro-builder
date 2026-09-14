@@ -908,6 +908,17 @@ def glueckspunkt(factors, cusps, ac=None, sonne=None, mond=None):
     -> {'lon', 'tag', 'sonne_haus', 'formel'}
     """
     lon = {f['name']: f['lon'] for f in factors}
+    # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA Schritt 1+2, 1.8): Fehlte AC
+    # in `factors`, brach die Funktion mit einem nackten KeyError('AC') ab und
+    # sagte nicht, was fehlt. Das Datenblatt-Modul zeigt den Aufruf ohne den
+    # Hinweis, dass die Achsen zu diesem Zeitpunkt schon in der Liste stehen
+    # muessen — wer die Liste in der naheliegenden Reihenfolge baut, laeuft
+    # hinein.
+    if ac is None and 'AC' not in lon:
+        raise KeyError(
+            "glueckspunkt(): 'AC' fehlt in factors. Die Achsen AC/MC/DC/IC "
+            "gehoeren VOR dem Glueckspunkt in die factors-Liste (oder ac= "
+            "direkt uebergeben).")
     ac = lon['AC'] if ac is None else ac
     sonne = lon['Sonne'] if sonne is None else sonne
     mond = lon['Mond'] if mond is None else mond
@@ -2252,6 +2263,23 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     sb['pluto_quadrat_gerechnet'] = ger.get('Pluto')
     sb['zyklen'] = {f['name']: zyklusfenster(f['name'], alter, ger)
                     for f in factors if zyklusfenster(f['name'])}
+    # NEU 14.09.2026 (Chris-Entscheidung nach dem EA-Pruefbericht, Rubrik 6).
+    # (1) ELEMENT NUR UEBER ACHSEN: Ein Element, das unter den zehn klassischen
+    #     Planeten gar nicht vorkommt und nur ueber Achsen, Knoten oder
+    #     Spezialfaktoren im Bild steht, ist keine Ausstattung, sondern eine
+    #     Oberflaeche oder eine Richtung. Die gewichtete Zaehlung verdeckt das,
+    #     weil ein Winkel dort doppelt zaehlt — im Prueffall vom 14.09. stand
+    #     Luft gewichtet bei 3 und bei den Planeten bei 0.
+    # (2) MEHR ALS ZWEI ENDDISPOSITOREN OHNE KREIS: Dann laufen die
+    #     Zustaendigkeiten nirgends zusammen; es gibt keine Zentrale, die
+    #     entscheidet. Bis dahin stand die Zahl da und wurde nicht gewertet.
+    _vp, _va = sb['verteilung_planeten'], sb['verteilung_alle']
+    sb['element_nur_achsen'] = [
+        {'element': e, 'traeger': list(_va['traeger'].get(e) or [])}
+        for e in _vp['elemente']
+        if _vp['elemente'][e] == 0 and _va['elemente'].get(e, 0) > 0]
+    sb['enddispositor_streuung'] = (
+        len(sb['ketten']['enddispositoren']) if not sb['ketten']['kreise'] else 0)
     return sb
 
 
@@ -2262,7 +2290,7 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
 # der beiden Knoten-HAEUSER, die Laufrichtung des Skipped Step und die
 # Ruecklaeufigkeit des Radix-Pluto.
 
-def ea_achse(factors, cusps, deckel=3.0):
+def ea_achse(factors, cusps, deckel=3.0, aspects=None):
     """Die sechs Punkte der evolutionaeren Achse plus Sekundaermaterial.
 
     Rueckgabe: dict mit
@@ -2345,17 +2373,75 @@ def ea_achse(factors, cusps, deckel=3.0):
             if d <= 8.0:
                 knoten_konj.append({'name': f['name'], 'knoten': knm, 'orb': d})
 
+    # NEU 14.09.2026 (Chris-Entscheidung nach dem EA-Pruefbericht Schritt 1+2,
+    # Rubrik 6). Zwei Befunde, die bis dahin nur auffielen, wenn jemand hinsah:
+    #
+    # (1) BESETZTER POLARITAETSPUNKT. Steht ein Faktor auf dem Punkt, der die
+    #     Richtung markiert, hat die Richtung einen Koerper statt einer blossen
+    #     Koordinate — im Prueffall vom 14.09. stand Mars mit 0°14′ darauf, und
+    #     das war der tragende Befund des ganzen Dokuments. Orb wie bei den
+    #     sensitiven Punkten (3°). Achsen bleiben draussen: AC/MC/DC/IC sind
+    #     keine Besetzung, sie sind Geometrie.
+    #
+    # (2) FREIE ECKE AUF EINEM ACHSENPUNKT. Faellt die entlastende Ecke eines
+    #     Spannungsdreiecks auf Pluto, einen Knoten oder den Polaritaetspunkt,
+    #     zeigt die Entlastung der Figur genau dorthin, wohin die Entwicklungs-
+    #     achse ohnehin zeigt — zwei Kapitel, die sonst nebeneinander stehen,
+    #     gehoeren dann zusammen. Braucht die Aspektliste; ohne `aspects` bleibt
+    #     die Liste leer und alles verhaelt sich wie vorher (additiv).
+    ppp_besetzt = sorted(
+        [{'name': f['name'], 'lon': f['lon'], 'orb': sep(f['lon'], ppp)}
+         for f in factors
+         if f['name'] not in ('AC', 'MC', 'DC', 'IC')
+         and sep(f['lon'], ppp) <= 3.0],
+        key=lambda x: x['orb'])
+    _achsenpunkte = (('Pluto', by['Pluto']['lon']), ('Nordknoten', nk),
+                     ('Südknoten', sk), ('Polaritätspunkt', ppp))
+    # `aspects` ist optional, WIRD ABER SELBST GERECHNET, wenn es fehlt. Grund:
+    # Das Werkzeuge-Modul dokumentiert den Aufruf als `ea_achse(factors, cusps)`;
+    # haenge der Befund an einem zusaetzlichen Parameter, faende ihn nur, wer das
+    # EA-Modul im Kopf hat — und genau das ist die Fehlerklasse, wegen der er
+    # ueberhaupt eingebaut wurde. Der Aufruf kostet nichts und ist deterministisch.
+    if aspects is None:
+        aspects = huber_aspects(factors)
+    leere_spitze_auf_achse = []
+    if aspects is not None:
+        for _tq in konfigurationen(factors, aspects,
+                                   cusps=cusps).get('t_quadrat', []):
+            _ls = _tq.get('leere_spitze') or {}
+            if not _ls:
+                continue
+            for _nam, _lo in _achsenpunkte:
+                _d = sep(_ls['lon'], _lo)
+                if _d <= 5.0:
+                    leere_spitze_auf_achse.append(
+                        {'achse': _tq.get('achse'), 'apex': _tq.get('apex'),
+                         'punkt': _nam, 'orb': _d, 'lon': _ls['lon'],
+                         'zeichen': _ls.get('zeichen'),
+                         'haus': _ls.get('haus_spalte')})
+        leere_spitze_auf_achse.sort(key=lambda x: x['orb'])
+
     return {'punkte': punkte, 'haus_herrscher': haus_h, 'skipped': skipped,
             'knoten_konj': knoten_konj,
             'pluto_retro': bool(by['Pluto'].get('retro')),
+            'ppp_besetzt': ppp_besetzt,
+            'leere_spitze_auf_achse': leere_spitze_auf_achse,
             'nordknoten_lon': nk, 'suedknoten_lon': sk, 'ppp_lon': ppp}
 
 
 def ea_achse_text(ea):
     """Der fertige Abschnitt `## Die evolutionäre Achse` fuers chart_data.md."""
     def gr(lon):
+        # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA Schritt 1+2, Rubrik 2):
+        # Hier stand round() OHNE Uebertrag. Bei 14°59,6′ kam "14°60′" heraus
+        # statt "15°00′" — und zwar in dem Abschnitt, den das EA-Modul als
+        # fertig zum Uebernehmen bezeichnet. Jetzt wie _gr() mit Uebertrag.
         g = lon % 30
-        return '%d°%02d′ %s' % (int(g), round((g - int(g)) * 60), zeichen_name(lon))
+        d = int(g)
+        m = int(round((g - d) * 60))
+        if m == 60:
+            d, m = d + 1, 0
+        return '%d°%02d′ %s' % (d, m, zeichen_name(lon))
     L = ['## Die evolutionäre Achse — das Rückgrat (Modus TIEF)', '',
          'Gerechnet mit `radix.ea_achse()`. Alle sechs Punkte sind '
          'Deckungsauftrag, nicht Gliederung.', '',
@@ -2387,6 +2473,29 @@ def ea_achse_text(ea):
                     ' · ÜBER DEM DECKEL, Aufnahme begründen'
                     if sp['ueber_deckel'] else ''))
     L.append('')
+    # NEU 14.09.2026: besetzter Polaritaetspunkt (s. ea_achse).
+    if ea.get('ppp_besetzt'):
+        L.append('**Der Polaritätspunkt ist BESETZT** — die Richtung hat einen '
+                 'Körper, nicht nur eine Koordinate:')
+        for b in ea['ppp_besetzt']:
+            L.append('- %s, %s, Abstand %d°%02d′ zum Polaritätspunkt. Das Kapitel '
+                     'der Richtung führt diesen Faktor als Träger; seine Aspekte '
+                     'beschreiben, worüber die Richtung praktisch zugänglich ist.'
+                     % (b['name'], gr(b['lon']), int(b['orb']),
+                        round((b['orb'] - int(b['orb'])) * 60)))
+        L.append('')
+    # NEU 14.09.2026: freie Ecke eines Spannungsdreiecks auf einem Achsenpunkt.
+    if ea.get('leere_spitze_auf_achse'):
+        L.append('**Freie Ecke eines Spannungsdreiecks auf einem Achsenpunkt** — '
+                 'die Entlastung der Figur zeigt dorthin, wohin die Achse zeigt:')
+        for e in ea['leere_spitze_auf_achse']:
+            L.append('- Dreieck %s, Brennpunkt %s: freie Ecke %s, Haus %s — dort '
+                     'der %s, Abstand %d°%02d′. Die beiden Kapitel gehören '
+                     'verbunden (Querverweis Pflicht).'
+                     % (' ☍ '.join(e['achse'] or []), e['apex'], gr(e['lon']),
+                        e['haus'], e['punkt'], int(e['orb']),
+                        round((e['orb'] - int(e['orb'])) * 60)))
+        L.append('')
     L.append('**Radix-Pluto ist %s.** %s'
              % ('rückläufig' if ea['pluto_retro'] else 'direktläufig',
                 'Eigener Befund der evolutionären Lesart: das Wandlungsgeschehen '
@@ -2433,6 +2542,13 @@ def strukturbild_text(sb):
                  f"schwächste Element, gewichtet ist es "
                  f"{vg['schwaechstes_element']} — die Befundzeile richtet sich "
                  f"nach der GEWICHTETEN Zählung.")
+    for _t in sb.get('element_nur_achsen', []):
+        L.append(f"- ⚠ {_t['element']} kommt unter den zehn klassischen Planeten "
+                 f"GAR NICHT vor und steht nur über "
+                 f"{', '.join(_t['traeger']) or '—'} im Bild — das Element "
+                 f"existiert als Auftreten oder als Richtung, nicht als "
+                 f"Ausstattung. Die Befundzeile sagt, was das im Alltag kostet "
+                 f"(seit 2026-09-14).")
     L.append('- Befund: <eine Zeile, was das strukturell heißt>')
     L.append('')
 
@@ -2452,6 +2568,11 @@ def strukturbild_text(sb):
     if not k['kreise']:
         L.append('- Kein geschlossener Kreis unter den modernen Herrschern.')
     L.append(f"- Enddispositoren: {', '.join(k['enddispositoren']) or 'keiner'}.")
+    if sb.get('enddispositor_streuung', 0) > 2:
+        L.append(f"- ⚠ {sb['enddispositor_streuung']} Enddispositoren und kein "
+                 f"geschlossener Kreis: Die Zuständigkeiten laufen nirgends "
+                 f"zusammen, es gibt keine Zentrale. Eigener Befund für das "
+                 f"Getriebe-Kapitel (seit 2026-09-14).")
     kk = sb['ketten_klassisch']
     if [sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]:
         L.append(f"- Klassisch gerechnet ergibt sich ein anderes Bild: Kreise "

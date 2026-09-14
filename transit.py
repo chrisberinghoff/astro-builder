@@ -230,7 +230,12 @@ def cusps_from_chart_data(path, radix=None, quiet=False):
         return None
 
     # (1) maschinenlesbare Liste
-    m = re.search(r"cusps'?\s*[:=]\s*\[([^\]]+)\]", txt)
+    # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA Schritt 1+2, 1.1/5.2):
+    # Der Ausdruck war case-sensitiv und fand die VERTRAGSSCHREIBWEISE des
+    # Datenblatt-Moduls (`CUSPS = [...]`, gross) nicht. Folge: In jedem
+    # Transit-, EA- und Ultimativ-Lauf fielen die Haus-Durchgaenge still aus
+    # ("Haus-Durchgaenge: AUSGEKLAMMERT" im Report-Kopf, ohne Ursache).
+    m = re.search(r"cusps'?\s*[:=]\s*\[([^\]]+)\]", txt, re.IGNORECASE)
     if m:
         try:
             vals = [float(x) for x in re.findall(r"-?\d+\.?\d*", m.group(1))]
@@ -244,7 +249,13 @@ def cusps_from_chart_data(path, radix=None, quiet=False):
     num_rx = re.compile(r"(?:haus\s*(\d{1,2})|^\s*\|?\s*(\d{1,2})\s*\.?\s*(?:haus)?\b)",
                         re.IGNORECASE)
     pos_rx = re.compile(r"(?:(" + zod_rx + r")\s*[^0-9\n]{0,6}(\d{1,2})\s*[°º:\s]\s*(\d{1,2})?"
-                        r"|(\d{1,2})\s*[°º]\s*(\d{1,2})?\s*['’\s]*\s*(" + zod_rx + r"))",
+                        # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA 1.2/5.3):
+                        # Die Minutenzeichen-Klasse kannte nur die beiden
+                        # Apostrophe. Das PRIME ′ (U+2032), das Datenblatt- und
+                        # Klartext-Modul ueberall vorschreiben ("7°06′ Waage"),
+                        # war nicht darin — die projekteigene Notation war fuer
+                        # diesen Parser unlesbar. ′ ″ ´ ` ergaenzt.
+                        r"|(\d{1,2})\s*[°º]\s*(\d{1,2})?\s*['’′″´`\s]*\s*(" + zod_rx + r"))",
                         re.IGNORECASE)
     found = {}
     for line in txt.splitlines():
