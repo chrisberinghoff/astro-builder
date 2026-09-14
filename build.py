@@ -1975,10 +1975,30 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
                     doppelt.append((sorted(paar), heimat[paar], titel))
                 heimat.setdefault(paar, titel)
 
+    # DOKUMENTIERTE WEGLASSUNGEN — der Scan ist seit dem 2026-09-14 BEGRENZT
+    # (Pruefbericht Geburtshoroskop Schritt 1+2 vom 14.09., Rubrik 5.1).
+    # Vorher las er ab der ersten Fundstelle einer Marke BIS ZUM DATEIENDE. Das
+    # Datenblatt-Modul schreibt die Weglassungs-Ueberschrift aber in den
+    # Aspekt-Abschnitt, also VOR Strukturbild, Themenliste und Ressourcen-Block
+    # — mit der Folge, dass saemtliche `aspekte=`-Felder der Themenliste und
+    # saemtliche Zeilen des Ressourcen-Blocks in `dok` landeten. Damit galt
+    # JEDER Aspekt ohne Heimat automatisch als dokumentiert weggelassen, und
+    # `offen` konnte nie etwas melden: eine Probe, die nichts mehr finden kann.
+    # Aufgefallen ist es nur, weil der Prueffall zufaellig keine Fehlstelle
+    # hatte. Jetzt endet jeder Marken-Abschnitt an der naechsten Ueberschrift —
+    # dieselbe Begrenzung, die der Tabellen-Scan oben schon benutzt.
     dok = set()
     for marke in ("Aspekte ohne Deutungs-Heimat", "Weglassung", "GESTRICHEN"):
-        if marke in txt:
-            teil = txt.split(marke, 1)[1]
+        stelle = 0
+        while True:
+            i = txt.find(marke, stelle)
+            if i < 0:
+                break
+            stelle = i + len(marke)
+            teil = txt[stelle:]
+            schnitt = _re.search(r"\n#{2,3} ", teil)      # bis zur naechsten Ueberschrift
+            if schnitt:
+                teil = teil[:schnitt.start()]
             dok |= _paare(teil, "[%s—]" % _AH_GLYPH)
             for m in _re.finditer(r"(%s)\s*(?:[%s]|—)\s*(%s)"
                                   % (_AH_NAME, _AH_GLYPH, _AH_NAME), teil):

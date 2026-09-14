@@ -57,7 +57,8 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         „rechnungsunabhängig".
 
     konfigurationen(factors, aspects, cusps=None) -> dict
-    gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung, 2026-09-09)
+    gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung: T-Quadrat
+                                                  2026-09-09, Jod und Großtrigon 2026-09-14)
     glueckspunkt(factors, cusps) -> dict          (Tag/Nacht selbst, 2026-09-09)
         T-Quadrat (mit leerer Spitze), Großkreuz, Großtrigon, Jod, Stellium —
         und seit 2026-09-08 Drachen (Kite) und Mystisches Rechteck. Ein Drachen
@@ -1682,9 +1683,30 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     und von der Deutung ab und bleibt offen. Solche Gruppen tragen
     `pruefen=True` und werden NICHT zusammengefasst.
 
+    SEIT 14.09.2026 GILT DASSELBE FUER JOD UND GROSSTRIGON (Pruefbericht
+    Geburtshoroskop Schritt 1+2 vom 14.09., Rubrik 5.4). Die Achsen-Doppelung
+    ist kein T-Quadrat-Problem, sondern ein Winkel-Problem: Sie tritt bei jeder
+    Figur auf, deren Ecke in Konjunktion zu einem Winkel steht. Im Prueffall vom
+    14.09. meldete `konfigurationen()` VIER Jods fuer DREI Figuren — zwei davon
+    mit identischer Basis und Spitzen, die voll konjunkt sind (ein
+    Spezialfaktor auf einem Winkel). Die Entscheidung musste von Hand fallen,
+    genau die Handarbeit, die fuer das T-Quadrat am 09.09. abgeschafft wurde.
+
+    Jod, hart: Basis paarweise identisch oder konjunkt UND Spitze identisch oder
+    konjunkt. Jod, weich (Kandidat): gleiche Basis, Spitzen weder identisch noch
+    konjunkt — das sind zwei Figuren mit benachbarten Spitzen oder eine mit
+    zwei Enden, und das ist eine Deutungsentscheidung.
+    Grosstrigon, hart: alle drei Ecken paarweise identisch oder konjunkt.
+    Kandidaten gibt es dort nicht; zwei Grosstrigone mit zwei gemeinsamen Ecken
+    sind zwei Figuren.
+
     -> {'figuren': [{'achse','apex','leere_spitze','meldungen'}],
         'kandidaten': [[i, j, ...]],   # Indizes in 'figuren'
-        'meldungen': n, 'anzahl': m}
+        'meldungen': n, 'anzahl': m,
+        'jod_figuren': [{'basis','apex','meldungen'}],
+        'jod_kandidaten': [[i, j, ...]], 'jod_meldungen': n, 'jod_anzahl': m,
+        'grosstrigon_figuren': [{'ecken','meldungen'}],
+        'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m}
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -1722,8 +1744,50 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                 continue
             if set(f['achse']) & set(g['achse']):
                 kandidaten.append([i, j])
+    # JOD und GROSSTRIGON, neu am 14.09.2026 (Pruefbericht 5.4). Dieselbe
+    # Achsen-Doppelung, andere Figur — deshalb dieselben zwei Regeln.
+    jod = konf.get('jod', [])
+    jod_figuren = []
+    for j in jod:
+        b = list(j.get('basis') or ())
+        for f in jod_figuren:
+            b2 = f['basis']
+            basis_gleich = (len(b) == len(b2) == 2
+                            and ((gleich(b[0], b2[0]) and gleich(b[1], b2[1]))
+                                 or (gleich(b[0], b2[1]) and gleich(b[1], b2[0]))))
+            if basis_gleich and gleich(j['apex'], f['apex']):
+                f['meldungen'].append(j['apex'])
+                break
+        else:
+            jod_figuren.append({'basis': b, 'apex': j['apex'],
+                                'meldungen': [j['apex']]})
+    jod_kandidaten = []
+    for i, f in enumerate(jod_figuren):
+        for k in range(i + 1, len(jod_figuren)):
+            g = jod_figuren[k]
+            if set(f['basis']) == set(g['basis']):
+                jod_kandidaten.append([i, k])
+
+    gt = konf.get('grosstrigon', [])
+    gt_figuren = []
+    for g in gt:
+        ecken = list(g)
+        for f in gt_figuren:
+            e2 = f['ecken']
+            if len(ecken) == len(e2) and all(
+                    any(gleich(x, y) for y in e2) for x in ecken):
+                f['meldungen'].append(ecken)
+                break
+        else:
+            gt_figuren.append({'ecken': ecken, 'meldungen': [ecken]})
+
     return {'figuren': figuren, 'kandidaten': kandidaten,
-            'meldungen': len(tq), 'anzahl': len(figuren)}
+            'meldungen': len(tq), 'anzahl': len(figuren),
+            'jod_figuren': jod_figuren, 'jod_kandidaten': jod_kandidaten,
+            'jod_meldungen': len(jod), 'jod_anzahl': len(jod_figuren),
+            'grosstrigon_figuren': gt_figuren,
+            'grosstrigon_meldungen': len(gt),
+            'grosstrigon_anzahl': len(gt_figuren)}
 
 
 def verteilungsmuster(factors, cusps=None):
@@ -2791,6 +2855,33 @@ def strukturbild_text(sb):
                      'die Entscheidung gehört ins chart_data.'
                      % (' ☍ '.join(a['achse']), ' ☍ '.join(b['achse']),
                         a['apex']))
+    # JOD und GROSSTRIGON, neu am 14.09.2026 (Pruefbericht 5.4): dieselbe
+    # Achsen-Doppelung. Die Zeilen erscheinen nur, wenn tatsaechlich doppelt
+    # gemeldet wurde — sonst schweigen sie, wie die T-Quadrat-Zeile auch.
+    if fg and fg.get('jod_meldungen', 0) > fg.get('jod_anzahl', 0):
+        L.append('- Achsen-Doppelung: %d Jod-Meldungen entsprechen %d Figuren '
+                 '(die übrigen sind dieselbe Figur über eine '
+                 'Winkel-Konjunktion an der Spitze oder an der Basis).'
+                 % (fg['jod_meldungen'], fg['jod_anzahl']))
+        for f in fg['jod_figuren']:
+            if len(f['meldungen']) > 1:
+                L.append('  · Basis %s — Spitze %s, gemeldet auch als %s; EIN '
+                         'Befund. Gedeutet wird mit der Spitze, die kein Winkel '
+                         'ist; der Winkel gibt der Figur ihren Ort.'
+                         % (' ⚹ '.join(f['basis']), f['apex'],
+                            ', '.join(m for m in f['meldungen']
+                                      if m != f['apex'])))
+    for i, j in (fg or {}).get('jod_kandidaten', []):
+        a, b = fg['jod_figuren'][i], fg['jod_figuren'][j]
+        L.append('- Zu prüfen: Jod %s → %s und Jod %s → %s teilen die Basis, '
+                 'die Spitzen sind weder identisch noch konjunkt. Zwei Figuren '
+                 'oder eine mit zwei Enden — die Entscheidung gehört ins '
+                 'chart_data.' % (' ⚹ '.join(a['basis']), a['apex'],
+                                  ' ⚹ '.join(b['basis']), b['apex']))
+    if fg and fg.get('grosstrigon_meldungen', 0) > fg.get('grosstrigon_anzahl', 0):
+        L.append('- Achsen-Doppelung: %d Großtrigon-Meldungen entsprechen %d '
+                 'Figuren.' % (fg['grosstrigon_meldungen'],
+                               fg['grosstrigon_anzahl']))
     for t in kf['t_quadrat']:
         zeile = (f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
                  f"{t['apex']}")
