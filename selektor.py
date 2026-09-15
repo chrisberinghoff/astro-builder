@@ -304,6 +304,21 @@ def parse_chart(text):
         elif kw == 'ASPEKT':
             if len(parts) >= 3:
                 aspekte.append((norm_token(parts[1]), norm_token(parts[2])))
+    # LEERE ASPEKTEBENE (neu 2026-09-15, Pruefbericht Geburtshoroskop
+    # Schritt 3+4). Die ASPEKT-Zeilen sind der einzige Weg, auf dem
+    # Aspektbloecke aus der Bibliothek in die referenz.md kommen. Fehlen sie,
+    # schreibt Schritt 2 SAEMTLICHE Aspektdeutungen ohne Quelltexte — und
+    # nichts faellt auf: Die Pflicht-Vollstaendigkeitspruefung prueft, ob jeder
+    # ANGEFORDERTE Block existiert, und bei null Anforderungen ist sie trivial
+    # gruen. Im Prueffall vom 15.09. ist genau das passiert; gemerkt hat es
+    # erst Schritt 3, zwei Konversationen spaeter.
+    if not aspekte and re.search(r'^\|\s*Faktor\s*\|\s*Aspekt\s*\|', text,
+                                 re.M):
+        hinweise.append(
+            'KEINE ASPEKT-ZEILE im @@SELEKTOR-Block, obwohl die chart_data '
+            'Aspekttabellen fuehrt. Erwartet wird je gedeutetem Paar eine '
+            'Zeile der Form "ASPEKT <A> <B>" (nur die beiden Faktornamen, '
+            'ohne Aspektart und ohne Orb).')
     return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
             'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise}
 
@@ -684,6 +699,21 @@ def main():
     for roh, ziel in chart.get('spiegel', []):
         print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
               'mitgedeutet' % (roh, ziel))
+    leer = [h for h in chart.get('hinweise', [])
+            if h.startswith('KEINE ASPEKT-ZEILE')]
+    if leer:
+        print('LEERE ASPEKTEBENE (harter Fehler — frueher lief das lautlos '
+              'durch):')
+        print('   Der @@SELEKTOR-Block traegt keine einzige ASPEKT-Zeile, die '
+              'chart_data aber Aspekttabellen.')
+        print('   Ohne sie zieht dieser Lauf KEINEN Aspektblock aus der '
+              'Bibliothek; Schritt 2 schriebe alle')
+        print('   Aspektdeutungen ohne Quelltexte. Je gedeutetem Paar eine '
+              'Zeile ergaenzen:')
+        print('       ASPEKT SONNE MOND')
+        print('       ASPEKT MARS AC')
+        print('   Nur die beiden Faktornamen — keine Aspektart, kein Orb.')
+        sys.exit(1)
     unbek = chart.get('unbekannt', [])
     if unbek:
         print('UNBEKANNTE FAKTOREN (harter Fehler — frueher fielen sie lautlos durch):')

@@ -153,6 +153,32 @@ _ANG_NAME = {0: 'Konjunktion', 30: 'Halbsextil', 60: 'Sextil', 90: 'Quadrat',
 
 # --- Aspektrechnung ---------------------------------------------------------
 
+# Namen, die schon gemeldet wurden — je Lauf einmal, nicht je Aspektpaar.
+_ORB_GEMELDET = set()
+
+
+def _orb_unbekannt(name):
+    """Meldet EINMAL je Lauf, dass ein Faktor keinen Eintrag in HUBER_ORB hat.
+
+    Chris-Entscheidung 2026-09-15 (Pruefbericht Geburtshoroskop Schritt 3+4,
+    5.3): warnen und weiterrechnen, nicht abbrechen. 3 Grad ist fuer
+    Nebenfaktoren der uebliche Wert, ein Abbruch wuerde jeden Lauf mit einem
+    neuen Punkt blockieren — aber der Rueckfall soll sichtbar sein.
+
+    Vorgeschichte: 'Mondknoten' und 'Glueckspunkt' standen in der chart_data
+    anders geschrieben als in HUBER_ORB ('Knoten', 'Glueckspunkt' ohne
+    Umlaut). Beide fielen lautlos auf 3 Grad — zufaellig derselbe Wert, den die
+    Tabelle fuehrt, sodass nie etwas auffiel und eine Aenderung an der Tabelle
+    wirkungslos gewesen waere.
+    """
+    if name in _ORB_GEMELDET:
+        return
+    _ORB_GEMELDET.add(name)
+    print('  ! ORBIS: %r steht nicht in radix.HUBER_ORB — es gilt der '
+          'Vorgabewert 3 Grad. Ist das gewollt, Eintrag ergaenzen; ist es ein '
+          'Schreibfehler, den Namen in der chart_data korrigieren.' % name)
+
+
 def huber_aspects(factors, orbs=None):
     """Aspekte zwischen allen `factors` nach Huber-Orbis.
 
@@ -165,6 +191,8 @@ def huber_aspects(factors, orbs=None):
     def orb_of(n):
         if orbs and n in orbs:
             return orbs[n]
+        if n not in HUBER_ORB:
+            _orb_unbekannt(n)
         return HUBER_ORB.get(n, 3)
 
     out = []
