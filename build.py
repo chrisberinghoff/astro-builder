@@ -2210,6 +2210,11 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         "doppelt": doppelt,
         "unbekannt": unbekannt,
         "ok": not ohne and not doppelt and not unbekannt,
+        # Ergaenzt 2026-09-15: die Schluesselmengen selbst, damit
+        # transit_rechenschaft() die Differenz bilden kann, ohne die
+        # Themenliste ein zweites Mal zu parsen. Rein additiv.
+        "soll_keys": sorted(soll),
+        "heimat_keys": sorted(heimat),
     }
 
 
@@ -2233,6 +2238,111 @@ def kontakt_heimat_bericht(chart_data_pfad: str, events_json_pfad: str,
         L.append("  IM THEMA, aber kein primaerer Wirkorb-Kontakt: %s (%s)"
                  % (k, titel))
     return "\n".join(L)
+
+
+GLYPH_ZU_ASPEKT = {"☌": "Konjunktion", "☍": "Opposition", "□": "Quadrat",
+                   "△": "Trigon", "⚹": "Sextil", "⚻": "Quincunx",
+                   "⚺": "Halbsextil"}
+ASPEKT_ZU_GLYPH = {v: k for k, v in GLYPH_ZU_ASPEKT.items()}
+
+
+def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
+                         stichtag: str = None, orb_wirk: float = 1.5) -> dict:
+    """Die fertigen Zeilen des Blocks `TRANSIT-RECHENSCHAFT:` — neu 2026-09-15.
+
+    Gebaut nach dem Prüfbericht EA Schritt 1+2 vom 15.09., Rubrik 2
+    ("von Hand nachgebaut, obwohl eine Funktion es liefern könnte"); Chris hat
+    sie am selben Tag bestellt.
+
+    Warum es sie gibt: `kontakt_heimat()` zählt ALLE primären Wirkorb-Kontakte
+    des Rechenfensters — bei `--months 24` also über zwei Jahre. Ein EA deutet
+    davon nur die Momentaufnahme zum Stichtag, ein Transit-Horoskop nur seine
+    Kapitel. Damit die Probe grün läuft, ohne dass etwas stillschweigend
+    verschwindet, trägt das Datenblatt hinter `GESTRICHEN:` je eine Zeile für
+    jeden Fensterkontakt OHNE Kapitel. Diese Liste ist eine reine Subtraktion
+    aus Daten, die der Builder ohnehin hat, und wurde trotzdem je Lauf von Hand
+    gefiltert — im Prüflauf vom 15.09. mit einem geratenen Feldnamen
+    (`exakt_datum` statt `exakt`), woraufhin alle 27 Zeilen "nie exakt" sagten,
+    obwohl 22 davon ein Exaktdatum haben. Der Fehler wirft nicht, er liefert
+    leer, und wäre durch jede Probe gekommen.
+
+    `stichtag` wird, wenn nicht übergeben, aus dem JSON gelesen
+    (`jetzt.stichtag`, sonst `asof`). Die Zeilen sind nach dem ersten
+    Exaktdatum sortiert, undatierte ans Ende.
+
+    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'stichtag'}
+    """
+    import json as _json
+
+    r = kontakt_heimat(chart_data_pfad, events_json_pfad, orb_wirk)
+    soll = set(tuple(k) for k in r["soll_keys"])
+    heimat = set(tuple(k) for k in r["heimat_keys"])
+    rest = soll - heimat
+
+    daten = _json.load(open(events_json_pfad, encoding="utf-8"))
+    if not stichtag:
+        stichtag = (daten.get("jetzt") or {}).get("stichtag") or daten.get("asof")
+
+    def _de(d):
+        """2030-01-02 -> 02.01.2030; unbekanntes Format bleibt stehen."""
+        teile = str(d).split("-")
+        return "%s.%s.%s" % (teile[2], teile[1], teile[0]) if len(teile) == 3 else str(d)
+
+    # Ereignis-Datensatz je Schluessel; bei Mehrfachtreffern der engste.
+    nach_key = {}
+    for e in daten.get("events", []):
+        if e.get("spiegel"):
+            continue
+        k = (e["transit"], e["aspekt"], e["ziel"])
+        if k not in rest:
+            continue
+        alt = nach_key.get(k)
+        if alt is None or (e.get("min_orb_grad") or 99) < (alt.get("min_orb_grad") or 99):
+            nach_key[k] = e
+
+    zeilen, sortier = [], []
+    for k in sorted(rest):
+        e = nach_key.get(k, {})
+        ex = e.get("exakt") or []
+        if ex:
+            datum = ", ".join(_de(d) for d in ex)
+            if all(d < (stichtag or "") for d in ex):
+                grund = ("exakt %s — lag vor der Momentaufnahme, Orb am Stichtag "
+                         "offen" % datum)
+            else:
+                grund = ("exakt %s — liegt außerhalb der Momentaufnahme vom %s"
+                         % (datum, _de(stichtag)))
+            schluessel = ex[0]
+        else:
+            grund = ("nie exakt (engster Orb %.2f°) — streift das Fenster nur"
+                     % (e.get("min_orb_grad") or 0.0))
+            schluessel = "9999"
+        zeile = "- T-%s %s R-%s — %s" % (k[0], ASPEKT_ZU_GLYPH.get(k[1], k[1]),
+                                         k[2], grund)
+        sortier.append((schluessel, zeile))
+
+    sortier.sort()
+    zeilen = [z for _, z in sortier]
+    return {"zeilen": zeilen, "kontakte": r["kontakte"],
+            "in_themen": r["in_themen"], "offen": len(zeilen),
+            "stichtag": stichtag}
+
+
+def transit_rechenschaft_block(chart_data_pfad: str, events_json_pfad: str,
+                               stichtag: str = None,
+                               orb_wirk: float = 1.5) -> str:
+    """Der fertige Block samt Kopfzeile — 1:1 ans Ende des `chart_data`.
+
+    Gehört hinter `GESTRICHEN:`. Nach dem Einfügen läuft
+    `kontakt_heimat_bericht()` grün; die Zeilen tragen den `T-`-Präfix, an dem
+    die Probe seit dem 14.09. eine Transit-Zeile erkennt.
+    """
+    r = transit_rechenschaft(chart_data_pfad, events_json_pfad, stichtag, orb_wirk)
+    kopf = ("TRANSIT-RECHENSCHAFT: %d primaere Wirkorb-Kontakte im Rechenfenster, "
+            "%d tragen ein Kapitel, %d ohne Kapitel — hier einzeln benannt "
+            "(Stichtag %s)." % (r["kontakte"], r["in_themen"], r["offen"],
+                                r["stichtag"]))
+    return "\n".join([kopf, ""] + r["zeilen"])
 
 
 def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
