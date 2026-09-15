@@ -682,9 +682,18 @@ LEGEND_TITEL = 'Die Aspekte und was sie bedeuten'
 # koennte (Pruefbericht EA 5d, 2026-09-08). Sie steht NUR unter der
 # Aspekttabelle, nicht auf der Radseite: dort haengt die eingemessene
 # Radbreite an der Kastenhoehe.
-ORBIS_ZEILE = ('Orbis nach Faktor: Sonne, Mond, Merkur 8° · Venus, Jupiter 6° '
-               '· Mars, Saturn 4° · Achsen 9° · alles Übrige 3°. '
-               'Nebenaspekte enger, auf beide Faktor-Orbis gedeckelt.')
+# Steht gedruckt unter jeder Aspektseite. Neu gefasst 2026-09-15 mit der
+# Orbis-Umstellung (s. radix.ASPEKT_ORB): Der frueher hier stehende Sammelwert
+# „alles Übrige 3°" hat verschwiegen, dass er Chiron, Lilith, Pholus,
+# Mondknoten und Glueckspunkt zu einer Gruppe zusammenfasste, die inzwischen
+# vier verschiedene Werte traegt. Aendert sich ein Wert in radix.ASPEKT_ORB,
+# aendert sich diese Zeile mit — sie ist die einzige Stelle, an der der Leser
+# erfaehrt, womit gerechnet wurde.
+ORBIS_ZEILE = ('Orbis nach Faktor: Sonne, Mond 8° · Merkur, Venus, Jupiter 6° '
+               '· Mars, Saturn 5° · Uranus, Neptun, Pluto 4° · Achsen und '
+               'Chiron 5° · Lilith, Glückspunkt 3° · Pholus 2°. Der Mondknoten '
+               'übernimmt den Orbis des aspektierenden Faktors. Nebenaspekte '
+               'enger, auf beide Faktor-Orbis gedeckelt.')
 
 # Aspektarten AUSSERHALB des Huber-Systems, die ein Chart bewusst in die
 # Tabelle haengen kann (Datenblatt-Modul, „Zusatzebene"). Sie stehen nicht im

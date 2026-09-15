@@ -120,12 +120,61 @@ DEFAULT_PALETTE = {
     'grund': '#f8f4ec',   # Bildhintergrund = Papierfarbe des Dokuments
 }
 
-# Huber-Standardorbis pro Faktor (individuelle Seite; Details im Datenblatt-Modul)
-HUBER_ORB = {
-    'Sonne': 8, 'Mond': 8, 'Merkur': 8, 'Venus': 6, 'Jupiter': 6,
-    'Saturn': 4, 'Mars': 4, 'Uranus': 3, 'Neptun': 3, 'Pluto': 3,
-    'Knoten': 3, 'Suedknoten': 3, 'Lilith': 3, 'Chiron': 3, 'Pholus': 3,
-    'Glueckspunkt': 3, 'AC': 9, 'MC': 9, 'DC': 9, 'IC': 9,
+# Aspekt-Orbis pro Faktor (individuelle Seite; Details im Datenblatt-Modul).
+#
+# Stand 2026-09-15, Chris-Entscheidung nach dem Orbis-Recherchelauf
+# (BEFUND_Orbis_2026-09-15). Vorher: 8/8/8 - 6/6 - 4/4 - 3/3/3, Achsen 9,
+# alles Uebrige 3 als Sammelwert ohne Begruendung.
+#
+# Die RANGFOLGE Sonne/Mond | Merkur/Venus/Jupiter | Mars/Saturn |
+# Uranus/Neptun/Pluto ist die der Huber-Orbistabelle (API-Institut Adliswil;
+# Huber, Aspektbild-Astrologie, Kap. 2). Die WERTE sind deren Trigon-Spalte,
+# flach auf alle vier Hauptaspekte angewandt. Huber staffelt zusaetzlich nach
+# Aspektart - Konj/Opp 9/7/6/5, Trigon 8/6/5/4, Quadrat 6/5/4/3,
+# Sextil+Quincunx 5/4/3/2, Halbsextil 3/2/1,5/1. Diese Staffelung ist hier
+# bewusst NICHT uebernommen (Chris-Entscheidung 2026-09-15: ein Wert je
+# Faktor, die mittlere Spalte als Flachwert). Merkur stand bis dahin bei den
+# Lichtern auf 8 - das ist in keiner geprueften Quelle belegt, und die
+# naheliegende Begruendung traegt nicht: Hubers Ich-Dreieck ist Sonne, Mond,
+# SATURN, Merkur ist dort ein Werkzeugplanet.
+#
+# Die Tabelle heisst deshalb seit dem 2026-09-15 ASPEKT_ORB und nicht mehr
+# HUBER_ORB: Huber fuehrt weder Achsen noch Chiron, Lilith, Pholus oder den
+# Glueckspunkt. Achsen aspektiert er ueberhaupt nicht (Aspektbild-Astrologie
+# S. 48-49). Diese fuenf Werte sind eigene, begruendete Setzungen:
+#   Achsen 5      - die ueberlieferte Konvention fuer Achsen und alle
+#                   nicht-leuchtenden Punkte. Vorher 9, also weiter als jeder
+#                   Planet ausser den Lichtern, ohne jeden Beleg; 9 Grad am AC
+#                   entsprechen in Berliner Breite 14 bis 52 Minuten
+#                   Geburtszeit, waehrend Gegenprobe (g) schon bei 10 Minuten
+#                   Kippminute warnt. Die vier Achsen erzeugten damit 45 % aller
+#                   Aspektzeilen.
+#   Chiron 5      - Melanie Reinhart, Hauptautorin zu Chiron, auf die
+#                   Orbisfrage: "the same orbs ... as you would use for
+#                   Saturn". Chiron zieht deshalb mit Saturn mit.
+#   Pholus 2      - Koch/von Heeren, "Der neue Planet Pholus": Maximalorbis
+#                   2 Grad. Einzige Primaerquelle ueberhaupt zu Pholus.
+#   Lilith 3      - die osculating Lilith (die dieses Projekt verwendet)
+#                   schwingt laut Swiss-Ephemeris-Doku um +/-30 Grad um das
+#                   mittlere Apogaeum, wird stationaer und rueckláufig; Koch
+#                   nennt die Schwingung selbst ein Artefakt der
+#                   Zweikoerper-Reduktion. Zurueckhaltung ist begruendet.
+#   Glueckspunkt 3 - rein gerechneter Punkt. Seine Kontakte zu AC und DC und zu
+#                   EINEM der beiden Lichter sind mathematisch erzwungen; sie
+#                   werden in aspektliste() gekennzeichnet, s. dort.
+#
+# Der MONDKNOTEN bekommt keinen eigenen Wert. Huber, Mondknoten-Astrologie:
+# "Deshalb hat der Mondknoten auch keinen eigenen Orb (Aspektumraum)." Es gilt
+# der Orbis des aspektierenden Faktors - s. KNOTEN_ERBT und huber_aspects().
+ASPEKT_ORB = {
+    'Sonne': 8, 'Mond': 8, 'Merkur': 6, 'Venus': 6, 'Jupiter': 6,
+    'Saturn': 5, 'Mars': 5, 'Uranus': 4, 'Neptun': 4, 'Pluto': 4,
+    'Lilith': 3, 'Chiron': 5, 'Pholus': 2,
+    'Glueckspunkt': 3, 'AC': 5, 'MC': 5, 'DC': 5, 'IC': 5,
+    # Knoten: Platzhalterwerte. Wirksam ist KNOTEN_ERBT - der Wert hier greift
+    # nur, wenn auch der Partner ein Knoten ist (kommt nicht vor, der
+    # Suedknoten geht nicht in die Aspektrechnung).
+    'Knoten': 3, 'Suedknoten': 3,
     # Schreibweisen des `chartdata.py`-Vertrags. Ohne sie fanden
     # `huber_aspects()` und `aspektliste()` fuer Mondknoten und Glueckspunkt
     # KEINEN Eintrag und nahmen den Vorgabewert 3 — zufaellig derselbe Wert,
@@ -135,6 +184,12 @@ HUBER_ORB = {
     # Am Ergebnis dieses und jedes bisherigen Charts aendert sich nichts.
     'Mondknoten': 3, 'Südknoten': 3, 'Glückspunkt': 3,
 }
+
+# Faktoren ohne eigenen Orbis: sie uebernehmen den des aspektierenden Partners.
+KNOTEN_ERBT = ('Knoten', 'Mondknoten', 'Suedknoten', 'Südknoten')
+
+# Alter Name, damit ein chart-eigener Builder nicht bricht. Dieselbe Tabelle.
+HUBER_ORB = ASPEKT_ORB
 
 # Aspektwinkel -> (Farbkategorie, Nebenaspekt-Fixorb | None für Haupt/Konjunktion)
 _ASPECT_DEFS = [
@@ -203,6 +258,16 @@ def huber_aspects(factors, orbs=None):
             if d > 180:
                 d = 360 - d
             o1, o2 = orb_of(a['name']), orb_of(b['name'])
+            # Der Mondknoten hat keinen eigenen Orbis (Huber,
+            # Mondknoten-Astrologie: "Alle Aspekte laufen immer von den
+            # Planeten zum Mondknoten, nie umgekehrt"). Es gilt der Orbis des
+            # aspektierenden Faktors. Ergaenzt 2026-09-15.
+            a_erbt = a['name'] in KNOTEN_ERBT
+            b_erbt = b['name'] in KNOTEN_ERBT
+            if a_erbt and not b_erbt:
+                o1 = o2
+            elif b_erbt and not a_erbt:
+                o2 = o1
             for angle, color, neben in _ASPECT_DEFS:
                 dev = abs(d - angle)
                 if angle in _MAIN_ANGLES:
@@ -280,6 +345,48 @@ _FUEHRT_QUADRAT = ('AC', 'MC')
 
 def ist_achse(name):
     return name in ACHSEN_NAMEN
+
+
+def glueckspunkt_kopplung(factors):
+    """Die Faktorpaare, deren Winkel durch die Glueckspunkt-Formel ERZWUNGEN
+    ist — sie tragen keine eigene Information.
+
+    Aus GP = AC + Mond - Sonne (Tag) folgt GP - AC = Mond - Sonne und
+    GP - Mond = AC - Sonne. Aus GP = AC + Sonne - Mond (Nacht) folgt
+    GP - AC = Sonne - Mond und GP - Sonne = AC - Mond. In beiden Faellen ist
+    also der Kontakt zu AC (und damit auch zu DC) gekoppelt, dazu der zu GENAU
+    EINEM der beiden Lichter — welchem, entscheidet die Formel. Der Kontakt zum
+    anderen Licht ist frei.
+
+    Welche Formel gilt, wird hier aus den Positionen selbst zurueckgerechnet,
+    nicht uebergeben: So bleibt die Funktion auch dann richtig, wenn ein
+    Datenblatt den Glueckspunkt von Hand gesetzt hat.
+
+    Rueckgabe: dict {frozenset({name_a, name_b}): "spiegelt X-Y"}. Leer, wenn
+    Glueckspunkt, AC, Sonne oder Mond fehlen. Neu 2026-09-15.
+    """
+    pos = {f['name']: f['lon'] for f in factors}
+    gp = pos.get('Glueckspunkt', pos.get('Glückspunkt'))
+    ac, so, mo = pos.get('AC'), pos.get('Sonne'), pos.get('Mond')
+    if None in (gp, ac, so, mo):
+        return {}
+
+    def nah(x, y):
+        return min((x - y) % 360, (y - x) % 360) < 0.05
+
+    if nah(gp, (ac + mo - so) % 360):        # Tagformel
+        licht, gegen = 'Mond', 'Sonne'
+    elif nah(gp, (ac + so - mo) % 360):      # Nachtformel
+        licht, gegen = 'Sonne', 'Mond'
+    else:
+        return {}                            # von Hand gesetzt, nicht deutbar
+
+    g = 'Glueckspunkt' if 'Glueckspunkt' in pos else 'Glückspunkt'
+    k = {frozenset((g, 'AC')): 'spiegelt Mond-Sonne',
+         frozenset((g, licht)): f'spiegelt AC-{gegen}'}
+    if 'DC' in pos:
+        k[frozenset((g, 'DC'))] = 'spiegelt Mond-Sonne'
+    return k
 
 
 def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
@@ -363,6 +470,17 @@ def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
         r = dict(fuehrt)
         r['spiegel'] = f"{zweit['name']} {z_achse}"
         out.append(r)
+
+    # Erzwungene Glueckspunkt-Kontakte kennzeichnen (neu 2026-09-15). Sie
+    # bleiben in der Tabelle — die Rechenschaft ist vollstaendig —, aber die
+    # Spalte „zugleich" sagt, dass ihr Winkel aus der Formel folgt und nicht
+    # aus dem Bild. Ein vorhandener spiegel-Eintrag hat Vorrang.
+    kopp = glueckspunkt_kopplung(factors)
+    if kopp:
+        for r in out:
+            hin = kopp.get(frozenset((r['a'], r['b'])))
+            if hin and not r.get('spiegel'):
+                r['spiegel'] = hin
 
     if sortieren:
         out.sort(key=lambda x: (_STAERKE_RANG.get(x['strength'], 9), x['orb']))
