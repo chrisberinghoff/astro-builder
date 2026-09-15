@@ -1560,6 +1560,38 @@ _FUSS_ZEILE_RE = re.compile(
     r'[☉☽☿♀♂♃♄♅♆♇☊☋⚷⚸⊗♈♉♊♋♌♍♎♏♐♑♒♓]')
 
 
+def source_text_chars(parsed) -> int:
+    """Vergleichswert fuer verify(source_text_chars=…) — Summe der
+    normalisierten Laengen von Kicker, Titel, Signatur, Beleg und allen
+    Blocktexten der geparsten Kapitel.
+
+    Neu am 2026-09-15 (Pruefbericht Geburtshoroskop Schritt 3+4, 5.2). Bis
+    dahin war das das EINZIGE verify()-Argument ohne Hilfsfunktion: Das
+    Design-Modul beschrieb die Summe in Prosa („selbst ausrechnen"), waehrend
+    `markers` ueber chapter_markers(), die Fusszeilen ueber fuss_signaturen()
+    und die Aspektzahl ueber radix.aspektliste() kamen. Jeder Lauf hat
+    dieselbe Schleife neu geschrieben — und ein Zaehlfehler darin tarnt sich
+    als „Textdeckung zu niedrig", also als Layoutfehler an einer Stelle, an
+    der gar keiner ist.
+
+    Nimmt das Ergebnis von parse_analyse() oder prepare_chapters().
+    """
+    kap = parsed.get('chapters', parsed) if hasattr(parsed, 'get') else parsed
+
+    def _n(x):
+        return len(re.sub(r'\s+', ' ', (x or '')).strip())
+
+    gesamt = 0
+    for it in kap:
+        if not isinstance(it, dict):
+            continue
+        gesamt += _n(it.get('kicker')) + _n(it.get('title'))
+        gesamt += _n(it.get('signatur')) + _n(it.get('beleg'))
+        for b in it.get('blocks') or ():
+            gesamt += _n(b.get('text'))
+    return gesamt
+
+
 def fuss_signaturen(parsed) -> list:
     """Alle Kapitel-Signaturen eines geparsten Dokuments.
 

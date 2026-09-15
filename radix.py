@@ -126,6 +126,14 @@ HUBER_ORB = {
     'Saturn': 4, 'Mars': 4, 'Uranus': 3, 'Neptun': 3, 'Pluto': 3,
     'Knoten': 3, 'Suedknoten': 3, 'Lilith': 3, 'Chiron': 3, 'Pholus': 3,
     'Glueckspunkt': 3, 'AC': 9, 'MC': 9, 'DC': 9, 'IC': 9,
+    # Schreibweisen des `chartdata.py`-Vertrags. Ohne sie fanden
+    # `huber_aspects()` und `aspektliste()` fuer Mondknoten und Glueckspunkt
+    # KEINEN Eintrag und nahmen den Vorgabewert 3 — zufaellig derselbe Wert,
+    # den die Tabelle eine Zeile hoeher fuehrt, sodass der Fehler stumm blieb
+    # und eine Aenderung an 'Knoten'/'Glueckspunkt' wirkungslos gewesen waere.
+    # Ergaenzt 2026-09-15 (Pruefbericht Geburtshoroskop Schritt 3+4, 5.3).
+    # Am Ergebnis dieses und jedes bisherigen Charts aendert sich nichts.
+    'Mondknoten': 3, 'Südknoten': 3, 'Glückspunkt': 3,
 }
 
 # Aspektwinkel -> (Farbkategorie, Nebenaspekt-Fixorb | None für Haupt/Konjunktion)
