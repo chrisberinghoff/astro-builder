@@ -820,6 +820,13 @@ GEWICHT = {
 SPEZIALFAKTOREN = ('Chiron', 'Lilith', 'Pholus', 'Glueckspunkt',
                    'Knoten', 'Suedknoten')
 WINKEL = ('AC', 'MC', 'DC', 'IC')
+# Die beiden Enden derselben Achse. Gebraucht in gruppiere_figuren():
+# Ist der Brennpunkt einer Figur ein Winkel, bekommt das Gegenende
+# zwangslaeufig dieselben Quadrate — konfigurationen() meldet die Figur
+# dann zweimal (Pruefbericht Geburtshoroskop Schritt 1+2, 15.09.2026, 5.2).
+# Die Reihenfolge in WINKEL entscheidet zugleich, welches Ende fuehrt:
+# AC vor DC, MC vor IC — dieselbe Konvention wie in aspektliste().
+GEGENWINKEL = {'AC': 'DC', 'DC': 'AC', 'MC': 'IC', 'IC': 'MC'}
 PERSOENLICH = ('Sonne', 'Mond', 'Merkur', 'Venus', 'Mars')
 
 # Aspektgewichte fuer die Dichterechnung (Befund 5.1). Ein voller Hauptaspekt
@@ -1846,6 +1853,23 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     Spezialfaktor auf einem Winkel). Die Entscheidung musste von Hand fallen,
     genau die Handarbeit, die fuer das T-Quadrat am 09.09. abgeschafft wurde.
 
+    SEIT 15.09.2026 ZWEI WEITERE FAELLE (Pruefbericht Geburtshoroskop
+    Schritt 1+2, 5.2 und 5.3).
+
+    T-Quadrat mit WINKEL-Brennpunkt: Steht der Apex auf einem Winkel, quadriert
+    dieselbe Opposition zwangslaeufig auch das Gegenende derselben Achse —
+    konfigurationen() meldet die Figur zweimal, einmal je Achsenende. Das ist
+    EINE Figur und keine Deutungsfrage; die alte Bedingung „gleicher Apex" lief
+    hier durch. Gefuehrt wird mit dem Ende, das WINKEL zuerst nennt (AC vor DC,
+    MC vor IC); das Gegenende steht als `spiegel_apex` und ist zugleich die
+    leere Spitze.
+
+    MYSTISCHES RECHTECK: bis dahin gar nicht gruppiert. Zwei Rechtecke sind
+    dieselbe Figur, wenn ihre beiden Achsen paarweise identisch oder konjunkt
+    sind (Reihenfolge egal). Im Prueffall vom 15.09. entsprachen FUENF Meldungen
+    ZWEI Figuren — die Vervielfachung kommt aus konjunkten Faktoren an einem
+    Achsenende, demselben Mechanismus wie bei Jod und T-Quadrat.
+
     Jod, hart: Basis paarweise identisch oder konjunkt UND Spitze identisch oder
     konjunkt. Jod, weich (Kandidat): gleiche Basis, Spitzen weder identisch noch
     konjunkt — das sind zwei Figuren mit benachbarten Spitzen oder eine mit
@@ -1854,13 +1878,15 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     Kandidaten gibt es dort nicht; zwei Grosstrigone mit zwei gemeinsamen Ecken
     sind zwei Figuren.
 
-    -> {'figuren': [{'achse','apex','leere_spitze','meldungen'}],
+    -> {'figuren': [{'achse','apex','spiegel_apex','leere_spitze','meldungen'}],
         'kandidaten': [[i, j, ...]],   # Indizes in 'figuren'
         'meldungen': n, 'anzahl': m,
         'jod_figuren': [{'basis','apex','meldungen'}],
         'jod_kandidaten': [[i, j, ...]], 'jod_meldungen': n, 'jod_anzahl': m,
         'grosstrigon_figuren': [{'ecken','meldungen'}],
-        'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m}
+        'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m,
+        'rechteck_figuren': [{'achsen','trigone','sextile','meldungen'}],
+        'rechteck_meldungen': n, 'rechteck_anzahl': m}
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -1869,26 +1895,54 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
             konj.add(frozenset((a['a'], a['b'])))
     gleich = lambda x, y: x == y or frozenset((x, y)) in konj
 
-    def deckungsgleich(t1, t2):
-        if t1['apex'] != t2['apex']:
-            return False
-        a1, b1 = t1['achse']
-        a2, b2 = t2['achse']
+    def achsen_gleich(p, q):
+        a1, b1 = p
+        a2, b2 = q
         return ((gleich(a1, a2) and gleich(b1, b2))
                 or (gleich(a1, b2) and gleich(b1, a2)))
+
+    def deckungsgleich(t1, t2):
+        if not achsen_gleich(t1['achse'], t2['achse']):
+            return False
+        if t1['apex'] == t2['apex']:
+            return True
+        # WINKEL-SPIEGEL (neu 2026-09-15, Pruefbericht Geburtshoroskop
+        # Schritt 1+2, 5.2): Ist der Brennpunkt ein Winkel, quadriert dieselbe
+        # Opposition zwangslaeufig auch das Gegenende derselben Achse —
+        # konfigurationen() meldet die Figur deshalb zweimal, einmal je
+        # Achsenende. Das ist EINE Figur, keine Deutungsfrage. Die alte
+        # Bedingung verlangte gleichen Apex und lief hier durch: Im Prueffall
+        # meldete die Funktion drei T-Quadrate fuer zwei Figuren, und die
+        # Datenblatt-Zeile schwieg darueber.
+        return GEGENWINKEL.get(t1['apex']) == t2['apex']
 
     figuren = []
     for t in tq:
         for f in figuren:
             if deckungsgleich(f['_erst'], t):
                 f['meldungen'].append(t['achse'])
+                if t['apex'] != f['apex']:
+                    # Winkel-Spiegel: das zweite Achsenende als Brennpunkt.
+                    f['spiegel_apex'] = t['apex']
+                    f['_spiegel_ls'] = t.get('leere_spitze')
                 break
         else:
             figuren.append({'achse': t['achse'], 'apex': t['apex'],
                             'leere_spitze': t.get('leere_spitze'),
+                            'spiegel_apex': None,
                             'meldungen': [t['achse']], '_erst': t})
     for f in figuren:
         f.pop('_erst', None)
+        sp = f.get('spiegel_apex')
+        # Gefuehrt wird mit dem Ende, das WINKEL zuerst nennt (AC vor DC,
+        # MC vor IC) — die eigene Seite der Achse. Das Gegenende bleibt als
+        # 'spiegel_apex' erhalten und ist zugleich die leere Spitze.
+        if sp and f['apex'] in WINKEL and sp in WINKEL:
+            if WINKEL.index(sp) < WINKEL.index(f['apex']):
+                f['apex'], f['spiegel_apex'] = sp, f['apex']
+                f['leere_spitze'], f['_spiegel_ls'] = (
+                    f.get('_spiegel_ls'), f['leere_spitze'])
+        f.pop('_spiegel_ls', None)
 
     kandidaten = []
     for i, f in enumerate(figuren):
@@ -1935,8 +1989,38 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         else:
             gt_figuren.append({'ecken': ecken, 'meldungen': [ecken]})
 
+    # MYSTISCHES RECHTECK, neu am 15.09.2026 (Pruefbericht Geburtshoroskop
+    # Schritt 1+2, 5.3). Bis dahin gab es fuer Rechtecke ueberhaupt keine
+    # Gruppierung, obwohl die Vervielfachung aus demselben Mechanismus kommt
+    # wie bei Jod und T-Quadrat: konjunkte Faktoren an einem Achsenende. Im
+    # Prueffall entsprachen FUENF Meldungen ZWEI Figuren, und keine Zeile des
+    # Datenblatts sagte es. Zwei Rechtecke sind dieselbe Figur, wenn ihre
+    # beiden Achsen paarweise identisch oder konjunkt sind — Reihenfolge egal.
+    def achsenpaar_gleich(p, q):
+        if len(p) != 2 or len(q) != 2:
+            return False
+        return ((achsen_gleich(p[0], q[0]) and achsen_gleich(p[1], q[1]))
+                or (achsen_gleich(p[0], q[1]) and achsen_gleich(p[1], q[0])))
+
+    rect = konf.get('rechteck', [])
+    rect_figuren = []
+    for r in rect:
+        achsen = [list(x) for x in (r.get('achsen') or ())]
+        for f in rect_figuren:
+            if achsenpaar_gleich(achsen, f['achsen']):
+                f['meldungen'].append(achsen)
+                break
+        else:
+            rect_figuren.append({'achsen': achsen,
+                                 'trigone': r.get('trigone'),
+                                 'sextile': r.get('sextile'),
+                                 'meldungen': [achsen]})
+
     return {'figuren': figuren, 'kandidaten': kandidaten,
             'meldungen': len(tq), 'anzahl': len(figuren),
+            'rechteck_figuren': rect_figuren,
+            'rechteck_meldungen': len(rect),
+            'rechteck_anzahl': len(rect_figuren),
             'jod_figuren': jod_figuren, 'jod_kandidaten': jod_kandidaten,
             'jod_meldungen': len(jod), 'jod_anzahl': len(jod_figuren),
             'grosstrigon_figuren': gt_figuren,
@@ -2303,10 +2387,23 @@ ZYKLEN = {
     'Uranus': [(21.0, 'Uranus-Quadrat'), (42.0, 'Uranus-Opposition'),
                (63.0, 'zweites Uranus-Quadrat')],
     'Chiron': [(50.5, 'Chiron-Rückkehr')],
-    'Knoten': [(18.6, 'erste Knoten-Rückkehr'), (37.2, 'zweite Knoten-Rückkehr'),
-               (55.8, 'dritte Knoten-Rückkehr')],
-    'Suedknoten': [(18.6, 'erste Knoten-Rückkehr'), (37.2, 'zweite Knoten-Rückkehr'),
-                   (55.8, 'dritte Knoten-Rückkehr')],
+    # Knotenachse: Umlauf 18,61 Jahre. Rueckkehr und Halbzyklus (die
+    # Knoten-Opposition, bei der die Achse gespiegelt steht) seit 2026-09-15 —
+    # Chris-Entscheidung nach dem Pruefbericht Geburtshoroskop Schritt 1+2, 5.4.
+    'Knoten': [(9.3, 'erste Knoten-Opposition'),
+               (18.6, 'erste Knoten-Rückkehr'),
+               (27.9, 'zweite Knoten-Opposition'),
+               (37.2, 'zweite Knoten-Rückkehr'),
+               (46.5, 'dritte Knoten-Opposition'),
+               (55.8, 'dritte Knoten-Rückkehr'),
+               (65.1, 'vierte Knoten-Opposition')],
+    'Suedknoten': [(9.3, 'erste Knoten-Opposition'),
+                   (18.6, 'erste Knoten-Rückkehr'),
+                   (27.9, 'zweite Knoten-Opposition'),
+                   (37.2, 'zweite Knoten-Rückkehr'),
+                   (46.5, 'dritte Knoten-Opposition'),
+                   (55.8, 'dritte Knoten-Rückkehr'),
+                   (65.1, 'vierte Knoten-Opposition')],
     'Jupiter': [(11.9, 'Jupiter-Rückkehr'), (23.8, 'Jupiter-Rückkehr'),
                 (35.7, 'Jupiter-Rückkehr'), (47.6, 'Jupiter-Rückkehr'),
                 (59.5, 'Jupiter-Rückkehr')],
@@ -2325,6 +2422,22 @@ ZYKLEN = {
                (62.0, 'siebte Lilith-Rückkehr')],
 }
 ZYKLUS_TAKT = ('Lilith',)   # Takte, keine markanten Stationen — s. ZYKLEN
+
+# ZYKLUS-NAMEN (neu 2026-09-15, Pruefbericht Geburtshoroskop Schritt 1+2, 5.4).
+# ZYKLEN kannte die Knotenachse die ganze Zeit — unter dem Schluessel 'Knoten'.
+# Nachgeschlagen wird aber mit dem Faktornamen aus `factors`, und der heisst
+# nach dem chartdata.py-Vertrag 'Mondknoten'. Folge: zyklusfenster('Mondknoten')
+# lieferte eine LEERE Liste, §7 nannte die Knotenachse nicht, und ein
+# Knoten-Kapitel durfte nach Prinzip 15 gar keine Zeitangabe tragen — obwohl das
+# Typmodul die Knotenachse ausdruecklich als zyklustragenden Faktor fuehrt. Das
+# ist derselbe Fehlertyp wie FAKTOR_ALIAS in selektor.py am 30.07.2026: ein
+# Name, der sich nicht aufloest, faellt lautlos durch. Deshalb hier ein Alias
+# statt eines zweiten Eintrags — eine Zahl, eine Stelle.
+ZYKLUS_ALIAS = {
+    'Mondknoten': 'Knoten', 'Nordknoten': 'Knoten',
+    'Mondknotenachse': 'Knoten', 'Knotenachse': 'Knoten',
+    'Südknoten': 'Suedknoten', 'Suedknoten': 'Suedknoten',
+}
 
 
 def pluto_quadrat_alter(jd_geburt, pluto_lon, max_alter=70):
@@ -2377,6 +2490,7 @@ def zyklusfenster(faktor, alter=None, gerechnet=None):
     dieser Art) und ausdruecklich kein Mangel.
     """
     out = []
+    faktor = ZYKLUS_ALIAS.get(faktor, faktor)
     eintraege = sorted(ZYKLEN.get(faktor, []))
     if gerechnet and faktor in gerechnet and gerechnet[faktor] is not None:
         # Gerechneter Wert schlaegt die Jahrgangstabelle (s. pluto_quadrat_alter).
@@ -3002,7 +3116,20 @@ def strukturbild_text(sb):
         # Figuren es tatsaechlich sind.
         L.append('- Achsen-Doppelung: %d T-Quadrat-Meldungen entsprechen %d '
                  'Figuren (die übrigen sind dieselbe Figur über eine '
-                 'Winkel-Konjunktion).' % (fg['meldungen'], fg['anzahl']))
+                 'Winkel-Konjunktion oder über die beiden Enden derselben '
+                 'Achse).' % (fg['meldungen'], fg['anzahl']))
+        for f in fg['figuren']:
+            # Winkel-Spiegel (neu 2026-09-15, Pruefbericht 5.2): Der Apex steht
+            # auf einem Winkel, also ist das Gegenende zwangslaeufig ebenfalls
+            # Brennpunkt. Die Zeile sagt, mit welchem Ende gedeutet wird und
+            # warum — damit aus einer Figur nicht zwei Kapitel werden.
+            if f.get('spiegel_apex'):
+                L.append('  · %s im Quadrat zur Achse %s/%s — EINE Figur, '
+                         'zweimal gemeldet. Gedeutet wird mit dem Brennpunkt '
+                         '%s (die eigene Seite der Achse); %s ist die '
+                         'Gegenspitze.'
+                         % (' ☍ '.join(f['achse']), f['apex'],
+                            f['spiegel_apex'], f['apex'], f['spiegel_apex']))
     if fg and fg['kandidaten']:
         # Weiche Gruppe: gleicher Brennpunkt, ein gemeinsames Achsenende, aber
         # die zweiten Enden sind weder identisch noch konjunkt. Ob das EINE
@@ -3049,6 +3176,18 @@ def strukturbild_text(sb):
         L.append('- Achsen-Doppelung: %d Großtrigon-Meldungen entsprechen %d '
                  'Figuren.' % (fg['grosstrigon_meldungen'],
                                fg['grosstrigon_anzahl']))
+    # MYSTISCHES RECHTECK, neu am 15.09.2026 (Pruefbericht 5.3).
+    if fg and fg.get('rechteck_meldungen', 0) > fg.get('rechteck_anzahl', 0):
+        L.append('- Achsen-Doppelung: %d Rechteck-Meldungen entsprechen %d '
+                 'Figuren (die übrigen unterscheiden sich nur darin, welcher '
+                 'von mehreren konjunkten Faktoren als Achsenende gezählt '
+                 'wird).' % (fg['rechteck_meldungen'], fg['rechteck_anzahl']))
+        for f in fg['rechteck_figuren']:
+            if len(f['meldungen']) > 1:
+                L.append('  · Achsen %s und %s, %d Meldungen, EIN Befund.'
+                         % (' ☍ '.join(f['achsen'][0]),
+                            ' ☍ '.join(f['achsen'][1]),
+                            len(f['meldungen'])))
     for t in kf['t_quadrat']:
         zeile = (f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
                  f"{t['apex']}")
@@ -3341,6 +3480,10 @@ if __name__ == '__main__':
     assert [x['lage'] for x in _z] == ['zurückliegend', 'zurückliegend',
                                        'bevorstehend', 'bevorstehend'], _z
     assert zyklusfenster('Venus') == []          # kein eigener Lebenszyklus
+    # Knoten-Alias (neu 2026-09-15): der Faktorname aus `factors` heisst
+    # 'Mondknoten', der ZYKLEN-Schluessel 'Knoten'. Ohne Alias lief das leer.
+    assert len(zyklusfenster('Mondknoten')) == 7, zyklusfenster('Mondknoten')
+    assert zyklusfenster('Mondknoten') == zyklusfenster('Knoten')
 
     _txt = strukturbild_text(_sb)
     assert '## Strukturbild' in _txt and 'Hausherrscher' in _txt

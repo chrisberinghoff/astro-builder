@@ -2396,3 +2396,109 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
     for p, a, b in r["doppelt"]:
         L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (p, a, b))
     return "\n".join(L)
+
+
+# ---------------------------------------------------------------------------
+# RESSOURCEN-BLOCK  (neu 2026-09-15, Pruefbericht Geburtshoroskop Schritt 1+2,
+# Rubrik 5.6)
+#
+# Gegenstueck zu transit_rechenschaft_block() fuer den zeitlosen Modus. Der
+# Ressourcen-Block des Datenblatts ist eine mechanisch bestimmbare Menge: jeder
+# harmonische Aspekt (Konjunktion, Trigon, Sextil) an einem der Faktoren, die
+# das Typmodul nennt, nach Enge sortiert, mit Staerkestufe als Merkmal. Bis zu
+# diesem Tag wurde er je Lauf von Hand aus der Aspektliste gefiltert — im
+# Pruefall 21 Zeilen, jede eine Fehlerquelle, und die Vollstaendigkeit pruefte
+# keine Funktion. Genau die Begruendung, mit der die Transit-Funktion gebaut
+# wurde.
+#
+# Die Funktion filtert und sortiert; sie ENTSCHEIDET NICHT. Der Deutungsort
+# bleibt Handarbeit und steht als leeres Feld hinter jeder Zeile.
+# ---------------------------------------------------------------------------
+
+# Zaehlmenge des Standard-Geburtshoroskops (Typmodul, "Die Ressourcen-Pflicht").
+# Andere Typen geben ihre eigene Menge mit; die Mengen selbst stehen in den
+# Typmodulen, nicht hier.
+RESSOURCEN_FAKTOREN = ("Sonne", "Mond", "Merkur", "Venus", "Mars", "AC", "MC")
+_HARMONISCH = {"☌": "Konjunktion", "△": "Trigon", "⚹": "Sextil"}
+_STAERKE_KOPF = (("### Volle Aspekte", "voll"),
+                 ("### Einseitige Aspekte", "einseitig"),
+                 ("### Nebenaspekte", "neben"))
+
+
+def _ressourcen_zeilen(chart_data_pfad: str, faktoren=None) -> list:
+    """Die Rohzeilen der Aspekttabellen als dicts, ungefiltert nach Menge."""
+    import re as _re
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+    # Sechsspaltige Form des Datenblatt-Moduls (Spalte 6 "zugleich" seit
+    # 15.09.2026 optional): | Faktor | ☌ Konjunktion | Faktor | 0°41′ | konj | … |
+    zeile = _re.compile(
+        r"\|\s*(%s)\s*\|\s*([%s])\s*[A-Za-zÄÖÜäöüß]*\s*\|\s*(%s)\s*\|"
+        r"\s*(\d{1,3}°\d{2}′)\s*\|" % (_AH_NAME, "".join(_HARMONISCH), _AH_NAME))
+    out = []
+    for kopf, stufe in _STAERKE_KOPF:
+        if kopf not in txt:
+            continue
+        teil = txt.split(kopf, 1)[1]
+        schnitt = _re.search(r"\n#{2,3} ", teil)
+        if schnitt:
+            teil = teil[:schnitt.start()]
+        for z in teil.splitlines():
+            m = zeile.match(z)
+            if not m:
+                continue
+            g, mi = m.group(4).split("°")
+            out.append({"a": m.group(1), "glyph": m.group(2), "b": m.group(3),
+                        "name": _HARMONISCH[m.group(2)], "orb_txt": m.group(4),
+                        "orb": int(g) + int(mi.rstrip("′")) / 60.0,
+                        "stufe": stufe})
+    return out
+
+
+def ressourcen_liste(chart_data_pfad: str, faktoren=None) -> dict:
+    """Die Zaehlmenge des Ressourcen-Blocks, nach Enge sortiert.
+
+    faktoren: Tupel der Punkte, an denen gezaehlt wird. Ohne Angabe die Menge
+    des Standard-Geburtshoroskops (RESSOURCEN_FAKTOREN). Die Staerkestufe ist
+    ein MERKMAL der Zeile und kein Filter (Datenblatt-Modul, 14.09.2026): Jeder
+    harmonische Aspekt zaehlt, die Stufe ordnet nur.
+
+    -> {'faktoren': (...), 'tabelle': n, 'zeilen': [str], 'eintraege': [dict],
+        'konjunktionen': [str]}
+    `konjunktionen` nennt die Konjunktionen der Menge — sie bleiben nach der
+    Regel vom 15.09.2026 in der Liste, sind aber nicht in jedem Fall eine Gabe
+    und brauchen die Anmerkung darunter. Welche das sind, entscheidet die
+    Deutung, nicht diese Funktion.
+    """
+    fak = tuple(faktoren or RESSOURCEN_FAKTOREN)
+    roh = _ressourcen_zeilen(chart_data_pfad)
+    treffer = [e for e in roh if e["a"] in fak or e["b"] in fak]
+    treffer.sort(key=lambda e: e["orb"])
+    zeilen = ["%s %s %s %s %s — Deutungsort: "
+              % (e["a"], e["glyph"], e["b"], e["orb_txt"], e["stufe"])
+              for e in treffer]
+    konj = ["%s %s %s" % (e["a"], e["glyph"], e["b"])
+            for e in treffer if e["glyph"] == "☌"]
+    return {"faktoren": fak, "tabelle": len(roh), "zeilen": zeilen,
+            "eintraege": treffer, "konjunktionen": konj}
+
+
+def ressourcen_block(chart_data_pfad: str, faktoren=None) -> str:
+    """Der fertige Abschnitt `## Ressourcen` — 1:1 ins chart_data.
+
+    Gehoert hinter die Themenliste und vor den Abschnitt „Aspekte ohne
+    Deutungs-Heimat". Der Deutungsort bleibt hinter jeder Zeile leer und wird
+    von Hand gesetzt; ohne ihn ist der Block unfertig (Datenblatt-Modul).
+    """
+    r = ressourcen_liste(chart_data_pfad, faktoren)
+    L = ["## Ressourcen", "",
+         "Zählmenge: jeder harmonische Aspekt (Trigon, Sextil, Konjunktion) an "
+         + ", ".join(r["faktoren"][:-1]) + " oder " + r["faktoren"][-1]
+         + " — ohne Stärkefilter, die Stufe steht als Merkmal in der Zeile und "
+           "ordnet nur die Reihenfolge. Sortiert nach Enge.", ""]
+    L += r["zeilen"]
+    if r["konjunktionen"]:
+        L += ["", "ANMERKUNG (Pflicht, Regel vom 15.09.2026): Prüfen, welche der "
+              "Konjunktionen dieser Liste NICHT als Gabe ausgegeben werden, und "
+              "es hier begründen. In der Liste bleiben sie in jedem Fall. "
+              "Konjunktionen der Menge: " + ", ".join(r["konjunktionen"]) + "."]
+    return "\n".join(L)
