@@ -2198,7 +2198,14 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     return {
         "kontakte": len(soll),
         "in_themen": len(heimat),
-        "rechenschaft": len(rech),
+        # Korrigiert 2026-09-15 (Pruefbericht EA Schritt 1+2, Rubrik 2):
+        # gezaehlt wird, was NUR in der Rechenschaft steht. Vorher zaehlte
+        # der Wert jeden Soll-Kontakt mit, dessen beide Namen irgendwo
+        # hinter der Marke "RECHENSCHAFT" auf einer Transit-Zeile standen —
+        # auch die, die ein Kapitel tragen. Im EA-Prueffall meldete er 35
+        # bei 27 Rechenschaftszeilen. Auf "ohne_heimat" und "ok" hatte das
+        # nie Einfluss; irrefuehrend war allein die Zahl im Bericht.
+        "rechenschaft": len(rech - set(heimat)),
         "ohne_heimat": [" ".join(k) for k in ohne],
         "doppelt": doppelt,
         "unbekannt": unbekannt,

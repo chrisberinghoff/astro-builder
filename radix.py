@@ -2828,6 +2828,13 @@ def strukturbild_text(sb):
                  f"({a['strength']}, Orb {a['orb']}°)")
     L.append(f"- Ganz außerhalb dieses Netzes: "
              f"{', '.join(sn['ohne_netz']) or 'keiner'}.")
+    # Befundzeile ergaenzt 2026-09-15 (Pruefbericht EA Schritt 1+2, Rubrik 2):
+    # Das Datenblatt-Modul verlangt sie fuer alle Unterpunkte ausser §7; §5 und
+    # §6 wurden bis dahin ohne Platzhalter ausgegeben und fielen deshalb im
+    # Datenblatt still aus.
+    L.append('- Befund: <eine Zeile — welcher Spezialfaktor tatsaechlich '
+             'eingebunden ist und woran, welcher am Rand steht, und was das '
+             'fuer die Deutung heisst>')
     L.append('')
 
     L.append('### 6 · Konfigurationen')
@@ -2865,12 +2872,18 @@ def strukturbild_text(sb):
                  % (fg['jod_meldungen'], fg['jod_anzahl']))
         for f in fg['jod_figuren']:
             if len(f['meldungen']) > 1:
-                L.append('  · Basis %s — Spitze %s, gemeldet auch als %s; EIN '
+                # Korrigiert 2026-09-15 (Pruefbericht EA Schritt 1+2,
+                # Rubrik 2): 'meldungen' traegt je Doppelmeldung den APEX,
+                # nie einen zweiten Namen — der Filter m != apex lieferte
+                # deshalb IMMER den leeren String, und die Zeile lautete
+                # "gemeldet auch als ; EIN Befund". Ausgegeben wird jetzt die
+                # ZAHL der zusammengefassten Meldungen; ein zweiter Name
+                # existiert in den Daten nicht und wird nicht erfunden.
+                L.append('  · Basis %s — Spitze %s, %d Meldungen, EIN '
                          'Befund. Gedeutet wird mit der Spitze, die kein Winkel '
                          'ist; der Winkel gibt der Figur ihren Ort.'
                          % (' ⚹ '.join(f['basis']), f['apex'],
-                            ', '.join(m for m in f['meldungen']
-                                      if m != f['apex'])))
+                            len(f['meldungen'])))
     for i, j in (fg or {}).get('jod_kandidaten', []):
         a, b = fg['jod_figuren'][i], fg['jod_figuren'][j]
         L.append('- Zu prüfen: Jod %s → %s und Jod %s → %s teilen die Basis, '
@@ -2929,6 +2942,10 @@ def strukturbild_text(sb):
                  f"{', '.join(s['faktoren'])}{doppelt}")
     if not any(kf.values()):
         L.append('- Keine Aspektfigur und kein Stellium.')
+    # Befundzeile ergaenzt 2026-09-15, gleiche Begruendung wie in §5.
+    L.append('- Befund: <eine Zeile — welche Figur das Bild traegt, wo ihre '
+             'leere Spitze liegt, und was die Deutungsentscheidungen zu den '
+             'Doppelmeldungen ergeben haben>')
     L.append('')
 
     if sb['zyklen']:
