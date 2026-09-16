@@ -814,11 +814,21 @@ GEWICHT = {
     'Uranus': 1.0, 'Neptun': 1.0, 'Pluto': 1.0,
     'Knoten': 0.5, 'Suedknoten': 0.5, 'Chiron': 0.5, 'Lilith': 0.5,
     'Pholus': 0.5, 'Glueckspunkt': 0.5,
+    # Schreibweisen des `chartdata.py`-Vertrags — dieselbe Luecke wie in
+    # ASPEKT_ORB (2026-09-15) und ZYKLUS_ALIAS: `factors` fuehrt die Knotenachse
+    # als 'Mondknoten'. Ohne diesen Eintrag zaehlte verteilung(gewichtet=True)
+    # den Knoten mit dem Vorgabewert 1.0 statt 0.5 — im Prueffall Erde 7,5
+    # statt 7 und veraenderlich 5,5 statt 5. Ergaenzt 2026-09-16
+    # (Pruefbericht Geburtshoroskop Schritt 1+2, 1.1).
+    'Mondknoten': 0.5, 'Südknoten': 0.5, 'Glückspunkt': 0.5,
     'DC': 0.0, 'IC': 0.0,
 }
 
 SPEZIALFAKTOREN = ('Chiron', 'Lilith', 'Pholus', 'Glueckspunkt',
-                   'Knoten', 'Suedknoten')
+                   'Knoten', 'Suedknoten',
+                   # Vertragsnamen, s. GEWICHT. Ohne sie fehlte der Mondknoten
+                   # im Spezialfaktor-Netz des Strukturbilds (2026-09-16).
+                   'Mondknoten', 'Südknoten', 'Glückspunkt')
 WINKEL = ('AC', 'MC', 'DC', 'IC')
 # Die beiden Enden derselben Achse. Gebraucht in gruppiere_figuren():
 # Ist der Brennpunkt einer Figur ein Winkel, bekommt das Gegenende
@@ -2394,8 +2404,13 @@ def mondphase(factors):
         out['syzygie'] = {'art': 'Konjunktion', 'orb': round(d_konj, 2)}
     elif d_opp <= FINSTERNIS_SYZYGIE_ORB:
         out['syzygie'] = {'art': 'Opposition', 'orb': round(d_opp, 2)}
-    if out['syzygie'] and 'Knoten' in pos:
-        kn = pos['Knoten']
+    # Die Knotenachse heisst in `factors` nach dem chartdata.py-Vertrag
+    # 'Mondknoten'; 'Knoten' bleibt fuer aeltere chart-eigene Builder gueltig
+    # (2026-09-16, Pruefbericht Geburtshoroskop Schritt 1+2, 1.1).
+    kn_name = next((k for k in ('Mondknoten', 'Knoten', 'Nordknoten')
+                    if k in pos), None)
+    if out['syzygie'] and kn_name:
+        kn = pos[kn_name]
 
         def naechster_knoten(lon):
             d_nord = _winkelabstand(lon, kn)
@@ -3545,6 +3560,17 @@ if __name__ == '__main__':
     # 'Mondknoten', der ZYKLEN-Schluessel 'Knoten'. Ohne Alias lief das leer.
     assert len(zyklusfenster('Mondknoten')) == 7, zyklusfenster('Mondknoten')
     assert zyklusfenster('Mondknoten') == zyklusfenster('Knoten')
+    # Vertragsname in GEWICHT, SPEZIALFAKTOREN und mondphase() (neu 2026-09-16,
+    # Pruefbericht Geburtshoroskop Schritt 1+2, 1.1): 'Mondknoten' zaehlt wie
+    # 'Knoten' — halb gewichtet, im Spezialfaktor-Netz, finsternisfaehig.
+    _fmk = [dict(x, name='Mondknoten') if x['name'] == 'Knoten' else x
+            for x in _f]
+    _vmk, _vkn = verteilung(_fmk, gewichtet=True), verteilung(_f, gewichtet=True)
+    assert (_vmk['elemente'], _vmk['modi']) == (_vkn['elemente'], _vkn['modi'])
+    assert 'Mondknoten' in spezialfaktor_netz(_fmk, huber_aspects(_fmk))['faktoren']
+    _fin = [{'name': 'Sonne', 'lon': 100.0}, {'name': 'Mond', 'lon': 102.0},
+            {'name': 'Mondknoten', 'lon': 105.0}]
+    assert mondphase(_fin)['finsternis']['naehe'] is True, mondphase(_fin)
 
     _txt = strukturbild_text(_sb)
     assert '## Strukturbild' in _txt and 'Hausherrscher' in _txt

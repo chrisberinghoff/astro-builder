@@ -28,6 +28,16 @@ Geburtshoroskops und uebersetzte Wortlisten fuer P8/P9. Die chart_data bleibt
 deutsch; deshalb entfaellt bei einer englischen Analyse allein der Titelvergleich
 in P3 (Hinweiszeile). EA und Transit haben noch keine englischen Wortlaute.
 
+Zugang-Kicker (2026-09-16, Reparatur nach dem Pruefbericht Geburtshoroskop
+Schritt 1+2 vom selben Tag, Klasse 1 Nr. 1.2 und 1.3): Ein Zugang-Kapitel traegt
+seit dem Typmodul-Stand vom 16.09. den Kicker `Zugang <Bereich>` (`Zugang Beruf`,
+`Zugang Partnerschaft`) — `build.parse_analyse()` fuehrt den Kicker als
+Kapitelschluessel und wies zwei Kapitel `Zugang` als „Kapitel doppelt" ab. Die
+Probe erkannte den Zugang bis dahin nur am nackten Kicker und las ein Kapitel
+`Zugang Beruf` als Normal-Beleg: P2 meldete Segment 1 als FEHLER, P1 vierzehnmal
+PRUEFEN. Seither zaehlt jeder Kicker, der mit `Zugang` (englisch `Access`) beginnt,
+als Zugang (`_ist_zugang()`); der nackte Kicker gilt fuer aeltere Analysen weiter.
+
 Schnittstelle
 -------------
     inhaltsprobe.pruefe(analyse_pfad, chart_data_pfad, typ=None) -> dict
@@ -354,6 +364,18 @@ def _ist_kicker(ch, *namen):
         erlaubt.update(_KICKER_ALIAS.get(n, ()))
     return k in erlaubt
 
+def _ist_zugang(ch):
+    """Zugang-Kapitel: Kicker `Zugang <Bereich>` (Typmodul Geburtshoroskop seit
+    2026-09-16, Pruefbericht Schritt 1+2, 1.2 — je Zugang ein eigener Kicker, weil
+    `build.parse_analyse()` den Kicker als Schluessel fuehrt). Der nackte Kicker
+    `Zugang` (aeltere Analysen) und die englischen Namen aus _KICKER_ALIAS gelten
+    weiter, ebenfalls mit oder ohne Bereich."""
+    k = (ch.get("kicker") or "").strip().casefold()
+    for n in ("zugang",) + _KICKER_ALIAS["zugang"]:
+        if k == n or k.startswith(n + " "):
+            return True
+    return False
+
 def _saetze(text):
     return [s for s in re.split(r"(?<=[.!?…])\s+(?=[„\"(A-ZÄÖÜ])", text) if s.strip()]
 
@@ -594,7 +616,7 @@ def _beleg_form(ch, typ):
         return None
     if _ist_kicker(ch, "Instrument"):
         return "instrument"
-    if _ist_kicker(ch, "Zugang"):
+    if _ist_zugang(ch):
         return "zugang"
     segs = _segmente(ch["beleg"])
     if typ in ("geburt", "ultimativ") and _kicker_nr(ch["kicker"]) == 1:
@@ -647,16 +669,16 @@ def _hat_bewegungen(ch):
 
 def _themenkapitel(chapters, typ):
     """Kapitel mit Bewegungsfolge, in Dokumentreihenfolge.
-    geburt: Kicker `Kapitel n` mit n >= 2, dazu `Zugang`. Andere Typen: jedes
+    geburt: Kicker `Kapitel n` mit n >= 2, dazu `Zugang <Bereich>`. Andere Typen: jedes
     Kapitel, das einen bekannten Bewegungs-Wortlaut traegt, plus jedes `Kapitel n`."""
     out = []
     for ch in chapters:
         n = _kicker_nr(ch["kicker"])
         if typ == "geburt":
-            if (n is not None and n >= 2) or _ist_kicker(ch, "Zugang"):
+            if (n is not None and n >= 2) or _ist_zugang(ch):
                 out.append(ch)
         else:
-            if n is not None or _ist_kicker(ch, "Zugang") or _hat_bewegungen(ch):
+            if n is not None or _ist_zugang(ch) or _hat_bewegungen(ch):
                 out.append(ch)
     return out
 
@@ -984,7 +1006,7 @@ def _p4_bewegungsfolge(chapters, typ, zuordnung):
         subs = _subheads(ch)
         th = zuordnung.get(id(ch))
         form = th["form"] if th else None
-        zugang = _ist_kicker(ch, "Zugang")
+        zugang = _ist_zugang(ch)
         if not subs:
             if typ == "geburt":
                 p.fehler.append("%s: keine ###-Bewegung — Themenkapitel ohne Bewegungsfolge" % bez)
@@ -1600,8 +1622,41 @@ Den Anfang machen und dann bleiben, bis er trägt.
 Du fängst an, bevor jemand dich darum bittet — und das ist kein Fehler. Das ist der Satz, auf den dieses Horoskop hinausläuft. Was ein Text leisten kann, ist eine Landkarte; gehen musst du selbst.
 """
 
+# Zugang-Kapitel fuer Lauf 3 des Selbsttests (2026-09-16): Kicker `Zugang <Bereich>`,
+# Haus-Format im Beleg, Kurzform ohne Wurzel und Widerstand. Wird vor das
+# Rechenschaftskapitel gesetzt.
+_TEST_ZUGANG = """## Zugang Beruf · Wo die Arbeit hinzieht
+
+**Signatur:** Beruf über die Häuser zehn, sechs und zwei — Saturn in der Jungfrau im sechsten verwaltet den Beruf, Merkur im Widder den Alltag; mitklingend der Mond im Stier im zweiten.
+
+**Beleg:** MC 0°00′ Steinbock ♑ — Herrscher Saturn ♄ 22°05′ Jungfrau ♍, 6. Haus · 6. Haus (Spitze 0°00′ Jungfrau ♍) — Herrscher Merkur ☿ 11°10′ Widder ♈, 1. Haus · im 6. Haus: Saturn ♄ 22°05′ Jungfrau ♍ · im 2. Haus: Mond ☽ 20°00′ Stier ♉ · verwiesen: Mond ☽ Trigon △ Saturn ♄ 2°05′ (Kapitel 3), Mars ♂ Opposition ☍ MC 0°40′ (Rechenschaft)
+
+### Woran du es merkst
+
+Du arbeitest am liebsten dort, wo etwas fertig wird und bleibt. Und ein Letztes, das schwerer zuzugeben ist: Ein Lob für Tempo freut dich weniger als eines für Dauer.
+
+### Was da arbeitet
+
+Saturn in der Jungfrau im sechsten Haus verwaltet den Beruf und steht zugleich im Trigon zum Mond — die Arbeit und das, was dich hält, laufen in dieselbe Richtung. Dieses Kapitel ist ein Zugang: Es sortiert, was die Themenkapitel schon gedeutet haben, unter einer Frage.
+
+### Die zwei Formen und das Dazwischen
+
+Die reife Form baut, was Bestand hat. Die regressive Form bleibt, weil Gehen Mühe macht. Dazwischen liegt der Normalfall: Du bleibst zu lange und gehst dann doch.
+
+### Womit du arbeiten kannst
+
+Einmal im Monat aufschreiben, was an deiner Arbeit fertig geworden ist. Nicht tun: die Liste mit Vorsätzen füllen. Gut genug ist, wenn eine Zeile darauf steht.
+
+### Wohin das gehört
+
+Die Aspekte dieses Kapitels sind in Kapitel 3 gedeutet; hier stehen sie unter der Frage nach der Arbeit. Es ist eine Ordnung, kein neues Thema.
+
+"""
+
 def _selbsttest(still=False):
-    """Konstruierter Fall, zweimal: fehlerfrei und mit je einem Fehler je Probe."""
+    """Konstruierter Fall, dreimal: fehlerfrei, mit je einem Fehler je Probe, und mit
+    einem Zugang-Kapitel (Kicker `Zugang <Bereich>`) — einmal sauber, einmal mit
+    falschem Orb im verwiesenen Aspekt."""
     import tempfile
     def lauf(chart, analyse):
         d = tempfile.mkdtemp(prefix="inhaltsprobe_")
@@ -1657,9 +1712,29 @@ def _selbsttest(still=False):
     st2 = {nr: p["status"] for nr, p in r2["proben"].items()}
     berichte.append("Lauf 2 (eingebaute Fehler): " + ", ".join("%s=%s" % kv for kv in st2.items()))
     assert not fehlt, "Eine Probe findet ihren Testfehler nicht:\n  " + "\n  ".join(fehlt)
+
+    # 3) Zugang-Kapitel mit Kicker `Zugang <Bereich>` (2026-09-16): sauber ohne
+    #    Befund — und der verwiesene Aspekt wird geprueft, nicht uebersprungen.
+    a3 = ersetze(_TEST_ANALYSE, "## Rechenschaft · Was sonst in deinem Bild steht",
+                 _TEST_ZUGANG + "## Rechenschaft · Was sonst in deinem Bild steht")
+    r3 = lauf(_TEST_CHART, a3)
+    st3 = {nr: p["status"] for nr, p in r3["proben"].items()}
+    berichte.append("Lauf 3 (Zugang-Kapitel): " + ", ".join("%s=%s" % kv for kv in st3.items()))
+    assert r3["fehler"] == 0 and r3["pruefen"] == 0 and not r3["uebersprungen"], (
+        "Lauf 3 nicht sauber: %s\n%s" % (st3, "\n".join(
+            f for p in r3["proben"].values() for f in p["fehler"] + p["pruefen"])))
+    assert r3["proben"]["P1"]["geprueft"] == r["proben"]["P1"]["geprueft"] + 2, (
+        "P1 hat die zwei verwiesenen Aspekte des Zugangs nicht geprueft")
+    assert r3["proben"]["P4"]["geprueft"] == r["proben"]["P4"]["geprueft"] + 1, (
+        "P4 hat das Zugang-Kapitel nicht als Themenkapitel gezaehlt")
+    a3f = ersetze(a3, "Mond ☽ Trigon △ Saturn ♄ 2°05′ (Kapitel 3)", "Mond ☽ Trigon △ Saturn ♄ 3°05′ (Kapitel 3)")
+    r3f = lauf(_TEST_CHART, a3f)
+    assert any("Zugang Beruf" in t and "Orb 3°05′" in t for t in r3f["proben"]["P1"]["fehler"]), (
+        "P1 findet den falschen Orb im Zugang-Beleg nicht: %s" % r3f["proben"]["P1"]["fehler"])
     if not still:
         print("\n".join(berichte))
-        print("[Selbsttest bestanden: Lauf 1 ohne Befund, Lauf 2 findet je Probe den eingebauten Fehler]")
+        print("[Selbsttest bestanden: Lauf 1 ohne Befund, Lauf 2 findet je Probe den eingebauten "
+              "Fehler, Lauf 3 liest das Zugang-Kapitel und prüft seine Aspekte]")
     return True
 
 def _main(argv):
