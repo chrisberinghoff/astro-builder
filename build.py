@@ -2037,11 +2037,36 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         tabelle |= _paare(teil, "[%s]" % _AH_GLYPH)
     if "### Untergrund-Aspekte" in txt:
         teil = txt.split("### Untergrund-Aspekte")[1].split("\n**")[0]
-        tabelle |= _paare(teil, "—")
+        # TRENNER DER UNTERGRUND-TABELLE (korrigiert 2026-09-16, Pruefbericht
+        # Geburtshoroskop Schritt 1+2 vom 16.09., Befund 1.2). Hier stand
+        # `_paare(teil, "—")`. Die Spaltenform von `_paare` verlangt in der
+        # mittleren Zelle entweder den Trenner oder einen Buchstaben; die
+        # Aspektarten der Zusatzebene tragen aber die Glyphen ⚼ und ∠, und die
+        # stehen nicht in _AH_GLYPH. Wer die Untergrund-Tabelle wie die drei
+        # Haupttabellen schreibt (| Sonne | ⚼ Anderthalbquadrat | Uranus | …),
+        # bekam die Zeilen LAUTLOS nicht in die Pruefmenge — die Probe meldete
+        # dann "ok", ohne die Zusatzebene je angesehen zu haben. Derselbe
+        # Fehlertyp wie der Befund vom 06.09. ("las nur ### Hauptaspekte").
+        # _AH_GLYPH bleibt bewusst unangetastet: Dieselbe Konstante steuert die
+        # `aspekte=`-Felder der Themenliste, und dort verlangt das
+        # Datenblatt-Modul fuer Zusatzaspekte ausdruecklich den
+        # –Wort–-Trenner statt der Glyphe.
+        tabelle |= _paare(teil, "[—⚼∠]")
 
     heimat, doppelt = {}, []
-    if "THEMA 1 |" in txt:
-        tl = "\nTHEMA 1 |" + txt.split("THEMA 1 |")[1]
+    # EINSTIEGSMARKE DER THEMENLISTE (korrigiert 2026-09-16, Pruefbericht
+    # Geburtshoroskop Schritt 1+2 vom 16.09., Befund 1.1). Hier stand
+    # `if "THEMA 1 |" in txt:` — die Themenliste wurde also nur gelesen, wenn
+    # ihre Nummerierung bei 1 beginnt. Dass sie das muss, steht in keinem
+    # Modul. Ein Lauf, der Themennummer und Kapitelnummer gleichziehen wollte
+    # (THEMA 2 … THEMA 10, damit "Deutungsort: Thema n" eindeutig auf ein
+    # Kapitel zeigt), bekam SAEMTLICHE Aspekte als "ohne Heimat" gemeldet,
+    # obwohl jeder eine hatte: `heimat` blieb leer, und die Probe meldete
+    # einen Fehler, ohne geprueft zu haben. Jetzt wird die erste THEMA-Zeile
+    # gesucht, gleich mit welcher Zahl sie anfaengt; der Rest ist unveraendert.
+    _erste = _re.search(r"THEMA \d+ \|", txt)
+    if _erste:
+        tl = "\n" + txt[_erste.start():]
         for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:"):
             tl = tl.split(schluss)[0]
         for blk in _re.split(r"\nTHEMA \d+ \|", tl):
