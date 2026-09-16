@@ -17,6 +17,17 @@ Skript sagen. Was sie meldet, ist falsch oder regelwidrig, mit Stelle. Sie koste
 null Token je Lauf und laeuft in Schritt 2 (nach dem Schreiben) und in Schritt 3+4
 (vor dem Rendern) — s. `lade.SCHRITTE`.
 
+Sprachfassung (2026-09-16d, Reparatur nach dem Pruefbericht Geburtshoroskop
+Schritt 3+4 vom selben Tag, Klasse 1 Nr. 1.2): Die Probe liest seither auch die
+ENGLISCHE Analyse nach Werkzeuge-Modul A3 — englische Faktor- und Zeichennamen,
+Aspektwoerter (beide Schreibweisen: semi-sextile/semisextile), Hausangaben
+("4th house", "fourth house", "11th/10th house"), die Kicker Prelude / Account /
+Closing Word / Core Themes / Fields of Conflict / Life Tasks, den Typ aus einer
+englischen H1 ("Birth Chart"), die englischen Bewegungs-Wortlaute des
+Geburtshoroskops und uebersetzte Wortlisten fuer P8/P9. Die chart_data bleibt
+deutsch; deshalb entfaellt bei einer englischen Analyse allein der Titelvergleich
+in P3 (Hinweiszeile). EA und Transit haben noch keine englischen Wortlaute.
+
 Schnittstelle
 -------------
     inhaltsprobe.pruefe(analyse_pfad, chart_data_pfad, typ=None) -> dict
@@ -146,8 +157,20 @@ _B2 = "Was da arbeitet"
 _B4 = "Der Teil von dir, der das nicht aufgeben will"
 _B5 = "Die zwei Formen und das Dazwischen"
 _B6 = "Womit du arbeiten kannst"
+# Englische Sprachfassung (Werkzeuge-Modul A3; Klartext-Modul, Aktivierung): die
+# Wortlaute der englischen Analyse des Pruefflaufs vom 2026-09-16d. Nur fuer das
+# Geburtshoroskop hinterlegt — EA und Transit haben noch keine englische Fassung
+# gehabt; ihre Wortlaute bleiben deutsch, bis ein Lauf sie liefert.
+_E1 = "How you notice it"
+_E2 = "What is at work"
+_E4 = "The part of you that does not want to give this up"
+_E5 = "The two forms and the in-between"
+_E6 = "What you can work with"
 WORTLAUTE = {
-    "geburt":  (_B1, _B2, "Wie so etwas zur Regel wird", _B4, _B5, _B6, "Wohin das gehört"),
+    "geburt":  ((_B1, _E1), (_B2, _E2),
+                ("Wie so etwas zur Regel wird", "How something like this becomes a rule"),
+                (_B4, _E4), (_B5, _E5), (_B6, _E6),
+                ("Wohin das gehört", "Where this belongs")),
     "ea":      (_B1, _B2, "Woher so etwas kommt", _B4, _B5, _B6,
                 ("Wo das im Ganzen steht", "Der Rahmen dieses Themas")),
     "transit": (_B1, _B2, "Warum das alt ist", _B4, _B5, _B6, "Zeit"),
@@ -155,7 +178,7 @@ WORTLAUTE = {
 # Das Ultimativ traegt alle drei Saetze in einem Dokument; welcher Teil ein Kapitel
 # ist, sagt das Kapitel selbst ueber seine dritte und siebte Bewegung.
 WORTLAUTE["ultimativ"] = {
-    "Teil I":   WORTLAUTE["geburt"],
+    "Teil I":   tuple(w[0] for w in WORTLAUTE["geburt"]),
     "Teil II":  (_B1, _B2, "Woher so etwas kommt", _B4, _B5, _B6, "Wo das im Ganzen steht"),
     "Teil III": WORTLAUTE["transit"],
 }
@@ -185,6 +208,12 @@ ALLE_WORTLAUTE = _alle_wortlaute()
 # Reihenfolge: laengere Schreibweisen zuerst, damit "Mondknotenachse" nicht als
 # "Mond" gelesen wird.
 _FAKTOR_SCHREIBWEISEN = (
+    # englische Schreibweisen (Sprachfassung, 2026-09-16d) — laengere zuerst
+    ("Part of Fortune", "GLUECKSPUNKT"), ("North Node", "MONDKNOTEN"),
+    ("north node", "MONDKNOTEN"), ("Lunar Node", "MONDKNOTEN"), ("lunar node", "MONDKNOTEN"),
+    ("nodal axis", "MONDKNOTEN"), ("South Node", "SUEDKNOTEN"), ("south node", "SUEDKNOTEN"),
+    ("Ascendant", "AC"), ("Descendant", "DC"), ("Midheaven", "MC"),
+    ("Sun", "SONNE"), ("Moon", "MOND"), ("Mercury", "MERKUR"), ("Neptune", "NEPTUN"),
     ("Mondknotenachse", "MONDKNOTEN"), ("Knotenachse", "MONDKNOTEN"),
     ("Mondknoten", "MONDKNOTEN"), ("Nordknoten", "MONDKNOTEN"),
     ("aufsteigender Knoten", "MONDKNOTEN"), ("aufsteigenden Knoten", "MONDKNOTEN"),
@@ -226,9 +255,26 @@ ASPEKTE = (("Anderthalbquadrat", "⚼"), ("Halbquadrat", "∠"), ("Halbsextil", 
            ("Konjunktion", "☌"), ("Opposition", "☍"), ("Quadrat", "□"),
            ("Trigon", "△"), ("Sextil", "⚹"), ("Quincunx", "⚻"))
 _ASP_WORT = {w: w for w, _ in ASPEKTE}
+# englische Aspektwoerter (Sprachfassung, 2026-09-16d): Werkzeuge-Modul A3 nennt
+# `semisextile`, die englische Analyse schreibt `semi-sextile` — beide gelten,
+# ebenso beide Schreibweisen von semi-square und sesquiquadrate/sesquisquare.
+_ASP_WORT_EN = {"conjunction": "Konjunktion", "opposition": "Opposition",
+                "square": "Quadrat", "trine": "Trigon", "sextile": "Sextil",
+                "quincunx": "Quincunx", "inconjunct": "Quincunx",
+                "semi-sextile": "Halbsextil", "semisextile": "Halbsextil",
+                "semi-square": "Halbquadrat", "semisquare": "Halbquadrat",
+                "sesquiquadrate": "Anderthalbquadrat", "sesquisquare": "Anderthalbquadrat"}
+_ASP_WORT.update(_ASP_WORT_EN)
 _ASP_GLYPH = {g: w for w, g in ASPEKTE}
-ASPEKT_RE = re.compile(r"(?<![\wäöüÄÖÜß])(%s)(?![\wäöüÄÖÜß])|([%s])"
-                       % ("|".join(w for w, _ in ASPEKTE), "".join(g for _, g in ASPEKTE)))
+# Alternation: laengere Woerter zuerst, damit "semi-sextile" nicht als "sextile" liest.
+_ASP_WOERTER = sorted(_ASP_WORT, key=len, reverse=True)
+ASPEKT_RE = re.compile(r"(?<![\wäöüÄÖÜß-])(%s)(?![\wäöüÄÖÜß])|([%s])"
+                       % ("|".join(re.escape(w) for w in _ASP_WOERTER),
+                          "".join(g for _, g in ASPEKTE)))
+
+def _art(wort):
+    """Aspektwort (deutsch oder englisch) -> deutsche Aspektart."""
+    return _ASP_WORT.get(wort, _ASP_WORT.get((wort or "").casefold(), wort))
 SPIEGEL_ASPEKT = {"Konjunktion": "Opposition", "Opposition": "Konjunktion",
                   "Trigon": "Sextil", "Sextil": "Trigon", "Quadrat": "Quadrat",
                   "Quincunx": "Halbsextil", "Halbsextil": "Quincunx",
@@ -238,12 +284,28 @@ SPIEGEL_FAKTOR = {"AC": "DC", "DC": "AC", "MC": "IC", "IC": "MC",
 
 ZEICHEN = ("Widder", "Stier", "Zwillinge", "Krebs", "Löwe", "Loewe", "Jungfrau", "Waage",
            "Skorpion", "Schütze", "Schuetze", "Steinbock", "Wassermann", "Fische")
-ZEICHEN_RE = "(?:%s)" % "|".join(ZEICHEN)
+# englische Zeichennamen -> deutscher Kanon (Sprachfassung, 2026-09-16d)
+_ZEICHEN_EN = {"Aries": "Widder", "Taurus": "Stier", "Gemini": "Zwillinge", "Cancer": "Krebs",
+               "Leo": "Löwe", "Virgo": "Jungfrau", "Libra": "Waage", "Scorpio": "Skorpion",
+               "Sagittarius": "Schütze", "Capricorn": "Steinbock", "Aquarius": "Wassermann",
+               "Pisces": "Fische"}
+ZEICHEN_RE = "(?:%s)" % "|".join(ZEICHEN + tuple(_ZEICHEN_EN))
+
+def _zeichen_norm(z):
+    return selektor.norm(_ZEICHEN_EN.get(z, z))
+
+_ORD_EN = {"first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+           "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+           "eleventh": "11", "twelfth": "12"}
+_ORD_EN_RE = "|".join(_ORD_EN)
 ZEICHEN_GLYPHEN = "♈♉♊♋♌♍♎♏♐♑♒♓"
 GRAD_RE = r"(\d{1,3})°\s*(\d{1,2})[′']"
 # Haus-Schreibweisen: "4. Haus", "4./3. Haus", "Haus 4", "Haus 4/3"
+# englisch: "4th house", "4th/3rd house", "fourth house", "eleventh/tenth house"
 HAUS_RE = (r"(?:(?P<h1>\d{1,2})\.(?:\s*/\s*(?P<h2>\d{1,2})\.)?\s*Haus"
-           r"|Haus(?:es)?\s+(?P<h3>\d{1,2})(?:\s*/\s*(?P<h4>\d{1,2}))?)")
+           r"|Haus(?:es)?\s+(?P<h3>\d{1,2})(?:\s*/\s*(?P<h4>\d{1,2}))?"
+           r"|(?P<h5>\d{1,2})(?:st|nd|rd|th)(?:\s*/\s*(?P<h6>\d{1,2})(?:st|nd|rd|th))?\s+house"
+           r"|(?P<h7>" + _ORD_EN_RE + r")(?:\s*/\s*(?P<h8>" + _ORD_EN_RE + r"))?\s+house)")
 # Segment 1 eines Normal-Belegs / Staende-Teil eines Instrument-Segments:
 # "Sonne ☉ 10°00′ Widder ♈, 1. Haus" (Form nach Klartext-Modul, Beleg-Format; konstruierte Werte).
 STAENDE_RE = re.compile(
@@ -268,8 +330,16 @@ def _orb_txt(minuten):
     return "%d°%02d′" % (minuten // 60, minuten % 60)
 
 def _kicker_nr(kicker):
-    m = re.match(r"^Kapitel\s+(\d+)\s*$", kicker or "", re.I)
+    m = re.match(r"^(?:Kapitel|Chapter)\s+(\d+)\s*$", kicker or "", re.I)
     return int(m.group(1)) if m else None
+
+# Wort-Kicker der englischen Fassung (Sprachfassung, 2026-09-16d); jeder deutsche
+# Name gilt weiter, die englischen Namen zaehlen als derselbe Kicker.
+_KICKER_ALIAS = {"auftakt": ("prelude",), "schlusswort": ("closing word", "closing words"),
+                 "rechenschaft": ("account",), "instrument": ("instrument",),
+                 "hauptthemen": ("core themes", "main themes"),
+                 "konfliktfelder": ("fields of conflict",), "lebensaufgaben": ("life tasks",),
+                 "zugang": ("access",)}
 
 def _kurz(s, n=110):
     s = _ws(s)
@@ -277,7 +347,12 @@ def _kurz(s, n=110):
 
 def _ist_kicker(ch, *namen):
     k = (ch.get("kicker") or "").strip().casefold()
-    return k in tuple(n.casefold() for n in namen)
+    erlaubt = set()
+    for n in namen:
+        n = n.casefold()
+        erlaubt.add(n)
+        erlaubt.update(_KICKER_ALIAS.get(n, ()))
+    return k in erlaubt
 
 def _saetze(text):
     return [s for s in re.split(r"(?<=[.!?…])\s+(?=[„\"(A-ZÄÖÜ])", text) if s.strip()]
@@ -445,10 +520,10 @@ def _staende_segment(seg):
     m = STAENDE_RE.match(seg)
     if not m:
         return None
-    h1 = m.group("h1") or m.group("h3")
-    h2 = m.group("h2") or m.group("h4")
+    h1 = m.group("h1") or m.group("h3") or m.group("h5") or _ORD_EN.get(m.group("h7") or "")
+    h2 = m.group("h2") or m.group("h4") or m.group("h6") or _ORD_EN.get(m.group("h8") or "")
     return {"faktor": kanon(m.group("faktor")), "minuten": _min(m.group("g"), m.group("m")),
-            "zeichen": selektor.norm(m.group("zeichen")),
+            "zeichen": _zeichen_norm(m.group("zeichen")),
             "haus1": h1, "haus2": h2, "roh": seg}
 
 def _aspekt_eintraege(text, faktor_a=None):
@@ -465,7 +540,7 @@ def _aspekt_eintraege(text, faktor_a=None):
     # EINE Angabe, nicht zwei.
     starts = []
     for t in ASPEKT_RE.finditer(text):
-        art = t.group(1) or _ASP_GLYPH.get(t.group(2))
+        art = _art(t.group(1)) if t.group(1) else _ASP_GLYPH.get(t.group(2))
         if starts and t.group(2) and t.start() - starts[-1][1] <= 3 and starts[-1][2] == art:
             continue
         starts.append((t.start(), t.end(), art, t))
@@ -487,7 +562,7 @@ def _aspekt_eintraege(text, faktor_a=None):
     return out
 
 def _eintrag(a, t, rest, mehrfach):
-    art = t.group(1) or _ASP_GLYPH.get(t.group(2))
+    art = _art(t.group(1)) if t.group(1) else _ASP_GLYPH.get(t.group(2))
     nach = rest[t.end() - t.start():]
     # Glyphe hinter dem Wort ueberspringen
     nach = re.sub(r"^\s*[%s]" % "".join(g for _, g in ASPEKTE), "", nach)
@@ -506,9 +581,10 @@ def _eintrag(a, t, rest, mehrfach):
         elif grade:
             orb, sicher = _min(*grade[-1]), False
     stufe = None
-    ms = re.search(r"(?<![\wäöüß])(voll|einseitig|Nebenaspekt|neben)(?![\wäöüß])", rest)
+    ms = re.search(r"(?<![\wäöüß])(voll|einseitig|Nebenaspekt|neben|full|one-sided|minor)(?![\wäöüß-])", rest)
     if ms:
-        stufe = {"Nebenaspekt": "neben"}.get(ms.group(1), ms.group(1))
+        stufe = {"Nebenaspekt": "neben", "full": "voll", "one-sided": "einseitig",
+                 "minor": "neben"}.get(ms.group(1), ms.group(1))
     return {"a": a, "art": art, "b": b, "orb": orb, "orb_sicher": sicher,
             "stufe": stufe, "roh": _ws(rest), "mehrfach": mehrfach}
 
@@ -537,15 +613,31 @@ def _beleg_form(ch, typ):
 
 def typ_aus_h1(doctype):
     d = (doctype or "").casefold()
-    if "ultimativ" in d:
+    if "ultimativ" in d or "ultimate" in d or "complete" in d:
         return "ultimativ"
-    if "transit" in d or "jahresvorschau" in d:
+    if "transit" in d or "jahresvorschau" in d or "year ahead" in d:
         return "transit"
-    if "evolution" in d or "seelen" in d or d.startswith("ea") or " ea" in d:
+    if ("evolution" in d or "seelen" in d or d.startswith("ea") or " ea" in d
+            or "soul" in d):
         return "ea"
-    if "geburtshoroskop" in d or "geburt" in d:
+    if "geburtshoroskop" in d or "geburt" in d or "birth chart" in d or "natal" in d:
         return "geburt"
     return None
+
+def sprache(parsed):
+    """'en' oder 'de' — an den ###-Wortlauten erkannt, sonst an der H1
+    (Sprachfassung, 2026-09-16d). Entscheidet nur, ob der Titelvergleich in P3
+    laeuft: die Themenliste der chart_data ist deutsch, eine englische Analyse
+    traegt uebersetzte Titel, und ein Vergleich waere jedes Mal ein Fehlalarm."""
+    en = {w[1] for w in WORTLAUTE["geburt"]}
+    de = {w[0] for w in WORTLAUTE["geburt"]}
+    subs = [s for ch in parsed["chapters"] for s in _subheads(ch)]
+    if any(s in en for s in subs):
+        return "en"
+    if any(s in de for s in subs):
+        return "de"
+    d = (parsed.get("doctype") or "").casefold()
+    return "en" if re.search(r"\b(?:chart|birth|natal|soul|transits?)\b", d) else "de"
 
 def _subheads(ch):
     return [_ws(b["text"]) for b in ch["blocks"] if b.get("type") == "subhead"]
@@ -693,11 +785,11 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
             muster = re.compile(r"(" + _FAKTOR_RE + r")(?:\s*\((?:AC|MC|DC|IC)\))?\s*[☉☽☿♀♂♃♄♅♆♇☊☋⚷⚸⊗]?\s*"
                                 r"(%s)\s*[%s]?\s*(%s)(?:\s*\((?:AC|MC|DC|IC)\))?[^,·]*?(?:Orb\s*)?"
                                 r"(\d{1,3})°\s*(\d{1,2})[′']"
-                                % ("|".join(w for w, _ in ASPEKTE), "".join(g for _, g in ASPEKTE),
-                                   _FAKTOR_RE))
+                                % ("|".join(re.escape(w) for w in _ASP_WOERTER),
+                                   "".join(g for _, g in ASPEKTE), _FAKTOR_RE))
             for i, seg in enumerate(segs, start=1):
                 for m in muster.finditer(seg):
-                    e = {"a": kanon(m.group(1)), "art": m.group(2), "b": kanon(m.group(3)),
+                    e = {"a": kanon(m.group(1)), "art": _art(m.group(2)), "b": kanon(m.group(3)),
                          "orb": _min(m.group(4), m.group(5)), "orb_sicher": True,
                          "stufe": None, "roh": m.group(0), "mehrfach": False}
                     pruefe_eintrag("%s, Segment %d" % (bez, i), e)
@@ -817,7 +909,7 @@ def _name_in_text(schluessel, text):
         return True
     return False
 
-def _p3_p7_kapitel_themen(chapters, typ, themen):
+def _p3_p7_kapitel_themen(chapters, typ, themen, sprache_analyse="de"):
     p3 = _Probe("P3", "Kapitel gegen Themenliste")
     p7 = _Probe("P7", "Signatur nennt den Führer")
     p3.einheit = p7.einheit = "Kapitel"
@@ -850,7 +942,11 @@ def _p3_p7_kapitel_themen(chapters, typ, themen):
         if not _name_in_text(soll, ch.get("signatur")):
             p7.fehler.append("%s ↔ THEMA %d: Signatur nennt %s nicht („%s“)"
                              % (bez, th["nr"], ANZEIGE.get(soll, soll), _kurz(ch.get("signatur"), 70)))
-        if th["titel"] and _ws(th["titel"]).casefold() != _ws(ch["title"]).casefold():
+        if sprache_analyse != "de":
+            if i == 0:
+                p3.hinweise.append("Titelvergleich entfällt: Analyse auf Englisch, Themenliste "
+                                   "deutsch — geprüft werden Führer, Zahl und Reihenfolge")
+        elif th["titel"] and _ws(th["titel"]).casefold() != _ws(ch["title"]).casefold():
             p3.pruefen.append("%s ↔ THEMA %d: Titel weicht ab — Themenliste: „%s“"
                               % (bez, th["nr"], _kurz(th["titel"], 70)))
     for ch in kap[len(themen):]:
@@ -982,7 +1078,7 @@ def _p5_rechenschaft(chapters, chart, themen):
         # Die Zeile beginnt mit dem Namen; ein Artikel davor ("Der Glückspunkt, …")
         # wird geduldet, mehr nicht.
         for e in eintraege:
-            m = FAKTOR_RE.match(re.sub(r"^(?:[Dd](?:er|ie|as))\s+", "", e))
+            m = FAKTOR_RE.match(re.sub(r"^(?:[Dd](?:er|ie|as)|[Tt]he)\s+", "", e))
             if m and kanon(m.group(1)) == schluessel:
                 return e
         return None
@@ -1065,18 +1161,36 @@ VERGANGENHEIT = ("du hast früh gelernt", "du hast gelernt", "hast du gelernt", 
                  "damals ist", "damals war", "als Kind hast du", "als Kind warst du",
                  "du bist aufgewachsen", "bist du aufgewachsen", "du wurdest", "dir wurde",
                  "in deiner Kindheit", "du hast erlebt", "du hast erfahren")
+# Englische Fassung der drei Listen (Sprachfassung, 2026-09-16d): Uebersetzung der
+# deutschen Eintraege, keine eigene Entscheidung — Chris kann sie hier nachziehen.
+VERGANGENHEIT_EN = ("you learned early", "you learned", "you have learned", "back then you",
+                    "at that time you", "as a child you", "you grew up", "in your childhood",
+                    "you experienced", "you have experienced", "you were raised",
+                    "you were brought up")
+DRITTE_EN_RE = re.compile(r"(?<![\w])your\s+(partner|mother|father|parents|child(?:ren)?|"
+                          r"boss|husband|wife)(?![\w])", re.I)
 VERGANGENHEIT_RE = re.compile("|".join(r"(?<![\wäöüß])" + re.escape(w) + r"(?![\wäöüß])"
-                                       for w in VERGANGENHEIT), re.I)
+                                       for w in VERGANGENHEIT + VERGANGENHEIT_EN), re.I)
 # Aspekt-Wertung: Klartext-Modul, Abschnitt Pruefung, Stand 2026-09-14 — "voll" und
 # "einseitig" nur als Wortpaar oder unmittelbar bei einer Gradangabe. `restyle.VERBOTEN`
 # fuehrt "einseitig" noch als nacktes Wort (Stand vor dem 14.09.); es wird hier in
 # der Wertungs-Form gesucht, nicht als Wort.
-WERTUNG_RE = re.compile(r"\d{1,3}°\s*\d{1,2}[′']\s*,?\s*(?:voll|einseitig)\b"
-                        r"|,?\s*(?:voll|einseitig)\s*,?\s*\d{1,3}°\s*\d{1,2}[′']"
-                        r"|\bvoll\s*/\s*einseitig\b")
-GRADZAHL_RE = re.compile(r"\d{1,3}\s*°|\d{1,3}\s*[′']|(?<![\wäöüß])\d{1,3}\s*Grad(?![\wäöüß])")
+WERTUNG_RE = re.compile(r"\d{1,3}°\s*\d{1,2}[′']\s*,?\s*(?:voll|einseitig|full|one-sided)\b"
+                        r"|,?\s*(?:voll|einseitig|full|one-sided)\s*,?\s*\d{1,3}°\s*\d{1,2}[′']"
+                        r"|\bvoll\s*/\s*einseitig\b|\bfull\s*/\s*one-sided\b")
+GRADZAHL_RE = re.compile(r"\d{1,3}\s*°|\d{1,3}\s*[′']|(?<![\wäöüß])\d{1,3}\s*Grad(?![\wäöüß])"
+                         r"|(?<![\w])\d{1,3}\s*degrees?(?![\w])")
 HAUSZIFFER_RE = re.compile(r"(?<![\wäöüß])\d{1,2}\.\s*Haus(?![\wäöüß])"
-                           r"|(?<![\wäöüß])H[äa]us(?:es|er|ern)?\s+\d{1,2}(?![\wäöüß])")
+                           r"|(?<![\wäöüß])H[äa]us(?:es|er|ern)?\s+\d{1,2}(?![\wäöüß])"
+                           r"|(?<![\w])\d{1,2}(?:st|nd|rd|th)\s+house(?![\w])"
+                           r"|(?<![\w])house\s+\d{1,2}(?![\w])", re.I)
+# englische Fachbegriffe: Uebersetzung der Klartext-Verbotsliste (restyle.VERBOTEN)
+FACHBEGRIFFE_EN = ["orb", "minute of arc", "minutes of arc", "arc minute", "arcminute",
+                   "degrees apart", "minor aspect", "domicile", "detriment", "exaltation",
+                   "cazimi", "apex", "dispositor", "final dispositor", "chart ruler",
+                   "T-square"]
+FACHBEGRIFF_EN_RE = re.compile("|".join(r"(?<![\w-])" + re.escape(w) + r"(?![\w-])"
+                                        for w in FACHBEGRIFFE_EN), re.I)
 
 def _fachbegriff_re():
     woerter = [w for w in VERBOTEN_FACHBEGRIFFE if w not in ("°", "′", "einseitig", "voll")]
@@ -1086,8 +1200,10 @@ FACHBEGRIFF_RE = _fachbegriff_re()
 def _p8_wortlisten(chapters):
     p = _Probe("P8", "Wortlisten")
     p.einheit = "Absätze"
-    listen = (("Dritte", DRITTE_RE), ("Vergangenheits-Indikativ", VERGANGENHEIT_RE),
-              ("Fachbegriff", FACHBEGRIFF_RE), ("Aspekt-Wertung", WERTUNG_RE),
+    listen = (("Dritte", DRITTE_RE), ("Dritte", DRITTE_EN_RE),
+              ("Vergangenheits-Indikativ", VERGANGENHEIT_RE),
+              ("Fachbegriff", FACHBEGRIFF_RE), ("Fachbegriff", FACHBEGRIFF_EN_RE),
+              ("Aspekt-Wertung", WERTUNG_RE),
               ("Gradzahl", GRADZAHL_RE), ("Hausnummer in Ziffern", HAUSZIFFER_RE))
     for ch in chapters:
         if _ist_kicker(ch, "Auftakt", "Rechenschaft"):
@@ -1106,6 +1222,11 @@ def _p8_wortlisten(chapters):
                     key = (name, satz)
                     if key in gesehen:
                         continue
+                    # Der Nichtwissens-Satz der Wurzel-Bewegung ("Where you learned
+                    # that I do not know") ist kein Vergangenheits-Indikativ — er ist
+                    # sein Gegenteil (Innere Arbeit, Prinzip 5).
+                    if name == "Vergangenheits-Indikativ" and NICHTWISSEN_RE.search(satz):
+                        continue
                     gesehen.add(key)
                     p.pruefen.append("%s · %s · %s: „%s“ — Treffer „%s“"
                                      % (name, _bezeichnung(ch), bewegung, _kurz(satz, 140), m.group(0)))
@@ -1113,8 +1234,14 @@ def _p8_wortlisten(chapters):
         return p.aussagelos("kein Fließtext-Absatz gefunden")
     return p.abschluss()
 
-NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem Horoskop|in keinem Horoskop", re.I)
-VERWERF_RE = re.compile(r"verwerf|verwirf", re.I)
+NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem Horoskop|in keinem Horoskop"
+                            r"|I do not know|I don't know|no chart contains|in no chart"
+                            r"|no horoscope contains|in no horoscope", re.I)
+# englisch eng gefasst (Kapitel-Bezug), damit "gets discarded" in normaler Verwendung
+# nicht mitzaehlt — dieselbe Fehlalarm-Klasse wie "verwerf" (Klasse-2-Liste 16.09.c, Nr. 6)
+VERWERF_RE = re.compile(r"verwerf|verwirf|discard (?:the|this|it)|free to discard|may discard"
+                        r"|put (?:the|this) chapter aside|set (?:the|this) chapter aside"
+                        r"|skip (?:the|this) chapter", re.I)
 
 def _p9_zwei_saetze(chapters, typ):
     p = _Probe("P9", "Zwei Sätze")
@@ -1201,7 +1328,7 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None):
 
     p1 = _p1_beleg_aspekte(chapters, typ, tabelle)
     p2 = _p2_beleg_staende(chapters, typ, chart, staende)
-    p3, p7, zuordnung = _p3_p7_kapitel_themen(chapters, typ, themen)
+    p3, p7, zuordnung = _p3_p7_kapitel_themen(chapters, typ, themen, sprache(parsed))
     p4 = _p4_bewegungsfolge(chapters, typ, zuordnung)
     p5 = _p5_rechenschaft(chapters, chart, themen)
     p6 = _p6_leitsatz(chapters, chart_data_pfad, themen)

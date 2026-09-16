@@ -99,7 +99,11 @@ SCHRITTE = {
     # chart_data, nach dem Schreiben); Schritt 3+4 laesst die Inhaltsprobe vor
     # dem Render laufen. Startprompt claude/STARTPROMPT_Inhaltsprobe_2026-09-16.md.
     "2":        ("selektor", "build", "inhaltsprobe"),
-    "3+4":      ("build", "chartdoc", "radix", "inhaltsprobe"),
+    # `selektor` gehoert auch zu 3+4: inhaltsprobe.py importiert es (Zeile
+    # `import selektor`), und ohne den Eintrag brach der erste Aufruf im
+    # Design-Lauf mit ModuleNotFoundError ab (Pruefbericht Geburtshoroskop
+    # Schritt 3+4 vom 2026-09-16d, Klasse 1 Nr. 1.1).
+    "3+4":      ("build", "chartdoc", "radix", "selektor", "inhaltsprobe"),
     "transit":  ("transit", "transitdata", "transituhr_fusion"),
     "restyle":  ("build", "chartdoc", "radix", "restyle"),
     "hdgk":     ("hd",),
