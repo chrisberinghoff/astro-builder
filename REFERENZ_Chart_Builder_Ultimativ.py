@@ -3,7 +3,8 @@
 """REFERENZ: vollstaendiger Chart-Builder (Beispiel Ultimativ-Modus).
 
 Stand nach dem Hausstil-Beschluss vom 2026-07-27, ergaenzt am 2026-07-30 um
-die gelesene Deckblatt-Bestellung. Die chart-unabhaengige Mechanik UND die
+die gelesene Deckblatt-Bestellung; 2026-09-16: der Suedknoten-Lauf in
+konst_zeilen() wird aus dem Mondknoten abgeleitet statt fest gesetzt. Die chart-unabhaengige Mechanik UND die
 Chartbild-Seiten stecken in `claude/chartdoc.py`; hier steht nur noch, was sich
 je Chart wirklich aendert:
 
@@ -321,9 +322,15 @@ def konst_zeilen():
             out.append(('SEP', '', '', '', '', ''))
             continue
         if n == 'Suedknoten':
+            # Der Suedknoten ist der Mondknoten um 180 Grad — beide Enden der
+            # Achse laufen gleich. Bis zum 2026-09-16 stand hier fest
+            # 'rueckläufig'; bei direktem wahren Knoten (kommt vor, der wahre
+            # Knoten pendelt) trug die Konstellationstabelle dann eine Achse
+            # mit zwei Laufrichtungen (Pruefbericht Geburtshoroskop Schritt 3+4,
+            # 2026-09-16e, Klasse 1 Nr. 1.1). Deshalb abgeleitet, nicht gesetzt.
             out.append(('☋', 'Südknoten', cd.sign_name(cd.SUEDKNOTEN),
                         cd.gr(cd.SUEDKNOTEN % 30), cd.haus(cd.SUEDKNOTEN),
-                        'rückläufig'))
+                        'rückläufig' if _BY['Mondknoten']['retro'] else 'direkt'))
             continue
         f = _BY[n]
         lauf = 'rückläufig' if f['retro'] else 'direkt'
