@@ -260,6 +260,24 @@ def struktur_css():
   @top-right {{ content: none; }}
   @bottom-center {{ content: none; }}
 }}
+/* Ausgleich fuer den UA-Rand von <body>. WeasyPrints Standard-Stylesheet gibt
+   <body> 8px Rand; struktur_css() setzt ihn NICHT zurueck, weil die
+   Hausstil-Seitenraender (2,15/1,9/1,95/1,9 cm) mit ihm eingemessen sind —
+   ein `body {{ margin:0 }}` verschoebe den Satzspiegel jeder Seite des Bandes.
+   `@page cover {{ margin:0 }}` nimmt nur den SEITENrand weg. Ohne die Zeile
+   unten beginnt die Coverseite deshalb bei (8,8) statt bei (0,0), ihre Hoehe
+   ist auf 29,7cm-16px gestutzt, rundum steht ein 0,21 cm breiter Streifen in
+   der @page-cover-Hintergrundfarbe, und die unteren 0,21 cm des Motivs fallen
+   weg. Unsichtbar, solange die Coverraender dunkel sind und die Seitenfarbe
+   dazu passt — sichtbar, sobald das Motiv bis an die Kante hell ist; im
+   Pruefdokument war das genau der Lichtstreifen, die einzige Lichtquelle.
+   Kein Preflight und kein verify() sieht das; gefunden hat es allein der vom
+   Design-Modul vorgeschriebene Rasterblick aufs Cover (Pruefbericht
+   Geburtshoroskop Schritt 3+4, 2026-09-16, Befund 1.1). Die Regel steht hier
+   statt im Modultext, damit sie niemand lesen und niemand uebersehen muss;
+   ein chart-eigenes COVER_CSS kann sie ueberschreiben, weil es nach
+   struktur_css() geladen wird. */
+section.cover {{ margin: -8px 0 0 -8px; }}
 @page front {{
   @top-right {{ content: "DAS CHARTBILD"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
