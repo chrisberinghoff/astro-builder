@@ -60,6 +60,7 @@ Laden von `transit`, wenn keine `seas_*.se1` erreichbar ist.
 """
 
 import glob
+import importlib
 import os
 import pathlib
 import py_compile
@@ -164,6 +165,29 @@ PAKETE = (
 )
 
 
+def _swisseph_importierbar():
+    """True, wenn `import swisseph` (Paket pyswisseph) gelingt.
+
+    Neu 2026-09-16 (Pruefbericht Geburtshoroskop Schritt 1+2, dritter Lauf, Befund 1.1).
+    `ephemeriden()` prueft nach der Installation nur, ob die Ephemeriden-DATEIEN da
+    sind — die kommen aus `flatlib`. Bricht der `pyswisseph`-Download ab (im Prueflauf
+    ein ReadTimeout des Proxys), laeuft `pip` mit check=False still durch, `flatlib`
+    kommt trotzdem an, die Dateien sind da, und die Funktion meldete "Ephemeriden
+    installiert" — der naechste `import swisseph` brach dann mit ModuleNotFoundError
+    ab. Dieselbe Klasse Fehler wie die fehlende Ephemeriden-Datei vor dem 2026-09-06
+    (nur als Hinweis gemeldet), diesmal auf der Paketseite.
+
+    `invalidate_caches()` ist noetig: Ein Paket, das im laufenden Interpreter eben
+    erst installiert wurde, sieht der Importer sonst nicht.
+    """
+    importlib.invalidate_caches()
+    try:
+        importlib.import_module("swisseph")
+        return True
+    except ImportError:
+        return False
+
+
 def ephemeriden(still=False):
     """Sorgt dafuer, dass die Swiss-Ephemeris-Dateien da sind, und gibt ihr
     Verzeichnis zurueck — fuer `swe.set_ephe_path(...)` bzw. `--ephe <...>`.
@@ -180,6 +204,12 @@ def ephemeriden(still=False):
     `glob.glob("/usr/**/flatlib/resources/swefiles", recursive=True)[0]` — die
     warf einen IndexError, wenn nichts gefunden wurde, statt zu sagen was fehlt.
 
+    Prueft seit dem 2026-09-16 auch, ob `pyswisseph` importierbar ist — Dateien
+    ohne Paket sind derselbe Ausfall wie Paket ohne Dateien (Befund 1.1 des
+    Pruefberichts Geburtshoroskop Schritt 1+2 vom 16.09., dritter Lauf). Fehlt das
+    Paket, wird einmal nachinstalliert (ein Download-Timeout des Proxys ist im
+    naechsten Moment meist weg); bleibt es weg, harter Fehler mit dem pip-Befehl.
+
     Wirft, wenn die Dateien auch nach der Installation nicht auffindbar sind.
     Nicht abfangen: Ohne sie rechnet der Builder auf Moshier (bis zu einer
     Bogensekunde bei den Langsamen, ein Exaktpunkt nahe Mitternacht kann auf den
@@ -187,16 +217,35 @@ def ephemeriden(still=False):
     harter Fehler. Bewusst ohne Chiron rechnet man mit `--ohne-chiron`.
     """
     pfad = ephemeriden_pfad()
-    if pfad:
+    if pfad and _swisseph_importierbar():
         if not still:
             print("Ephemeriden schon da:", pfad)
         return pfad
 
-    for paket, extra in PAKETE:
+    # Dateien da, aber Paket nicht importierbar: nur pyswisseph nachziehen.
+    # Sonst beide Pakete (PAKETE ist die einzige verbindliche Liste).
+    pakete = [p for p in PAKETE if p[0] == "pyswisseph"] if pfad else list(PAKETE)
+    for paket, extra in pakete:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", paket, *extra,
              "--break-system-packages", "-q"],
             check=False,
+        )
+
+    if not _swisseph_importierbar():
+        # Einmal nachfassen — dieselbe Regel wie beim Ladeweg ("einmal mit curl
+        # nachfassen", Werkzeuge-Modul): Ein Timeout des Proxys ist meist vorbei.
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "pyswisseph",
+             "--break-system-packages", "-q"],
+            check=False,
+        )
+    if not _swisseph_importierbar():
+        raise RuntimeError(
+            "pyswisseph ist nach zwei Installationsversuchen nicht importierbar "
+            "(`import swisseph` schlaegt fehl) — pip hat den Download vermutlich "
+            "abgebrochen (Timeout). Von Hand: "
+            + sys.executable + " -m pip install pyswisseph --break-system-packages"
         )
 
     pfad = ephemeriden_pfad()
