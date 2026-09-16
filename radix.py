@@ -1870,6 +1870,15 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     ZWEI Figuren — die Vervielfachung kommt aus konjunkten Faktoren an einem
     Achsenende, demselben Mechanismus wie bei Jod und T-Quadrat.
 
+    SEIT 16.09.2026 DIE ACHSENKREUZ-DOPPELUNG (Pruefbericht Geburtshoroskop
+    Schritt 1+2 vom 16.09., Befund 1.1; Chris-Entscheidung). Sitzen ZWEI
+    Faktoren auf je einem Winkel, stehen die beiden Achsenkreuze ohnehin im
+    Quadrat; konfigurationen() meldet daraus zwei T-Quadrate, in denen
+    Brennpunkt und Achsenende die Rollen tauschen. Sitzen BEIDE Brennpunkte am
+    Winkel, wird hart zusammengefasst; sitzt nur einer dort, geht die Gruppe
+    als Kandidat heraus. Gefuehrt wird mit dem Ende, dessen Winkel WINKEL
+    zuerst nennt. Im Prueffall entsprachen DREI Meldungen ZWEI Figuren.
+
     Jod, hart: Basis paarweise identisch oder konjunkt UND Spitze identisch oder
     konjunkt. Jod, weich (Kandidat): gleiche Basis, Spitzen weder identisch noch
     konjunkt — das sind zwei Figuren mit benachbarten Spitzen oder eine mit
@@ -1901,7 +1910,42 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         return ((gleich(a1, a2) and gleich(b1, b2))
                 or (gleich(a1, b2) and gleich(b1, a2)))
 
+    def winkel_rang(n):
+        # Rang des Winkels, an dem ein Faktor sitzt — WINKEL selbst oder in
+        # Konjunktion dazu. Ersetzt seit 2026-09-16 die fruehere Sonderregel
+        # "nur wenn beide Brennpunkte selbst Winkel sind"; der Rang deckt
+        # beide Faelle ab und ist damit eine Regel statt zwei.
+        for k, w in enumerate(WINKEL):
+            if gleich(n, w):
+                return k
+        return None
+
+    def rollentausch(t1, t2):
+        # ACHSENKREUZ-DOPPELUNG (neu 2026-09-16, Pruefbericht Geburtshoroskop
+        # Schritt 1+2 vom 16.09., Befund 1.1; Chris-Entscheidung "hart
+        # zusammenfassen, wenn beide am Winkel"). Sitzen ZWEI Faktoren auf je
+        # einem Winkel, quadrieren die beiden Achsenkreuze einander ohnehin;
+        # konfigurationen() meldet daraus zwei T-Quadrate, in denen Brennpunkt
+        # und Achsenende die Rollen tauschen — (DC, A) mit Brennpunkt B und
+        # (MC, B) mit Brennpunkt A. Dieselbe Anordnung. Weder "gleicher Apex"
+        # noch der Gegenwinkel-Zweig greift, weil die Achsen verschieden sind.
+        # Rueckgabe: 2 = beide Brennpunkte am Winkel, zwingend EINE Figur.
+        #            1 = nur einer — Deutungsentscheidung, also Kandidat.
+        #            0 = kein Rollentausch.
+        a1, a2 = t1['apex'], t2['apex']
+        if a1 == a2 or a1 not in t2['achse'] or a2 not in t1['achse']:
+            return 0
+        r1 = [x for x in t1['achse'] if x != a2]
+        r2 = [x for x in t2['achse'] if x != a1]
+        if len(r1) != 1 or len(r2) != 1:
+            return 0
+        if r1[0] not in WINKEL or r2[0] not in WINKEL:
+            return 0
+        return sum(1 for n in (a1, a2) if winkel_rang(n) is not None)
+
     def deckungsgleich(t1, t2):
+        if rollentausch(t1, t2) == 2:
+            return True
         if not achsen_gleich(t1['achse'], t2['achse']):
             return False
         if t1['apex'] == t2['apex']:
@@ -1934,11 +1978,14 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     for f in figuren:
         f.pop('_erst', None)
         sp = f.get('spiegel_apex')
-        # Gefuehrt wird mit dem Ende, das WINKEL zuerst nennt (AC vor DC,
-        # MC vor IC) — die eigene Seite der Achse. Das Gegenende bleibt als
-        # 'spiegel_apex' erhalten und ist zugleich die leere Spitze.
-        if sp and f['apex'] in WINKEL and sp in WINKEL:
-            if WINKEL.index(sp) < WINKEL.index(f['apex']):
+        # Gefuehrt wird mit dem Ende, das WINKEL zuerst nennt (AC vor MC vor DC
+        # vor IC). Seit 2026-09-16 ueber winkel_rang(): das gilt fuer einen
+        # Brennpunkt, der selbst ein Winkel ist, genauso wie fuer einen, der in
+        # Konjunktion zu einem steht (Achsenkreuz-Doppelung). Das Gegenende
+        # bleibt als 'spiegel_apex' erhalten und ist zugleich die leere Spitze.
+        if sp:
+            ra, rs = winkel_rang(f['apex']), winkel_rang(sp)
+            if ra is not None and rs is not None and rs < ra:
                 f['apex'], f['spiegel_apex'] = sp, f['apex']
                 f['leere_spitze'], f['_spiegel_ls'] = (
                     f.get('_spiegel_ls'), f['leere_spitze'])
@@ -1948,9 +1995,11 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     for i, f in enumerate(figuren):
         for j in range(i + 1, len(figuren)):
             g = figuren[j]
-            if f['apex'] != g['apex']:
-                continue
-            if set(f['achse']) & set(g['achse']):
+            if f['apex'] == g['apex'] and set(f['achse']) & set(g['achse']):
+                kandidaten.append([i, j])
+            elif rollentausch(f, g) == 1:
+                # Rollentausch, aber nur EIN Brennpunkt sitzt an einem Winkel:
+                # ob das eine Figur ist, haengt am Orb und ist Deutung.
                 kandidaten.append([i, j])
     # JOD und GROSSTRIGON, neu am 14.09.2026 (Pruefbericht 5.4). Dieselbe
     # Achsen-Doppelung, andere Figur — deshalb dieselben zwei Regeln.
@@ -3124,12 +3173,24 @@ def strukturbild_text(sb):
             # Brennpunkt. Die Zeile sagt, mit welchem Ende gedeutet wird und
             # warum — damit aus einer Figur nicht zwei Kapitel werden.
             if f.get('spiegel_apex'):
-                L.append('  · %s im Quadrat zur Achse %s/%s — EINE Figur, '
-                         'zweimal gemeldet. Gedeutet wird mit dem Brennpunkt '
-                         '%s (die eigene Seite der Achse); %s ist die '
-                         'Gegenspitze.'
-                         % (' ☍ '.join(f['achse']), f['apex'],
-                            f['spiegel_apex'], f['apex'], f['spiegel_apex']))
+                sp = f['spiegel_apex']
+                if f['apex'] in WINKEL and sp in WINKEL:
+                    L.append('  · %s im Quadrat zur Achse %s/%s — EINE Figur, '
+                             'zweimal gemeldet. Gedeutet wird mit dem '
+                             'Brennpunkt %s (das Ende, das WINKEL zuerst '
+                             'nennt); %s ist die Gegenspitze.'
+                             % (' ☍ '.join(f['achse']), f['apex'], sp,
+                                f['apex'], sp))
+                else:
+                    # Achsenkreuz-Doppelung (neu 2026-09-16): zwei Faktoren auf
+                    # je einem Winkel, die Rollen von Brennpunkt und Achsenende
+                    # getauscht. Die Achsenschreibweise oben passt hier nicht.
+                    L.append('  · %s und %s stehen je auf einem Winkel — EINE '
+                             'Figur, zweimal gemeldet, weil die beiden '
+                             'Achsenkreuze einander ohnehin quadrieren. '
+                             'Gedeutet wird mit dem Brennpunkt %s; %s ist die '
+                             'Gegenspitze.'
+                             % (f['apex'], sp, f['apex'], sp))
     if fg and fg['kandidaten']:
         # Weiche Gruppe: gleicher Brennpunkt, ein gemeinsames Achsenende, aber
         # die zweiten Enden sind weder identisch noch konjunkt. Ob das EINE
