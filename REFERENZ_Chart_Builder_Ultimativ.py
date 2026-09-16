@@ -287,7 +287,7 @@ tuhr.THEMEN = [
 ]
 
 REIHENFOLGE = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
-               'Uranus', 'Neptun', 'Pluto', 'SEP', 'Knoten', 'Suedknoten',
+               'Uranus', 'Neptun', 'Pluto', 'SEP', 'Mondknoten', 'Suedknoten',
                'Chiron', 'Lilith', 'Pholus', 'Glueckspunkt']
 KLASSISCH = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
              'Uranus', 'Neptun', 'Pluto']
@@ -329,7 +329,11 @@ def konst_zeilen():
         lauf = 'rückläufig' if f['retro'] else 'direkt'
         if n == 'Glueckspunkt':
             lauf = '—'
-        glyph = '' if f['glyph'] == 'Pho' else f['glyph']
+        # Glyphenregel wie in chartdoc._fac(): ueber die ZEICHENLAENGE, nicht
+        # ueber den verdrahteten String 'Pho' (Design-Modul, Radseite, seit
+        # 2026-09-08; hier nachgezogen 2026-09-16). Ein Feld von mehr als
+        # einem Zeichen ist ein Name, kein Symbol.
+        glyph = '' if len(f['glyph']) > 1 else f['glyph']
         out.append((glyph, cd.name_of(n), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out
