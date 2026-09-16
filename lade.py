@@ -74,6 +74,7 @@ BEKANNT = {
     "build", "chartdoc", "radix", "transit", "transitdata",
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
     "hd", "REFERENZ_Chart_Builder_Ultimativ",
+    "inhaltsprobe",          # seit 2026-09-16: Analyse gegen chart_data (Schritt 2 und 3+4)
     "lade",
 }
 
@@ -92,8 +93,12 @@ BEKANNT = {
 # verweisen hierher. Wer wissen will, was ein Schritt zieht: `uebersicht()`.
 SCHRITTE = {
     "1":        ("radix", "build"),
-    "2":        ("selektor",),
-    "3+4":      ("build", "chartdoc", "radix"),
+    # Schritt 2 zieht seit dem 2026-09-16 auch `build` (das Werkzeuge-Modul
+    # verlangt dort `build.parse_analyse()`) und `inhaltsprobe` (Analyse gegen
+    # chart_data, nach dem Schreiben); Schritt 3+4 laesst die Inhaltsprobe vor
+    # dem Render laufen. Startprompt claude/STARTPROMPT_Inhaltsprobe_2026-09-16.md.
+    "2":        ("selektor", "build", "inhaltsprobe"),
+    "3+4":      ("build", "chartdoc", "radix", "inhaltsprobe"),
     "transit":  ("transit", "transitdata", "transituhr_fusion"),
     "restyle":  ("build", "chartdoc", "radix", "restyle"),
     "hdgk":     ("hd",),
@@ -103,8 +108,8 @@ SCHRITTE = {
 # Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
 _SCHRITT_TEXT = {
     "1":        "Datenblatt (Heimat-Probe braucht build)",
-    "2":        "Referenzschnitt fuer die Analyse",
-    "3+4":      "Design, HTML, Rendern, Pruefen",
+    "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
+    "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render)",
     "transit":  "zusaetzlich bei Transit- und Ultimativ-Lauf",
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
     "hdgk":     "Human Design / Gene Keys",
