@@ -1672,8 +1672,24 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
     verbunden = lambda menge, x, y: frozenset((x, y)) in menge
 
     tq, gk, gt, jod = [], [], [], []
-    for o in opp:
-        a, b = tuple(o)
+    # DETERMINISMUS (2026-09-17, Pruefbericht Geburtshoroskop Schritt 1+2,
+    # Klasse-1-Befund 1.2). Hier stand `for o in opp:` mit `a, b = tuple(o)`.
+    # `paare()` gibt ein SET von frozensets zurueck; dessen Iterationsreihen-
+    # folge haengt an PYTHONHASHSEED und ist zwischen zwei Prozessen
+    # verschieden. Damit wechselten (1) die Reihenfolge der T-Quadrat-
+    # Meldungen in `tq` und (2) die Zuordnung der beiden Achsenenden zu a/b.
+    # gruppiere_figuren() prueft jede neue Meldung gegen die ERSTE Meldung
+    # ihrer Gruppe (`_erst`) und bildet `kandidaten` aus Indizes in `figuren`
+    # — beides haengt deshalb an der Eingabereihenfolge. Gemessen im Prueflauf:
+    # dreimal eine andere Figurenreihenfolge, zweimal kandidaten=[] und einmal
+    # eine Kandidatengruppe, einmal eine andere Achsenbenennung fuer dieselbe
+    # Figur. Ein zweiter Lauf desselben Charts haette ein anderes Datenblatt
+    # erzeugt. Die uebrigen Zweige waren nie betroffen: Jod und Grosstrigon
+    # laufen ueber `namen` (sortiert), das Rechteck ueber `opps = sorted(...)`,
+    # die Stellien ueber sorted(). Dieselbe MENGE an Figuren wie vorher, nur
+    # in stabiler Reihenfolge.
+    for o in sorted(sorted(x) for x in opp):
+        a, b = o
         for c in namen:
             if c in (a, b):
                 continue
@@ -3662,6 +3678,35 @@ if __name__ == '__main__':
     _fin = [{'name': 'Sonne', 'lon': 100.0}, {'name': 'Mond', 'lon': 102.0},
             {'name': 'Mondknoten', 'lon': 105.0}]
     assert mondphase(_fin)['finsternis']['naehe'] is True, mondphase(_fin)
+
+    # DETERMINISMUS-PROBE (neu 2026-09-17). konfigurationen() lief im
+    # T-Quadrat-Zweig ueber ein SET; die Reihenfolge haengt an
+    # PYTHONHASHSEED und war zwischen zwei Prozessen verschieden. Im selben
+    # Prozess ist das nicht zu sehen — deshalb zwei Subprozesse mit
+    # verschiedenem Seed gegeneinander.
+    import json as _json, os as _os
+    _probe = (
+        'import sys; sys.path.insert(0, %r); import radix; '
+        'f=[{"name":n,"lon":l} for n,l in '
+        '[("Sonne",15.1),("Mond",105.3),("Mars",195.7),("Venus",200.4),'
+        '("Jupiter",285.2),("Saturn",288.9),("Uranus",20.6),("Neptun",110.8),'
+        '("Pluto",25.3),("Merkur",282.1),'
+        '("AC",0.0),("MC",270.0),("DC",180.0),("IC",90.0)]]; '
+        'a=radix.huber_aspects(f); k=radix.konfigurationen(f,a); '
+        'g=radix.gruppiere_figuren(k,a); '
+        'import json; print(json.dumps([[x["achse"],x["apex"],'
+        'x.get("spiegel_apex")] for x in g["figuren"]]+[g["kandidaten"]]))'
+        % _os.path.dirname(_os.path.abspath(__file__)))
+    _aus = []
+    for _seed in ('0', '1', '12345'):
+        _env = dict(_os.environ, PYTHONHASHSEED=_seed)
+        _r = subprocess.run([sys.executable, '-c', _probe], env=_env,
+                            capture_output=True, text=True)
+        assert _r.returncode == 0, _r.stderr
+        _aus.append(_r.stdout.strip())
+    assert len(set(_aus)) == 1, (
+        'gruppiere_figuren() ist nicht deterministisch:\n' + '\n'.join(_aus))
+    print('Determinismus-Test: OK — gleiche Figuren bei drei Hash-Seeds')
 
     _txt = strukturbild_text(_sb)
     assert '## Strukturbild' in _txt and 'Hausherrscher' in _txt
