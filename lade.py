@@ -98,7 +98,14 @@ SCHRITTE = {
     # verlangt dort `build.parse_analyse()`) und `inhaltsprobe` (Analyse gegen
     # chart_data, nach dem Schreiben); Schritt 3+4 laesst die Inhaltsprobe vor
     # dem Render laufen. Startprompt claude/STARTPROMPT_Inhaltsprobe_2026-09-16.md.
-    "2":        ("selektor", "build", "inhaltsprobe"),
+    # `chartdoc` seit dem 2026-09-17 (Klasse-2-Entscheidungslauf,
+    # Wiederholungstaeter aus zwei Laufabschnitten): Der Kern verlangt in
+    # Arbeitsablauf 2 ausdruecklich `chartdoc.pruefe_kapitelkopf()` — die harte
+    # Kicker-Probe, die seit dem 2026-09-08 einen fehlenden Kicker abbricht.
+    # Schritt 2 lieferte chartdoc aber nicht, und der Aufruf brach mit
+    # ModuleNotFoundError ab. Ein Import kostet keine Token; die Alternative waere
+    # gewesen, den Kern zu aendern, damit er weniger verlangt.
+    "2":        ("selektor", "build", "inhaltsprobe", "chartdoc"),
     # `selektor` gehoert auch zu 3+4: inhaltsprobe.py importiert es (Zeile
     # `import selektor`), und ohne den Eintrag brach der erste Aufruf im
     # Design-Lauf mit ModuleNotFoundError ab (Pruefbericht Geburtshoroskop
@@ -214,6 +221,24 @@ def ephemeriden(still=False):
     Paket, wird einmal nachinstalliert (ein Download-Timeout des Proxys ist im
     naechsten Moment meist weg); bleibt es weg, harter Fehler mit dem pip-Befehl.
 
+    ERSTINSTALLATION IN EINEM FRISCHEN CONTAINER IST TEUER (hierher gezogen
+    2026-09-17, Klasse-2-Entscheidungslauf; stand vorher als vier Zeilen im
+    Werkzeuge-Modul und lief damit in jedem Chart-Lauf mit, obwohl der Fall je
+    Container genau EINMAL auftritt). `pyswisseph` wird aus dem Quelltext gebaut
+    und ueberschreitet das Standard-Zeitlimit des Bash-Werkzeugs von zwei
+    Minuten; im Prueflauf vom 16.09. kostete das zwei Abbrueche (Lesetimeout von
+    files.pythonhosted.org, dann Exit 143) und rund vier Minuten vor dem ersten
+    Rechenschritt. Wer diese Funktion in einem frischen Container ruft, gibt dem
+    Bash-Aufruf MINDESTENS FUENF MINUTEN Zeitlimit und installiert die beiden
+    Pakete getrennt. Im Dauerbetrieb kostet der Aufruf nichts.
+
+    Die pip-Warnung "flatlib requires pyswisseph==2.08.00-1, but you have
+    pyswisseph <neuer>" bei der Erstinstallation ist HARMLOS und erwartet
+    (erklaert 2026-09-17): `flatlib` wird mit `--no-deps` allein wegen seiner
+    mitgelieferten swefiles installiert, nicht als Bibliothek — seine
+    Versionsforderung an pyswisseph spielt hier keine Rolle. Sie war bis dahin
+    unerklaert und stand als Befund in der Klasse-2-Liste.
+
     Wirft, wenn die Dateien auch nach der Installation nicht auffindbar sind.
     Nicht abfangen: Ohne sie rechnet der Builder auf Moshier (bis zu einer
     Bogensekunde bei den Langsamen, ein Exaktpunkt nahe Mitternacht kann auf den
@@ -229,6 +254,12 @@ def ephemeriden(still=False):
     # Dateien da, aber Paket nicht importierbar: nur pyswisseph nachziehen.
     # Sonst beide Pakete (PAKETE ist die einzige verbindliche Liste).
     pakete = [p for p in PAKETE if p[0] == "pyswisseph"] if pfad else list(PAKETE)
+    if not still and len(pakete) > 1:
+        print("[lade] Erstinstallation der Ephemeriden-Pakete: pyswisseph wird "
+              "gebaut, das dauert im frischen Container mehrere Minuten — "
+              "Bash-Zeitlimit auf mindestens 5 Minuten setzen. Die pip-Warnung "
+              "'flatlib requires pyswisseph==2.08.00-1' ist harmlos (flatlib "
+              "kommt mit --no-deps, nur wegen der swefiles).", file=sys.stderr)
     for paket, extra in pakete:
         subprocess.run(
             [sys.executable, "-m", "pip", "install", paket, *extra,

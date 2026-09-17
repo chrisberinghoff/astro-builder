@@ -1136,9 +1136,23 @@ def parse_analyse(path: str, client: str = None) -> dict:
             "untertitel": untertitel, "chapters": chapters}
 
 
-def chapter_markers(parsed: dict) -> list:
-    """Kapiteltitel in Dokumentreihenfolge — direkt für verify(markers=...)."""
-    return [ch["title"] for ch in parsed["chapters"]]
+def chapter_markers(parsed: dict, nur_titel: bool = False) -> list:
+    """(Kicker, Titel) je Kapitel in Dokumentreihenfolge — direkt für
+    verify(markers=...).
+
+    Seit dem 2026-09-17 Tupel statt nackter Titel (Klasse-2-Entscheidungslauf,
+    Wiederholungstäter aus zwei Laufabschnitten): `verify()` nahm die ERSTE
+    Fundstelle eines Titels im PDF-Text. Ein Titel, der vorher in der Prosa
+    vorkommt oder Präfix eines anderen ist („The way up" / „The way up into
+    Taurus"), wurde damit auf der falschen Seite gefunden, und die
+    Reihenfolgeprobe blieb grün. Mit dem Kicker daneben kann `verify()` die
+    Fundstelle auf die Seite festnageln, die auch den Kicker trägt.
+
+    `nur_titel=True` gibt die alte Form zurück — für Aufrufer, die die Liste
+    ausgeben statt sie an `verify()` zu übergeben."""
+    if nur_titel:
+        return [ch["title"] for ch in parsed["chapters"]]
+    return [(ch.get("kicker"), ch["title"]) for ch in parsed["chapters"]]
 
 
 def prepare_chapters(parsed: dict) -> list:
@@ -1765,19 +1779,47 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
 
     marker_pages = {}
     if markers:
+        # KAPITELKOPF STATT ERSTER FUNDSTELLE (neu 2026-09-17). markers nimmt
+        # (Kicker, Titel) aus chapter_markers(); nackte Titel gehen weiter und
+        # verhalten sich wie vorher. Mit Kicker wird die Fundstelle akzeptiert,
+        # deren SEITE auch den Kicker traegt — Kicker sind gesperrt gesetzt, der
+        # Vergleich laeuft darum ohne Leerstellen, wie unten bei `kickers`.
         pos = 0
-        for mk in markers:
+        for eintrag in markers:
+            if isinstance(eintrag, (tuple, list)):
+                kick, mk = eintrag[0], eintrag[1]
+            else:
+                kick, mk = None, eintrag
             needle = _dehyph(_nrm(mk))
+            kick_ds = (kick or "").upper().replace(" ", "")
+            stellen = []
             i = whole_d.find(needle, pos)
-            if i < 0:
-                if whole_d.find(needle) >= 0:
+            while i >= 0:
+                stellen.append(i)
+                i = whole_d.find(needle, i + 1)
+            treffer = None
+            for i in stellen:
+                seite = whole_d.count("\x0c", 0, i)        # 0-basiert
+                if not kick_ds:
+                    treffer = (i, seite)
+                    break
+                pt = pages_n[seite] if seite < len(pages_n) else ""
+                if kick_ds in _dehyph(pt).upper().replace(" ", ""):
+                    treffer = (i, seite)
+                    break
+            if treffer is None:
+                if stellen:
+                    fails.append(f"MARKER nicht am Kapitelkopf: {mk!r} — "
+                                 f"gefunden, aber auf keiner Seite mit dem "
+                                 f"Kicker {kick!r}.")
+                elif whole_d.find(needle) >= 0:
                     fails.append(f"MARKER-REIHENFOLGE verletzt: {mk!r}.")
                 else:
                     fails.append(f"MARKER fehlt im PDF-Text: {mk!r}.")
                 continue
+            i, seite = treffer
             pos = i + len(needle)
-            marker_pages[mk] = next((pi + 1 for pi, pt in enumerate(pages_n)
-                                     if needle in _dehyph(pt)), None)
+            marker_pages[mk] = seite + 1
     if kickers:
         # Kicker sind gesperrt gesetzt (letter-spacing) -> pdftotext liefert
         # 'Z U R L E S A RT'; Vergleich darum ohne jede Leerstelle.
@@ -1982,6 +2024,32 @@ if __name__ == "__main__":
 
 _AH_GLYPH = "☌☍□△⚹⚻⚺"
 _AH_NAME = r"(?:AC|MC|DC|IC|[A-ZÄÖÜ][a-zäöüß]+)"
+# SCHNITTMARKE fuer JEDEN Teilscan dieser Probe (neu 2026-09-17,
+# Klasse-2-Entscheidungslauf, Wiederholungstaeter aus drei Laufabschnitten).
+# Ein Abschnitt endet an der naechsten Ueberschrift ODER am naechsten
+# @@-Block. Vorher stand das Muster dreimal als Literal im Code, und der
+# Untergrund-Zweig hatte ein viertes, abweichendes (`.split("\n**")[0]`):
+# fehlte darunter eine `**`-Zeile, lief er bis Dateiende. Die @@-Marke fehlte
+# ueberall — @@SELEKTOR und @@ZUGANG stehen hinter der Weglassungsliste und
+# landeten mit ihren ASPEKT-Zeilen in `dok`, womit jeder Aspekt als
+# dokumentiert weggelassen galt. Seit dieser Fassung regelt KEIN Modul mehr,
+# in welcher Reihenfolge die Schlussbloecke stehen muessen — die Probe
+# begrenzt sich selbst.
+_AH_SCHNITT = r"\n(?:#{2,3} |@@)"
+
+
+def _ah_abschnitt(txt, marke, ab=0):
+    """Text ab `marke` bis zur naechsten Ueberschrift oder zum naechsten
+    @@-Block. Einzige Begrenzungsstelle der Aspekt-Heimat-Probe."""
+    i = txt.find(marke, ab)
+    if i < 0:
+        return None, -1
+    ende = i + len(marke)
+    teil = txt[ende:]
+    schnitt = re.search(_AH_SCHNITT, teil)
+    if schnitt:
+        teil = teil[:schnitt.start()]
+    return teil, ende
 
 
 def aspekt_heimat(chart_data_pfad: str) -> dict:
@@ -2030,13 +2098,10 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
                  "### Einseitige Aspekte", "### Nebenaspekte"):
         if kopf not in txt:
             continue
-        teil = txt.split(kopf, 1)[1]
-        schnitt = _re.search(r"\n#{2,3} ", teil)          # bis zur nächsten Überschrift
-        if schnitt:
-            teil = teil[:schnitt.start()]
+        teil, _ = _ah_abschnitt(txt, kopf)
         tabelle |= _paare(teil, "[%s]" % _AH_GLYPH)
     if "### Untergrund-Aspekte" in txt:
-        teil = txt.split("### Untergrund-Aspekte")[1].split("\n**")[0]
+        teil, _ = _ah_abschnitt(txt, "### Untergrund-Aspekte")
         # TRENNER DER UNTERGRUND-TABELLE (korrigiert 2026-09-16, Pruefbericht
         # Geburtshoroskop Schritt 1+2 vom 16.09., Befund 1.2). Hier stand
         # `_paare(teil, "—")`. Die Spaltenform von `_paare` verlangt in der
@@ -2107,13 +2172,13 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
             i = txt.find(marke, stelle)
             if i < 0:
                 break
-            stelle = i + len(marke)
-            teil = txt[stelle:]
-            schnitt = _re.search(r"\n#{2,3} ", teil)      # bis zur naechsten Ueberschrift
-            if schnitt:
-                teil = teil[:schnitt.start()]
-            dok |= _paare(teil, "[%s—]" % _AH_GLYPH)
-            for m in _re.finditer(r"(%s)\s*(?:[%s]|—)\s*(%s)"
+            teil, stelle = _ah_abschnitt(txt, marke, i)
+            # ZUSATZEBENE MIT (neu 2026-09-17): Seit dem 2026-09-16 liegt die
+            # Untergrund-Tabelle in der Pruefmenge, ihre Aspektarten tragen ⚼
+            # und ∠ — ohne sie hier ist eine Untergrund-Zeile pruefbar, aber
+            # nicht dokumentierbar. Beim Patchen der Grenzen aufgefallen.
+            dok |= _paare(teil, "[%s—⚼∠]" % _AH_GLYPH)
+            for m in _re.finditer(r"(%s)\s*(?:[%s⚼∠]|—)\s*(%s)"
                                   % (_AH_NAME, _AH_GLYPH, _AH_NAME), teil):
                 dok.add(frozenset([m.group(1), m.group(2)]))
 

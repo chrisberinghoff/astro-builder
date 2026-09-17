@@ -1368,6 +1368,49 @@ def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
     return out
 
 
+def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE):
+    """Fertiger FUSSNOTENSATZ fuer die Konstellationsseite — oder None.
+
+    Neu 2026-09-17 (Klasse-2-Entscheidungslauf, Wiederholungstaeter aus zwei
+    Laufabschnitten). Das Design-Modul verlangte den „Wortlaut aus dem
+    Datenblatt". Das Datenblatt liefert aber eine HANDLUNGSZEILE (⚠-Block,
+    Gegenprobe g) und keinen Fussnotentext; wer den Satz formuliert, stand in
+    keinem Modul. Ausserdem nannte die Design-Regel nur AC und MC, waehrend die
+    Warnung fuer JEDE der zwoelf Spitzen faellt — im Prueflauf vom 16.09. traf
+    es die Spitzen 3 und 9. Beides erledigt sich, wenn der Satz hier entsteht:
+    Schritt 3 setzt ihn, ohne ihn zu formulieren, und ohne etwas nachzurechnen.
+
+    kipp      Rueckgabe von kippminuten() (oder strukturbild()['kippminuten'])
+    schwelle  Minuten; Vorgabe KIPP_SCHWELLE, dieselbe wie bei Gegenprobe g
+
+    -> str oder None (None = keine Spitze unter der Schwelle, keine Fussnote).
+    """
+    w = kipp_warnungen(kipp, schwelle=schwelle) if kipp is not None else None
+    if not w:
+        return None
+    _ACHSNAME = {(1, 7): 'AC/DC', (10, 4): 'MC/IC', (4, 10): 'IC/MC',
+                 (7, 1): 'DC/AC'}
+    teile = []
+    for x in w:
+        paar = tuple(x['paar'])
+        name = _ACHSNAME.get(paar)
+        wie, steht, wechselt = (
+            (f"Die Achse {name}", 'steht', 'wechselt sie') if name
+            else (f"Die Spitzen {paar[0]} und {paar[1]}", 'stehen', 'wechseln sie'))
+        m = x['minuten']
+        min_w = 'Minute' if m == 1 else 'Minuten'
+        teile.append(
+            f"{wie} {steht} {m} {min_w} vor einer Zeichengrenze: bei {m} "
+            f"{min_w} {x['richtung']}er Geburt {wechselt} von {x['von'][0]}/"
+            f"{x['von'][1]} auf {x['nach'][0]}/{x['nach'][1]}")
+    mehr = len(teile) > 1
+    teile = [teile[0]] + [t[0].lower() + t[1:] for t in teile[1:]]
+    return ('; '.join(teile)
+            + ('. Die Zeichen- und Hausdeutung dieser Spitzen hängt damit an '
+               'der Geburtszeit.' if mehr else
+               '. Die Zeichen- und Hausdeutung hängt damit an der Geburtszeit.'))
+
+
 def hausherrscher(factors, cusps, aspects=None, klassisch=False,
                   spitzen_orb=SPITZEN_ORB):
     """Wo steht der Herrscher jedes Hauses? (Befund 5.2 des Prueflaufs.)
@@ -2933,6 +2976,21 @@ def strukturbild_text(sb):
              f"{', '.join(vp['traeger'][vg['schwaechstes_element']]) or '—'}).")
     L.append(f"- Schwächster Modus: {vg['schwaechster_modus']} "
              f"(gewichtet {vg['modi'][vg['schwaechster_modus']]:g}).")
+    # GLEICHSTAND SAGEN, NICHT STILL ENTSCHEIDEN (neu 2026-09-17,
+    # Klasse-2-Entscheidungslauf). min() nimmt bei gleichem Wert den zuerst
+    # genannten Schlüssel. Die Zeile las sich dann wie ein Befund („der
+    # schwächste Modus ist X"), obwohl zwei gleich schwach sind — und die
+    # Befundzeile darunter baut darauf auf.
+    for _lab, _key, _feld in (('Element', 'schwaechstes_element', 'elemente'),
+                              ('Modus', 'schwaechster_modus', 'modi')):
+        _w = vg[_feld][vg[_key]]
+        _gleich = [k for k, v in vg[_feld].items() if v == _w and k != vg[_key]]
+        if _gleich:
+            L.append(f"- ⚠ Gleichstand: {vg[_key]} und "
+                     f"{', '.join(_gleich)} liegen gewichtet beide bei {_w:g} — "
+                     f"es gibt kein eindeutig schwächstes {_lab}. Die Zeile oben "
+                     f"nennt nur das erste; die Befundzeile entscheidet, welches "
+                     f"sie führt, oder nennt beide.")
     if vp['schwaechstes_element'] != vg['schwaechstes_element']:
         L.append(f"- ⚠ Ungewichtet wäre {vp['schwaechstes_element']} das "
                  f"schwächste Element, gewichtet ist es "
@@ -2971,8 +3029,13 @@ def strukturbild_text(sb):
                  f"Getriebe-Kapitel (seit 2026-09-14).")
     kk = sb['ketten_klassisch']
     if [sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]:
+        # LESBAR STATT ROH (neu 2026-09-17, Klasse-2-Entscheidungslauf).
+        # `kk['kreise']` ist eine Liste von Listen und stand als
+        # "[['Mars', 'Pluto']]" im ausgelieferten Datenblatt.
+        _kkt = ('; '.join(' → '.join(x) + f' → {x[0]}' for x in kk['kreise'])
+                or 'keine')
         L.append(f"- Klassisch gerechnet ergibt sich ein anderes Bild: Kreise "
-                 f"{kk['kreise'] or 'keine'}, Enddispositoren "
+                 f"{_kkt}, Enddispositoren "
                  f"{', '.join(kk['enddispositoren']) or 'keine'}.")
     r = sb['rezeptionen']
     L.append(f"- Gegenseitige Rezeption: "
@@ -2994,7 +3057,20 @@ def strukturbild_text(sb):
         if h.get('spannung_zur_spitze'):
             mark.append(f"in Spannung zur eigenen Spitze: {h['spannung_zur_spitze']}")
         if h.get('wechselseitig'):
-            mark.append(f"wechselseitig mit Haus {h['wechselseitig']}")
+            # SCHWELLENLAGE MITSAGEN (neu 2026-09-17,
+            # Klasse-2-Entscheidungslauf). Diese Zeile meldete den Sonderfall
+            # („wechselseitig mit Haus n"), während die Kreis-Zeile weiter unten
+            # denselben Kreis nach der Schwellenlage-Regel verneinte — zwei
+            # Aussagen über dasselbe, im selben Datenblatt.
+            _z = f"wechselseitig mit Haus {h['wechselseitig']}"
+            _hk0 = sb.get('haus_kreise') or {}
+            for _kr in (_hk0.get('kreise') or []):
+                if (_kr['laenge'] == 2 and h['haus'] in _kr['haeuser']
+                        and not _kr.get('haelt_bei_schwellenlage', True)):
+                    _z += (" — hält bei Schwellenlage NICHT (s. Häuser-Kreise, "
+                           "Nebenhaus führt)")
+                    break
+            mark.append(_z)
         if mark:
             beteiligt.add(h['haus'])
         zusatz_ = f"  ⟵ {'; '.join(mark)}" if mark else ''
@@ -3060,11 +3136,21 @@ def strukturbild_text(sb):
     sk = sb.get('spitzen_kontakte')
     if sk is not None:
         if sk:
+            # KEINE SELBSTUNGÜLTIGEN ZEILEN (geändert 2026-09-17,
+            # Klasse-2-Entscheidungslauf). Steht die Spitze auf einem Winkel,
+            # gilt die Aspektliste, und die Zeile erklärte sich selbst für
+            # ungültig — stand aber im ausgelieferten Datenblatt. Sie wird jetzt
+            # gezählt statt gedruckt.
+            _winkelzeilen = [k for k in sk if k['winkel']]
+            if _winkelzeilen:
+                L.append(f"- Spitzen-Kontakte an einem Winkel: "
+                         f"{len(_winkelzeilen)} "
+                         f"({', '.join(sorted({k['winkel'] for k in _winkelzeilen}))}) "
+                         f"— nicht aufgeführt, dort gilt die Aspektliste.")
             for k in sk:
                 if k['winkel']:
-                    note = (f" — Spitze ist {k['winkel']}, hier gilt die "
-                            f"Aspektliste; die Zeile ist nur Gegenprobe")
-                elif k['hart']:
+                    continue
+                if k['hart']:
                     note = ' — harter Kontakt an einer Zwischenspitze: Sonderfall ' \
                            '„in Spannung zur eigenen Spitze"'
                     beteiligt.add(k['haus'])
@@ -3178,10 +3264,15 @@ def strukturbild_text(sb):
         # konfigurationen() dasselbe Dreieck mehrfach. Frueher musste das von
         # Hand zusammengefasst werden; die Zeile hier sagt jetzt, wie viele
         # Figuren es tatsaechlich sind.
+        # Der dritte Grund fehlte in dieser Sammelzeile (ergänzt 2026-09-17,
+        # Klasse-2-Entscheidungslauf): zwei Faktoren auf JE EINEM Winkel, deren
+        # Achsenkreuze einander ohnehin quadrieren. Der Zweig dafür steht seit
+        # dem 2026-09-16 darunter, die Begründung oben nannte ihn nicht.
         L.append('- Achsen-Doppelung: %d T-Quadrat-Meldungen entsprechen %d '
-                 'Figuren (die übrigen sind dieselbe Figur über eine '
-                 'Winkel-Konjunktion oder über die beiden Enden derselben '
-                 'Achse).' % (fg['meldungen'], fg['anzahl']))
+                 'Figuren (die übrigen sind dieselbe Figur — über eine '
+                 'Winkel-Konjunktion, über die beiden Enden derselben Achse '
+                 'oder über zwei Faktoren auf je einem Winkel).'
+                 % (fg['meldungen'], fg['anzahl']))
         for f in fg['figuren']:
             # Winkel-Spiegel (neu 2026-09-15, Pruefbericht 5.2): Der Apex steht
             # auf einem Winkel, also ist das Gegenende zwangslaeufig ebenfalls

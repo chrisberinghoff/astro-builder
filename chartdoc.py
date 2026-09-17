@@ -1485,6 +1485,40 @@ def build_head(it):
             f'<div class="rule"></div>{bel}</div>')
 
 
+def build_section(i, it, breaks, part_kicker=(), open_page=(), erstes=False):
+    """Eine ganze Kapitel-SEKTION: Wrapper, Kopf, Koerper, Fuss — ein Aufruf.
+
+    Neu 2026-09-17 (Klasse-2-Entscheidungslauf). Bis dahin stand die
+    Kapitel-Schleife samt ihrer CSS-Klassennamen (`chapter`, `chapter-first`,
+    `part`, `part-inner`) NUR in `claude/REFERENZ_Chart_Builder_Ultimativ.py`;
+    kein Modul nannte sie, und zwei Prueflaeufe haben das als Befund gemeldet.
+    Sie gehoeren hierher: dieselbe Begruendung, mit der `build_bloecke()` am
+    2026-09-09 die Block-Schleife uebernommen hat. Wer die Schleife weiter von
+    Hand baut, ist damit nicht falsch — diese Funktion tut genau dasselbe.
+
+    i              Kapitelindex (0-basiert), wie bei build_bloecke()
+    it             das dekorierte Kapitel aus build.prepare_chapters()
+    breaks         die Satz-Umbruchmenge von render_sentence_safe()
+    part_kicker    Kicker, die eine TEILERSEITE sind (z. B. {'Zweiter Teil'})
+    open_page      Kicker, die IMMER auf einer neuen Seite beginnen
+    erstes         True fuer das erste Kapitel des Dokuments
+
+    -> vollstaendiges `<section …>…</section>`
+    """
+    is_part = it.get('kicker') in part_kicker
+    allow_drop = not is_part
+    cls = ['chapter']
+    if is_part:
+        cls.append('part')
+    if erstes or it.get('kicker') in open_page:
+        cls.append('chapter-first')
+    head = build_part_head(it) if is_part else build_head(it)
+    inner = head + build_bloecke(i, it, breaks, allow_drop) + build_fuss(it)
+    if is_part:
+        inner = '<div class="part-inner">%s</div>' % inner
+    return '<section class="%s" id="CH_%d">%s</section>' % (' '.join(cls), i, inner)
+
+
 def build_fuss(it):
     """Kapitelfuss: Signatur und Beleg als schmaler heller Streifen.
 

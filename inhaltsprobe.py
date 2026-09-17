@@ -109,13 +109,25 @@ P8  Wortlisten       ueber den Fliesstext aller Kapitel ausser Auftakt und
                      Fachbegriffe, Gradzahlen und Hausnummern in Ziffern
                      (Klartext-Verbotsscan; Liste aus `restyle.VERBOTEN`). Nur PRUEFEN.
 P9  Zwei Saetze      der Nichtwissens-Satz in jeder Wurzel-Bewegung ("weiss ich
-                     nicht" oder "steht in keinem Horoskop"); "verwerf"/"verwirf"
-                     ausserhalb von Auftakt und erstem Themenkapitel. Nur PRUEFEN.
+                     nicht" oder "steht in keinem Horoskop"); die
+                     Verwerfungs-ERLAUBNIS ausserhalb von Auftakt und erstem
+                     Themenkapitel. Nur PRUEFEN.
+P10 Wortscan        die vier Listen der Inneren Arbeit, Probe 9 — Superlative
+                     (Prinzip 8), Klinisches (Guardrail Pathologisierung),
+                     Bestaetigung und Optimierung (Prinzipien 12 und 14), Zeit
+                     als Frist oder Ereignis (Prinzip 15). Seit dem 2026-09-17
+                     hier statt als Modelltext im Modul: Die Listen waren mit
+                     Ausnahmeklauseln gegen ihre eigenen Fehlalarme gewachsen
+                     (IC-Fuegung, "am dichtesten verschaltet"), und zwei weitere
+                     Fehlalarm-Klassen standen offen — "Zerstoerung" traf
+                     "Stoerung", "solltest du" traf die von Prinzip 12 VERLANGTE
+                     Lassen-Formulierung. Beides ist hier eine Zeile. Nur
+                     PRUEFEN.
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
 Fall ohne reales Geburtsdatum, ohne Uhrzeit, ohne Namen, ohne Staende eines realen
 Charts (Datenschutz-Guardrail des Kerns) — einmal fehlerfrei, einmal mit je einem
-eingebauten Fehler je Probe P1–P6 und je einem Treffer fuer P8 und P9. Eine Probe,
+eingebauten Fehler je Probe P1–P6 und je einem Treffer fuer P8, P9 und P10. Eine Probe,
 die ihren Testfehler nicht findet, ist nicht fertig. Der Selbsttest ist Teil des
 Moduls und laeuft bei jedem spaeteren Umbau wieder.
 
@@ -503,7 +515,14 @@ def _staende_lesen(txt):
         if mm:
             out[kanon(mm.group(1))] = (_min(mm.group(2), mm.group(3)),
                                        selektor.norm(mm.group(4)))
-    return out or None
+    # LEERES dict STATT None, WENN DIE TABELLE DA IST (geaendert 2026-09-17,
+    # Klasse-2-Entscheidungslauf, Wiederholungstaeter aus drei Laufabschnitten).
+    # Vorher war "keine ## Staende-Ueberschrift" von "Ueberschrift da, aber kein
+    # Zeilenformat erkannt" nicht zu unterscheiden; der zweite Fall lief als
+    # stiller Hinweis durch, und drei Prueflaeufe haben deshalb nach einer
+    # MODULREGEL fuer das Tabellenformat gefragt. Jetzt sagt die Probe das
+    # Format selbst — die Regel wird nicht gebraucht.
+    return out
 
 def _themenliste_lesen(txt):
     """THEMA-Zeilen als Liste von dicts (nr, titel, fuehrt, fuehrt_roh, form,
@@ -837,7 +856,16 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
     fak = {f["name"]: f for f in chart.get("faktoren", [])}
     achsen = chart.get("achsen", {})
     if staende is None:
-        p.hinweise.append("Ständetabelle nicht sicher lesbar — Gradminuten übersprungen")
+        p.hinweise.append("Keine `## Stände`-Überschrift in der chart_data — "
+                          "Gradminuten übersprungen")
+    elif not staende:
+        p.pruefen.append(
+            "Ständetabelle gefunden, aber KEINE Zeile lesbar — Gradminuten "
+            "ungeprüft. Erwartetes Zeilenformat: "
+            "`| <Faktor> | <NN>°<NN>′ | <Zeichen> | …` mit nacktem Faktornamen "
+            "in der ersten Zelle (kein Symbol, kein Zusatz), Gradminuten mit ° "
+            "und ′ oder ' in der zweiten. Entweder die Tabelle anpassen oder "
+            "diesen Hinweis ausdrücklich abhaken.")
 
     def pruefe(ort, st):
         p.geprueft += 1
@@ -923,8 +951,13 @@ def _fuehrer_im_beleg(ch):
 
 def _name_in_text(schluessel, text):
     """Steht der Faktor (in einer seiner Schreibweisen) im Text?"""
+    # KOMPOSITUM ZAEHLT (geaendert 2026-09-17, Klasse-2-Entscheidungslauf).
+    # Die Rueckschau schloss einen vorangehenden BINDESTRICH aus, womit
+    # "Fische-Sonne" als "Sonne fehlt" galt — eine Form, die der
+    # Klartext-Standard ausdruecklich zulaesst. Im Prueflauf vom 16.09. war das
+    # ein P7-FEHLER ohne Fehler.
     for s, k in _FAKTOR_SCHREIBWEISEN:
-        if k == schluessel and re.search(r"(?<![\wäöüÄÖÜß-])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", text or ""):
+        if k == schluessel and re.search(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", text or ""):
             return True
     # "Knoten" allein gilt fuer den Mondknoten
     if schluessel == "MONDKNOTEN" and re.search(r"(?<![\wäöüß])Knoten(?:achse)?(?![\wäöüß])", text or ""):
@@ -1261,9 +1294,105 @@ NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem 
                             r"|no horoscope contains|in no horoscope", re.I)
 # englisch eng gefasst (Kapitel-Bezug), damit "gets discarded" in normaler Verwendung
 # nicht mitzaehlt — dieselbe Fehlalarm-Klasse wie "verwerf" (Klasse-2-Liste 16.09.c, Nr. 6)
-VERWERF_RE = re.compile(r"verwerf|verwirf|discard (?:the|this|it)|free to discard|may discard"
+# DEUTSCH EBENSO ENG GEFASST (geaendert 2026-09-17, Klasse-2-Entscheidungslauf,
+# Wiederholungstaeter). "verwerf|verwirf" traf jede normale Verwendung — vor
+# allem den Klartext-Standardsatz selbst und jedes "einen Gedanken verwerfen".
+# Gesucht ist die ERLAUBNIS, nicht das Verb: ein Modalausdruck davor oder ein
+# ausdruecklicher Kapitelbezug. Dieselbe Enge, die die englische Seite am
+# 2026-09-16 bekommen hat.
+VERWERF_RE = re.compile(r"(?:darfst|kannst|darf|kann)\s+(?:du\s+)?"
+                        r"(?:[\wäöüÄÖÜß]+\s+){0,3}verwerfen"
+                        r"|verwirf\s+(?:es|ihn|sie|das|dieses|jenes)"
+                        r"|(?:Kapitel|Band|Abschnitt)[^.]{0,40}verwerfen"
+                        r"|discard (?:the|this|it)|free to discard|may discard"
                         r"|put (?:the|this) chapter aside|set (?:the|this) chapter aside"
                         r"|skip (?:the|this) chapter", re.I)
+
+# ---------------------------------------------------------------------------
+# P10 — Wortscan der Inneren Arbeit (Probe 9 des Moduls), seit 2026-09-17 hier
+# ---------------------------------------------------------------------------
+# Die Ausnahmen sind KEINE neuen Setzungen, sondern die im Modul schon
+# dokumentierten, plus die zwei Fehlalarm-Klassen, die dort offen standen:
+#   tiefst…   + "Punkt des/im Horoskops|Bildes|Charts"  -> Fachname des IC
+#              (Modul seit 2026-09-14, dort als lauffaehige Vorschau notiert)
+#   dichtest… + "verschaltet" / "am dichtesten verschaltet"
+#              (Modul seit 2026-09-15, gleiche Klasse)
+#   Stoerung  nicht in "Zerstoerung"/"zerstoerung" (Klasse-2-Liste 16.09.d Nr. 4)
+#   "solltest du" nicht im Lassen-Satz, den Prinzip 12 gerade verlangt
+#              (Klasse-2-Liste 16.09.e Nr. 6, acht Fehlalarme in einem Lauf)
+# Der SUPERLATIV-DECKEL steht seit dem 2026-09-17 auf DREI je Dokument, und der
+# Auftakt zaehlt nicht mit (Chris-Entscheidung: "superlative sind auch nicht so
+# schlimm, uebertreib es nicht mit der regel"). Vorher: genau EINER im ganzen
+# Dokument — und die Pflichtformulierung des Auftakts ("ausdruecklich als die
+# staerkste", Typmodul) verbrauchte ihn, weshalb der Konflikt in zwei
+# Laufabschnitten als Befund stand.
+SUPERLATIV_DECKEL = 3
+SUPERLATIV_RE = re.compile(
+    r"tiefst\w*\b(?!\s+Punkt\s+(?:des|im|deines|in\s+deinem)\s+(?:Horoskop|Bild|Chart))"
+    r"|dichtest\w*\b(?!\s+verschaltet)|\bam\s+dichtesten\b(?!\s+verschaltet)"
+    r"|prägendst\w*|markantest\w*|stärkst\w*|größt\w*|wichtigst\w*"
+    r"|zentralst\w*|entscheidendst\w*", re.I)
+KLINISCH_RE = re.compile(
+    r"(?<!Zer)(?<!zer)[Ss]törung\w*|Trauma\w*|traumatisiert\w*|Symptom\w*"
+    r"|Diagnose\w*|Syndrom\w*|pathologisch\w*|dysfunktional\w*|neurotisch\w*"
+    r"|narzisstisch\w*|Depression\w*|Bindungsangst\w*")
+BESTAETIGUNG_RE = re.compile(
+    r"es ist kein Zufall|nicht umsonst|darin lebst du|das passt genau zu"
+    r"|deshalb bist du|solltest du|musst du lernen|arbeite an dir"
+    r"|dein Potenzial|das Beste aus dir", re.I)
+# Der Lassen-Satz von Prinzip 12 ist der Grund, warum "solltest du" ueberhaupt
+# vorkommt. Er ist kein Treffer.
+LASSEN_RE = re.compile(r"\bnicht\b|\blassen\b|\bunterlassen\b|\bweglassen\b"
+                       r"|\bsein\s+lassen\b|\bzu\s+lassen\b|\blässt\b", re.I)
+FRIST_RE = re.compile(
+    r"du hast noch|spätestens|bis dahin musst|damals hast du|damals ist"
+    r"|wird sich entscheiden|steht bevor", re.I)
+
+def _p10_wortscan(chapters):
+    p = _Probe("P10", "Wortscan (Innere Arbeit, Probe 9)")
+    p.einheit = "Absätze"
+    supertreffer = []
+    listen = (("Klinisches", KLINISCH_RE), ("Bestätigung/Optimierung", BESTAETIGUNG_RE),
+              ("Zeit als Frist", FRIST_RE))
+    for ch in chapters:
+        bewegung = "—"
+        for b in ch["blocks"]:
+            if b.get("type") == "subhead":
+                bewegung = _ws(b["text"])
+                continue
+            if b.get("type") != "p":
+                continue
+            p.geprueft += 1
+            t = b["text"]
+            for m in SUPERLATIV_RE.finditer(t):
+                if _ist_kicker(ch, "Auftakt"):
+                    continue
+                supertreffer.append((ch, bewegung, m.group(0),
+                                     _satz_mit(t, m.start())))
+            for name, rx in listen:
+                gesehen = set()
+                for m in rx.finditer(t):
+                    satz = _satz_mit(t, m.start())
+                    if (name == "Bestätigung/Optimierung"
+                            and m.group(0).lower().startswith("solltest")
+                            and LASSEN_RE.search(satz or "")):
+                        continue
+                    key = (name, satz, m.group(0))
+                    if key in gesehen:
+                        continue
+                    gesehen.add(key)
+                    p.pruefen.append("%s · %s · %s: „%s“ — Treffer „%s“"
+                                     % (name, _bezeichnung(ch), bewegung,
+                                        _kurz(satz, 140), m.group(0)))
+    if len(supertreffer) > SUPERLATIV_DECKEL:
+        p.pruefen.append(
+            "Superlative: %d Treffer, Deckel %d (Auftakt zählt nicht mit) — %s"
+            % (len(supertreffer), SUPERLATIV_DECKEL,
+               "; ".join("%s: „%s“" % (_bezeichnung(c), w)
+                         for c, _bw, w, _sz in supertreffer)))
+    if p.geprueft == 0:
+        return p.aussagelos("kein Fließtext-Absatz gefunden")
+    return p.abschluss()
 
 def _p9_zwei_saetze(chapters, typ):
     p = _Probe("P9", "Zwei Sätze")
@@ -1356,7 +1485,8 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None):
     p6 = _p6_leitsatz(chapters, chart_data_pfad, themen)
     p8 = _p8_wortlisten(chapters)
     p9 = _p9_zwei_saetze(chapters, typ)
-    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9]
+    p10 = _p10_wortscan(chapters)
+    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10]
 
     fehler = sum(len(p.fehler) for p in proben)
     pruefen_n = sum(len(p.pruefen) for p in proben)
@@ -1399,7 +1529,7 @@ def bericht_aus(r):
     zeilen = ["Inhaltsprobe — %s gegen %s (Typ: %s, aus %s)"
               % (os.path.basename(r["analyse"]), os.path.basename(r["chart_data"]),
                  r["typ"] or "unbekannt", r["typ_quelle"])]
-    for nr in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"):
+    for nr in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"):
         zeilen += _zeile(r["proben"][nr])
     gruende = "; ".join("%s %s: %s" % (nr, art, g) for nr, art, g in r["uebersprungen"])
     zeilen.append("INHALTSPROBE: %d FEHLER · %d PRÜFEN · %d übersprungen%s"
@@ -1696,12 +1826,16 @@ def _selbsttest(still=False):
                    "Die Prüfung daran ist deine Sache.")                                          # P9a Nichtwissen
     a = ersetze(a, "Es ist eine ruhige Stelle in deinem Bild.",
                    "Es ist eine ruhige Stelle in deinem Bild; auch dieses Kapitel darfst du verwerfen.")  # P9b
+    a = ersetze(a, "Du bleibst, wo dein Partner längst gegangen ist.",
+                   "Du bleibst, wo dein Partner längst gegangen ist. Das ist keine "
+                   "Störung, und du solltest daran arbeiten.")                                    # P10 klinisch + Optimierung
     r2 = lauf(c, a)
     erwartet = {"P1": ("fehler", "Orb 2°10′"), "P2": ("fehler", "führendes Haus 3"),
                 "P3": ("fehler", "Themenliste sagt Merkur"), "P4": ("fehler", "fehlt: „Der Teil von dir"),
                 "P5": ("fehler", "Saturn führt kein Thema"), "P6": ("fehler", "Leitsatz nicht im Schlusswort"),
                 "P7": ("fehler", "Signatur nennt Merkur nicht"),
-                "P8": ("pruefen", "dein Partner"), "P9": ("pruefen", "Nichtwissens-Satz")}
+                "P8": ("pruefen", "dein Partner"), "P9": ("pruefen", "Nichtwissens-Satz"),
+                "P10": ("pruefen", "Störung")}
     fehlt = []
     for nr, (feld, marke) in erwartet.items():
         treffer = r2["proben"][nr][feld]
@@ -1709,6 +1843,12 @@ def _selbsttest(still=False):
             fehlt.append("%s: erwartet %s mit „%s“, gefunden: %s" % (nr, feld.upper(), marke, treffer or "nichts"))
     if not any("Verwerfungs-Erlaubnis" in t for t in r2["proben"]["P9"]["pruefen"]):
         fehlt.append("P9: erwartet PRUEFEN zur Verwerfungs-Erlaubnis")
+    # Negativkontrollen des Wortscans: die zwei Fehlalarm-Klassen, an denen die
+    # Modulregel gewachsen ist, duerfen NICHT anschlagen.
+    for _t in ("Zerstörung", "solltest du lassen", "dichtesten verschaltet",
+               "tiefste Punkt des Horoskops"):
+        if any(_t in t for t in r2["proben"]["P10"]["pruefen"]):
+            fehlt.append("P10: Fehlalarm bei „%s“" % _t)
     st2 = {nr: p["status"] for nr, p in r2["proben"].items()}
     berichte.append("Lauf 2 (eingebaute Fehler): " + ", ".join("%s=%s" % kv for kv in st2.items()))
     assert not fehlt, "Eine Probe findet ihren Testfehler nicht:\n  " + "\n  ".join(fehlt)

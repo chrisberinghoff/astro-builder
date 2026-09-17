@@ -251,15 +251,22 @@ def glyphe(x, y, size, color, zeichen, op=0.9):
 
 
 def cover_html():
+    # KEINE VORGABEWERTE (geaendert 2026-09-17, Klasse-2-Entscheidungslauf).
+    # Hier standen "GEBURTSBILD · SEELE · ZEIT" und "Anlage, Seelenweg und die
+    # Jahre <von> bis <bis>" als eingesetzte Texte, waehrend das Design-Modul
+    # Kicker und Untertitel ausdruecklich als NICHT vorgeschrieben fuehrt. Wer
+    # die Vorlage uebernimmt und die Zeilen nicht anfasst, rendert die Vorgabe
+    # eines anderen Typs. Jetzt stehen sichtbare Marken: bleiben sie stehen,
+    # faellt es im ersten Rasterblick auf.
     return f"""<section class="cover">
 <div class="cv-sky"></div>
 {cover_stars()}
 {cover_svg()}
-<div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">GEBURTSBILD · SEELE · ZEIT</div>
+<div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">&lt;&lt;KICKER — aus dem @@DECKBLATT-Block, KEIN Vorgabewert&gt;&gt;</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
 <div class="cv-block cv-sub" style="top:{y2cm(186):.2f}cm">Horoskop</div>
-<div class="cv-block cv-sub2" style="top:{y2cm(208):.2f}cm">Anlage, Seelenweg und die Jahre &lt;von&gt; bis &lt;bis&gt;</div>
+<div class="cv-block cv-sub2" style="top:{y2cm(208):.2f}cm">&lt;&lt;UNTERTITEL — aus dem @@DECKBLATT-Block&gt;&gt;</div>
 <div class="cv-block cv-leit" style="top:{y2cm(788):.2f}cm">{html.escape(LEITSATZ)}</div>
 <div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">&lt;TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT&gt;</div>
 </section>"""
@@ -293,6 +300,19 @@ REIHENFOLGE = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
 KLASSISCH = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
              'Uranus', 'Neptun', 'Pluto']
 _BY = {f['name']: f for f in cd.factors}
+# NAMENSTOLERANZ (neu 2026-09-17, Klasse-2-Entscheidungslauf,
+# Wiederholungstaeter aus zwei Laufabschnitten). REIHENFOLGE fuehrt die
+# ASCII-Schreibweisen 'Suedknoten' und 'Glueckspunkt'; der
+# chartdata.py-Vertrag schreibt 'Suedknoten' mit ue, den Gluecks-Punkt aber
+# mit Umlaut ('Glueckspunkt' vs 'Glückspunkt'). Woertlich abgeschrieben gab
+# das einen KeyError in konst_zeilen(). radix loest das seit dem 2026-09-15
+# mit Aliassen; hier dasselbe, damit die Vorlage nicht vom Zufall der
+# Schreibweise haengt.
+for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
+    if _a in _BY and _b not in _BY:
+        _BY[_b] = _BY[_a]
+    elif _b in _BY and _a not in _BY:
+        _BY[_a] = _BY[_b]
 
 RAD_NOTE = (f'{VORNAME} · <TT. Monat JJJJ, HH:MM MEZ/MESZ> · <Ort> · '
             'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
