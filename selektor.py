@@ -548,6 +548,56 @@ UEBERSPRINGBAR = ('Sonnenzeichen-Hintergrund', 'Grundlagen',
                   'Spezialfaktor-Methodik')
 
 
+# Zeichen-Tabellen, aus denen nur die eigene Zeile gebraucht wird.
+# key -> (Feld in chart['achsen'], Zeilen-Praefix)
+ZEICHENTABELLEN = {
+    'MC_IN_ZEICHEN':      ('MC', 'MC in %s'),
+    'IC_IN_ZEICHEN':      ('IC', 'IC in %s'),
+    'DESZENDENT_TABELLE': ('DC', 'Deszendent %s'),
+}
+
+
+def _zeichen_norm(s):
+    """Versalien, Umlaute aufgeloest — fuer den Vergleich Chart gegen Bibliothek."""
+    s = (s or '').upper()
+    for a, b in (('\u00c4', 'AE'), ('\u00d6', 'OE'), ('\u00dc', 'UE'),
+                 ('\u00e4', 'AE'), ('\u00f6', 'OE'), ('\u00fc', 'UE'),
+                 ('\u00df', 'SS')):
+        s = s.replace(a, b)
+    return s
+
+
+def _zeichenschnitt(text, praefix_muster, zeichen):
+    """Kopf des Blocks + die EINE Zeile des eigenen Zeichens.
+
+    Gibt (neuer_text, gespart_zeilen) zurueck. Wird die Zeile nicht gefunden,
+    kommt der Text unveraendert zurueck — ein Schnitt, der nicht sicher ist,
+    findet nicht statt.
+    """
+    if not zeichen:
+        return text, 0
+    ziel = _zeichen_norm(praefix_muster % zeichen)
+    zeilen = text.split('\n')
+    treffer = [i for i, z in enumerate(zeilen)
+               if _zeichen_norm(z.strip()).startswith(ziel)]
+    if len(treffer) != 1:
+        return text, 0
+    # Kopf = alles vor der ERSTEN Zeile, die dem Muster irgendeines Zeichens folgt
+    stamm = _zeichen_norm(praefix_muster.split('%s')[0].strip())
+    erste = None
+    for i, z in enumerate(zeilen):
+        if _zeichen_norm(z.strip()).startswith(stamm) and ':' in z:
+            erste = i
+            break
+    if erste is None or erste > treffer[0]:
+        return text, 0
+    behalten = zeilen[:erste] + [zeilen[treffer[0]]]
+    gespart = len(zeilen) - len(behalten)
+    if gespart <= 0:
+        return text, 0
+    return '\n'.join(behalten).rstrip() + '\n', gespart
+
+
 def select(chart_text, blocks_ref):
     """blocks_ref = Verzeichnis blocks/ ODER Bündeldatei blocks_bundle.txt."""
     chart = parse_chart(chart_text)
@@ -580,7 +630,18 @@ def select(chart_text, blocks_ref):
             continue
         if (src, key) not in seen:
             seen.add((src, key))
-            ordered.append((gruppe, src, key, note, bl[key]))
+            _txt = bl[key]
+            if key in ZEICHENTABELLEN:
+                _feld, _muster = ZEICHENTABELLEN[key]
+                _txt, _gespart = _zeichenschnitt(
+                    _txt, _muster, chart['achsen'].get(_feld))
+                if _gespart:
+                    prot.append('ZEICHENSCHNITT %s (%s) -> %d Zeilen gespart'
+                                % (key, chart['achsen'].get(_feld), _gespart))
+                else:
+                    prot.append('ZEICHENSCHNITT %s -> nicht geschnitten '
+                                '(Zeile nicht eindeutig), ganzer Block' % key)
+            ordered.append((gruppe, src, key, note, _txt))
     return chart, req, prot, ordered, missing, grenz
 
 
