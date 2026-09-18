@@ -2037,6 +2037,17 @@ _AH_NAME = r"(?:AC|MC|DC|IC|[A-ZÄÖÜ][a-zäöüß]+)"
 # begrenzt sich selbst.
 _AH_SCHNITT = r"\n(?:#{2,3} |@@)"
 
+# WORT-TRENNER DER ZUSATZEBENE (neu 2026-09-18, Pruefbericht Geburtshoroskop
+# Schritt 1+2 vom 17.09.d, Klasse 1 Nr. 1.3). Das Datenblatt-Modul schreibt fuer
+# Untergrund-Aspekte einen Trenner in Halbgeviertstrichen vor
+# (`Merkur --Anderthalbquadrat-- Uranus`, mit U+2013). Im `aspekte=`-Feld der
+# Themenliste wurde er erkannt, in der WEGLASSUNGSLISTE und in der
+# Untergrund-Tabelle nicht: Wer den Satz aus dem Modul dorthin uebertrug, bekam
+# FEHLER auf eine korrekt dokumentierte Weglassung. Nachgestellt mit drei
+# Minimalfaellen — Modulform FEHLER, Glyphe gruen, Gedankenstrich gruen. Seither
+# gilt an ALLEN drei Stellen dieselbe Trennermenge.
+_AH_WORT = r"\u2013[A-Za-z\u00c4\u00d6\u00dca-z\u00e4\u00f6\u00fc\u00df]+\u2013"
+
 
 def _ah_abschnitt(txt, marke, ab=0):
     """Text ab `marke` bis zur naechsten Ueberschrift oder zum naechsten
@@ -2116,7 +2127,7 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         # `aspekte=`-Felder der Themenliste, und dort verlangt das
         # Datenblatt-Modul fuer Zusatzaspekte ausdruecklich den
         # –Wort–-Trenner statt der Glyphe.
-        tabelle |= _paare(teil, "[—⚼∠]")
+        tabelle |= _paare(teil, "[—⚼∠]|" + _AH_WORT)
 
     heimat, doppelt = {}, []
     # EINSTIEGSMARKE DER THEMENLISTE (korrigiert 2026-09-16, Pruefbericht
@@ -2132,6 +2143,9 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     _erste = _re.search(r"THEMA \d+ \|", txt)
     if _erste:
         tl = "\n" + txt[_erste.start():]
+        _ende = _re.search(_AH_SCHNITT, tl)
+        if _ende:
+            tl = tl[:_ende.start()]
         for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:"):
             tl = tl.split(schluss)[0]
         for blk in _re.split(r"\nTHEMA \d+ \|", tl):
@@ -2177,9 +2191,9 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
             # Untergrund-Tabelle in der Pruefmenge, ihre Aspektarten tragen ⚼
             # und ∠ — ohne sie hier ist eine Untergrund-Zeile pruefbar, aber
             # nicht dokumentierbar. Beim Patchen der Grenzen aufgefallen.
-            dok |= _paare(teil, "[%s—⚼∠]" % _AH_GLYPH)
-            for m in _re.finditer(r"(%s)\s*(?:[%s⚼∠]|—)\s*(%s)"
-                                  % (_AH_NAME, _AH_GLYPH, _AH_NAME), teil):
+            dok |= _paare(teil, "[%s—⚼∠]|%s" % (_AH_GLYPH, _AH_WORT))
+            for m in _re.finditer(r"(%s)\s*(?:[%s⚼∠]|—|%s)\s*(%s)"
+                                  % (_AH_NAME, _AH_GLYPH, _AH_WORT, _AH_NAME), teil):
                 dok.add(frozenset([m.group(1), m.group(2)]))
 
     ohne = sorted(tabelle - set(heimat), key=lambda x: sorted(x))
@@ -2587,8 +2601,7 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None) -> str:
            "ordnet nur die Reihenfolge. Sortiert nach Enge.", ""]
     L += r["zeilen"]
     if r["konjunktionen"]:
-        L += ["", "ANMERKUNG (Pflicht, Regel vom 15.09.2026): Prüfen, welche der "
-              "Konjunktionen dieser Liste NICHT als Gabe ausgegeben werden, und "
-              "es hier begründen. In der Liste bleiben sie in jedem Fall. "
-              "Konjunktionen der Menge: " + ", ".join(r["konjunktionen"]) + "."]
+        L += ["", "Konjunktionen der Menge (bleiben in der Liste; je Zeile "
+                  "Gabe: ja — oder nein mit Begründung):"]
+        L += ["- %s — Gabe: " % k for k in r["konjunktionen"]]
     return "\n".join(L)

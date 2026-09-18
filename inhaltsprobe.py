@@ -1340,6 +1340,13 @@ BESTAETIGUNG_RE = re.compile(
     r"es ist kein Zufall|nicht umsonst|darin lebst du|das passt genau zu"
     r"|deshalb bist du|solltest du|musst du lernen|arbeite an dir"
     r"|dein Potenzial|das Beste aus dir", re.I)
+# VERNEINUNG UNMITTELBAR VOR DEM KLINISCHEN WORT ist kein Treffer (neu
+# 2026-09-18). Gesucht ist das Wort in BEHAUPTENDER Verwendung. Der Abstand ist
+# bewusst kurz (24 Zeichen), damit eine Verneinung irgendwo im Satz nicht die
+# ganze Zeile freikauft.
+KLINISCH_VERNEINT_RE = re.compile(
+    r"(?:kein|keine|keiner|keinem|keinen|nicht|nie|niemals|weder|statt)"
+    r"[^.!?]{0,24}$", re.I)
 # Der Lassen-Satz von Prinzip 12 ist der Grund, warum "solltest du" ueberhaupt
 # vorkommt. Er ist kein Treffer.
 LASSEN_RE = re.compile(r"\bnicht\b|\blassen\b|\bunterlassen\b|\bweglassen\b"
@@ -1376,6 +1383,9 @@ def _p10_wortscan(chapters):
                     if (name == "Bestätigung/Optimierung"
                             and m.group(0).lower().startswith("solltest")
                             and LASSEN_RE.search(satz or "")):
+                        continue
+                    if (name == "Klinisches"
+                            and KLINISCH_VERNEINT_RE.search(t[:m.start()])):
                         continue
                     key = (name, satz, m.group(0))
                     if key in gesehen:
@@ -1827,8 +1837,8 @@ def _selbsttest(still=False):
     a = ersetze(a, "Es ist eine ruhige Stelle in deinem Bild.",
                    "Es ist eine ruhige Stelle in deinem Bild; auch dieses Kapitel darfst du verwerfen.")  # P9b
     a = ersetze(a, "Du bleibst, wo dein Partner längst gegangen ist.",
-                   "Du bleibst, wo dein Partner längst gegangen ist. Das ist keine "
-                   "Störung, und du solltest daran arbeiten.")                                    # P10 klinisch + Optimierung
+                   "Du bleibst, wo dein Partner längst gegangen ist. Das wirkt wie eine "
+                   "Störung, und du solltest daran arbeiten. Eine Störung ist es nicht.")         # P10 klinisch + Optimierung
     r2 = lauf(c, a)
     erwartet = {"P1": ("fehler", "Orb 2°10′"), "P2": ("fehler", "führendes Haus 3"),
                 "P3": ("fehler", "Themenliste sagt Merkur"), "P4": ("fehler", "fehlt: „Der Teil von dir"),
@@ -1846,7 +1856,13 @@ def _selbsttest(still=False):
     # Negativkontrollen des Wortscans: die zwei Fehlalarm-Klassen, an denen die
     # Modulregel gewachsen ist, duerfen NICHT anschlagen.
     for _t in ("Zerstörung", "solltest du lassen", "dichtesten verschaltet",
-               "tiefste Punkt des Horoskops"):
+               "tiefste Punkt des Horoskops",
+               # neu 2026-09-18: verneintes klinisches Wort. Die Innere Arbeit
+               # verlangt den Satz "das ist kein Leiden und keine Stoerung"
+               # ausdruecklich; der Scan meldete ihn (drei Fehlalarme in einem
+               # Lauf, dazu einer im Transit), und der Lauf schrieb die
+               # regelkonforme Stelle um, damit die Probe schweigt.
+               "keine Störung", "kein Leiden und keine"):
         if any(_t in t for t in r2["proben"]["P10"]["pruefen"]):
             fehlt.append("P10: Fehlalarm bei „%s“" % _t)
     st2 = {nr: p["status"] for nr, p in r2["proben"].items()}

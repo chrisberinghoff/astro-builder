@@ -3159,9 +3159,11 @@ def strukturbild_text(sb):
             # gezählt statt gedruckt.
             _winkelzeilen = [k for k in sk if k['winkel']]
             if _winkelzeilen:
+                _wpaare = sorted({f"{k['herrscher']} an {k['winkel']}"
+                                  for k in _winkelzeilen})
                 L.append(f"- Spitzen-Kontakte an einem Winkel: "
                          f"{len(_winkelzeilen)} "
-                         f"({', '.join(sorted({k['winkel'] for k in _winkelzeilen}))}) "
+                         f"({', '.join(_wpaare)}) "
                          f"— nicht aufgeführt, dort gilt die Aspektliste.")
             for k in sk:
                 if k['winkel']:
