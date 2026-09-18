@@ -50,7 +50,7 @@ weiter (Status im Report: haeuser: JA/AUSGEKLAMMERT).
 CLI:
     python3 transit.py <chart_data.md> [--start YYYY-MM-DD] [--months 24] \\
             [--asof YYYY-MM-DD] [--lookback 6] [--orb 1.5] [--orb-weit 3.0] \\
-            [--primary Venus,Mars,Pluto,Saturn,Chiron,Nordknoten] \\
+            [--primary Venus,Mars,Pluto,Saturn,Chiron,Mondknoten] \\
             [--cusps "175.3,201.0,..."] [--ephe <verzeichnis>] [--json out.json]
 
 Modul:
@@ -178,7 +178,21 @@ ANMARSCH_TAGE = 90                               # Vorlauf-Fenster im Jetzt-Teil
 # Nach-/Vorwirkzeit im Jetzt-Teil, gedeckelt nach Verweildauer des Transiters.
 # Ohne Eintrag gilt das volle Rueckblick- bzw. Anmarschfenster (die ganz Langsamen).
 NACHWIRK = {'Mars':21,'Jupiter':60,'Knoten':90,'Saturn':120}
-NAME_MAP = {'Knoten':'Nordknoten'}               # factors-Name -> Radix-Zielname
+# REPARATUR 2026-09-18 (Pruefbericht Transit Schritt 1+2 2026-09-17, Klasse 1
+# Nr. 1.1; Betreiber-Entscheidung 18.09.: `Mondknoten` ist der Zielname).
+# Vorher: {'Knoten':'Nordknoten'} — die Abbildung ging vom ALTEN factors-Namen
+# `Knoten` aus. Der chartdata.py-Vertrag des Datenblatt-Moduls schreibt seit der
+# Vertragsnamen-Umstellung `Mondknoten` vor; bei einem vertragskonformen Block
+# lief NAME_MAP deshalb leer, das Ziel hiess `Mondknoten`, und `--primary
+# Nordknoten` brach hart ab, obwohl Transit-Modul und Fehlermeldung genau
+# diesen Namen vorschrieben. Jetzt normalisieren beide Altnamen auf den
+# Vertragsnamen; ALIAS_ZIEL unten tut dasselbe fuer die EINGABE.
+NAME_MAP = {'Knoten': 'Mondknoten',              # factors-Name -> Radix-Zielname
+            'Nordknoten': 'Mondknoten'}
+
+# Eingabe-Aliasse fuer --primary / primary_extra. Ein Aufruf mit `Knoten` oder
+# `Nordknoten` soll nicht mehr abbrechen, sondern auf den Vertragsnamen zeigen.
+ALIAS_ZIEL = {'Knoten': 'Mondknoten', 'Nordknoten': 'Mondknoten'}
 
 # ---------------------------------------------------------------------------
 # Radix aus chart_data.md (factors/achsen-Block)
@@ -186,7 +200,7 @@ NAME_MAP = {'Knoten':'Nordknoten'}               # factors-Name -> Radix-Zielnam
 def radix_from_chart_data(path):
     """Liest name/lon-Paare aus dem factors- UND achsen-Block der chart_data.md.
     Erwartet Dict-Literale wie {'name':'Sonne', ... 'lon':45.4833, ...}. Gibt
-    {Name: ekl. Laenge} zurueck (Knoten -> Nordknoten normalisiert)."""
+    {Name: ekl. Laenge} zurueck (Knoten/Nordknoten -> Mondknoten normalisiert)."""
     txt = open(path, encoding='utf-8').read()
     rx = re.compile(r"'name'\s*:\s*'([^']+)'[^{}]*?'lon'\s*:\s*(-?\d+\.?\d*)")
     radix = {}
@@ -456,13 +470,18 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     # Bis dahin wurde ein unbekannter Name STILL verworfen; im Pruefall fielen
     # dadurch zwei Langlaeufer von 20 und 17 Monaten aus der primaeren Auswahl,
     # weil `Knoten` uebergeben wurde, das Radix-Ziel aber `Nordknoten` heisst.
-    unbekannt = [x for x in (primary_extra or []) if x not in radix]
+    # REPARATUR 2026-09-18: Altnamen der Knotenachse werden auf den Vertragsnamen
+    # gezogen, statt einen Abbruch auszuloesen (s. Kommentar bei NAME_MAP).
+    primary_extra = [ALIAS_ZIEL.get(x, x) for x in (primary_extra or [])]
+    unbekannt = [x for x in primary_extra if x not in radix]
     if unbekannt:
         raise ValueError(
             "unbekannte primaere Ziele: %s\n"
             "  Erlaubt sind die Namen der Radix-Punkte: %s\n"
-            "  Haeufige Verwechslung: der Mondknoten heisst hier `Nordknoten`, "
-            "nicht `Knoten`." % (", ".join(unbekannt), ", ".join(sorted(radix))))
+            "  Haeufige Verwechslung: der Mondknoten heisst hier `Mondknoten` "
+            "(Vertragsname des Datenblatt-Moduls); `Knoten` und `Nordknoten` "
+            "werden still darauf abgebildet." % (", ".join(unbekannt),
+                                                 ", ".join(sorted(radix))))
     primary = set(PERSONAL) | set(primary_extra or [])
     spiegel = spiegel_ziele(radix)
     transiters, chiron_on, chiron_info = _transiters(
@@ -1159,7 +1178,9 @@ if __name__ == "__main__":
     ap.add_argument("--lookback", type=int, default=LOOKBACK_M, help="Rueckblick in Monaten")
     ap.add_argument("--orb", type=float, default=ORB, help="Wirk-Orb (Deutung/Quartale)")
     ap.add_argument("--orb-weit", type=float, default=ORB_WEIT, help="Erfassungs-/Jetzt-Orb")
-    ap.add_argument("--primary", default="", help="zusaetzliche primaere Ziele, kommagetrennt")
+    ap.add_argument("--primary", default="",
+                    help="zusaetzliche primaere Ziele, kommagetrennt "
+                         "(Radix-Namen; die Knotenachse heisst `Mondknoten`)")
     ap.add_argument("--cusps", default=None,
                     help="12 Koch-Spitzen als Dezimalgrad, kommagetrennt (ueberschreibt Datei)")
     ap.add_argument("--ephe", default=None,
