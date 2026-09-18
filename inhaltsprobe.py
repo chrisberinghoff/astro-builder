@@ -711,8 +711,14 @@ def _bezeichnung(ch):
 def _p1_beleg_aspekte(chapters, typ, tabelle):
     p = _Probe("P1", "Beleg-Aspekte")
     p.einheit = "Segmente"
-    if not tabelle:
+    # Ohne Aspekttabellen ist im Geburtshoroskop nichts zu pruefen. Im TRANSIT
+    # schon: Dort wird die FORM des Kontakt-Segments geprueft (eine Aspektbeziehung,
+    # Exaktdaten), und die haengt nicht an den Radix-Tabellen (neu 2026-09-18).
+    if not tabelle and typ != "transit":
         return p.aussagelos("keine Aspektzeile in den vier Aspekttabellen gefunden")
+    if not tabelle:
+        p.hinweise.append("Keine Radix-Aspekttabellen in der chart_data — im Transit "
+                          "wird nur die FORM der Kontakt-Segmente geprüft")
     index = {}
     for e in tabelle:
         index.setdefault(frozenset([e["a"], e["b"]]), []).append(e)
@@ -791,6 +797,26 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
             p.pruefen.append("%s — Beleg nennt Stufe „%s“, Tabelle führt „%s“"
                              % (stelle, e["stufe"], passend[0]["stufe"]))
 
+    def pruefe_transit_segment(stelle, seg, eintr):
+        """Transit-Beleg: Form pruefen, nicht gegen die Radix-Tabellen halten.
+
+        Der Kontakt traegt statt des Orbs die Exaktdaten (Transit-Modul). Ein
+        Tabellenabgleich waere sinnlos und faellt gelegentlich zufaellig aus:
+        Die Radix-Aspekttabellen des Transit-Datenblatts fuehren Radix-Paare,
+        nicht Transit-Kontakte. Zustaendig ist dort build.kontakt_heimat_bericht().
+        Geprueft wird: genau EINE Aspektbeziehung, und Exaktdaten vorhanden.
+        """
+        p.geprueft += 1
+        if len(eintr) > 1:
+            p.fehler.append("%s — %d Aspektbeziehungen im Segment; ab Segment 2 gilt "
+                            "auch im Transit genau EINE" % (stelle, len(eintr)))
+            return
+        if not _TRANSIT_EXAKT_RE.search(seg):
+            p.pruefen.append("%s — kein Exaktdatum; das Transit-Segment trägt statt "
+                             "des Orbs die Exaktdaten (Transit-Modul, „Signatur, "
+                             "Beleg und ihre Darstellung“): „%s“"
+                             % (stelle, _kurz(seg, 90)))
+
     for ch in chapters:
         form = _beleg_form(ch, typ)
         if form is None:
@@ -807,6 +833,9 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
                     p.pruefen.append("%s, Segment %d: „%s“ — kein Aspekt im Segment (Normalformat: "
                                      "jedes Segment ab dem zweiten genau EINE Aspektbeziehung)"
                                      % (bez, i, _kurz(seg, 90)))
+                    continue
+                if typ == "transit" and _TRANSIT_KONTAKT_RE.search(seg):
+                    pruefe_transit_segment("%s, Segment %d" % (bez, i), seg, eintr)
                     continue
                 for e in eintr:
                     pruefe_eintrag("%s, Segment %d" % (bez, i), e)
@@ -957,25 +986,49 @@ def _name_in_text(schluessel, text):
     # Klartext-Standard ausdruecklich zulaesst. Im Prueflauf vom 16.09. war das
     # ein P7-FEHLER ohne Fehler.
     for s, k in _FAKTOR_SCHREIBWEISEN:
-        if k == schluessel and re.search(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", text or ""):
+        if k != schluessel:
+            continue
+        # GEBEUGTE ACHSENNAMEN ZAEHLEN (neu 2026-09-18). "zum Aszendenten" ist
+        # dieselbe Angabe wie "Aszendent"; die harte Rueckschau meldete sie als
+        # "Faktor fehlt" — derselbe Fehlalarm-Typ wie "Fische-Sonne" am 16.09.
+        # Nur fuer Namen auf -ent (Aszendent, Deszendent), sonst nichts gelockert.
+        _endung = r"(?:en|es|s)?" if s.endswith("ent") else ""
+        if re.search(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + _endung + r"(?![\wäöüÄÖÜß])",
+                     text or ""):
             return True
     # "Knoten" allein gilt fuer den Mondknoten
     if schluessel == "MONDKNOTEN" and re.search(r"(?<![\wäöüß])Knoten(?:achse)?(?![\wäöüß])", text or ""):
         return True
     return False
 
+def _kontakt_faktoren(roh):
+    """Die beiden Faktoren eines Transit-Kontakts aus `fuehrt=`.
+
+    Das Transit-Modul schreibt seit dem 2026-09-18: `fuehrt=T-Saturn \u25a1 R-Sonne`.
+    -> (a, b) kanonisch, oder (None, None), wenn die Form nicht lesbar ist.
+    """
+    teile = re.findall(r"[TR]-\s*(" + _FAKTOR_RE + r")", roh or "")
+    if len(teile) != 2:
+        return None, None
+    return kanon(teile[0]), kanon(teile[1])
+
+
 def _p3_p7_kapitel_themen(chapters, typ, themen, sprache_analyse="de"):
     p3 = _Probe("P3", "Kapitel gegen Themenliste")
     p7 = _Probe("P7", "Signatur nennt den Führer")
     p3.einheit = p7.einheit = "Kapitel"
-    if typ != "geburt":
-        grund = ("Kapitel-Skelett des Typs %s ist in dieser Probe nicht hinterlegt (nur Geburtshoroskop)"
-                 % (typ or "unbekannt"))
+    if typ not in ("geburt", "transit"):
+        grund = ("Kapitel-Skelett des Typs %s ist in dieser Probe nicht hinterlegt "
+                 "(Geburtshoroskop und Transit)" % (typ or "unbekannt"))
         return p3.uebersprungen(grund), p7.uebersprungen(grund), {}
     if not themen:
         return p3.aussagelos("keine THEMA-Zeile in der chart_data gefunden"), \
                p7.aussagelos("keine THEMA-Zeile in der chart_data gefunden"), {}
-    kap = [ch for ch in chapters if (_kicker_nr(ch["kicker"]) or 0) >= 2]
+    # Im Geburtshoroskop ist Kapitel 1 das Getriebe-Kapitel, die Themen beginnen
+    # bei 2; im Transit ist Kapitel 1 schon das erste Thema (Auftakt, Lagebild,
+    # Sammelkapitel und Schlusswort tragen Wort-Kicker).
+    _ab = 1 if typ == "transit" else 2
+    kap = [ch for ch in chapters if (_kicker_nr(ch["kicker"]) or 0) >= _ab]
     zuordnung = {}
     if len(kap) != len(themen):
         p3.fehler.append("Zahl: %d nummerierte Themenkapitel (Kapitel 2 ff.), aber %d THEMA-Zeilen"
@@ -985,6 +1038,31 @@ def _p3_p7_kapitel_themen(chapters, typ, themen, sprache_analyse="de"):
         p7.geprueft += 1
         zuordnung[id(ch)] = th
         bez = _bezeichnung(ch)
+        if typ == "transit":
+            # fuehrt= traegt hier den KONTAKT. Geprueft wird, ob die Signatur BEIDE
+            # Faktoren nennt; der Beleg-Fuehrer-Vergleich entfaellt, weil Segment 1
+            # im Transit die Staende des getroffenen Radix-Punktes traegt.
+            ka, kb = _kontakt_faktoren(th["fuehrt_roh"])
+            if not ka:
+                p3.fehler.append("THEMA %d: fuehrt= trägt keinen lesbaren Kontakt "
+                                 "(erwartet `T-<Faktor> <Aspekt> R-<Faktor>`): „%s“"
+                                 % (th["nr"], _kurz(th["fuehrt_roh"], 60)))
+                continue
+            fehlt = [x for x in (ka, kb) if not _name_in_text(x, ch.get("signatur"))]
+            if fehlt:
+                p7.fehler.append("%s ↔ THEMA %d: Signatur nennt %s nicht („%s“)"
+                                 % (bez, th["nr"],
+                                    " und ".join(ANZEIGE.get(x, x) for x in fehlt),
+                                    _kurz(ch.get("signatur"), 70)))
+            # Der Kapitel-Schluessel heisst `title`, nicht `titel` — build.parse_analyse()
+            # gibt ihn so zurueck (stand als eigener Befund in der Sammelliste).
+            if sprache_analyse == "de" and th["titel"] \
+                    and _ws(th["titel"]).casefold() != _ws(ch.get("title")).casefold():
+                p3.pruefen.append("%s ↔ THEMA %d: Titel weicht vom Arbeitstitel ab "
+                                  "(„%s“ gegen „%s“)"
+                                  % (bez, th["nr"], _kurz(ch.get("title"), 50),
+                                     _kurz(th["titel"], 50)))
+            continue
         soll = th["fuehrt"]
         if soll is None:
             p3.fehler.append("THEMA %d: fuehrt= trägt keinen lesbaren Faktor („%s“)"
@@ -1288,6 +1366,10 @@ def _p8_wortlisten(chapters):
     if p.geprueft == 0:
         return p.aussagelos("kein Fließtext-Absatz gefunden")
     return p.abschluss()
+
+# Ein Transit-Kontakt im Beleg: T-<Faktor> <Aspekt> R-<Faktor> — exakt <Daten>.
+_TRANSIT_KONTAKT_RE = re.compile(r"(?<![\w\u00e4\u00f6\u00fc\u00df])[TR]-\s*[A-Z\u00c4\u00d6\u00dc]")
+_TRANSIT_EXAKT_RE = re.compile(r"exakt\w*\s*:?\s*\d{1,2}\.\d{1,2}\.\d{4}", re.I)
 
 NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem Horoskop|in keinem Horoskop"
                             r"|I do not know|I don't know|no chart contains|in no chart"
