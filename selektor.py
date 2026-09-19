@@ -29,12 +29,44 @@ seit 30.07.2026 ein HARTER Fehler (vorher fiel er lautlos durch, s. Kommentar be
 FAKTOR_ALIAS).
 
 FUEHRT-FELD (seit 2026-09-06): Traegt eine FAKTOR-Zeile `fuehrt=ja`, fuehrt
-dieser Faktor laut Themenliste ein Kapitel. Zwei Wirkungen: (a) bei einem
-Spezialfaktor werden seine Methoden-Segmente (_ALLG/_SEC_*) in die normale
-Gruppe gezogen statt in die ueberspringbare 'Spezialfaktor-Methodik'; (b) der
-Grenzlagen-Warnblock sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob
-beide nur in seiner Zeile im Rechenschaftskapitel stehen. Ohne das Feld
-verhaelt sich alles wie zuvor — das Feld ist optional und additiv.
+dieser Faktor laut Themenliste ein Kapitel. Zwei Wirkungen: (a) bei der SONNE
+wandert das Sonnenzeichen-Kapitel in die gelesene Gruppe 'Sonnenzeichen' statt
+in die ueberspringbare 'Sonnenzeichen-Hintergrund'; (b) der Grenzlagen-Warnblock
+sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob beide nur angegeben
+werden (Registerzeile). Ohne das Feld verhaelt sich alles wie zuvor — das Feld
+ist optional und additiv.
+Die Methoden-Segmente der Spezialfaktoren (_ALLG/_SEC_*) bleiben seit dem
+2026-09-19 (W59, Chris-Entscheidung Frage 16) AUCH bei `fuehrt=ja` in der
+ueberspringbaren 'Spezialfaktor-Methodik'. Vorher zog `fuehrt=ja` sie in die
+gelesene Gruppe — 87 bis 135 Zeilen je Faktor, gebraucht wurden drei bis vier
+Saetze. Das chart-spezifische Material (Zeichen, Haus, Aspekte) steht ohnehin
+immer in der gelesenen Gruppe.
+
+GRENZLAGEN-ZEILEN (seit 2026-09-19, W35 und F19): Je grenzlagigem Faktor stehen
+im ⚠-Block fertige Zeilen zum Uebernehmen — die Signatur-WORTFORM fuer den
+Klartext (echte Umlaute, keine Gradzahl, fuehrendes Haus vorn), die Notation
+fuer den Fachmodus, die Beleg-Angabe (die EINZIGE Stelle mit Gradzahl) und fuer
+einen nicht fuehrenden Faktor die Hausangabe seiner Registerzeile. Der Wortlaut
+fuer den nicht fuehrenden Faktor haengt vom Typ ab: Heisst die Datei
+`<klient>_Transit_chart_data.md`, gibt es kein Rechenschaftskapitel (das
+Register „Mitlaufendes" fuehrt Kontakte, nicht Faktoren).
+
+FEHLSTELLEN (eindeutig seit 2026-09-19, W36): Ein angeforderter Aspekt, fuer den
+die Bibliothek keinen Block fuehrt (Spezialfaktor mit Spezialfaktor, Achse mit
+Achse, ausserhalb des Systems), IST eine Fehlstelle. Sie bricht nicht ab: Die
+referenz.md wird geschrieben, ihr Kopf zaehlt die Fehlstelle, der Abschnitt
+„⚠ FEHLSTELLEN" nennt sie samt Anweisung (aus den Nachbarbloecken deuten, in der
+Referenzdatei-Liste melden), das Auswahl-Protokoll schreibt „FEHLSTELLE" und die
+Schlusszeile zaehlt sie. Vorher stand im selben Lauf „nicht als Block gefuehrt"
+neben „Fehlstellen: 0" und „keine Fehlstelle". Hart bleibt, was die Bibliothek
+fuehren MUESSTE und nicht hat (FEHLT … in …).
+
+NUR-LISTE-MODUS (seit 2026-09-19, W40): `--liste` sagt, welche
+Bibliotheksdateien und wie viele Bloecke das Chart braucht, und nennt die
+Fehlstellen — ohne Bibliothek und ohne eine referenz.md zu schreiben. Gedacht
+fuer die Referenzdatei-Liste am Ende von Schritt 1 (dieselben harten Proben wie
+der volle Lauf: leere Aspektebene, unbekannter Faktor). Mit der Bibliothek als
+zweitem Argument prueft er zusaetzlich, ob jeder Block da ist.
 
 @@SELEKTOR-Blockformat (Schritt 1 schreibt ihn ins chart_data.md):
     @@SELEKTOR
@@ -52,6 +84,8 @@ verhaelt sich alles wie zuvor — das Feld ist optional und additiv.
     @@ENDE
 
 Aufruf:  python3 selektor.py <chart_data.md> [blocks_dir] [out.md]
+         python3 selektor.py <chart_data.md> --liste [blocks_bundle.txt]
+         python3 selektor.py --selbsttest      (ohne Bibliothek, konstruierte Werte)
 """
 import os
 import re
@@ -194,19 +228,101 @@ def grenz_stufe(abstand):
         'Nebenhaus als deutlicher Nebenton' % a)
 
 
-def signatur_notation(g):
-    """Fertige Signatur-Zeile fuer den Klartext-Modus (Schritt 2 uebernimmt sie 1:1).
+# 2026-09-19 (W35): Bausteine der fertigen Grenzlagen-Zeilen. Echte Umlaute,
+# weil die Zeilen 1:1 in die Analyse gehen (T34-18d Nr. 22: „fuehrt" stand so in
+# einer Signatur). Dativ fuer die Signatur („im zwoelften Haus"), Nominativ fuer
+# die Registerzeile („zwoelftes/elftes Haus, Schwellenlage").
+_ORD_DATIV = {1: 'ersten', 2: 'zweiten', 3: 'dritten', 4: 'vierten',
+              5: 'fünften', 6: 'sechsten', 7: 'siebten', 8: 'achten',
+              9: 'neunten', 10: 'zehnten', 11: 'elften', 12: 'zwölften'}
+_ORD_NOM = {1: 'erstes', 2: 'zweites', 3: 'drittes', 4: 'viertes',
+            5: 'fünftes', 6: 'sechstes', 7: 'siebtes', 8: 'achtes',
+            9: 'neuntes', 10: 'zehntes', 11: 'elftes', 12: 'zwölftes'}
+FAKTOR_ANZEIGE = {'SONNE': 'Sonne', 'MOND': 'Mond', 'MERKUR': 'Merkur',
+                  'VENUS': 'Venus', 'MARS': 'Mars', 'JUPITER': 'Jupiter',
+                  'SATURN': 'Saturn', 'URANUS': 'Uranus', 'NEPTUN': 'Neptun',
+                  'PLUTO': 'Pluto', 'CHIRON': 'Chiron', 'LILITH': 'Lilith',
+                  'MONDKNOTEN': 'Mondknoten', 'SUEDKNOTEN': 'Südknoten',
+                  'PHOLUS': 'Pholus', 'GLUECKSPUNKT': 'Glückspunkt'}
 
-    Das fuehrende Haus steht vorn. Gradzahl und Hausnummern gehoeren im
-    Klartext-Modus ausschliesslich in Signatur/Beleg, nie in den Fliesstext.
-    """
-    h, nh = g['haus'], g['nebenhaus']
-    grad = _gradmin(g['abstand'])
+
+def _ord(n, tafel):
+    """Hausnummer -> Ordinalwort; Unlesbares bleibt als Zahl mit Punkt stehen."""
+    try:
+        return tafel[int(n)]
+    except (KeyError, TypeError, ValueError):
+        return '%s.' % n
+
+
+def _ordnung(g):
+    """(fuehrendes Haus, zweites Haus, Stufenwort). Schwellenlage (<= 2°): das
+    Nebenhaus fuehrt; Grenzlage (2°–5°) und fehlender Abstand: das rechnerische."""
     if g['stufe'] == 'nebenhaus_fuehrt':
-        return ('Haus %s/%s (Schwellenlage, %s vor Spitze %s; Haus %s fuehrt, '
-                '%s klingt mit)' % (nh, h, grad, nh, nh, h))
-    return ('Haus %s/%s (Grenzlage, %s vor Spitze %s; Haus %s fuehrt, '
-            '%s klingt mit)' % (h, nh, grad, nh, h, nh))
+        return g['nebenhaus'], g['haus'], 'Schwellenlage'
+    return g['haus'], g['nebenhaus'], 'Grenzlage'
+
+
+def signatur_notation(g):
+    """Fertige Signatur-WORTFORM fuer den Klartext-Standard (Schritt 2 uebernimmt sie 1:1).
+
+    Seit 2026-09-19 (W35) in Worten, mit echten Umlauten und OHNE Gradzahl, wie
+    es das Typmodul fuer den Klartext verlangt („Saturn im zwoelften Haus, dicht
+    an der Schwelle aus dem elften"). Vorher lieferte die Funktion die Notation
+    mit Grad („Haus 11/12 (Grenzlage, 3°13′ vor Spitze 12; Haus 11 fuehrt, 12
+    klingt mit)") — Gradzahl und ASCII-Umlaut in einer Zeile, die 1:1 in die
+    Signatur ging. Das fuehrende Haus steht vorn: bei Schwellenlage das
+    Nebenhaus („dicht an der Schwelle aus dem …"), bei Grenzlage das
+    rechnerische Haus („nahe an der Schwelle zum …"). Fachmodus:
+    fachmodus_notation(); die Gradzahl steht nur im Beleg: beleg_notation().
+    """
+    fh, zh, stufe = _ordnung(g)
+    name = FAKTOR_ANZEIGE.get(g['faktor'], g['faktor'].capitalize())
+    if stufe == 'Schwellenlage':
+        return '%s im %s Haus, dicht an der Schwelle aus dem %s' % (
+            name, _ord(fh, _ORD_DATIV), _ord(zh, _ORD_DATIV))
+    return '%s im %s Haus, nahe an der Schwelle zum %s' % (
+        name, _ord(fh, _ORD_DATIV), _ord(zh, _ORD_DATIV))
+
+
+def fachmodus_notation(g):
+    """Signatur im Fachmodus (Typmodul): „Haus 12/11, Schwellenlage" — fuehrendes
+    Haus vorn, ohne Gradzahl. Neu 2026-09-19 (W35)."""
+    fh, zh, stufe = _ordnung(g)
+    return 'Haus %s/%s, %s' % (fh, zh, stufe)
+
+
+def beleg_notation(g):
+    """Hausangabe fuer das Staende-Segment des Belegs — die EINZIGE Stelle mit
+    Gradzahl: „12./11. Haus (Schwellenlage, 1°47′ vor Spitze 12)". Form wie der
+    Klartext-Beleg („…, 9. Haus"); inhaltsprobe P2 liest das fuehrende Haus vorn.
+    Neu 2026-09-19 (W35)."""
+    fh, zh, stufe = _ordnung(g)
+    grad = _gradmin(g['abstand'])
+    if grad == '?':
+        return ('%s./%s. Haus (%s, Abstand fehlt — abstand= im '
+                '@@SELEKTOR-Block nachtragen)' % (fh, zh, stufe))
+    return '%s./%s. Haus (%s, %s vor Spitze %s)' % (fh, zh, stufe, grad,
+                                                    g['nebenhaus'])
+
+
+def register_notation(g):
+    """Hausangabe der Registerzeile eines NICHT fuehrenden Faktors (Typmodul,
+    Rechenschaftskapitel): „zwoelftes/elftes Haus, Schwellenlage". Neu
+    2026-09-19 (W35)."""
+    fh, zh, stufe = _ordnung(g)
+    return '%s/%s Haus, %s' % (_ord(fh, _ORD_NOM), _ord(zh, _ORD_NOM), stufe)
+
+
+def typ_aus_pfad(pfad):
+    """'transit' fuer <klient>_Transit_chart_data.md, sonst None.
+
+    Neu 2026-09-19 (F19): Der Wortlaut fuer einen nicht fuehrenden
+    grenzlagigen Faktor haengt vom Typ ab — im Transit gibt es kein
+    Rechenschaftskapitel. Erkannt wird am Kuerzel, das der Kern jedem
+    Nicht-Standard-Typ direkt nach dem Klientennamen vorschreibt.
+    """
+    name = os.path.basename(pfad or '')
+    return 'transit' if re.search(r'_transit_chart_data', name, re.I) else None
 
 
 # ---------------------------------------------------------------- Eingabe
@@ -463,11 +579,14 @@ def build_requests(chart):
             # Spezialfaktoren rund 700 Zeilen. Sie stehen deshalb seit dem
             # 2026-09-06 in einer EIGENEN Gruppe ganz am Ende der referenz.md
             # und sind dort ueberspringbar wie die GRUNDLAGEN_*-Segmente
-            # (Werkzeug-Modul, Punkt 2). Fuehrt der Faktor ein Thema
-            # (`fuehrt=ja` in der FAKTOR-Zeile), traegt seine Methodik die
-            # Deutung mit und wandert in die normale Gruppe, wird also gelesen.
-            gruppe_meth = ('Spezialfaktor' if f.get('fuehrt')
-                           else 'Spezialfaktor-Methodik')
+            # (Werkzeug-Modul, Punkt 2).
+            # 2026-09-19 (W59, Frage 16 = Option 1): auch bei `fuehrt=ja`.
+            # Vorher wanderte die Methodik eines fuehrenden Faktors in die
+            # gelesene Gruppe — 87 bis 135 Zeilen je Faktor, von denen die
+            # Laeufe drei bis vier Saetze brauchten. Das chart-spezifische
+            # Material (IN_<Zeichen>, HAUS_<n>, Aspekte) steht immer in der
+            # gelesenen Gruppe.
+            gruppe_meth = 'Spezialfaktor-Methodik'
             for suf in ('ALLG', 'SEC_HAUS', 'SEC_ZEICHEN', 'SEC_ASPEKT'):
                 add(gruppe_meth, src, '%s_%s' % (nm, suf))
             if z:
@@ -512,13 +631,20 @@ def build_requests(chart):
         add('Achsen', F04, 'IC_IN_ZEICHEN')
 
     # Aspekte
+    # 2026-09-19 (W36): Ein angeforderter Aspekt ohne Bibliotheksblock IST
+    # eine Fehlstelle. Vorher stand er nur als „nicht als Block gefuehrt" im
+    # Protokoll, waehrend Kopf und Schlusszeile „Fehlstellen: 0" bzw. „keine
+    # Fehlstelle" meldeten. Jetzt sammelt chart['ohne_block'] sie fuer Kopf,
+    # ⚠-Abschnitt und Schlusszeile (kein Abbruch, s. main()).
+    ohne = chart['ohne_block'] = []
     for a, b in chart['aspekte']:
         src, key, note = resolve_aspect(a, b)
         if key:
             add('Aspekte', src, key, note)
             prot.append('ASPEKT %s-%s -> %s%s' % (a, b, key, ' [' + note + ']' if note else ''))
         else:
-            prot.append('ASPEKT %s-%s -> %s' % (a, b, note))
+            ohne.append((a, b, note))
+            prot.append('ASPEKT %s-%s -> FEHLSTELLE: %s' % (a, b, note))
     return req, prot, grenz
 
 
@@ -645,10 +771,52 @@ def select(chart_text, blocks_ref):
     return chart, req, prot, ordered, missing, grenz
 
 
-def assemble_md(chart, ordered, prot, missing, grenz=None):
+# 2026-09-19 (F19): Was mit einem NICHT fuehrenden grenzlagigen Faktor
+# geschieht, haengt vom Typ ab. Im Transit gibt es kein Rechenschaftskapitel —
+# das Register „Mitlaufendes" fuehrt Kontakte, nicht Faktoren (T12-18c Nr. 10);
+# die Anweisung „Zeile im Rechenschaftskapitel" lief dort ins Leere.
+# Schluessel: typ_aus_pfad(); None = Geburtshoroskop, EA, Ultimativ.
+# Je Typ: (Marke der Faktorzeile, Absatz im Kopf des ⚠-Blocks, Etikett der
+# fertigen Hausangabe).
+NICHT_FUEHREND = {
+    None: (
+        ' [fuehrt kein Thema — Zeile im Rechenschaftskapitel, beide Haeuser, '
+        'keine Ausdeutung]',
+        '  - Er fuehrt KEINES -> seine Zeile im Rechenschaftskapitel traegt '
+        'beide Haeuser\n'
+        '    mit der Stufe (fertige Hausangabe je Faktor unten). Ausgedeutet '
+        'wird dort nichts.\n',
+        'Registerzeile, Hausangabe (1:1)'),
+    'transit': (
+        ' [fuehrt kein Thema — im Transit keine eigene Zeile (kein '
+        'Rechenschaftskapitel; das Register „Mitlaufendes" fuehrt Kontakte, '
+        'nicht Faktoren). Wo der Punkt genannt wird: beide Haeuser mit der '
+        'Stufe, keine Ausdeutung]',
+        '  - Er fuehrt KEINES -> im Transit gibt es kein Rechenschaftskapitel; '
+        'das Register\n'
+        '    „Mitlaufendes" fuehrt Kontakte, nicht Faktoren. Wo der Punkt '
+        'genannt wird\n'
+        '    (Registerzeile eines Kontakts, Signatur, Beleg), stehen beide '
+        'Haeuser mit der\n'
+        '    Stufe (fertige Hausangabe je Faktor unten). Ausgedeutet wird '
+        'nichts.\n',
+        'Hausangabe, wo der Punkt genannt wird (1:1)'),
+}
+
+
+def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
+    """typ: None (Geburtshoroskop, EA, Ultimativ) oder 'transit' — s.
+    typ_aus_pfad() und NICHT_FUEHREND (neu 2026-09-19, F19)."""
+    marke_nf, kopf_nf, etikett_nf = NICHT_FUEHREND.get(typ, NICHT_FUEHREND[None])
+    ohne = chart.get('ohne_block', [])
     out = ['# Referenzschnitt (Schritt 2) — nur chart-relevante Bloecke', '']
+    # 2026-09-19 (W36): Fehlstellen zaehlen auch die angeforderten Aspekte ohne
+    # Bibliotheksblock — vorher stand hier 0, waehrend das Protokoll „nicht als
+    # Block gefuehrt" meldete.
     out.append('> Maschinell aus blocks/ gezogen. Bloecke: %d. '
-               'Fehlstellen: %d.' % (len(ordered), len(missing)))
+               'Fehlstellen: %d.' % (len(ordered), len(missing) + len(ohne))
+               + (' Davon %d angeforderte(r) Aspekt(e) ohne Bibliotheksblock '
+                  '— s. ⚠ FEHLSTELLEN.' % len(ohne) if ohne else ''))
     # Ueberspringbare Abschnitte mit ihrem Umfang ausweisen. Ohne diese Zeile
     # ist beim Lesen nicht zu sehen, was der Schnitt kostet — und was er
     # sparen wuerde. Zahlen aus dem tatsaechlich gezogenen Schnitt, nicht
@@ -669,7 +837,32 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
                    'Bloecke (Zeichen, Haus,')
         out.append('> Aspekt, Spezialfaktor-Staende) werden IMMER voll '
                    'gelesen.')
+        if _z.get('Spezialfaktor-Methodik'):
+            # 2026-09-19 (W59, Frage 16 = Option 1)
+            out.append('> Die Methoden-Vorreden der Spezialfaktoren sind auch '
+                       'bei `fuehrt=ja` ueberspringbar: das chart-')
+            out.append('> spezifische Material eines fuehrenden Spezialfaktors '
+                       'steht unter "Spezialfaktor" und "Aspekte".')
     out.append('')
+    if ohne:
+        # 2026-09-19 (W36): eindeutige Meldung samt Anweisung — vorher stand
+        # nirgends, was mit einer solchen Fehlstelle geschieht (G12-18 Nr. 10).
+        out.append('\n' + '=' * 70)
+        out.append('## ⚠ FEHLSTELLEN — angeforderte Aspekte ohne '
+                   'Bibliotheksblock')
+        out.append('=' * 70)
+        out.append(
+            'Fuer diese ASPEKT-Zeilen fuehrt die Bibliothek keinen Block '
+            '(Spezialfaktor mit\nSpezialfaktor, Achse mit Achse oder '
+            'ausserhalb des Systems). Jede ist eine Fehlstelle,\nkein '
+            'Abbruch: aus den Nachbarbloecken deuten — die Staende beider '
+            'Faktoren und,\nbei einem Spezialfaktor, seine Aspekt-Vorrede '
+            '(<FAKTOR>_SEC_ASPEKT unter\n"Spezialfaktor-Methodik"; fuer diese '
+            'Deutung dort nachlesen) — und in der\nReferenzdatei-Liste '
+            'melden.\n')
+        for a, b, note in ohne:
+            out.append('- ASPEKT %s-%s — %s' % (a, b, note))
+        out.append('')
     if grenz:
         out.append('\n' + '=' * 70)
         out.append('## ⚠ GRENZLAGEN — Pflichtanweisung fuer die Deutung')
@@ -686,10 +879,7 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
             '    wegfallen; sie faellt sonst bei der Deckungsprobe (a) auf wie '
             'eine fehlende\n'
             '    Zeichenebene.\n'
-            '  - Er fuehrt KEINES -> seine Zeile im Rechenschaftskapitel traegt '
-            'beide Haeuser\n'
-            '    mit der Stufe („Haus 11/12, Schwellenlage"). Ausgedeutet wird '
-            'dort nichts.\n'
+            + kopf_nf +   # 2026-09-19 (F19): typabhaengig, s. NICHT_FUEHREND
             '\n'
             'Bis zum 2026-09-06 stand hier pauschal „werden in BEIDEN Haeusern '
             'gedeutet" —\ndas war gegenueber dem Kern veraltet und wies bei '
@@ -697,22 +887,29 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
             'nicht gilt.\n'
             '\n'
             'Beide Hausbloecke stehen unten unter "Planet-in-Haus" bzw. '
-            '"Spezialfaktor". Die\nfertige Signatur-Zeile (Klartext-Modus) '
-            'steht jeweils dabei und wird 1:1 in den\nKapitelkopf uebernommen; '
-            'im Fliesstext erscheint KEINE Gradzahl. Die Hausnummer darf '
+            '"Spezialfaktor". Je\nFaktor stehen fertige Zeilen dabei (seit '
+            '2026-09-19 in Worten, mit echten Umlauten):\ndie Signatur-Wortform '
+            'wird 1:1 in den Kapitelkopf uebernommen, im Fachmodus\ndie '
+            'Notation daneben. Die Gradzahl steht NUR in der Beleg-Angabe; im '
+            'Fliesstext\nerscheint KEINE Gradzahl. Die Hausnummer darf '
             'dort stehen\n(Klartext-Modul, Anker-Regel: "DARF stehen — beim '
             'ersten Mal mit dem\nLebensbereich dahinter"). Bis zum 2026-09-06 '
             'stand hier "weder Hausnummer\nnoch Gradzahl" — das widersprach '
             'dem Klartext-Modul (Pruefbericht Transit 1.7).\n')
         for g in grenz:
             marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
-                     if g.get('fuehrt')
-                     else ' [fuehrt kein Thema — Zeile im Rechenschaftskapitel, '
-                          'beide Haeuser, keine Ausdeutung]')
+                     if g.get('fuehrt') else marke_nf)
             out.append('- **%s**: Haus %s → Haus %s. %s.%s'
                        % (g['faktor'].capitalize(), g['haus'], g['nebenhaus'],
                           g['text'], marke))
-            out.append('  `Signatur: %s`' % signatur_notation(g))
+            # 2026-09-19 (W35): Wortform statt Notation mit Grad; die Gradzahl
+            # nur noch in der Beleg-Angabe.
+            out.append('  Signatur (Klartext, 1:1): `%s`' % signatur_notation(g))
+            out.append('  Fachmodus: `%s` · Beleg (einzige Stelle mit '
+                       'Gradzahl): `%s`'
+                       % (fachmodus_notation(g), beleg_notation(g)))
+            if not g.get('fuehrt'):
+                out.append('  %s: `%s`' % (etikett_nf, register_notation(g)))
             if g.get('spiegel_von'):
                 out.append('  ACHTUNG Spiegelpol: Deutungstext kommt gespiegelt '
                            'ueber %s (eigene Bloecke wuerden die Achse '
@@ -741,25 +938,56 @@ def assemble_md(chart, ordered, prot, missing, grenz=None):
     return '\n'.join(out) + '\n'
 
 
-def main():
-    chart_path = sys.argv[1]
-    blocks_dir = sys.argv[2] if len(sys.argv) > 2 else 'blocks'
-    out_path = sys.argv[3] if len(sys.argv) > 3 else \
-        os.path.basename(chart_path).replace('chart_data', 'referenz')
-    text = open(chart_path, encoding='utf-8').read()
-    chart, req, prot, ordered, missing, grenz = select(text, blocks_dir)
-    print('Faktoren :', len(chart['faktoren']),
-          '| Aspekte:', len(chart['aspekte']),
-          '| Bloecke gezogen:', len(ordered),
-          '| Grenzlagen:', len(grenz))
-    for g in grenz:
-        print('   GRENZLAGE %-12s Haus %s -> %s  (%s)'
-              % (g['faktor'], g['haus'], g['nebenhaus'], g['stufe']))
-    for h in chart.get('hinweise', []):
-        print('   HINWEIS %s' % h)
-    for roh, ziel in chart.get('spiegel', []):
-        print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
-              'mitgedeutet' % (roh, ziel))
+def referenzliste(chart_text, blocks_ref=None):
+    """Nur-Liste-Modus (neu 2026-09-19, W40): was das Chart aus der Bibliothek
+    braucht — ohne Bibliothek und ohne referenz.md.
+
+    Fuer die Referenzdatei-Liste am Ende von Schritt 1. Liest nur den
+    @@SELEKTOR-Block und leitet die Anfragen ab wie der volle Lauf
+    (build_requests); die Bibliothek ist optional und dient nur der Probe, ob
+    jeder Block da ist.
+
+    -> dict: dateien {Bibliotheksdatei: [Blockschluessel, ...]} (Wildcards wie
+       'GRUNDLAGEN_*' als ein Eintrag), fehlstellen [(A, B, Grund)] (angeforderte
+       Aspekte ohne Block), fehlt [(Datei, Schluessel)] (nur mit blocks_ref,
+       sonst None), chart (das geparste Datenblatt mit 'hinweise' und
+       'unbekannt').
+    """
+    chart = parse_chart(chart_text)
+    req, _prot, _grenz = build_requests(chart)
+    dateien = {}
+    for _gruppe, src, key, _note in req:
+        keys = dateien.setdefault(src, [])
+        if key not in keys:
+            keys.append(key)
+    fehlt = None
+    if blocks_ref is not None:
+        fehlt = select(chart_text, blocks_ref)[4]
+    return {'dateien': dateien, 'fehlstellen': list(chart.get('ohne_block', [])),
+            'fehlt': fehlt, 'chart': chart}
+
+
+AUFRUF = (
+    'Aufruf:\n'
+    '  python3 selektor.py <klient>[_KUERZEL]_chart_data.md blocks_bundle.txt '
+    '<klient>[_KUERZEL]_referenz.md\n'
+    '      Referenzschnitt (Schritt 2): schreibt die referenz.md. Alle drei '
+    'Argumente angeben.\n'
+    '  python3 selektor.py <klient>[_KUERZEL]_chart_data.md --liste '
+    '[blocks_bundle.txt]\n'
+    '      Nur-Liste-Modus (Ende Schritt 1): welche Bibliotheksdateien das '
+    'Chart braucht und\n'
+    '      welche angeforderten Aspekte keinen Block haben; schreibt nichts. '
+    'Mit der Bibliothek\n'
+    '      prueft er zusaetzlich, ob jeder Block da ist.\n'
+    '  python3 selektor.py --selbsttest\n'
+    '      Selbsttest ohne Bibliothek (konstruierte Werte).')
+
+
+def _pruefe_hart(chart):
+    """Harte Abbrueche, die fuer beide Modi gelten (leere Aspektebene,
+    unbekannter Faktor). Aus main() herausgezogen am 2026-09-19 (W40), damit der
+    Nur-Liste-Modus dieselben Proben faehrt; Wortlaut unveraendert."""
     leer = [h for h in chart.get('hinweise', [])
             if h.startswith('KEINE ASPEKT-ZEILE')]
     if leer:
@@ -787,14 +1015,178 @@ def main():
         print('   Spiegelpole (bewusst uebersprungen): %s'
               % ', '.join(sorted(SPIEGEL_FAKTOREN)))
         sys.exit(1)
+
+
+def _melde_ohne_block(ohne):
+    """Angeforderte Aspekte ohne Bibliotheksblock melden (2026-09-19, W36)."""
+    print('FEHLSTELLEN OHNE BIBLIOTHEKSBLOCK (kein Abbruch): %d angeforderte(r) '
+          'Aspekt(e)' % len(ohne))
+    for a, b, note in ohne:
+        print('   FEHLSTELLE ASPEKT %s-%s — %s' % (a, b, note))
+    print('   Aus den Nachbarbloecken deuten (Staende beider Faktoren, bei einem '
+          'Spezialfaktor seine')
+    print('   Aspekt-Vorrede <FAKTOR>_SEC_ASPEKT) und in der Referenzdatei-Liste '
+          'melden.')
+
+
+def _main_liste(chart_path, blocks_ref=None):
+    """Nur-Liste-Modus auf der Kommandozeile (2026-09-19, W40)."""
+    text = open(chart_path, encoding='utf-8').read()
+    r = referenzliste(text, blocks_ref)
+    chart = r['chart']
+    for h in chart.get('hinweise', []):
+        print('   HINWEIS %s' % h)
+    _pruefe_hart(chart)
+    print('Referenzdateien, die dieses Chart braucht (Nur-Liste-Modus — '
+          'schreibt keine referenz.md):')
+    for src in sorted(r['dateien']):
+        n = len(r['dateien'][src])
+        print('   %s — %d %s' % (src, n, 'Block' if n == 1 else 'Bloecke'))
+    print('   Zusammen: %d Dateien, %d Bloecke (Wildcards als ein Eintrag).'
+          % (len(r['dateien']), sum(len(k) for k in r['dateien'].values())))
+    if r['fehlstellen']:
+        _melde_ohne_block(r['fehlstellen'])
+    else:
+        print('Fehlstellen ohne Bibliotheksblock: keine.')
+    if r['fehlt'] is None:
+        print('Bibliothek nicht geprueft (kein zweites Argument): ob jeder Block '
+              'da ist, zeigt erst der volle Lauf.')
+    elif r['fehlt']:
+        print('FEHLSTELLEN (harter Fehler):')
+        for src, key in r['fehlt']:
+            print('   FEHLT %s in %s' % (key, src))
+        sys.exit(1)
+    else:
+        print('Bibliothek geprueft: jeder angeforderte Block ist da.')
+
+
+def _selbsttest():
+    """Selbsttest ohne Bibliothek (neu 2026-09-19): W35, W36, W59, F19, W40.
+    Konstruierte Staende — kein echter Mensch, keine echten Daten."""
+    blk = '\n'.join([
+        '@@SELEKTOR',
+        'FAKTOR SONNE zeichen=Widder haus=1 fuehrt=ja',
+        'FAKTOR MOND zeichen=Stier haus=11 nebenhaus=12 abstand=1.50 fuehrt=ja',
+        'FAKTOR SATURN zeichen=Jungfrau haus=6 nebenhaus=7 abstand=3.25',
+        'FAKTOR CHIRON zeichen=Stier haus=2 fuehrt=ja',
+        'FAKTOR SUEDKNOTEN zeichen=Widder haus=4 nebenhaus=5 abstand=4.00',
+        'ACHSE AC zeichen=Widder',
+        'ASPEKT SONNE MOND',
+        'ASPEKT CHIRON LILITH',
+        'ASPEKT AC MC',
+        '@@ENDE'])
+    chart = parse_chart(blk)
+    req, prot, grenz = build_requests(chart)
+    g = dict((x['faktor'], x) for x in grenz)
+    # W35: Wortform, echte Umlaute, keine Gradzahl; fuehrendes Haus vorn
+    assert signatur_notation(g['MOND']) == \
+        'Mond im zwölften Haus, dicht an der Schwelle aus dem elften'
+    assert signatur_notation(g['SATURN']) == \
+        'Saturn im sechsten Haus, nahe an der Schwelle zum siebten'
+    assert signatur_notation(g['SUEDKNOTEN']) == \
+        'Südknoten im vierten Haus, nahe an der Schwelle zum fünften'
+    assert fachmodus_notation(g['MOND']) == 'Haus 12/11, Schwellenlage'
+    assert beleg_notation(g['MOND']) == \
+        '12./11. Haus (Schwellenlage, 1°30′ vor Spitze 12)'
+    assert register_notation(g['SATURN']) == 'sechstes/siebtes Haus, Grenzlage'
+    for x in grenz:
+        for zeile in (signatur_notation(x), fachmodus_notation(x),
+                      register_notation(x)):
+            assert '°' not in zeile, zeile
+            for ascii_umlaut in ('fuehr', 'Sued', 'zwoelf', 'fuenf', 'Glueck'):
+                assert ascii_umlaut not in zeile, zeile
+    # W59: Methodik eines fuehrenden Spezialfaktors bleibt ueberspringbar
+    gruppe = dict((k, gr) for gr, _src, k, _n in req)
+    assert gruppe['CHIRON_ALLG'] == 'Spezialfaktor-Methodik'
+    assert gruppe['CHIRON_IN_STIER'] == 'Spezialfaktor'
+    # W36: angeforderter Aspekt ohne Block = Fehlstelle, eindeutig gemeldet
+    assert [(a, b) for a, b, _n in chart['ohne_block']] == \
+        [('CHIRON', 'LILITH'), ('AC', 'MC')]
+    assert sum('-> FEHLSTELLE:' in p for p in prot) == 2
+    md = assemble_md(chart, [], prot, [], grenz)
+    assert 'Fehlstellen: 2.' in md and '## ⚠ FEHLSTELLEN' in md
+    assert 'Fehlstellen: 0' not in md
+    # F19: Wortlaut fuer den nicht fuehrenden Faktor je Typ
+    md_t = assemble_md(chart, [], prot, [], grenz, typ='transit')
+    assert 'Zeile im Rechenschaftskapitel' in md and 'Mitlaufendes' not in md
+    assert 'Mitlaufendes' in md_t and 'Zeile im Rechenschaftskapitel' not in md_t
+    assert typ_aus_pfad('/x/muster_Transit_chart_data.md') == 'transit'
+    assert typ_aus_pfad('muster_chart_data.md') is None
+    assert typ_aus_pfad('muster_EA_chart_data.md') is None
+    # W40: Nur-Liste-Modus ohne Bibliothek
+    r = referenzliste(blk)
+    assert r['fehlt'] is None and 'Sonne_Aspekte.txt' in r['dateien']
+    assert 'SONNE_MOND' in r['dateien']['Sonne_Aspekte.txt']
+    assert len(r['fehlstellen']) == 2
+    print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
+          'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
+          'Nur-Liste-Modus (W40)]')
+
+
+def main():
+    # 2026-09-19 (W40): Optionen erkennen statt jedes Argument als Pfad zu
+    # lesen — `--liste` ist neu, und ein Tippfehler (`--list`) oder `--help`
+    # lief vorher als Dateipfad in einen FileNotFoundError.
+    args = sys.argv[1:]
+    optionen = [a for a in args if a.startswith('-')]
+    pos = [a for a in args if not a.startswith('-')]
+    unbek = [o for o in optionen if o not in ('--liste', '--hilfe', '--help',
+                                              '-h', '--selbsttest')]
+    hilfe = any(o in ('--hilfe', '--help', '-h') for o in optionen)
+    if '--selbsttest' in optionen and not unbek:
+        _selbsttest()
+        return
+    if unbek or hilfe or not pos:
+        if unbek:
+            print('Unbekannte Option: %s' % ', '.join(unbek))
+        elif not pos and not hilfe:
+            print('Kein Datenblatt angegeben.')
+        print(AUFRUF)
+        sys.exit(0 if (hilfe and not unbek) else 2)
+    chart_path = pos[0]
+    if '--liste' in optionen:
+        _main_liste(chart_path, pos[1] if len(pos) > 1 else None)
+        return
+    blocks_dir = pos[1] if len(pos) > 1 else 'blocks'
+    out_path = pos[2] if len(pos) > 2 else \
+        os.path.basename(chart_path).replace('chart_data', 'referenz')
+    typ = typ_aus_pfad(chart_path)
+    text = open(chart_path, encoding='utf-8').read()
+    chart, req, prot, ordered, missing, grenz = select(text, blocks_dir)
+    print('Faktoren :', len(chart['faktoren']),
+          '| Aspekte:', len(chart['aspekte']),
+          '| Bloecke gezogen:', len(ordered),
+          '| Grenzlagen:', len(grenz))
+    if typ == 'transit':
+        print('   TYP Transit (Dateiname) — Grenzlagen-Wortlaut ohne '
+              'Rechenschaftskapitel')
+    for g in grenz:
+        print('   GRENZLAGE %-12s Haus %s -> %s  (%s)'
+              % (g['faktor'], g['haus'], g['nebenhaus'], g['stufe']))
+    for h in chart.get('hinweise', []):
+        print('   HINWEIS %s' % h)
+    for roh, ziel in chart.get('spiegel', []):
+        print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
+              'mitgedeutet' % (roh, ziel))
+    _pruefe_hart(chart)
     if missing:
         print('FEHLSTELLEN (harter Fehler):')
         for src, key in missing:
             print('   FEHLT %s in %s' % (key, src))
         sys.exit(1)
     open(out_path, 'w', encoding='utf-8').write(
-        assemble_md(chart, ordered, prot, missing, grenz))
-    print('OK — geschrieben:', out_path, '(keine Fehlstelle)')
+        assemble_md(chart, ordered, prot, missing, grenz, typ=typ))
+    # 2026-09-19 (W36): Die Schlusszeile zaehlt die Fehlstellen ohne
+    # Bibliotheksblock mit — nie mehr „keine Fehlstelle" neben „nicht als Block
+    # gefuehrt".
+    ohne = chart.get('ohne_block', [])
+    if ohne:
+        _melde_ohne_block(ohne)
+        print('Geschrieben:', out_path, '— %d Fehlstelle(n) ohne '
+              'Bibliotheksblock, s. oben und ⚠ FEHLSTELLEN in der referenz.md'
+              % len(ohne))
+    else:
+        print('OK — geschrieben:', out_path, '(keine Fehlstelle)')
 
 
 if __name__ == '__main__':

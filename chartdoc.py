@@ -54,6 +54,7 @@ Ablauf im Chart-Builder:
         doctype='ultimativ')
 """
 import html
+import os
 import re
 import sys
 
@@ -169,7 +170,23 @@ def name_of(n):
     return _CFG['name_of'](n)
 
 
-_CFG = {'gr': lambda x: str(x), 'name_of': lambda n: n}
+def _orb_text(x):
+    """Orb -> 'N°NN′' mit build.orb_text() (2026-09-19, W2) — die eine
+    Rundung fuer Aspektseite und Aspekttabelle des Datenblatts."""
+    f = getattr(build, 'orb_text', None)
+    if f is None:
+        raise RuntimeError(
+            'chartdoc: build.py ist aelter als chartdoc.py (build.orb_text '
+            'fehlt, Stand vor 2026-09-19). Beide aus demselben Stand laden '
+            '(lade_schritt), sonst rundet die Aspektseite anders als die '
+            'Aspekttabelle.')
+    return f(x)
+
+
+# 2026-09-19 (W2): Vorgabe fuer gr ist die Minutenformatierung (_orb_text)
+# statt str — radix liefert den Orb seither ungerundet, und str() schrieb ihn
+# als lange Dezimalzahl.
+_CFG = {'gr': _orb_text, 'name_of': lambda n: n}
 
 
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
@@ -180,7 +197,10 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
     pal           Palette (Schluessel s. PAL oben)
     part_kicker   Kicker der Teiler-Kapitel, z. B. {'Teil I', 'Teil II', ...}
     glyphen       Faktorname -> Glyphe (fuer Aspekttabelle und Konstellationen)
-    gr            Funktion Gradbetrag -> 'N°NN′'
+    gr            Funktion Gradbetrag -> 'N°NN′'. Die Orbspalte der
+                  Aspektseite benutzt sie seit 2026-09-19 NICHT mehr: dort
+                  rundet build.orb_text() — dieselbe Rundung wie die
+                  Aspekttabelle des Datenblatts (W2)
     name_of       Funktion interner Faktorname -> Anzeigename
     kopfzeile     Text der linken Kolumnentitel-Zeile (meist der Vorname)
     aspektfarben  dict mit 'rot'/'blau'/'gruen' (und optional 'konj') — die
@@ -567,6 +587,12 @@ td.zs {{ color:#4c4335; white-space:nowrap; }}
 td.zr {{ color:#8d8371; font-family:"EB Garamond Italic"; font-style:italic; }}
 td.zz {{ color:#4c4335; font-size:0.94em; }}
 .zl-leer {{ color:#a99b80; }}
+/* 2026-09-19 (W12): die Marke des Quartals (marke= im @@ZEITLEISTE-Block) —
+   hinter den Themen der Dicht-Zelle, durch „ · " abgesetzt und gedaempft
+   gesetzt wie die Ruht-Spalte. Vorher baute jeder Lauf dafuer einen eigenen
+   Span per HTML-Nachbearbeitung. */
+.zl-marke {{ color:#8d8371; font-family:"EB Garamond Italic";
+   font-style:italic; }}
 
 /* ---------- Kapitel ---------- */
 /* Vorabstand vor Kapiteln: HAUSSTIL['kapitel_vorab'], seit dem 2026-09-08
@@ -965,14 +991,21 @@ def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
 # gepflegt werden muss (s. _pflicht_baustein_angleichen).
 ZEITLEISTE_TITEL = 'Die Zeitleiste'
 
+# 2026-09-19 (W12): der Satz, der die Dichte-Spalte erklaert, einzeln
+# greifbar. ZL_LEAD traegt ihn wortgleich; steht statt ZL_LEAD der LEAD aus dem
+# @@ZEITLEISTE-Block als Vorspann, erklaert der die Klammerzahl nicht (T34-18c
+# Nr. 13, T34-18d Nr. 8) — dann setzt zeitleiste_page() diesen Satz selbst in
+# die Fussnote.
+ZL_SPALTE = ('Ganz rechts steht, wie viele Berührungen die Rechnung je Monat '
+             'gezählt hat; die Zahl in Klammern sind die Tage, an denen ein '
+             'Winkel exakt steht.')
+
 ZL_LEAD = (
     'Diese Seite ist zum Nachschlagen, nicht zum Lesen. Jede Zeile ist ein '
     'Quartal des Fensters: daneben steht, welche Themen in diesen drei '
-    'Monaten dicht laufen und welche in derselben Zeit ruhen. Ganz rechts '
-    'steht, wie viele Berührungen die Rechnung je Monat gezählt hat; die Zahl '
-    'in Klammern sind die Tage, an denen ein Winkel exakt steht. Eine hohe '
-    'Zahl heißt nicht, dass viel passiert — sie heißt, dass viel gleichzeitig '
-    'angerührt ist.')
+    'Monaten dicht laufen und welche in derselben Zeit ruhen. ' + ZL_SPALTE
+    + ' Eine hohe Zahl heißt nicht, dass viel passiert — sie heißt, dass viel '
+    'gleichzeitig angerührt ist.')
 
 ZL_NOTE = ('Die Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
            'dieses Horoskop entstanden ist. Spannen und Zahlen sind '
@@ -988,6 +1021,211 @@ def _zl_liste(x, leer='—'):
     return esc(' · '.join(str(t) for t in x))
 
 
+# --- Leser fuer den @@ZEITLEISTE-Block (neu 2026-09-19, W12) ---------------
+
+class ZeitleisteError(ValueError):
+    """@@ZEITLEISTE-Block fehlt, ist unvollstaendig oder traegt eine unbekannte
+    Zeile bzw. ein unbekanntes Feld (s. lies_zeitleiste)."""
+
+
+ZL_FELDER = ('LEAD',)                    # Kopffelder des Blocks
+ZL_QUARTAL_FELDER = ('dicht', 'marke')   # Felder einer Quartalszeile
+ZL_MARKEN_MAX = 3                        # Transit-/Ultimativ-Modul
+_ZL_START_RE = re.compile(r'^@@ZEITLEISTE\s*$')
+_ZL_ENDE_RE = re.compile(r'^@@ENDE\s*$')
+_ZL_FELD_RE = re.compile(r'^([A-ZÄÖÜ][A-ZÄÖÜ_]{1,24})\s*:\s*(.*)$')
+_ZL_QUARTAL_RE = re.compile(r'^Q(\d{1,2})\s*\|(.*)$')
+
+
+def lies_zeitleiste(pfad_oder_text, titel=None):
+    """@@ZEITLEISTE-Block aus der chart_data lesen (Transit und Ultimativ).
+
+    Neu 2026-09-19 (W12). Vorher baute jeder Schritt-3-Lauf seinen eigenen
+    Parser; in T34-18b nahm einer mit txt.split('@@ZEITLEISTE') die erste
+    Fundstelle des WORTES im Kopf der chart_data statt des Blocks und brach ab.
+    Gesucht wird deshalb zeilengebunden wie in build.lies_deckblatt():
+    Blockanfang ist eine Zeile, die NUR `@@ZEITLEISTE` traegt (die letzte, falls
+    es mehrere gibt), Blockende die naechste Zeile `@@ENDE`.
+
+    Blockformat (Transit-Modul, Struktur Punkt 6; Ultimativ-Modul):
+        @@ZEITLEISTE
+        LEAD: <ein Absatz Vorspann; Folgezeilen direkt darunter gehoeren dazu>
+        Q1 | dicht=1,2,3,6 | marke=
+        Q2 | dicht=2,4,5 | marke=<Datum · Befund>
+        ...
+        @@ENDE
+    Die Zahlen hinter dicht= sind KAPITELNUMMERN; `dicht=` leer heisst: nichts
+    im Wirkorb. marke= ist optional, hoechstens dreimal je Dokument; ihr Text
+    wird wortgleich uebernommen.
+
+    pfad_oder_text  Pfad der <klient>_<KUERZEL>_chart_data.md oder ihr Text
+    titel           optional {Kapitelnummer: Kapiteltitel}. Dann traegt jedes
+                    Quartal zusaetzlich 'dicht_titel' und 'ruht_titel' (die
+                    Gegenmenge, in Kapitelreihenfolge) — fertig fuer
+                    zeitleiste_page() —, und eine Nummer ohne Kapitel ist ein
+                    harter Fehler.
+
+    Rueckgabe: {'lead': str,
+                'quartale': [{'quartal': 'Q1', 'dicht': [1, 2, 3, 6],
+                              'marke': ''}, ...]}
+
+    Wirft ZeitleisteError, wenn der Block fehlt, kein @@ENDE hat, LEAD fehlt,
+    eine Zeile oder ein Feld unbekannt ist, dicht= keine Kapitelnummern traegt,
+    ein Quartal doppelt vorkommt oder die Quartale nicht lueckenlos ab Q1 laufen.
+    Mehr als drei Marken: nur ein Hinweis (Regel aus Schritt 2, im Bericht
+    melden).
+
+    Im Chart-Builder (TITEL = {Nummer: Titel} aus parse_analyse(),
+    TD = transitdata.parse()):
+        zl = chartdoc.lies_zeitleiste(CHARTDATA, titel=TITEL)
+        zeilen = []
+        for q, (qq, a, b, spanne) in zip(zl['quartale'], TD['quartale']):
+            assert q['quartal'] == qq
+            zeilen.append((qq, spanne, q['dicht_titel'], q['ruht_titel'],
+                           tdat.dichte_je_monat(TD, a, b), q['marke']))
+        seite = chartdoc.zeitleiste_page(zeilen, lead=zl['lead'])
+    """
+    text, name = pfad_oder_text, 'Text'
+    if isinstance(text, os.PathLike):
+        text = os.fspath(text)
+    if not isinstance(text, str):
+        raise ZeitleisteError(
+            'lies_zeitleiste() erwartet den Pfad der chart_data.md oder ihren '
+            f'Text als String, bekommen: {type(text).__name__}.')
+    if '\n' not in text and os.path.isfile(text):
+        name = os.path.basename(text)
+        with open(text, encoding='utf-8') as fh:
+            text = fh.read()
+    elif '\n' not in text and '@@ZEITLEISTE' not in text:
+        raise ZeitleisteError(
+            f'lies_zeitleiste(): Datei nicht gefunden: {text}. Erwartet: Pfad '
+            'der <klient>_<KUERZEL>_chart_data.md oder ihr Text.')
+    zeilen = text.splitlines()
+    start = None
+    for i, z in enumerate(zeilen):
+        if _ZL_START_RE.match(z):
+            start = i + 1
+    if start is None:
+        raise ZeitleisteError(
+            f'@@ZEITLEISTE-Block fehlt in {name}. Er gehoert ans ENDE der '
+            'chart_data.md, hinter den @@DECKBLATT-Block (Transit- bzw. '
+            'Ultimativ-Modul): eine Zeile "@@ZEITLEISTE", darunter "LEAD: …", '
+            'je Quartal "Q<n> | dicht=<Kapitelnummern> | marke=<optional>", zum '
+            'Schluss "@@ENDE". Gesucht wird eine Zeile, die NUR "@@ZEITLEISTE" '
+            'traegt — das Wort im Fliesstext zaehlt nicht. Die Zuordnung trifft '
+            'Schritt 2, Schritt 3 liest sie nur (Transit-Modul, Struktur Punkt '
+            '6): fehlt der Block, das melden, statt sie hier neu zu treffen.')
+    ende = next((j for j in range(start, len(zeilen))
+                 if _ZL_ENDE_RE.match(zeilen[j])), None)
+    if ende is None:
+        raise ZeitleisteError(
+            f'@@ZEITLEISTE-Block in {name} ohne abschliessende Zeile "@@ENDE".')
+
+    lead, quartale, im_lead = None, [], False
+    for nr, z in enumerate(zeilen[start:ende], start + 1):
+        s = z.strip()
+        wo = f'@@ZEITLEISTE in {name}, Zeile {nr}'
+        if not s:
+            im_lead = False
+            continue
+        mq = _ZL_QUARTAL_RE.match(s)
+        if mq:
+            im_lead = False
+            label = 'Q%d' % int(mq.group(1))
+            if any(q['quartal'] == label for q in quartale):
+                raise ZeitleisteError(f'{wo}: {label} steht doppelt im Block.')
+            felder = {}
+            for teil in mq.group(2).split('|'):
+                teil = teil.strip()
+                if not teil:
+                    continue
+                if '=' not in teil:
+                    raise ZeitleisteError(
+                        f'{wo} ({label}): Teil "{teil}" ohne "=". Erwartet: '
+                        'dicht=<Kapitelnummern> und optional marke=<Text>. '
+                        'Steht ein senkrechter Strich im Markentext, ihn '
+                        'ersetzen — er trennt die Felder.')
+                k, v = teil.split('=', 1)
+                k = k.strip()
+                if k not in ZL_QUARTAL_FELDER:
+                    raise ZeitleisteError(
+                        f'{wo} ({label}): unbekanntes Feld "{k}=". Erlaubt: '
+                        + ', '.join(f + '=' for f in ZL_QUARTAL_FELDER) + '.')
+                if k in felder:
+                    raise ZeitleisteError(f'{wo} ({label}): "{k}=" doppelt.')
+                felder[k] = v.strip()
+            if 'dicht' not in felder:
+                raise ZeitleisteError(
+                    f'{wo} ({label}): kein "dicht=". Ein Quartal ohne '
+                    'Wirkorb-Kontakt traegt "dicht=" leer.')
+            try:
+                dicht = [int(x) for x in re.split(r'[,\s]+', felder['dicht'])
+                         if x]
+            except ValueError:
+                raise ZeitleisteError(
+                    f'{wo} ({label}): dicht= traegt keine Kapitelnummern: '
+                    f'"{felder["dicht"]}". Erwartet die NUMMERN der '
+                    'Themenkapitel, z. B. dicht=1,2,3 — keine Titel.') from None
+            quartale.append({'quartal': label, 'dicht': dicht,
+                             'marke': felder.get('marke', '')})
+            continue
+        mf = _ZL_FELD_RE.match(s)
+        if mf:
+            if mf.group(1) not in ZL_FELDER:
+                raise ZeitleisteError(
+                    f'{wo}: unbekanntes Feld "{mf.group(1)}:". Erlaubt: '
+                    + ', '.join(f + ':' for f in ZL_FELDER)
+                    + '; dazu je Quartal eine Zeile '
+                    '"Q<n> | dicht=<Kapitelnummern> | marke=<optional>".')
+            if lead is not None:
+                raise ZeitleisteError(f'{wo}: LEAD steht doppelt im Block.')
+            lead, im_lead = mf.group(2).strip(), True
+            continue
+        if im_lead and not re.match(r'^Q\d', s):
+            lead = (lead + ' ' + s).strip()
+            continue
+        raise ZeitleisteError(
+            f'{wo}: unbekannte Zeile "{s[:60]}". Erwartet "LEAD: …" oder '
+            '"Q<n> | dicht=<Kapitelnummern> | marke=<optional>".')
+
+    if not lead:
+        raise ZeitleisteError(
+            f'@@ZEITLEISTE in {name}: LEAD fehlt oder ist leer. Schritt 2 '
+            'schreibt ihn (Transit-Modul: ordnet die Dichte-Zahl ein und nennt '
+            'den progressiven Mond) — melden; ZL_LEAD traegt den progressiven '
+            'Mond nicht.')
+    if not quartale:
+        raise ZeitleisteError(f'@@ZEITLEISTE in {name}: keine Quartalszeile.')
+    ist = [q['quartal'] for q in quartale]
+    soll = ['Q%d' % i for i in range(1, len(quartale) + 1)]
+    if ist != soll:
+        raise ZeitleisteError(
+            f'@@ZEITLEISTE in {name}: Quartale nicht lueckenlos in Reihenfolge '
+            f'ab Q1 — im Block {", ".join(ist)}, erwartet {", ".join(soll)}.')
+    marken = sum(1 for q in quartale if q['marke'])
+    if marken > ZL_MARKEN_MAX:
+        print(f'[chartdoc] Hinweis: {marken} Marken im @@ZEITLEISTE-Block — das '
+              f'Modul erlaubt hoechstens {ZL_MARKEN_MAX} je Dokument. Gesetzt '
+              'wird, was im Block steht; im Bericht melden (Schritt 2).')
+    if titel is not None:
+        try:
+            tmap = {int(k): str(v) for k, v in dict(titel).items()}
+        except (TypeError, ValueError):
+            raise ZeitleisteError(
+                'lies_zeitleiste(titel=…) erwartet {Kapitelnummer: Titel}, '
+                'z. B. {1: "Titel von Kapitel 1", 2: "…"}.') from None
+        nummern = sorted(tmap)
+        for q in quartale:
+            fremd = [n for n in q['dicht'] if n not in tmap]
+            if fremd:
+                raise ZeitleisteError(
+                    f'@@ZEITLEISTE in {name}, {q["quartal"]}: dicht= nennt '
+                    f'Kapitel {fremd}, die es nicht gibt. Kapitel: {nummern}.')
+            q['dicht_titel'] = [tmap[n] for n in q['dicht']]
+            q['ruht_titel'] = [tmap[n] for n in nummern if n not in q['dicht']]
+    return {'lead': lead, 'quartale': quartale}
+
+
 def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
                     anker='PG_zeit', lead=None, note=None, skala=1.0):
     """Zeitleisten-Seite (Transit und Ultimativ) — EINE Seite, kein Fließtext.
@@ -995,8 +1233,8 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
     Sie ersetzt die acht Quartalskapitel (Umbau 2026-09-03) und ist danach die
     einzige Stelle, an der das Kalenderraster noch auftaucht.
 
-    zeilen  [(quartal, spanne, dicht, ruht, dichte), ...] — je Kalenderquartal
-            eine Zeile, in der Reihenfolge des Fensters:
+    zeilen  [(quartal, spanne, dicht, ruht, dichte[, marke]), ...] — je
+            Kalenderquartal eine Zeile, in der Reihenfolge des Fensters:
               quartal  'Q1' … 'Q8'            — aus `quartale`
               spanne   'Jul–Sep 26'           — die Monatsspanne, viertes Feld
                                                 der Quartalstupel aus
@@ -1006,15 +1244,28 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
               ruht     die uebrigen Themen desselben Dokuments
               dichte   'Jul 3 (1) · Aug 5 (2) · Sep 2 (0)' — je Monat
                        aktiv(exakt) aus `hotspots`
+              marke    OPTIONAL (seit 2026-09-19, W12): der Text aus
+                       `marke=` des @@ZEITLEISTE-Blocks. Er steht in der
+                       Dicht-Zelle hinter den Themen, durch „ · " abgesetzt
+                       und gedaempft gesetzt (.zl-marke), wortgleich.
+                       Vorher kannte die Seite kein Markenfeld und jeder Lauf
+                       setzte den Span per HTML-Nachbearbeitung.
 
     NICHTS DAVON WIRD HIER GERECHNET. Die Werte kommen unveraendert aus dem
     Builder-JSON (transit.py -> transitdata.parse()); auch die Monatsdichte
     wird NICHT zu einer Quartalssumme oder einem Maximum verdichtet — das
     waere gerechnet, und die Regel lautet uebernehmen. Welches Thema in
-    welchem Quartal dicht ist, ergibt sich aus dem `quartale`-Feld der
-    Kontakte, die das Thema buendelt — dieselbe Zuordnung, die auch
-    transituhr_fusion.THEMEN benutzt; sie kommt aus dem Chart-Builder, nicht
-    von hier.
+    welchem Quartal dicht ist, steht im @@ZEITLEISTE-Block der chart_data
+    (Zuordnung aus Schritt 2, NICHT das `quartale`-Feld der Kontakte);
+    lies_zeitleiste() liest ihn und liefert mit titel= die fertigen
+    Titellisten (berichtigt 2026-09-19, W12 — hier stand noch das
+    `quartale`-Feld als Quelle).
+
+    lead    Vorspann. Vorgabe ZL_LEAD. Wird der LEAD aus dem Block uebergeben,
+            erklaert er die Klammerzahl der Dichte-Spalte nicht — dann haengt
+            die Seite ZL_SPALTE an die Fussnote (seit 2026-09-19, W12), es sei
+            denn, `note` ist ausdruecklich gesetzt oder der LEAD traegt den
+            Satz schon.
 
     Die Themennamen sind WORTGLEICH die Kapiteltitel des Dokuments. Ein
     erfundener oder gekuerzter Name ist derselbe Fehler wie in der
@@ -1037,15 +1288,30 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
     """
     titel = titel or ZEITLEISTE_TITEL
     rows = []
-    for q, spanne, dicht, ruht, dichte in zeilen:
+    for nr, z in enumerate(zeilen, 1):
+        # 2026-09-19 (W12): optionales sechstes Feld `marke`
+        if len(z) not in (5, 6):
+            raise ValueError(
+                f'zeitleiste_page(): Zeile {nr} hat {len(z)} Felder — erwartet '
+                '(quartal, spanne, dicht, ruht, dichte) oder mit Marke '
+                '(quartal, spanne, dicht, ruht, dichte, marke).')
+        q, spanne, dicht, ruht, dichte = z[:5]
+        marke = z[5] if len(z) == 6 else ''
+        zd = _zl_liste(dicht, "nichts im Wirkorb")
+        if marke:
+            zd += f' · <span class="zl-marke">{esc(str(marke))}</span>'
         rows.append(
             f'<tr><td class="zq">{esc(str(q))}</td>'
             f'<td class="zs">{esc(str(spanne))}</td>'
-            f'<td class="zd">{_zl_liste(dicht, "nichts im Wirkorb")}</td>'
+            f'<td class="zd">{zd}</td>'
             f'<td class="zr">{_zl_liste(ruht)}</td>'
             f'<td class="zz">{_zl_liste(dichte)}</td></tr>')
     ld = lead if lead is not None else ZL_LEAD
     nt = note if note is not None else ZL_NOTE
+    if lead is not None and note is None and ZL_SPALTE not in lead:
+        # 2026-09-19 (W12): Block-LEAD als Vorspann -> Spaltensatz in die
+        # Fussnote (so gesetzt in T34-18c und T34-18d, dort je von Hand).
+        nt = ZL_NOTE + ' ' + ZL_SPALTE
     return f"""<section class="zeit" id="{anker}">
 <div class="fm-kicker">{esc(kicker)}</div>
 <h2 class="fm-title">{esc(titel)}</h2>
@@ -1305,6 +1571,12 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
     skala skaliert Tabellen- und Legendenschrift gemeinsam; der Chart-Builder
     sucht damit die groesste Stufe, die noch auf eine Seite passt
     (s. passe_aspektseite_ein).
+
+    Orb (2026-09-19, W2): `aspekte` traegt den UNGERUNDETEN Orb aus
+    radix.aspektliste(); die Seite rundet ihn genau einmal mit
+    build.orb_text() — dieselbe Funktion wie die Aspekttabelle des
+    Datenblatts, damit Seite, Tabelle und Belege dieselbe Bogenminute zeigen.
+    Das konfigurierte `gr` greift hier nicht mehr.
     """
     titel = titel or ASPEKT_TITEL
     setze_zusatzaspekte(aspekte)
@@ -1335,7 +1607,7 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
                 f'<tr><td class="ax">{_fac(a["a"])} '
                 f'<span class="an a-{k}">{a["name"]}</span> '
                 f'{_fac(a["b"])}{mir}</td>'
-                f'<td class="ao">{gr(a["orb"])}{e}</td></tr>')
+                f'<td class="ao">{_orb_text(a["orb"])}{e}</td></tr>')
         blocks.append(f'<div class="{cls}">{esc(label)}</div>'
                       f'<table class="aspt">{"".join(rows)}</table>')
     tab_pt = 9.0 * skala
@@ -1827,7 +2099,22 @@ def _toc_rows(eintraege, seiten):
 def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament='',
                 teil3_a=None):
     """Inhaltsverzeichnis-Seite (Pflicht bei JEDEM Chart, direkt nach dem
-    Deckblatt). `teil3_a` s. _ist_jetzt()."""
+    Deckblatt). `teil3_a` s. _ist_jetzt().
+
+    kopf  die Kickerzeile ueber „Inhalt" — ein STRING, etwa
+          f'Horoskop für {VORNAME}'. Seit 2026-09-19 (W61, G34-17d Nr. 7)
+          geprueft: Anderes bricht mit einer Meldung ab, die sagt, was gemeint
+          ist.
+    """
+    if not isinstance(kopf, str):
+        raise TypeError(
+            'inhalt_page(): kopf ist die Kickerzeile ueber "Inhalt" und muss ein '
+            f'String sein, bekommen: {type(kopf).__name__}. Beispiel: '
+            'chartdoc.inhalt_page(items, SEITEN, "Horoskop für <Vorname>", '
+            'vorne=[...], ornament=ORNAMENT). Liegt das Deckblatt-dict aus '
+            'build.lies_deckblatt() vor: den Kicker-Text als String setzen, '
+            'nicht das dict uebergeben.')
+
     def zeile(titel, pid, klasse='toc-grp', unter=''):
         p = seiten.get(pid, '')
         us = f' <span class="gs">{esc(unter)}</span>' if unter else ''
@@ -1954,3 +2241,105 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     raise RuntimeError('Die Seitenzahlen im Inhaltsverzeichnis konvergieren '
                        'nicht — Layout pruefen, nicht die Zahlen von Hand '
                        'eintragen.')
+
+
+def _selbsttest():
+    """Selbsttest ohne Render (neu 2026-09-19): lies_zeitleiste(),
+    zeitleiste_page() mit Marke (W12) und die kopf-Pruefung von inhalt_page()
+    (W61). Konstruierter Block — keine echten Daten."""
+    block = '\n'.join([
+        '# Datenblatt (konstruiert)',
+        'Sprachfassung: der @@ZEITLEISTE-Block steht am Ende.',
+        '@@DECKBLATT',
+        'LEITSATZ: Ein Satz.',
+        '@@ENDE',
+        '@@ZEITLEISTE',
+        'LEAD: Eine hohe Zahl heisst nicht, dass viel passiert.',
+        'Der progressive Mond wechselt im dritten Quartal das Zeichen.',
+        'Q1 | dicht=1,2 | marke=',
+        'Q2 | dicht= | marke=',
+        'Q3 | dicht=2, 3 | marke=Exaktdatum · Konstruierter Befund <A&B>',
+        '@@ENDE'])
+    zl = lies_zeitleiste(block, titel={1: 'Erstes Thema', 2: 'Zweites Thema',
+                                       3: 'Drittes Thema'})
+    assert zl['lead'].startswith('Eine hohe Zahl') and 'Mond' in zl['lead']
+    assert [q['quartal'] for q in zl['quartale']] == ['Q1', 'Q2', 'Q3']
+    assert zl['quartale'][1]['dicht'] == [] and zl['quartale'][2]['dicht'] == [2, 3]
+    assert zl['quartale'][2]['marke'] == 'Exaktdatum · Konstruierter Befund <A&B>'
+    assert zl['quartale'][0]['ruht_titel'] == ['Drittes Thema']
+    assert zl['quartale'][1]['dicht_titel'] == []
+    fehlfaelle = [
+        ('# ohne Block\nkein @@ZEITLEISTE hier\n', 'fehlt'),
+        (block.replace('LEAD:', 'VORSPANN:'), 'unbekanntes Feld "VORSPANN:"'),
+        (block.replace('| marke=\n', '| farbe=rot\n', 1), 'unbekanntes Feld "farbe="'),
+        (block.replace('Q3 |', 'Q4 |'), 'lueckenlos'),
+        (block.replace('dicht=1,2', 'dicht=Erstes Thema'), 'Kapitelnummern'),
+        (block.replace('@@ENDE', '').replace('@@DECKBLATT', ''),
+         'ohne abschliessende'),
+        ('/gibt/es/nicht_Transit_chart_data.md', 'Datei nicht gefunden'),
+        (block.replace('Q2 |', 'Q2 dicht'), 'unbekannte Zeile'),
+    ]
+    for text, erwartet in fehlfaelle:
+        try:
+            lies_zeitleiste(text)
+        except ZeitleisteError as e:
+            assert erwartet in str(e), (erwartet, str(e))
+        else:
+            raise AssertionError('kein Fehler fuer: ' + erwartet)
+    import tempfile
+    with tempfile.NamedTemporaryFile('w', suffix='_chart_data.md',
+                                     encoding='utf-8', delete=False) as fh:
+        fh.write(block)
+    try:
+        assert lies_zeitleiste(fh.name)['quartale'] == [
+            {k: v for k, v in q.items() if not k.endswith('_titel')}
+            for q in zl['quartale']]
+    finally:
+        os.unlink(fh.name)
+    try:
+        lies_zeitleiste(block, titel={1: 'Erstes Thema'})
+        raise AssertionError('Kapitelnummer ohne Kapitel nicht erkannt')
+    except ZeitleisteError as e:
+        assert 'die es nicht gibt' in str(e), e
+    zeilen = [(q['quartal'], 'Monat–Monat 00', q['dicht_titel'], q['ruht_titel'],
+               'M1 1 (0)', q['marke']) for q in zl['quartale']]
+    seite = zeitleiste_page(zeilen, lead=zl['lead'])
+    assert seite.count('class="zl-marke"') == 1
+    assert '· <span class="zl-marke">Exaktdatum · Konstruierter Befund ' \
+           '&lt;A&amp;B&gt;</span>' in seite
+    assert 'nichts im Wirkorb' in seite
+    assert esc(ZL_SPALTE) in seite.split('anh-note')[1], 'Spaltensatz fehlt'
+    alt = zeitleiste_page([z[:5] for z in zeilen])      # 5 Felder, Vorgabe-LEAD
+    assert 'zl-marke' not in alt.split('<tbody>')[1]
+    assert esc(ZL_SPALTE) not in alt.split('anh-note')[1]
+    assert ZL_SPALTE in ZL_LEAD
+    try:
+        zeitleiste_page([('Q1', 'x', [], [])])
+        raise AssertionError('Zeile mit vier Feldern nicht erkannt')
+    except ValueError as e:
+        assert 'Felder' in str(e), e
+    try:
+        inhalt_page([], {}, {'LEITSATZ': 'x'})
+        raise AssertionError('kopf als dict nicht erkannt')
+    except TypeError as e:
+        assert 'Kickerzeile' in str(e) and 'String' in str(e), e
+    # 2026-09-19 (W2): Die Orbspalte der Aspektseite rundet genau einmal mit
+    # build.orb_text() — auch wenn ein Chart-Builder ein anderes gr setzt.
+    # 0.4917° ist 0°30′; die alte Doppelrundung (0.49°) ergab 0°29′.
+    asp = [{'a': 'Sonne', 'b': 'Mond', 'name': 'Trigon', 'orb': 0.4917,
+            'strength': 'voll', 'color': 'blau'}]
+    vorher = _CFG['gr']
+    try:
+        konfiguriere(gr=lambda x: 'FALSCH')
+        seite = aspekt_page(asp)
+    finally:
+        _CFG['gr'] = vorher
+    assert '0°30′' in seite and '0°29′' not in seite and 'FALSCH' not in seite
+    assert gr(0.4917) == '0°30′' and gr(29.9999) == '30°00′'
+    print('[chartdoc-Selbsttest bestanden: lies_zeitleiste(), Marke der '
+          'Zeitleiste (W12), kopf-Pruefung von inhalt_page() (W61), '
+          'Orb der Aspektseite (W2)]')
+
+
+if __name__ == '__main__':
+    _selbsttest()

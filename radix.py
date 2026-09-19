@@ -35,9 +35,12 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         HERRSCHER-EINLAUF, SPITZEN-KONTAKTE und die KIPPMINUTE je Spitze
         (dafür jd_geburt, lat und lon mitgeben).
         strukturbild_text(sb) schreibt daraus den fertigen `## Strukturbild`-
-        Abschnitt fürs chart_data.md (neun Unterpunkte). Eingeführt 2026-09-06
-        (Prüfbericht 5.1–5.6); bis dahin wurde das alles von Hand gerechnet,
-        und vier Ebenen fehlten ganz, weil keine Regel nach ihnen fragte.
+        Abschnitt fürs chart_data.md (zehn Unterpunkte; §10 sind seit dem
+        2026-09-19 die RANGZEILEN, lesbar mit rangzeilen_lesen()). Eingeführt
+        2026-09-06 (Prüfbericht 5.1–5.6); bis dahin wurde das alles von Hand
+        gerechnet, und vier Ebenen fehlten ganz, weil keine Regel nach ihnen
+        fragte. strukturbild_text(sb, typ='transit') lässt seit dem
+        2026-09-19 die Verweise auf Getriebe, Instrument und Typmodul weg.
 
     hausherrscher(factors, cusps, aspects=None) -> list
     haus_kreise(factors, cusps, klassisch=False) -> dict
@@ -55,6 +58,18 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         12.09. hingen drei von fünf Hausherrscher-Deutungen an vier Minuten
         Geburtszeit — die Ebene ist eine Koch-Aussage mit Kippminute, nie
         „rechnungsunabhängig".
+
+    faktor_kippminuten(jd, factors, lat=None, lon=None) -> list | None
+    faktor_kipp_warnungen(fk) -> list | None
+        Seit 2026-09-19 (W34) dieselbe Kippminute für Planeten und Punkte
+        (Mond, Sonne … Glückspunkt): Minuten früherer/späterer Geburt bis zum
+        Zeichenwechsel, Warnung unter KIPP_SCHWELLE; läuft in strukturbild()
+        mit (jd_geburt genügt, der Glückspunkt braucht lat/lon) und in
+        zeichengrenze_fussnote(kipp, faktoren=fk).
+
+    glyphen_ergaenzen(factors) -> list          (FAKTOR_GLYPHE, 2026-09-19)
+        Füllt leere 'glyph'-Felder mit dem Vertrags-Kürzel ('AC' … 'IC',
+        'Pho') bzw. Symbol und meldet jede Ergänzung.
 
     konfigurationen(factors, aspects, cusps=None) -> dict
     gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung: T-Quadrat
@@ -96,6 +111,7 @@ pyswisseph, wenn es da ist — sonst geben sie None zurück, und
 `strukturbild_text()` sagt das ausdrücklich.
 """
 
+import re
 import subprocess
 import sys
 
@@ -103,6 +119,22 @@ import sys
 
 SIGN_GLYPHS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓']
 _ELEM_OF_SIGN = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]  # Feuer, Erde, Luft, Wasser
+
+# Das 'glyph'-Feld je Faktor, wie der chartdata.py-Vertrag (Datenblatt-Modul)
+# und die Pruefliste des Design-Moduls es verlangen: EIN font-gedecktes
+# Zeichen oder ein Kuerzel — 'Pho' fuer Pholus, 'AC'/'MC'/'DC'/'IC' fuer die
+# Achsen. Neu 2026-09-19 (F24): Im Transit-Prueflauf vom 18.09. trugen die
+# Achsen im factors-Block eine LEERE Glyphe; ein leerer String macht einen
+# Faktor im Rad unsichtbar. glyphen_ergaenzen() fuellt leere Felder hieraus,
+# radix() faellt beim Zeichnen darauf zurueck.
+FAKTOR_GLYPHE = {
+    'Sonne': '☉', 'Mond': '☽', 'Merkur': '☿', 'Venus': '♀', 'Mars': '♂',
+    'Jupiter': '♃', 'Saturn': '♄', 'Uranus': '♅', 'Neptun': '♆', 'Pluto': '♇',
+    'Mondknoten': '☊', 'Knoten': '☊', 'Nordknoten': '☊',
+    'Südknoten': '☋', 'Suedknoten': '☋', 'Chiron': '⚷', 'Lilith': '⚸',
+    'Glückspunkt': '⊗', 'Glueckspunkt': '⊗', 'Pholus': 'Pho',
+    'AC': 'AC', 'MC': 'MC', 'DC': 'DC', 'IC': 'IC',
+}
 
 # Hausstil-Palette (gemeinsam festgelegt 2026-07-27). Gegenüber der ersten
 # Fassung sind die Zeichenfarben des Aussenrings und vor allem das Aspekt-Grün
@@ -242,6 +274,8 @@ def huber_aspects(factors, orbs=None):
 
     Rückgabe: Liste von dicts
         {'a','b','angle','name','color','strength','orb'}
+    'orb' ist die UNGERUNDETE Abweichung in Grad (seit 2026-09-19, W2);
+    gerundet wird erst in der Ausgabe (`_gr()` hier, `gr()` der chartdata.py).
     """
     def orb_of(n):
         if orbs and n in orbs:
@@ -282,9 +316,13 @@ def huber_aspects(factors, orbs=None):
                         strength = 'neben'
                     else:
                         continue
+                # 2026-09-19 (W2): Orb ungerundet. Vorher round(dev, 2) — die
+                # Aspektseite rundete daraus ein ZWEITES Mal auf Bogenminuten
+                # und stand bis zu 1′ neben Aspekttabelle und Belegen
+                # (konstruiert: 1,4917° = 89,5′ -> 1,49° -> 1°29′ statt 1°30′).
                 out.append({'a': a['name'], 'b': b['name'], 'angle': angle,
                             'name': _ANG_NAME[angle], 'color': color,
-                            'strength': strength, 'orb': round(dev, 2)})
+                            'strength': strength, 'orb': dev})
                 break
     return out
 
@@ -319,9 +357,10 @@ def zusatz_aspekte(factors, orb=2.0, nur_planeten=True):
             for angle, name in _ZUSATZ_ANGLES:
                 dev = abs(d - angle)
                 if dev <= orb:
+                    # 2026-09-19 (W2): ungerundet wie huber_aspects().
                     out.append({'a': a['name'], 'b': b['name'], 'angle': angle,
                                 'name': name, 'color': 'rot',
-                                'strength': 'zusatz', 'orb': round(dev, 2)})
+                                'strength': 'zusatz', 'orb': dev})
                     break
     return out
 
@@ -433,6 +472,20 @@ def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
                 b['spiegel'] = 'Zusatzebene'
                 roh.append(b)
 
+    out = _zeilen_zusammenziehen(roh, factors)
+
+    if sortieren:
+        out.sort(key=lambda x: (_STAERKE_RANG.get(x['strength'], 9), x['orb']))
+    return out
+
+
+def _zeilen_zusammenziehen(roh, factors):
+    """Schritt 3 und die Glueckspunkt-Kennzeichnung von aspektliste() —
+    ausgelagert am 2026-09-19 (U2), unveraendert: strukturbild() braucht
+    fuer die Rangzeilen (§10) GENAU die Zeilen der Aspektseite, nicht eine
+    zweite, eigene Zaehlung. `roh` ist die Huber-Liste ohne Achse-Achse-
+    Paare (samt angehaengter Zusatzzeilen); Rueckgabe unsortiert.
+    """
     out, verbraucht = [], set()
     for i, a in enumerate(roh):
         if i in verbraucht:
@@ -482,8 +535,6 @@ def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
             if hin and not r.get('spiegel'):
                 r['spiegel'] = hin
 
-    if sortieren:
-        out.sort(key=lambda x: (_STAERKE_RANG.get(x['strength'], 9), x['orb']))
     return out
 
 
@@ -540,6 +591,38 @@ def haus_spalte(lon, cusps, orb=HAUS_ORB):
 
 
 # --- Zeichnung --------------------------------------------------------------
+
+def glyphen_ergaenzen(factors, melden=True):
+    """Leere oder fehlende 'glyph'-Felder aus FAKTOR_GLYPHE fuellen (F24).
+
+    Neu 2026-09-19. Fuer Schritt 1 VOR dem Schreiben des factors-Blocks und fuer
+    Schritt 3 als Netz: Eine vorhandene Glyphe bleibt, ein leeres Feld bekommt
+    das Vertrags-Kuerzel ('AC', 'MC', 'DC', 'IC', 'Pho') bzw. das Symbol. Jede
+    Ergaenzung wird gemeldet — sie ist eine Abweichung vom Vertrag, die im
+    Datenblatt gehoert korrigiert, nicht nur hier ueberdeckt.
+
+    -> neue Liste (Kopien der dicts); `factors` selbst bleibt unveraendert.
+    """
+    out = []
+    for f in factors:
+        g = dict(f)
+        if not (g.get('glyph') or '').strip():
+            ersatz = FAKTOR_GLYPHE.get(g.get('name'))
+            if ersatz is None:
+                raise ValueError(
+                    'glyphen_ergaenzen(): %r hat keine Glyphe, und '
+                    'radix.FAKTOR_GLYPHE kennt den Namen nicht. Glyphe im '
+                    'factors-Block von Hand setzen (EIN gedecktes Zeichen oder '
+                    'ein Kuerzel wie \'Pho\') oder den Namen auf den '
+                    'Vertragsnamen korrigieren.' % g.get('name'))
+            if melden:
+                print("  ! GLYPHE: %r hatte ein leeres 'glyph'-Feld — gesetzt "
+                      "auf %r (Vertrag, Datenblatt-Modul). Im factors-Block "
+                      "der chart_data nachziehen." % (g.get('name'), ersatz))
+            g['glyph'] = ersatz
+        out.append(g)
+    return out
+
 
 # Farbe der gerechneten Punkte im Rad (kein Ephemeriden-Faktor). Bewusst
 # KEINE der vier Aspektfarben und nicht das Ink der Faktoren — ein gerechneter
@@ -703,7 +786,10 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
     last, tier = -999.0, 0
     for f in order:
         L = f['lon']
-        g = f.get('glyph', '?')
+        # 2026-09-19 (F24): leeres oder fehlendes Glyphenfeld -> Kuerzel bzw.
+        # Symbol aus FAKTOR_GLYPHE, wie die Pruefliste es verlangt; ein
+        # leerer String machte den Faktor im Rad unsichtbar.
+        g = f.get('glyph') or FAKTOR_GLYPHE.get(f['name'], '?')
         tier = (tier + 1) % 2 if 0 <= (L - last) % 360 < 6 else 0
         last = L
         r = R_PL - tier * TIER_DR
@@ -1043,15 +1129,31 @@ def _kette(faktor, zeichen_von, herrscher_tab):
 def herrscherketten(factors, klassisch=False):
     """Zeichenherrscher-Ketten, geschlossene Kreise und Enddispositoren.
 
-    Ein Enddispositor steht im eigenen Zeichen; bei ihm enden Faeden. Ein
-    geschlossener Kreis ohne Enddispositor bedeutet, dass jedes Glied die
+    ENDDISPOSITOR heisst seit dem 2026-09-19 (F1, Chris-Entscheidung Frage 10)
+    nur ein Planet im eigenen Zeichen, bei dem mindestens EINE FREMDE Kette
+    endet: Die Kette eines anderen Planeten laeuft ueber die Zeichenherrscher
+    bis zu ihm und bleibt dort stehen. Ein Planet im eigenen Zeichen, zu dem
+    keine fremde Kette laeuft, folgt keinem anderen, fuehrt aber auch keinen —
+    er steht in 'ohne_zulauf', nicht unter den Enddispositoren. Vorher hiess
+    JEDER Planet im eigenen Zeichen Enddispositor („bei ihm enden Faeden"),
+    auch ohne fremde Kette; im Prueflauf vom 18.09. wurden daraus sechs falsche
+    Saetze („alle Ketten enden bei ihm").
+
+    Ein geschlossener Kreis ohne Enddispositor bedeutet, dass jedes Glied die
     Bedingungen des naechsten erbt (Befund 5.4 des Prueflaufs) — daher wird der
     Kreis mit ausgegeben und nicht nur seine Existenz vermerkt.
+
+    -> {'zeichen_von', 'ketten', 'kreise',
+        'enddispositoren'  echte Endpunkte (eine fremde Kette endet dort),
+        'zulauf'           {Enddispositor: [Planeten, deren Kette dort endet]},
+        'ohne_zulauf'      im eigenen Zeichen, keine fremde Kette endet dort,
+        'eigenes_zeichen'  ALLE Planeten im eigenen Zeichen (bis 2026-09-18
+                           hiess diese Liste 'enddispositoren')}
     """
     tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
     zeichen_von = {f['name']: zeichen_name(f['lon']) for f in factors
                    if f['name'] in _PLANETEN}
-    ketten, kreise, endd = {}, [], []
+    ketten, kreise, endd, zulauf = {}, [], [], {}
     for nm in zeichen_von:
         pfad, zyklus = _kette(nm, zeichen_von, tab)
         ketten[nm] = pfad
@@ -1059,9 +1161,14 @@ def herrscherketten(factors, klassisch=False):
             endd.append(nm)
         elif zyklus and sorted(zyklus) not in [sorted(k) for k in kreise]:
             kreise.append(zyklus)
+        if len(zyklus) == 1 and zyklus[0] != nm:      # fremde Kette endet dort
+            zulauf.setdefault(zyklus[0], []).append(nm)
     return {'zeichen_von': zeichen_von, 'ketten': ketten,
             'kreise': [k for k in kreise if len(k) > 1],
-            'enddispositoren': sorted(endd)}
+            'enddispositoren': sorted(p for p in endd if p in zulauf),
+            'zulauf': {p: sorted(zulauf[p]) for p in sorted(zulauf)},
+            'ohne_zulauf': sorted(p for p in endd if p not in zulauf),
+            'eigenes_zeichen': sorted(endd)}
 
 
 def glueckspunkt(factors, cusps, ac=None, sonne=None, mond=None):
@@ -1279,7 +1386,7 @@ def herrscher_spitzen_kontakt(factors, cusps, orb=SPITZEN_ORB, klassisch=False):
             if dev <= orb:
                 out.append({'haus': n, 'herrscher': hr,
                             'aspekt': _ANG_NAME[angle], 'angle': angle,
-                            'orb': round(dev, 2), 'hart': angle in _HART,
+                            'orb': dev, 'hart': angle in _HART,   # ungerundet (W2)
                             'winkel': _WINKEL_VON_HAUS.get(n),
                             'spitze_lon': round(cusps[n - 1] % 360.0, 4)})
                 break
@@ -1368,7 +1475,202 @@ def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
     return out
 
 
-def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE):
+# --- Zeichengrenze der Faktoren (neu 2026-09-19, W34) ------------------------
+# Gegenprobe (g) kannte nur Achsen und Spitzen. Ein Planet Bogensekunden hinter
+# einer Zeichengrenze (Pruefberichte vom 17.09.c, 17.09.e und 18.09.) wechselt
+# bei wenigen Minuten anderer Geburtszeit das Zeichen — dieselbe Logik, dasselbe
+# Mass: die Kippminute, gewarnt unter KIPP_SCHWELLE (Chris-Entscheidung
+# Frage 17). Praktisch trifft es schnelle Faktoren: Mond, Glueckspunkt (laeuft
+# mit dem AC), seltener Sonne, Merkur, Venus, Mars.
+KIPP_FAKTOR_GRENZE = 1.0        # Grad: naeher an einer Zeichengrenze -> der
+                                #   Faktor steht mit Kippminute in §3
+_KIPP_KOERPER = {'Sonne': 'SUN', 'Mond': 'MOON', 'Merkur': 'MERCURY',
+                 'Venus': 'VENUS', 'Mars': 'MARS', 'Jupiter': 'JUPITER',
+                 'Saturn': 'SATURN', 'Uranus': 'URANUS', 'Neptun': 'NEPTUNE',
+                 'Pluto': 'PLUTO', 'Mondknoten': 'TRUE_NODE',
+                 'Knoten': 'TRUE_NODE', 'Nordknoten': 'TRUE_NODE',
+                 'Lilith': 'OSCU_APOG', 'Chiron': 'CHIRON', 'Pholus': 'PHOLUS'}
+_GP_NAMEN = ('Glückspunkt', 'Glueckspunkt')
+_FAKTOR_ANZEIGE = {'Knoten': 'Mondknoten', 'Nordknoten': 'Mondknoten',
+                   'Glueckspunkt': 'Glückspunkt', 'Suedknoten': 'Südknoten'}
+_FAKTOR_ARTIKEL = {'Sonne': ('Die Sonne', 'sie'), 'Mond': ('Der Mond', 'er'),
+                   'Venus': ('Venus', 'sie'), 'Lilith': ('Lilith', 'sie'),
+                   'Mondknoten': ('Der Mondknoten', 'er'),
+                   'Glückspunkt': ('Der Glückspunkt', 'er')}
+
+
+def _gr_s(deg):
+    """Grad-Betrag als N°NN′NN″ (mit Bogensekunden und Uebertrag)."""
+    s = int(round(abs(deg) * 3600))
+    d, rest = divmod(s, 3600)
+    m, s = divmod(rest, 60)
+    return f"{d}°{m:02d}′{s:02d}″"
+
+
+def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
+                       max_min=KIPP_MAX):
+    """Je Faktor: wie viele Minuten fruehere und spaetere Geburt das ZEICHEN
+    des Faktors wechseln (neu 2026-09-19, W34) — das Gegenstueck zu
+    kippminuten() fuer Planeten und Punkte. Braucht pyswisseph; ohne es None.
+
+    Gerechnet wird die BEWEGUNG aus der Ephemeride (Minutenschritt bis
+    max_min) und an die Laenge aus `factors` angelegt: Der Befund haengt an
+    denselben Staenden wie das Datenblatt. Weicht die Ephemeride fuer `jd` um
+    mehr als 0,05° von der Laenge in `factors` ab (anderes jd, mittlerer statt
+    wahrer Knoten, andere Lilith), bleibt der Faktor ohne Kippminute, und
+    'fehler' sagt warum.
+
+    Gerechnet werden die zehn Planeten, der Mondknoten (wahrer Knoten), Lilith
+    (oskulierend), Chiron und Pholus (beide brauchen seas_*.se1; fehlt die
+    Datei, steht das in 'fehler' — sie laufen so langsam, dass sie binnen 180
+    Minuten nur aus Bogensekunden-Abstand kippen) und der Glueckspunkt: er
+    laeuft mit dem AC und braucht deshalb lat UND lon (Tag-/Nachtformel je
+    Minute ueber glueckspunkt(), `cusps` als Anker). Die Achsen und Spitzen
+    stehen in kippminuten().
+
+    jd   Julianisches Datum der Geburt in UT (wie in strukturbild()).
+    -> Liste von dicts in der Reihenfolge von `factors`:
+       {'name', 'lon', 'zeichen', 'abstand_grenze' (Grad bis zur naechsten
+        Zeichengrenze), 'grenze' (z. B. 'Stier/Zwillinge'), 'lage' ('hinter' =
+        kurz nach dem Zeichenbeginn, 'vor' = kurz vor dem Zeichenende),
+        'frueher', 'spaeter', 'min', 'richtung', 'zeichen_frueher',
+        'zeichen_spaeter', 'grad_je_minute', 'gerechnet' (True beim
+        Glueckspunkt), 'fehler' (None oder der Grund)}
+       'frueher'/'spaeter' wie bei kippminuten(): die erste Minute mit anderem
+       Zeichen, None = kein Wechsel bis max_min.
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    flag = swe.FLG_SWIEPH | swe.FLG_SPEED
+    schritt = 1.0 / 1440.0
+
+    def _delta(neu, alt):
+        return ((neu - alt + 180.0) % 360.0) - 180.0
+
+    pos = {f['name']: f['lon'] % 360.0 for f in factors}
+    out = []
+    for f in factors:
+        nm = f['name']
+        ist_gp = nm in _GP_NAMEN
+        if nm in WINKEL or not (ist_gp or nm in _KIPP_KOERPER):
+            continue
+        l0 = pos[nm]
+        z = zeichen_index(l0)
+        if l0 % 30.0 < 15.0:
+            lage, abst = 'hinter', l0 % 30.0
+            grenze = f"{SIGN_NAMES[(z - 1) % 12]}/{SIGN_NAMES[z]}"
+        else:
+            lage, abst = 'vor', 30.0 - l0 % 30.0
+            grenze = f"{SIGN_NAMES[z]}/{SIGN_NAMES[(z + 1) % 12]}"
+        e = {'name': nm, 'lon': l0, 'zeichen': SIGN_NAMES[z],
+             'abstand_grenze': abst, 'grenze': grenze, 'lage': lage,
+             'frueher': None, 'spaeter': None, 'min': None, 'richtung': None,
+             'zeichen_frueher': None, 'zeichen_spaeter': None,
+             'grad_je_minute': None, 'gerechnet': ist_gp, 'fehler': None}
+        out.append(e)
+        try:
+            if ist_gp:
+                if lat is None or lon is None:
+                    e['fehler'] = ('ohne lat und lon keine Kippminute — er läuft '
+                                   'mit dem AC')
+                    continue
+                if 'Sonne' not in pos or 'Mond' not in pos:
+                    e['fehler'] = 'Sonne oder Mond fehlt in factors'
+                    continue
+                c0 = swe.houses_ex(jd, lat, lon, b"K")[0][:12]
+                anker = [c % 360.0 for c in (cusps or c0)]
+                s0 = swe.calc_ut(jd, swe.SUN, flag)[0][0]
+                m0 = swe.calc_ut(jd, swe.MOON, flag)[0][0]
+                ac0 = pos.get('AC', anker[0])
+
+                def lage_bei(dt):
+                    ck = swe.houses_ex(jd + dt, lat, lon, b"K")[0][:12]
+                    cus = [(anker[i] + _delta(ck[i], c0[i])) % 360.0
+                           for i in range(12)]
+                    sk = pos['Sonne'] + _delta(
+                        swe.calc_ut(jd + dt, swe.SUN, flag)[0][0], s0)
+                    mk = pos['Mond'] + _delta(
+                        swe.calc_ut(jd + dt, swe.MOON, flag)[0][0], m0)
+                    return glueckspunkt([], cus, ac=(ac0 + _delta(ck[0], c0[0])),
+                                        sonne=sk % 360.0, mond=mk % 360.0)['lon']
+                if _winkelabstand(lage_bei(0.0), l0) > 0.05:
+                    e['fehler'] = ('seine Länge in factors folgt nicht der Formel '
+                                   'von radix.glueckspunkt() — von Hand gesetzt? '
+                                   'Kippminute nicht bestimmbar')
+                    continue
+                v = _winkelabstand(lage_bei(schritt), lage_bei(-schritt)) / 2.0
+            else:
+                body = getattr(swe, _KIPP_KOERPER[nm])
+                x0 = swe.calc_ut(jd, body, flag)[0]
+                if _winkelabstand(x0[0], l0) > 0.05:
+                    e['fehler'] = ('die Ephemeride steht für jd %s von der Länge '
+                                   'in factors entfernt — jd, wahrer Knoten, '
+                                   'oskulierende Lilith prüfen'
+                                   % _gr_s(_winkelabstand(x0[0], l0)))
+                    continue
+
+                def lage_bei(dt, _b=body, _x=x0[0]):
+                    return l0 + _delta(swe.calc_ut(jd + dt, _b, flag)[0][0], _x)
+                v = abs(x0[3]) / 1440.0
+        except Exception as ex:
+            _dt = re.search(r"file '([^']+)' not found", str(ex))
+            e['fehler'] = (('Ephemeridendatei %s nicht gefunden — vorher '
+                            'swe.set_ephe_path(lade.ephemeriden()) setzen'
+                            % _dt.group(1)) if _dt else
+                           'die Ephemeride meldet einen Fehler: %s' % ex)
+            continue
+        e['grad_je_minute'] = v
+        # Kann der Faktor binnen max_min ueberhaupt eine Grenze erreichen?
+        # (Faktor 2 gegen Beschleunigung; der Glueckspunkt wird immer gerechnet.)
+        if not ist_gp and abst > 2.0 * v * max_min + 1e-9:
+            continue
+        for key, vz in (('frueher', -1), ('spaeter', 1)):
+            for k in range(1, max_min + 1):
+                lk = lage_bei(vz * k * schritt) % 360.0
+                if zeichen_index(lk) != z:
+                    e[key] = k
+                    e['zeichen_' + key] = SIGN_NAMES[zeichen_index(lk)]
+                    break
+        kand = [(e['frueher'], 'früher'), (e['spaeter'], 'später')]
+        kand = [x for x in kand if x[0] is not None]
+        if kand:
+            e['min'], e['richtung'] = min(kand)
+    return out
+
+
+def faktor_kipp_warnungen(fk, schwelle=KIPP_SCHWELLE):
+    """Die Faktoren unter der Schwelle (Gegenprobe g, seit 2026-09-19 auch
+    fuer Planeten und Punkte), die knappste zuerst.
+
+    -> [{'name', 'minuten', 'richtung', 'von', 'nach', 'grad_je_minute',
+         'abstand_grenze', 'grenze', 'lage', 'gerechnet'}]; leer, wenn keiner
+        unter der Schwelle liegt; None, wenn fk None ist.
+    """
+    if fk is None:
+        return None
+    out = []
+    for e in fk:
+        if e.get('min') is None or e['min'] >= schwelle:
+            continue
+        out.append({'name': e['name'], 'minuten': e['min'],
+                    'richtung': e['richtung'], 'von': e['zeichen'],
+                    'nach': (e['zeichen_frueher'] if e['richtung'] == 'früher'
+                             else e['zeichen_spaeter']),
+                    'grad_je_minute': e['grad_je_minute'],
+                    'abstand_grenze': e['abstand_grenze'],
+                    'grenze': e['grenze'], 'lage': e['lage'],
+                    'gerechnet': e['gerechnet']})
+    out.sort(key=lambda w: w['minuten'])
+    return out
+
+
+def _faktor_anzeige(nm):
+    return _FAKTOR_ANZEIGE.get(nm, nm)
+
+
+def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE, faktoren=None):
     """Fertiger FUSSNOTENSATZ fuer die Konstellationsseite — oder None.
 
     Neu 2026-09-17 (Klasse-2-Entscheidungslauf, Wiederholungstaeter aus zwei
@@ -1382,16 +1684,24 @@ def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE):
 
     kipp      Rueckgabe von kippminuten() (oder strukturbild()['kippminuten'])
     schwelle  Minuten; Vorgabe KIPP_SCHWELLE, dieselbe wie bei Gegenprobe g
+    faktoren  (neu 2026-09-19, W34) Rueckgabe von faktor_kippminuten() (oder
+              strukturbild()['faktor_kippminuten']). Dann nennt der Satz auch
+              Planeten und Punkte unter der Schwelle — im Prueflauf vom 17.09.e
+              hing der bestellte Hinweis an einem Planeten, und wer den Satz
+              formuliert, stand nirgends. Ohne `faktoren` ist der Satz
+              wortgleich wie bisher.
 
-    -> str oder None (None = keine Spitze unter der Schwelle, keine Fussnote).
+    -> str oder None (None = weder Spitze noch Faktor unter der Schwelle).
     """
     w = kipp_warnungen(kipp, schwelle=schwelle) if kipp is not None else None
-    if not w:
+    fw = (faktor_kipp_warnungen(faktoren, schwelle=schwelle)
+          if faktoren is not None else None)
+    if not w and not fw:
         return None
     _ACHSNAME = {(1, 7): 'AC/DC', (10, 4): 'MC/IC', (4, 10): 'IC/MC',
                  (7, 1): 'DC/AC'}
     teile = []
-    for x in w:
+    for x in (w or []):
         paar = tuple(x['paar'])
         name = _ACHSNAME.get(paar)
         wie, steht, wechselt = (
@@ -1403,12 +1713,33 @@ def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE):
             f"{wie} {steht} {m} {min_w} vor einer Zeichengrenze: bei {m} "
             f"{min_w} {x['richtung']}er Geburt {wechselt} von {x['von'][0]}/"
             f"{x['von'][1]} auf {x['nach'][0]}/{x['nach'][1]}")
+    n_spitzen = len(teile)
+    for x in (fw or []):                       # 2026-09-19 (W34)
+        anz = _faktor_anzeige(x['name'])
+        wer, pron = _FAKTOR_ARTIKEL.get(anz, (anz, 'er'))
+        m = x['minuten']
+        min_w = 'Minute' if m == 1 else 'Minuten'
+        teile.append(
+            f"{wer} steht {m} {min_w} vor einer Zeichengrenze: bei {m} "
+            f"{min_w} {x['richtung']}er Geburt wechselt {pron} von {x['von']} "
+            f"auf {x['nach']}")
     mehr = len(teile) > 1
-    teile = [teile[0]] + [t[0].lower() + t[1:] for t in teile[1:]]
+    teile = [teile[0]] + [(t[0].lower() + t[1:])
+                          if t.startswith(('Die ', 'Der ')) else t
+                          for t in teile[1:]]
+    if not fw:
+        return ('; '.join(teile)
+                + ('. Die Zeichen- und Hausdeutung dieser Spitzen hängt damit an '
+                   'der Geburtszeit.' if mehr else
+                   '. Die Zeichen- und Hausdeutung hängt damit an der Geburtszeit.'))
+    if not n_spitzen:
+        return ('; '.join(teile)
+                + ('. Die Zeichendeutung dieser Faktoren hängt damit an der '
+                   'Geburtszeit.' if mehr else
+                   '. Die Zeichendeutung hängt damit an der Geburtszeit.'))
     return ('; '.join(teile)
-            + ('. Die Zeichen- und Hausdeutung dieser Spitzen hängt damit an '
-               'der Geburtszeit.' if mehr else
-               '. Die Zeichen- und Hausdeutung hängt damit an der Geburtszeit.'))
+            + '. Die Zeichen- und Hausdeutung der Spitzen und die '
+              'Zeichendeutung der Faktoren hängen damit an der Geburtszeit.')
 
 
 def hausherrscher(factors, cusps, aspects=None, klassisch=False,
@@ -1589,10 +1920,23 @@ def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
     Definition auf der leeren Spitze, auch wenn er (mit dem groesseren
     Huber-Orb der Lichter) mehr als 5 Grad entfernt ist. Dafuer `apex_name`
     und `aspects` mitgeben; `konfigurationen()` tut das selbst.
+
+    ACHSENENDEN (seit 2026-09-19, W33, Chris-Entscheidung Frage 17): Steht der
+    Brennpunkt auf einem Winkel oder auf dem Mondknoten — selbst oder laut
+    Aspektliste in Konjunktion dazu —, liegt das GEGENENDE derselben Achse per
+    Konstruktion auf der leeren Spitze; die Spitze gilt dann als besetzt.
+    Der Suedknoten steht nach dem chartdata.py-Vertrag nicht in `factors` und
+    wird hier aus dem Mondknoten abgeleitet (auch fuer die 5°-Nachbarschaft);
+    ein fehlender DC/IC ebenso aus AC/MC. Abgeleitete Eintraege tragen
+    'abgeleitet': True. `achsenende` nennt je Fall {'ende', 'gegenende',
+    'art': 'auf'|'konjunktion'}. Ein Grosskreuz hat keine leere Spitze (s.
+    konfigurationen(), 'grosskreuz_achsen').
     """
     lon = (apex_lon + 180.0) % 360
-    out = {'lon': round(lon, 2), 'zeichen': zeichen_name(lon), 'haus': None,
-           'haus_spalte': None, 'besetzt': []}
+    # 2026-09-19 (W2): Lage und Orbs ungerundet — mit round(lon, 2) stand die
+    # leere Spitze in der Ausgabe bis zu 1′ neben der Minute des Apex.
+    out = {'lon': lon, 'zeichen': zeichen_name(lon), 'haus': None,
+           'haus_spalte': None, 'besetzt': [], 'achsenende': []}
     if cusps:
         out['haus'] = haus_und_grenzlage(lon, cusps)['haus']
         out['haus_spalte'] = haus_spalte(lon, cusps)
@@ -1608,7 +1952,35 @@ def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
     for f in factors:
         d = abs((f['lon'] - lon + 180.0) % 360 - 180.0)
         if d <= orb or f['name'] in per_opposition:
-            out['besetzt'].append({'name': f['name'], 'orb': round(d, 2)})
+            out['besetzt'].append({'name': f['name'], 'orb': d})
+    # 2026-09-19 (W33): Gegenenden von Winkel- und Knotenachse.
+    lon_of = {f['name']: f['lon'] for f in factors}
+    konj_apex = set()
+    if apex_name and aspects:
+        for a in aspects:
+            if a.get('angle') != 0:
+                continue
+            if a['a'] == apex_name:
+                konj_apex.add(a['b'])
+            elif a['b'] == apex_name:
+                konj_apex.add(a['a'])
+    enden = [(w, GEGENWINKEL[w], lon_of[w]) for w in WINKEL if w in lon_of]
+    kn = next((k for k in ('Mondknoten', 'Knoten', 'Nordknoten')
+               if k in lon_of), None)
+    if kn and not any(s in lon_of for s in ('Südknoten', 'Suedknoten')):
+        enden.append((kn, 'Südknoten', lon_of[kn]))
+    schon = {b['name'] for b in out['besetzt']}
+    for ende, gegen, lon_e in enden:
+        auf, konj = apex_name == ende, ende in konj_apex
+        d = abs((lon_e + 180.0 - lon + 180.0) % 360 - 180.0)
+        if gegen not in schon and gegen not in lon_of and (d <= orb or auf
+                                                          or konj):
+            out['besetzt'].append({'name': gegen, 'orb': d,
+                                   'abgeleitet': True})
+            schon.add(gegen)
+        if auf or konj:
+            out['achsenende'].append({'ende': ende, 'gegenende': gegen,
+                                      'art': 'auf' if auf else 'konjunktion'})
     out['besetzt'].sort(key=lambda x: x['orb'])
     return out
 
@@ -1620,6 +1992,9 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
 
     Jeder T-Quadrat-Eintrag traegt seit dem 2026-09-08 zusaetzlich
     `leere_spitze` (s. `leere_spitze()`): Zeichen, Haus und was dort steht.
+    Ein Grosskreuz hat KEINE leere Spitze; seit 2026-09-19 (W33) steht zu jedem
+    Eintrag in 'grosskreuz' an derselben Stelle von 'grosskreuz_achsen' das
+    Paar seiner Gegenpaare [[a, b], [c, d]] — ueber sie laeuft die Entlastung.
 
     Drachen (Kite): ein Grosstrigon plus ein Faktor (der Kopf) in Opposition zu
     einer Ecke und im Sextil zu den beiden anderen. Eintrag: {'trigon',
@@ -1672,6 +2047,7 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
     verbunden = lambda menge, x, y: frozenset((x, y)) in menge
 
     tq, gk, gt, jod = [], [], [], []
+    gk_achsen = []                     # W33: Gegenpaare je Grosskreuz
     # DETERMINISMUS (2026-09-17, Pruefbericht Geburtshoroskop Schritt 1+2,
     # Klasse-1-Befund 1.2). Hier stand `for o in opp:` mit `a, b = tuple(o)`.
     # `paare()` gibt ein SET von frozensets zurueck; dessen Iterationsreihen-
@@ -1702,6 +2078,8 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                     figur = sorted([a, b, c, gegen[0]])
                     if figur not in gk:
                         gk.append(figur)
+                        gk_achsen.append(sorted([sorted([a, b]),
+                                                 sorted([c, gegen[0]])]))
                 else:
                     eintrag = {'achse': sorted([a, b]), 'apex': apex,
                                'leere_spitze': leere_spitze(
@@ -1817,7 +2195,8 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                    for h, v in sorted(nach_haus.items()) if _stellium(v)]
     return {'t_quadrat': tq, 'grosskreuz': gk, 'grosstrigon': gt, 'jod': jod,
             'drachen': drachen, 'rechteck': rechteck,
-            'stellium_zeichen': stell_z, 'stellium_haus': stell_h}
+            'stellium_zeichen': stell_z, 'stellium_haus': stell_h,
+            'grosskreuz_achsen': gk_achsen}
 
 
 # --- Verteilungsmuster: Hemisphaeren, Quadranten, Jones-Muster ---------------
@@ -1953,8 +2332,12 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     konjunkt — das sind zwei Figuren mit benachbarten Spitzen oder eine mit
     zwei Enden, und das ist eine Deutungsentscheidung.
     Grosstrigon, hart: alle drei Ecken paarweise identisch oder konjunkt.
-    Kandidaten gibt es dort nicht; zwei Grosstrigone mit zwei gemeinsamen Ecken
-    sind zwei Figuren.
+    Kandidaten gibt es dort nicht. Zwei Grosstrigone mit zwei gemeinsamen
+    (identischen oder konjunkten) Ecken, deren dritte Ecken NICHT konjunkt
+    sind, sind seit 2026-09-19 EIN Befund (L9, Chris-Entscheidung Frage 19):
+    Die engere Figur fuehrt (kleinste Summe ihrer drei Trigon-Orben, bei
+    Gleichstand die zuerst gemeldete), die andere ist Nebenlesart und wird in
+    einem Satz genannt — 'grosstrigon_nebenlesarten'.
 
     -> {'figuren': [{'achse','apex','spiegel_apex','leere_spitze','meldungen'}],
         'kandidaten': [[i, j, ...]],   # Indizes in 'figuren'
@@ -1963,6 +2346,8 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'jod_kandidaten': [[i, j, ...]], 'jod_meldungen': n, 'jod_anzahl': m,
         'grosstrigon_figuren': [{'ecken','meldungen'}],
         'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m,
+        'grosstrigon_nebenlesarten': [{'fuehrt': i, 'neben': [j, ...],
+                                       'orbsummen': [s_i, s_j, ...]}],
         'rechteck_figuren': [{'achsen','trigone','sextile','meldungen'}],
         'rechteck_meldungen': n, 'rechteck_anzahl': m}
     """
@@ -2107,6 +2492,40 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         else:
             gt_figuren.append({'ecken': ecken, 'meldungen': [ecken]})
 
+    # ZWEI GROSSTRIGONE MIT ZWEI GEMEINSAMEN ECKEN (2026-09-19, L9): EIN
+    # Befund, die engere Figur fuehrt. Im Prueflauf vom 17.09.d standen die
+    # dritten Ecken knapp ausserhalb des Konjunktions-Orbs; keine
+    # Zusammenfass-Regel griff, und der Lauf musste selbst entscheiden.
+    # Ketten aus drei und mehr Figuren bilden EINE Gruppe (Verbundkomponente).
+    tri_orb = {frozenset((a['a'], a['b'])): a.get('orb', 0.0)
+               for a in (aspects or ()) if a.get('angle') == 120}
+
+    def _orbsumme(ecken):
+        return sum(tri_orb.get(frozenset((x, y)), 0.0)
+                   for i, x in enumerate(ecken) for y in ecken[i + 1:])
+
+    gruppe_von = list(range(len(gt_figuren)))
+
+    def _wurzel(i):
+        while gruppe_von[i] != i:
+            i = gruppe_von[i]
+        return i
+    for i, f in enumerate(gt_figuren):
+        for j in range(i + 1, len(gt_figuren)):
+            gem = [x for x in f['ecken']
+                   if any(gleich(x, y) for y in gt_figuren[j]['ecken'])]
+            if len(gem) == 2:
+                gruppe_von[_wurzel(j)] = _wurzel(i)
+    gt_neben = []
+    for w in sorted({_wurzel(i) for i in range(len(gt_figuren))}):
+        glieder = [i for i in range(len(gt_figuren)) if _wurzel(i) == w]
+        if len(glieder) < 2:
+            continue
+        glieder.sort(key=lambda i: (_orbsumme(gt_figuren[i]['ecken']), i))
+        gt_neben.append({'fuehrt': glieder[0], 'neben': glieder[1:],
+                         'orbsummen': [_orbsumme(gt_figuren[i]['ecken'])
+                                       for i in glieder]})
+
     # MYSTISCHES RECHTECK, neu am 15.09.2026 (Pruefbericht Geburtshoroskop
     # Schritt 1+2, 5.3). Bis dahin gab es fuer Rechtecke ueberhaupt keine
     # Gruppierung, obwohl die Vervielfachung aus demselben Mechanismus kommt
@@ -2143,7 +2562,8 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
             'jod_meldungen': len(jod), 'jod_anzahl': len(jod_figuren),
             'grosstrigon_figuren': gt_figuren,
             'grosstrigon_meldungen': len(gt),
-            'grosstrigon_anzahl': len(gt_figuren)}
+            'grosstrigon_anzahl': len(gt_figuren),
+            'grosstrigon_nebenlesarten': gt_neben}
 
 
 def verteilungsmuster(factors, cusps=None):
@@ -2420,6 +2840,17 @@ def verteilungsmuster(factors, cusps=None):
         out['auch_lesbar'].append({'muster': k['muster'], 'grund': k['grund'],
                                    'details': k['details'],
                                    'strikt': k['strikt']})
+    # RANGFOLGE DER NEBENLESARTEN (2026-09-19, L8, Chris-Entscheidung Frage
+    # 19): strikt vor grenzwertig, dann das engere Muster zuerst — dieselbe
+    # Reihenfolge, nach der die erste Wahl faellt (_MUSTER_RANG). Die erste
+    # Nebenlesart wird gedeutet, jede weitere in einem Satz genannt. Vorher
+    # standen zwei Nebenlesarten in Fundreihenfolge nebeneinander, und der
+    # Lauf musste entscheiden, welche zuerst kommt.
+    out['auch_lesbar'].sort(key=lambda z: (
+        0 if z['strikt'] else 1,
+        _MUSTER_RANG.index(z['muster']) if z['muster'] in _MUSTER_RANG else 99))
+    for _r, _z in enumerate(out['auch_lesbar'], 1):
+        _z['rang'] = _r
     return out
 
 
@@ -2460,9 +2891,9 @@ def mondphase(factors):
     d_konj = min(winkel, 360.0 - winkel)
     d_opp = abs(180.0 - winkel)
     if d_konj <= FINSTERNIS_SYZYGIE_ORB:
-        out['syzygie'] = {'art': 'Konjunktion', 'orb': round(d_konj, 2)}
+        out['syzygie'] = {'art': 'Konjunktion', 'orb': d_konj}   # ungerundet (W2)
     elif d_opp <= FINSTERNIS_SYZYGIE_ORB:
-        out['syzygie'] = {'art': 'Opposition', 'orb': round(d_opp, 2)}
+        out['syzygie'] = {'art': 'Opposition', 'orb': d_opp}
     # Die Knotenachse heisst in `factors` nach dem chartdata.py-Vertrag
     # 'Mondknoten'; 'Knoten' bleibt fuer aeltere chart-eigene Builder gueltig
     # (2026-09-16, Pruefbericht Geburtshoroskop Schritt 1+2, 1.1).
@@ -2504,9 +2935,20 @@ def mondphase(factors):
 # fuehrt, melden sich klassisch um die neunundzwanzig\"; verboten bleibt jede
 # Aussage darueber, was in diesem Alter GESCHIEHT.
 
+# 2026-09-19 (W6): Alle Eintraege gegen die mittleren siderischen Umlaufzeiten
+# geprueft (Saturn 29,457 J, Jupiter 11,862 J, Uranus 84,02 J, Knoten 18,61 J,
+# Apsiden/Lilith 8,85 J) und gegen die Ephemeride (erste exakte Kreuzung,
+# 71 synthetische Geburtsmomente, Protokoll im Wartungslog). Korrigiert: 14,7
+# Jahre hiessen „erstes Saturn-Quadrat" — das ist die erste Opposition (das
+# erste Quadrat liegt bei rund 7,4); 44,0 hiess „Saturn-Opposition" und ist die
+# ZWEITE, astronomisch 44,2; Jupiter lief als Vielfaches von 11,9 statt 11,862
+# und lag bei der fuenften Rueckkehr 0,2 Jahre zu spaet; die Pluto-Schaetzung
+# nannte 36–45, das gilt nur fuer die Jahrgaenge 1940–1990. Die erste exakte
+# Kreuzung einer Retro-Schleife kommt bis zu 0,4 Jahre VOR dem Tabellenwert —
+# die Fenster (±1,5 Jahre) decken das.
 ZYKLEN = {
-    'Saturn': [(29.5, 'Saturn-Rückkehr'), (44.0, 'Saturn-Opposition'),
-               (58.9, 'zweite Saturn-Rückkehr'), (14.7, 'erstes Saturn-Quadrat')],
+    'Saturn': [(29.5, 'Saturn-Rückkehr'), (44.2, 'zweite Saturn-Opposition'),
+               (58.9, 'zweite Saturn-Rückkehr'), (14.7, 'erste Saturn-Opposition')],
     'Uranus': [(21.0, 'Uranus-Quadrat'), (42.0, 'Uranus-Opposition'),
                (63.0, 'zweites Uranus-Quadrat')],
     'Chiron': [(50.5, 'Chiron-Rückkehr')],
@@ -2527,11 +2969,12 @@ ZYKLEN = {
                    (46.5, 'dritte Knoten-Opposition'),
                    (55.8, 'dritte Knoten-Rückkehr'),
                    (65.1, 'vierte Knoten-Opposition')],
-    'Jupiter': [(11.9, 'Jupiter-Rückkehr'), (23.8, 'Jupiter-Rückkehr'),
-                (35.7, 'Jupiter-Rückkehr'), (47.6, 'Jupiter-Rückkehr'),
-                (59.5, 'Jupiter-Rückkehr')],
-    'Pluto': [(38.0, 'Pluto-Quadrat (Jahrgangsschätzung, 36–45 — '
-                     'wird von pluto_quadrat_alter() überschrieben)')],
+    'Jupiter': [(11.9, 'Jupiter-Rückkehr'), (23.7, 'Jupiter-Rückkehr'),
+                (35.6, 'Jupiter-Rückkehr'), (47.4, 'Jupiter-Rückkehr'),
+                (59.3, 'Jupiter-Rückkehr')],
+    'Pluto': [(38.0, 'Pluto-Quadrat (Jahrgangsschätzung, 36–45 nur für die '
+                     'Jahrgänge 1940–1990, davor und danach später, bis über '
+                     '60 — wird von pluto_quadrat_alter() überschrieben)')],
     # Lilith neu am 2026-09-09 (Pruefbericht Geburtshoroskop, 5.8). Die
     # Lilith-Referenz nennt eine Wiederkehr alle knapp neun Jahre als „stillen
     # Reifungstakt"; ZYKLEN kannte sie nicht, weshalb ein Lilith-Kapitel nach
@@ -2570,7 +3013,9 @@ def pluto_quadrat_alter(jd_geburt, pluto_lon, max_alter=70):
     Jahrgangsmittel und lag im Prüffall zwei Jahre daneben — er wies den
     aktuell laufenden Transit als „zurückliegend" aus. Weil Plutos Bahn stark
     exzentrisch ist, schwankt das Alter beim Quadrat je nach Radix-Position
-    zwischen etwa 36 und 45 Jahren; ein Mittelwert ist dafür untauglich.
+    für die Jahrgänge 1940–1990 zwischen etwa 36 und 45 Jahren, davor und
+    danach deutlich später (Jahrgang 2000 rund 51, 2015 rund 64; gegengerechnet
+    2026-09-19, W6); ein Mittelwert ist dafür untauglich.
 
     Rechnet gegen die Ephemeride, wenn pyswisseph verfügbar ist, sonst None —
     dann gilt der Tabellenwert weiter und `strukturbild_text()` kennzeichnet ihn
@@ -2634,6 +3079,107 @@ def zyklusfenster(faktor, alter=None, gerechnet=None):
     return out
 
 
+# --- Rangzeilen (neu 2026-09-19, U2, Chris-Entscheidung Frage 18) -----------
+# „Das Datenblatt liefert die Zahlen, die der Text braucht." 23 Inhaltsbefunde
+# in neun von zehn Schritt-3-Laeufen waren Rang-, Zaehl- und
+# Einzigkeitsaussagen („die engste Verbindung deines Bildes" — die fuenftengste;
+# „X mit zwei Verbindungen" — gezaehlt drei, 2 war die gewichtete Dichte aus
+# §4). Das Datenblatt hatte Tabellen, keine Ranglisten, und fuehrte die
+# gewichtete Dichte ohne Etikett. §10 schreibt die Ranglisten fertig, jede mit
+# ihrer Zaehlmenge; die Zahlen sind dieselben wie in §1 und §4.
+RANG_ENGSTE = 10            # so viele Raenge nennt RANG engste-aspekte
+RANG_ENGSTE_PLANETEN = 5    # ... und RANG engste-aspekte-planeten
+
+
+def _minuten(deg):
+    """Grad-Betrag in ganzen Bogenminuten, genau wie _gr() rundet."""
+    d = int(deg)
+    return d * 60 + int(round((deg - d) * 60))
+
+
+def _wettkampf(werte):
+    """Rangzahlen einer schon sortierten Werteliste: gleicher Wert, gleicher
+    Rang, danach wird uebersprungen (1, 2, 2, 4)."""
+    raenge = []
+    for i, w in enumerate(werte):
+        raenge.append(raenge[-1] if i and w == werte[i - 1] else i + 1)
+    return raenge
+
+
+def _rang_daten(factors, aspects, zusatz, sb):
+    """Die Daten der Rangzeilen (§10). Grundlage sind AUSSCHLIESSLICH
+    Groessen, die das Strukturbild schon fuehrt: die Zeilen der Aspektseite
+    (aspektliste()-Logik), die Aspektdichte aus §4 und die Verteilungen aus §1.
+    Gleichstand = gleiche Rangzahl; bei den Orben zaehlt die Bogenminute, die
+    auch in der Tabelle steht.
+    """
+    # Kopien: _zeilen_zusammenziehen() setzt 'spiegel' in den Zeilen, und die
+    # Aspektliste des Aufrufers darf dadurch nicht veraendert werden.
+    roh = [dict(a) for a in aspects
+           if not (ist_achse(a['a']) and ist_achse(a['b']))]
+    zeilen = sorted(_zeilen_zusammenziehen(roh, factors),
+                    key=lambda x: (x['orb'], _STAERKE_RANG.get(x['strength'], 9),
+                                   x['a'], x['b']))
+
+    def _aspekte(zz, n):
+        raenge = _wettkampf([_minuten(z['orb']) for z in zz])
+        return {'gesamt': len(zz), 'eintraege': [
+            {'rang': r, 'a': z['a'], 'b': z['b'], 'name': z['name'],
+             'orb': z['orb'], 'strength': z['strength'],
+             'spiegel': z.get('spiegel')}
+            for r, z in zip(raenge, zz) if r <= n]}
+
+    ad = sb['aspektdichte']
+    pool = [n for n in ad['gewichtet'] if n not in WINKEL]
+    seite = {n: sum(1 for z in zeilen if n in (z['a'], z['b'])) for n in pool}
+
+    def _verbindungen(feld):
+        werte = ad['anzahl'] if feld == 'anzahl' else ad['gewichtet']
+        folge = sorted(pool, key=lambda n: (-werte[n], n))
+        return [{'rang': r, 'faktor': n, 'wert': werte[n],
+                 'aspekttabelle': seite[n]}
+                for r, n in zip(_wettkampf([werte[n] for n in folge]), folge)]
+
+    def _verteilung(v, feld, traeger_feld, namen, gewichtet):
+        summe = round(sum(v[feld].values()), 1)
+        folge = sorted(namen, key=lambda k: (-v[feld][k], namen.index(k)))
+        out = []
+        for r, k in zip(_wettkampf([v[feld][k] for k in folge]), folge):
+            tr = [(n, GEWICHT.get(n, 1.0) if gewichtet else 1.0)
+                  for n in v[traeger_feld][k]]
+            out.append({'rang': r, 'name': k, 'wert': v[feld][k],
+                        'summe': summe, 'traeger': tr,
+                        'prozent': (int(100.0 * v[feld][k] / summe + 0.5)
+                                    if summe else 0)})
+        return out
+
+    vp, vg = sb['verteilung_planeten'], sb['verteilung_gewichtet']
+    # Die Gewichte fuer die Etiketten aus GEWICHT und _DICHTE_GEWICHT, nicht
+    # abgeschrieben — ein fest geschriebenes Etikett veraltet (s. „Orb 9°").
+    gewichte = {}
+    for f in factors:
+        gewichte.setdefault(GEWICHT.get(f['name'], 1.0), []).append(f['name'])
+    return {
+        'gewichte': sorted(gewichte.items(), key=lambda x: -x[0]),
+        'dichte_gewichte': dict(_DICHTE_GEWICHT),
+        'engste_aspekte': _aspekte(zeilen, RANG_ENGSTE),
+        'engste_aspekte_planeten': _aspekte(
+            [z for z in zeilen if z['a'] in _PLANETEN and z['b'] in _PLANETEN],
+            RANG_ENGSTE_PLANETEN),
+        'verbindungen_gezaehlt': _verbindungen('anzahl'),
+        'verbindungen_gewichtet': _verbindungen('gewichtet'),
+        'mit_untergrund': bool(zusatz),
+        'elemente_gezaehlt': _verteilung(vp, 'elemente', 'traeger',
+                                         _ELEM_NAMES, False),
+        'elemente_gewichtet': _verteilung(vg, 'elemente', 'traeger',
+                                          _ELEM_NAMES, True),
+        'modi_gezaehlt': _verteilung(vp, 'modi', 'traeger_modus',
+                                     _MODUS_NAMES, False),
+        'modi_gewichtet': _verteilung(vg, 'modi', 'traeger_modus',
+                                      _MODUS_NAMES, True),
+    }
+
+
 def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
                  jd_geburt=None, lat=None, lon=None):
     """Alle Struktur-Befunde eines Charts in einem Aufruf.
@@ -2660,7 +3206,10 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     rezeptionen, aspektdichte, spezialnetz, konfigurationen, zyklen — seit
     dem 2026-09-08 (zweiter Durchgang) verteilungsmuster und mondphase — und
     seit dem 2026-09-12 haus_kreise, haus_kreise_klassisch, herrscher_einlauf,
-    spitzen_kontakte, kippminuten, kipp_warnungen, kippminuten_abweichung.
+    spitzen_kontakte, kippminuten, kipp_warnungen, kippminuten_abweichung —
+    und seit dem 2026-09-19 faktor_kippminuten und faktor_kipp_warnungen (W34:
+    Zeichengrenze der Planeten und Punkte, nur mit jd_geburt) sowie rang (U2:
+    die Daten der Rangzeilen §10).
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -2681,6 +3230,8 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'kippminuten': None,
         'kipp_warnungen': None,
         'kippminuten_abweichung': None,
+        'faktor_kippminuten': None,
+        'faktor_kipp_warnungen': None,
         'rezeptionen': rezeptionen(factors),
         'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
@@ -2703,6 +3254,13 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             sb['kipp_warnungen'] = kipp_warnungen(kipp)
             sb['kippminuten_abweichung'] = round(max(
                 _winkelabstand(k['lon'], cusps[i]) for i, k in enumerate(kipp)), 3)
+    # Zeichengrenze der Faktoren (neu 2026-09-19, W34): braucht jd_geburt und
+    # pyswisseph; lat/lon nur fuer den Glueckspunkt.
+    if jd_geburt is not None:
+        _fk = faktor_kippminuten(jd_geburt, factors, lat=lat, lon=lon,
+                                 cusps=cusps)
+        sb['faktor_kippminuten'] = _fk
+        sb['faktor_kipp_warnungen'] = faktor_kipp_warnungen(_fk)
     # Achsen-Doppelungen gruppieren (neu 2026-09-09, Pruefbericht 5.7): Die
     # Handarbeit, die das Datenblatt-Modul bisher verlangte, macht jetzt
     # gruppiere_figuren() — sie fasst zusammen, was zweifelsfrei dieselbe Figur
@@ -2733,8 +3291,13 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         {'element': e, 'traeger': list(_va['traeger'].get(e) or [])}
         for e in _vp['elemente']
         if _vp['elemente'][e] == 0 and _va['elemente'].get(e, 0) > 0]
+    # 2026-09-19 (F1): gezaehlt werden weiter ALLE Endstellen der Ketten, also
+    # auch die Planeten im eigenen Zeichen ohne Zulauf — jeder ist eine eigene
+    # Zustaendigkeit. Der Wert ist derselbe wie vorher, nur das Etikett im
+    # Text nennt die Enddispositoren jetzt getrennt.
     sb['enddispositor_streuung'] = (
-        len(sb['ketten']['enddispositoren']) if not sb['ketten']['kreise'] else 0)
+        len(sb['ketten']['eigenes_zeichen']) if not sb['ketten']['kreise'] else 0)
+    sb['rang'] = _rang_daten(factors, aspects, zusatz, sb)     # U2, §10
     return sb
 
 
@@ -2966,14 +3529,32 @@ def _vert_zeile(v):
     return el, mo
 
 
-def strukturbild_text(sb):
+STRUKTURBILD_TYPEN = ('geburtshoroskop', 'ea', 'ultimativ', 'transit')
+
+
+def strukturbild_text(sb, typ='geburtshoroskop'):
     """Der fertige `## Strukturbild`-Abschnitt fuers chart_data.md.
 
     Schreibt AUSSCHLIESSLICH Befunde, keine Deutung — die kommt in Schritt 2.
     Die Befundzeilen, die das Datenblatt-Modul verlangt, sind als „Befund:\"
     ausgewiesen und dort von Hand zu vervollstaendigen, wo sie eine Aussage
     ueber die Person und nicht ueber die Zahl treffen.
+
+    typ  (neu 2026-09-19, F19) Dokumenttyp, fuer den das Datenblatt entsteht:
+         'geburtshoroskop' (Vorgabe, Wortlaut unveraendert), 'ea', 'ultimativ'
+         (beide mit Getriebe- und Instrument-Kapitel, Wortlaut wie
+         Geburtshoroskop) oder 'transit'. Im Transit gibt es weder Getriebe-
+         noch Instrument-Kapitel, und das Typmodul Geburtshoroskop ist nicht
+         geladen — die Verweise darauf entfallen dort; alle Befunde bleiben.
     """
+    _typ = str(typ or '').strip().lower()
+    if _typ not in STRUKTURBILD_TYPEN:
+        raise ValueError(
+            'strukturbild_text(): typ=%r ist unbekannt. Erlaubt sind %s — '
+            'typ bestimmt nur, ob die Befundzeilen auf Getriebe-, Instrument-'
+            'Kapitel und Typmodul verweisen (im Transit nicht). Fuer ein '
+            'Geburtshoroskop typ weglassen.' % (typ, ', '.join(STRUKTURBILD_TYPEN)))
+    transit = _typ == 'transit'
     L = ['## Strukturbild', '']
 
     L.append('### 1 · Elemente und Modi')
@@ -3037,12 +3618,28 @@ def strukturbild_text(sb):
                  f"Jedes Glied erbt die Bedingungen des nächsten.")
     if not k['kreise']:
         L.append('- Kein geschlossener Kreis unter den modernen Herrschern.')
-    L.append(f"- Enddispositoren: {', '.join(k['enddispositoren']) or 'keiner'}.")
+    # ENDDISPOSITOR NUR FUER ECHTE ENDPUNKTE (2026-09-19, F1): Das Etikett
+    # stand vorher an jedem Planeten im eigenen Zeichen, auch wenn keine
+    # fremde Kette dort endete. Wer sich an ihm entlang erzaehlt, schreibt
+    # dann „alle Ketten enden bei ihm" — sechs falsche Saetze im Prueflauf.
+    _zl = k.get('zulauf') or {}
+    L.append("- Enddispositoren (im eigenen Zeichen, und eine fremde Kette "
+             "endet bei ihm): "
+             + (', '.join(f"{p} (Ketten von {', '.join(_zl[p])})"
+                          if _zl.get(p) else p
+                          for p in k['enddispositoren']) or 'keiner') + '.')
+    if k.get('ohne_zulauf'):
+        L.append(f"- Im eigenen Zeichen ohne Zulauf (folgt keinem anderen, "
+                 f"aber keine fremde Kette endet bei ihm — kein "
+                 f"Enddispositor): {', '.join(k['ohne_zulauf'])}.")
     if sb.get('enddispositor_streuung', 0) > 2:
-        L.append(f"- ⚠ {sb['enddispositor_streuung']} Enddispositoren und kein "
-                 f"geschlossener Kreis: Die Zuständigkeiten laufen nirgends "
-                 f"zusammen, es gibt keine Zentrale. Eigener Befund für das "
-                 f"Getriebe-Kapitel (seit 2026-09-14).")
+        L.append(f"- ⚠ {sb['enddispositor_streuung']} Planeten im eigenen "
+                 f"Zeichen (davon {len(k['enddispositoren'])} mit Zulauf) und "
+                 f"kein geschlossener Kreis: Die Zuständigkeiten laufen "
+                 f"nirgends zusammen, es gibt keine Zentrale."
+                 + ('' if transit else
+                    ' Eigener Befund für das Getriebe-Kapitel (seit '
+                    '2026-09-14).'))
     kk = sb['ketten_klassisch']
     if [sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]:
         # LESBAR STATT ROH (neu 2026-09-17, Klasse-2-Entscheidungslauf).
@@ -3052,7 +3649,10 @@ def strukturbild_text(sb):
                 or 'keine')
         L.append(f"- Klassisch gerechnet ergibt sich ein anderes Bild: Kreise "
                  f"{_kkt}, Enddispositoren "
-                 f"{', '.join(kk['enddispositoren']) or 'keine'}.")
+                 f"{', '.join(kk['enddispositoren']) or 'keine'}"
+                 + (f" (im eigenen Zeichen ohne Zulauf: "
+                    f"{', '.join(kk['ohne_zulauf'])})"
+                    if kk.get('ohne_zulauf') else '') + ".")
     r = sb['rezeptionen']
     L.append(f"- Gegenseitige Rezeption: "
              f"{', '.join(a + '↔' + b for a, b in r['gegenseitig']) or 'keine'}.")
@@ -3062,7 +3662,8 @@ def strukturbild_text(sb):
         L.append(f"- Nur klassisch: "
                  f"{', '.join(a + '↔' + b for a, b in nur_kl)}.")
     L.append('- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht; die vier '
-             'Sonderfälle des Typmoduls stehen hinter ⟵):')
+             + ('Sonderfälle' if transit else 'Sonderfälle des Typmoduls')
+             + ' stehen hinter ⟵):')
     beteiligt = set()          # Haeuser, deren Spitze an einem Sonderfall haengt
     for h in sb['hausherrscher']:
         mark = []
@@ -3219,9 +3820,10 @@ def strukturbild_text(sb):
                      f"({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} → "
                      f"{w['nach'][1]}; {_gr(w['grad_je_minute'])} je Minute). "
                      f"Gehört in den ⚠-Block und den Datenblatt-Kopf (Gegenprobe "
-                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe; ein "
-                     f"Sonderfall an dieser Spitze führt ein Thema nur mit "
-                     f"Begründung (Typmodul, Gewichtungsrang 2).")
+                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe"
+                     + ('.' if transit else
+                        "; ein Sonderfall an dieser Spitze führt ein Thema nur "
+                        "mit Begründung (Typmodul, Gewichtungsrang 2)."))
         if not sb.get('kipp_warnungen'):
             L.append(f'- Keine Spitze unter {KIPP_SCHWELLE} Kippminuten.')
     else:
@@ -3229,6 +3831,53 @@ def strukturbild_text(sb):
                  'jd_geburt, lat und lon (und pyswisseph). Ohne sie ist jede '
                  'Hausherrscher-Deutung eine Behauptung mit unbekannter '
                  'Reichweite (Datenblatt-Modul, §3 und Gegenprobe g).')
+
+    # --- Zeichengrenze der Faktoren (neu 2026-09-19, W34) ----------------------
+    fk = sb.get('faktor_kippminuten')
+    if fk is None:
+        L.append('- Zeichengrenze der Faktoren: nicht gerechnet — strukturbild() '
+                 'braucht dafür jd_geburt (und pyswisseph), der Glückspunkt '
+                 'zusätzlich lat und lon (Gegenprobe g, seit 2026-09-19).')
+    else:
+        def _mn(x):
+            return 'nie (>%d)' % KIPP_MAX if x is None else str(x)
+        nah = [e for e in fk if e['fehler'] is None
+               and e['abstand_grenze'] < KIPP_FAKTOR_GRENZE]
+        if nah:
+            L.append(f"- Zeichengrenze der Faktoren (Gegenprobe g, seit "
+                     f"2026-09-19): unter {KIPP_FAKTOR_GRENZE:g}° an einer "
+                     f"Grenze stehen " + ' · '.join(
+                         f"{_faktor_anzeige(e['name'])} "
+                         f"{_gr_s(e['abstand_grenze'])} {e['lage']} der Grenze "
+                         f"{e['grenze']} (früher {_mn(e['frueher'])}, später "
+                         f"{_mn(e['spaeter'])}; {_gr_s(e['grad_je_minute'])} je "
+                         f"Minute)" for e in nah) + '.')
+        else:
+            L.append(f"- Zeichengrenze der Faktoren (Gegenprobe g, seit "
+                     f"2026-09-19): keiner steht unter {KIPP_FAKTOR_GRENZE:g}° "
+                     f"an einer Zeichengrenze.")
+        for w in (sb.get('faktor_kipp_warnungen') or []):
+            L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: "
+                     f"{_faktor_anzeige(w['name'])}"
+                     + (' (gerechneter Punkt, läuft mit dem AC)'
+                        if w['gerechnet'] else '')
+                     + f" wechselt bei {w['minuten']} "
+                     f"{'Minute' if w['minuten'] == 1 else 'Minuten'} "
+                     f"{w['richtung']}er Geburt das Zeichen ({w['von']} → "
+                     f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute). "
+                     f"Gehört in den ⚠-Block und den Datenblatt-Kopf (Gegenprobe "
+                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe; "
+                     f"für die Fußnote radix.zeichengrenze_fussnote(kipp, "
+                     f"faktoren=…).")
+        if not sb.get('faktor_kipp_warnungen'):
+            L.append(f'- Kein Faktor unter {KIPP_SCHWELLE} Kippminuten.')
+        _fehl = [e for e in fk if e['fehler']]
+        if _fehl:
+            L.append('- ⚠ Ohne Kippminute (Zeichengrenze der Faktoren): '
+                     + '; '.join(f"{_faktor_anzeige(e['name'])} — {e['fehler']} "
+                                 f"(Abstand zur Grenze "
+                                 f"{_gr_s(e['abstand_grenze'])})"
+                                 for e in _fehl) + '.')
     L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
              'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
              'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
@@ -3239,14 +3888,26 @@ def strukturbild_text(sb):
     L.append('### 4 · Aspektdichte je Faktor')
     ad = sb['aspektdichte']
     gw = ad['gewichtet']
-    dicht = ', '.join('%s (%g)' % (n, gw[n]) for n in ad['dicht'])
-    duenn = ', '.join('%s (%g)' % (n, gw[n]) for n in ad['duenn'])
+    # ETIKETT STATT NACKTER ZAHL (2026-09-19, U2): Hier stand etwa „X (1)" —
+    # die gewichtete Dichte, gelesen als „eine Verbindung" (gezaehlt zwei).
+    # Jetzt stehen beide Zahlen mit Namen da; die Zaehlmenge nennt §10.
+    _anz = ad.get('anzahl') or {}
+    dicht = ', '.join('%s (gewichtet %g, gezählt %d)' % (n, gw[n], _anz.get(n, 0))
+                      for n in ad['dicht'])
+    duenn = ', '.join('%s (gewichtet %g, gezählt %d)' % (n, gw[n], _anz.get(n, 0))
+                      for n in ad['duenn'])
     L.append('- Dicht verschaltet: %s.' % (dicht or '—'))
     L.append('- Dünn verschaltet: %s.' % (duenn or '—'))
     L.append('- Unaspektiert: %s.' % (', '.join(ad['unaspektiert']) or 'keiner'))
     if ad.get('winkel'):
-        L.append('- Zum Vergleich, außer Konkurrenz (Winkel, Orb 9°): %s.'
-                 % ' · '.join('%s %g' % (k, v) for k, v in ad['winkel'].items()))
+        # Der Orb im Etikett kommt aus ASPEKT_ORB (2026-09-19, U2): hier stand
+        # seit dem 2026-09-15 unveraendert „Orb 9°", die Achsen haben 5°.
+        _wo = sorted({ASPEKT_ORB.get(w, 3) for w in ad['winkel']})
+        L.append('- Zum Vergleich, außer Konkurrenz (Winkel, Orb %s): %s.'
+                 % ('/'.join('%g°' % o for o in _wo),
+                    ' · '.join('%s gewichtet %g, gezählt %d'
+                               % (k, v, _anz.get(k, 0))
+                               for k, v in ad['winkel'].items())))
     L.append('- Befund: <welche Funktionen viel Verkehr haben, welche isoliert '
              'arbeiten>')
     L.append('')
@@ -3255,13 +3916,15 @@ def strukturbild_text(sb):
     sn = sb['spezialnetz']
     if sn['untereinander']:
         for a in sn['untereinander']:
+            # 2026-09-19 (W2): Orb erst hier gerundet, in derselben
+            # Schreibweise wie Aspekttabelle und Belege (vorher etwa „1.49°").
             L.append(f"- {a['a']} {a['name']} {a['b']} "
-                     f"({a['strength']}, Orb {a['orb']}°)")
+                     f"({a['strength']}, Orb {_gr(a['orb'])})")
     else:
         L.append('- Keine Aspekte der Spezialfaktoren untereinander.')
     for a in sn['an_winkel']:
         L.append(f"- an der Achse: {a['a']} {a['name']} {a['b']} "
-                 f"({a['strength']}, Orb {a['orb']}°)")
+                 f"({a['strength']}, Orb {_gr(a['orb'])})")
     L.append(f"- Ganz außerhalb dieses Netzes: "
              f"{', '.join(sn['ohne_netz']) or 'keiner'}.")
     # Befundzeile ergaenzt 2026-09-15 (Pruefbericht EA Schritt 1+2, Rubrik 2):
@@ -3387,11 +4050,51 @@ def strukturbild_text(sb):
                              for b in ls['besetzt']) or 'nichts'
             zeile += (f" — leere Spitze {_gr(ls['lon'] % 30)} {ls['zeichen']}"
                       f"{haus}; dort: {dort}")
+            # ACHSENENDE AUF DER SPITZE (2026-09-19, W33): Brennpunkt auf
+            # einem Winkel oder dem Mondknoten (selbst oder konjunkt) — das
+            # Gegenende liegt per Konstruktion auf der Spitze.
+            _hin = []
+            for _ae in ls.get('achsenende') or []:
+                _e = ('Mondknoten' if _ae['ende'] in ('Knoten', 'Nordknoten')
+                      else _ae['ende'])
+                _wie = 'auf dem' if _ae['art'] == 'auf' else 'in Konjunktion zum'
+                if _ae['gegenende'] == 'Südknoten':
+                    _hin.append(f"Brennpunkt {_wie} {_e}: die Spitze liegt auf "
+                                f"dem Südknoten und gilt als besetzt")
+                else:
+                    _hin.append(f"Brennpunkt {_wie} {_e}: die Spitze ist das "
+                                f"Gegenende {_ae['gegenende']} und gilt als "
+                                f"besetzt")
+            if _hin:
+                zeile += ' — ' + '; '.join(_hin) + ' (seit 2026-09-19)'
         L.append(zeile)
-    for g in kf['grosskreuz']:
-        L.append(f"- Großkreuz: {', '.join(g)}")
+    _gk_achsen = kf.get('grosskreuz_achsen') or []
+    for _i, g in enumerate(kf['grosskreuz']):
+        zeile = f"- Großkreuz: {', '.join(g)}"
+        if _i < len(_gk_achsen):
+            # 2026-09-19 (W33): Ein Grosskreuz hat keine leere Spitze.
+            zeile += (" — Gegenpaare "
+                      + ' und '.join(' ☍ '.join(p) for p in _gk_achsen[_i])
+                      + "; keine leere Spitze, die Entlastung läuft über die "
+                        "Gegenpaare (seit 2026-09-19)")
+        L.append(zeile)
     for g in kf['grosstrigon']:
         L.append(f"- Großtrigon: {', '.join(g)}")
+    # ZWEI GROSSTRIGONE MIT ZWEI GEMEINSAMEN ECKEN (2026-09-19, L9).
+    for _gn in (fg or {}).get('grosstrigon_nebenlesarten', []):
+        _gf = fg['grosstrigon_figuren']
+        _fue = _gf[_gn['fuehrt']]['ecken']
+        _neb = [_gf[j]['ecken'] for j in _gn['neben']]
+        L.append(f"- Großtrigone mit zwei gemeinsamen Ecken: "
+                 f"{'; '.join(', '.join(e) for e in [_fue] + _neb)} (die "
+                 f"übrigen Ecken stehen nicht in Konjunktion). EIN Befund: "
+                 f"geführt von {', '.join(_fue)} (die engere Figur, Orbsumme "
+                 f"{_gr(_gn['orbsummen'][0])}); "
+                 f"{'; '.join(', '.join(e) for e in _neb)} "
+                 + ('ist die Nebenlesart und wird in einem Satz genannt'
+                    if len(_neb) == 1 else
+                    'sind Nebenlesarten und werden je in einem Satz genannt')
+                 + ' (seit 2026-09-19).')
     for d in kf.get('drachen', []):
         # Der Drachen fuehrt sein Grosstrigon selbst: konfigurationen() hat es
         # aus der Grosstrigon-Liste genommen — EIN Befund, nicht zwei (dieselbe
@@ -3439,9 +4142,9 @@ def strukturbild_text(sb):
                     'kurz und wiederholt sich oft)'
                     if nm in ZYKLUS_TAKT else '')
             L.append(f"  - {nm}: " + ' · '.join(teile) + takt)
-        L.append('- Verwendung s. Typmodul, Bewegung 7. Erlaubt ist die '
-                 'Einordnung, verboten jede Aussage darüber, was in diesem '
-                 'Alter geschieht.')
+        L.append(('- ' if transit else '- Verwendung s. Typmodul, Bewegung 7. ')
+                 + 'Erlaubt ist die Einordnung, verboten jede Aussage darüber, '
+                   'was in diesem Alter geschieht.')
         L.append('')
 
     # §8 und §9 seit dem 2026-09-08 (zweiter Durchgang). Beide tragen eine
@@ -3542,12 +4245,24 @@ def strukturbild_text(sb):
                      f"({gl['von']} → {gl['bis']}). Das ist ein legitimer "
                      f"Befund, kein Fehler.")
         L.append(zeile)
-        if vm['auch_lesbar']:
+        if len(vm['auch_lesbar']) == 1:
             L.append('- Auch lesbar als: ' + '; '.join(
                 f"{z['muster']} ({z['grund']})" for z in vm['auch_lesbar']) + '.')
-        L.append('- Befund: <eine Zeile — was Hemisphäre und Muster als Statik '
-                 'heißen; Henkelplanet oder Lokführer als Brennpunkt (Typmodul, '
-                 'Rang 5) oder ins Getriebe>')
+        elif vm['auch_lesbar']:
+            # 2026-09-19 (L8): mehrere Nebenlesarten mit Rangfolge.
+            L.append('- Auch lesbar als (Rangfolge: strikt vor grenzwertig, '
+                     'dann das engere Muster zuerst — die erste wird gedeutet, '
+                     'jede weitere in einem Satz genannt; seit 2026-09-19): '
+                     + '; '.join(f"{z.get('rang', _r)}. {z['muster']} "
+                                 f"({z['grund']})" for _r, z in
+                                 enumerate(vm['auch_lesbar'], 1)) + '.')
+        if transit:
+            L.append('- Befund: <eine Zeile — was Hemisphäre und Muster als '
+                     'Statik heißen; Henkelplanet oder Lokführer benennen>')
+        else:
+            L.append('- Befund: <eine Zeile — was Hemisphäre und Muster als '
+                     'Statik heißen; Henkelplanet oder Lokführer als Brennpunkt '
+                     '(Typmodul, Rang 5) oder ins Getriebe>')
         L.append('')
 
     mp = sb.get('mondphase')
@@ -3561,8 +4276,9 @@ def strukturbild_text(sb):
         if sy:
             wort = 'Neumond' if sy['art'] == 'Konjunktion' else 'Vollmond'
             L.append(f"- Lichter in {sy['art']} (Orb {_gr(sy['orb'])}): "
-                     f"{wort}-Geburt — darf über Rang 5 ein Thema tragen "
-                     f"(Typmodul).")
+                     f"{wort}-Geburt"
+                     + ('.' if transit else
+                        " — darf über Rang 5 ein Thema tragen (Typmodul)."))
             fi = mp.get('finsternis')
             if fi:
                 L.append(f"- Finsternisnähe: Sonne {_gr(fi['sonne_knoten'][1])} "
@@ -3578,11 +4294,169 @@ def strukturbild_text(sb):
             L.append(f"- Lichter weder in Konjunktion noch in Opposition "
                      f"(Orb {FINSTERNIS_SYZYGIE_ORB:g}°) — keine Neumond-/"
                      f"Vollmond-Geburt, Finsternisnähe entfällt.")
-        L.append('- Befund: <ein Satz für den Mond-Block des '
+        L.append('- Befund: <ein Satz: wie diese Phase beginnt, erntet oder '
+                 'loslässt — Anlage, keine Biografie>' if transit else
+                 '- Befund: <ein Satz für den Mond-Block des '
                  'Instrument-Kapitels: wie diese Phase beginnt, erntet oder '
                  'loslässt — Anlage, keine Biografie>')
         L.append('')
+
+    # §10 RANGZEILEN (neu 2026-09-19, U2). Format und Parser:
+    # rangzeilen_lesen(); Schnittstelle fuer inhaltsprobe.py.
+    rg = sb.get('rang')
+    if rg:
+        L.extend(_rangzeilen_text(rg))
+        L.append('')
     return '\n'.join(L)
+
+
+def _rangzeilen_text(rg):
+    """§10 als Zeilenliste. Jede RANG-Zeile: `- RANG <schluessel>
+    [<zaehlmenge>]: <eintrag> · <eintrag> …` — Grammatik s. rangzeilen_lesen().
+    Kein Eintrag enthaelt „ · " oder eine eckige Klammer."""
+    def _asp(e):
+        sp = e.get('spiegel')
+        zug = ''
+        if sp:
+            zug = ', ' + (sp if sp.startswith('spiegelt') else 'zugleich ' + sp)
+        return (f"{e['rang']}. {e['a']} {e['name']} {e['b']} {_gr(e['orb'])} "
+                f"({e['strength']}{zug})")
+
+    def _vt(e, gewichtet):
+        tr = ', '.join(n if (not gewichtet or g == 1.0) else f"{n} ×{g:g}"
+                       for n, g in e['traeger']) or '—'
+        return (f"{e['rang']}. {e['name']} {e['wert']:g} von {e['summe']:g} "
+                f"= {e['prozent']} % ({tr})")
+
+    def _zeile(schl, menge, eintraege):
+        return f"- RANG {schl} [{menge}]: " + (' · '.join(eintraege) or '—')
+
+    ea, ep = rg['engste_aspekte'], rg['engste_aspekte_planeten']
+    unt = rg.get('mit_untergrund')
+    dg = rg.get('dichte_gewichte') or _DICHTE_GEWICHT
+    gew_txt = '; '.join(f"×{g:g}: {', '.join(n)}"
+                        for g, n in (rg.get('gewichte') or []))
+    z = [
+        '### 10 · Rangzeilen (Zahlen für Rang-, Zähl- und Einzigkeitsaussagen)',
+        '- Wer im Text „die engste", „die einzige", „die meisten", „x von y" '
+        'oder „am dichtesten verschaltet" schreibt, nimmt die Zahl aus einer '
+        'dieser Zeilen und sagt, welche Zählung gemeint ist (seit 2026-09-19). '
+        'In eckigen Klammern steht die Zählmenge; gleiche Rangzahl heißt '
+        'Gleichstand. Maschinenlesbar über radix.rangzeilen_lesen().',
+        _zeile('engste-aspekte',
+               f"Zeilen der Aspekttabelle, {ea['gesamt']} Zeilen: Achse–Achse "
+               f"ausgenommen, ein Achsen-Spiegel ist eine Zeile, ohne "
+               f"Untergrund; Rang nach dem Orb in Bogenminuten; die ersten "
+               f"{RANG_ENGSTE} Ränge", [_asp(e) for e in ea['eintraege']]),
+        _zeile('engste-aspekte-planeten',
+               f"nur Zeilen zwischen zwei der zehn klassischen Planeten, "
+               f"{ep['gesamt']} Zeilen; Rang nach dem Orb in Bogenminuten; die "
+               f"ersten {RANG_ENGSTE_PLANETEN} Ränge",
+               [_asp(e) for e in ep['eintraege']]),
+        _zeile('verbindungen-gezaehlt',
+               "Zählmenge von §4: jeder Aspekt der Huber-Liste (voll, "
+               "einseitig, Nebenaspekt)"
+               + (' und jeder Untergrund-Aspekt' if unt else '')
+               + " zählt 1, ein Kontakt zu beiden Enden einer Achse zählt je "
+                 "Ende; Winkel außer Konkurrenz, s. §4; in Klammern die Zeilen "
+                 "der Aspekttabelle, wo sie abweichen",
+               [f"{e['rang']}. {e['faktor']} {e['wert']}"
+                + (f" (Aspekttabelle {e['aspekttabelle']})"
+                   if e['aspekttabelle'] != e['wert'] else '')
+                for e in rg['verbindungen_gezaehlt']]),
+        _zeile('verbindungen-gewichtet',
+               "Gewichtung von §4: " + ', '.join(
+                   f"{lab} {dg.get(key, 0.5):g}" for key, lab in (
+                       ('voll', 'voll'), ('einseitig', 'einseitig'),
+                       ('neben', 'Nebenaspekt'))
+                   + ((('zusatz', 'Untergrund'),) if unt else ()))
+               + "; Menge wie verbindungen-gezaehlt",
+               [f"{e['rang']}. {e['faktor']} {e['wert']:g}"
+                for e in rg['verbindungen_gewichtet']]),
+    ]
+    for art, titel in (('elemente', 'Elemente'), ('modi', 'Modi')):
+        gz, gw = rg[art + '_gezaehlt'], rg[art + '_gewichtet']
+        z.append(_zeile(
+            art + '-gezaehlt',
+            f"zehn klassische Planeten, je 1, Summe "
+            f"{gz[0]['summe'] if gz else 0:g} — die Zählung der "
+            f"Konstellationsseite", [_vt(e, False) for e in gz]))
+        z.append(_zeile(
+            art + '-gewichtet',
+            f"alle Faktoren nach radix.GEWICHT ({gew_txt}); Summe "
+            f"{gw[0]['summe'] if gw else 0:g} — die maßgebliche Zählung von §1",
+            [_vt(e, True) for e in gw]))
+    return z
+
+
+# Grammatik der Rangzeilen (neu 2026-09-19, U2). Eine Stelle fuer Format und
+# Parser — inhaltsprobe.py liest ueber rangzeilen_lesen() oder diese Muster.
+RANG_ZEILE_RE = re.compile(
+    r'^- RANG (?P<schluessel>[a-z0-9-]+) \[(?P<menge>[^\]]*)\]: '
+    r'(?P<eintraege>.*)$', re.M)
+RANG_EINTRAG_RE = {
+    'aspekt': re.compile(
+        r'^(?P<rang>\d+)\. (?P<a>\S+) (?P<aspekt>\S+) (?P<b>\S+) '
+        r'(?P<orb>\d+°\d{2}′) \((?P<staerke>[a-z]+)(?:, (?P<zusatz>[^)]*))?\)$'),
+    'verbindung': re.compile(
+        r'^(?P<rang>\d+)\. (?P<faktor>\S+) (?P<wert>\d+(?:\.\d+)?)'
+        r'(?: \(Aspekttabelle (?P<aspekttabelle>\d+)\))?$'),
+    'verteilung': re.compile(
+        r'^(?P<rang>\d+)\. (?P<name>\S+) (?P<wert>\d+(?:\.\d+)?) von '
+        r'(?P<summe>\d+(?:\.\d+)?) = (?P<prozent>\d+) % '
+        r'\((?P<traeger>[^)]*)\)$'),
+}
+
+
+def rangzeilen_lesen(text):
+    """Liest die RANG-Zeilen aus einem chart_data-Text (neu 2026-09-19, U2).
+
+    -> {schluessel: {'menge': str, 'eintraege': [dict]}}. Eintraege je Familie:
+       engste-*       {'rang', 'a', 'aspekt', 'b', 'orb' (Text N°NN′),
+                       'orb_min' (int), 'staerke', 'zusatz' (z. B.
+                       'zugleich Opposition MC') oder None}
+       verbindungen-* {'rang', 'faktor', 'wert' (int bzw. float),
+                       'aspekttabelle' (int oder None = wie wert)}
+       elemente-*/modi-* {'rang', 'name', 'wert', 'summe', 'prozent',
+                       'traeger': [(name, gewicht)]}
+    Ein Eintrag, der nicht passt, kommt als {'roh': text} — nicht still
+    verworfen. Leere Zeile („—") -> leere Liste.
+    """
+    out = {}
+    for m in RANG_ZEILE_RE.finditer(text):
+        schl = m.group('schluessel')
+        fam = ('aspekt' if schl.startswith('engste-') else
+               'verbindung' if schl.startswith('verbindungen-') else
+               'verteilung')
+        eintraege = []
+        roh = m.group('eintraege').strip()
+        for teil in ([] if roh in ('', '—') else roh.split(' · ')):
+            e = RANG_EINTRAG_RE[fam].match(teil)
+            if not e:
+                eintraege.append({'roh': teil})
+                continue
+            d = e.groupdict()
+            d['rang'] = int(d['rang'])
+            if fam == 'aspekt':
+                g, mi = d['orb'].split('°')
+                d['orb_min'] = int(g) * 60 + int(mi.rstrip('′'))
+            elif fam == 'verbindung':
+                d['wert'] = (float(d['wert']) if schl.endswith('gewichtet')
+                             or '.' in d['wert'] else int(d['wert']))
+                d['aspekttabelle'] = (int(d['aspekttabelle'])
+                                      if d['aspekttabelle'] else None)
+            else:
+                d['wert'], d['summe'] = float(d['wert']), float(d['summe'])
+                d['prozent'] = int(d['prozent'])
+                tr = []
+                for t in ([] if d['traeger'] in ('', '—')
+                          else d['traeger'].split(', ')):
+                    n, _, g = t.partition(' ×')
+                    tr.append((n, float(g) if g else 1.0))
+                d['traeger'] = tr
+            eintraege.append(d)
+        out[schl] = {'menge': m.group('menge'), 'eintraege': eintraege}
+    return out
 
 
 # --- Selbsttest (neutrales Demo-Chart, KEINE Klientendaten) -----------------
@@ -4015,3 +4889,310 @@ if __name__ == '__main__':
     print('Hausherrscher-Etage-Test: OK —', len(_hk['kreise']), 'Häuser-Kreise,',
           len(_he['ohne_einlauf']), 'Häuser ohne Einlauf,',
           len(herrscher_spitzen_kontakt(_fs2, _c)), 'Spitzen-Kontakte')
+
+    # --- Wartungslauf A, 2026-09-19 (W2, W6, W33, W34, F1, F19, F24, L8, L9,
+    # U2). ALLE Werte ERFUNDEN: konstruierte Laengen, Spitzen bei 0°, 30°, …,
+    # Geburtsmomente nur als Julianisches Datum (ein Sonnen- bzw.
+    # Mond-Zeichenwechsel, per Bisektion gesucht) — kein echtes Chart. --------
+    def _ax(ac=0.0, mc=270.0):
+        return [{'name': 'AC', 'lon': ac}, {'name': 'MC', 'lon': mc},
+                {'name': 'DC', 'lon': (ac + 180) % 360},
+                {'name': 'IC', 'lon': (mc + 180) % 360}]
+
+    # W2: Orb ungerundet in den Daten, gerundet erst in der Ausgabe.
+    _fo = [{'name': 'Sonne', 'lon': 10.0}, {'name': 'Mond', 'lon': 191.4917}]
+    _ao = huber_aspects(_fo)
+    assert _ao[0]['name'] == 'Opposition' and abs(_ao[0]['orb'] - 1.4917) < 1e-9
+    assert _gr(_ao[0]['orb']) == '1°30′'             # einmal gerundet
+    assert _gr(round(_ao[0]['orb'], 2)) == '1°29′'   # so rundete es vorher
+    assert aspektliste(_fo)[0]['orb'] == _ao[0]['orb']
+    assert abs(zusatz_aspekte([{'name': 'Sonne', 'lon': 0.0},
+                               {'name': 'Mars', 'lon': 46.4917}])[0]['orb']
+               - 1.4917) < 1e-9
+    _f5 = [{'name': 'Sonne', 'lon': 50.0}, {'name': 'Mond', 'lon': 200.0},
+           {'name': 'Merkur', 'lon': 300.0},
+           {'name': 'Chiron', 'lon': 10.0}, {'name': 'Lilith', 'lon': 131.4917}
+           ] + _ax()
+    _t5 = strukturbild_text(strukturbild(_f5, _c)).split('### 5')[1].split('###')[0]
+    assert 'Chiron Trigon Lilith (voll, Orb 1°30′)' in _t5, _t5
+
+    # W6: 14,7 Jahre sind die erste Saturn-Opposition; Jupiter ×11,862.
+    _zs = {x['alter']: x['name'] for x in zyklusfenster('Saturn')}
+    assert _zs[14.7] == 'erste Saturn-Opposition', _zs
+    assert _zs[44.2] == 'zweite Saturn-Opposition', _zs
+    assert not any('Quadrat' in n for n in _zs.values()), _zs
+    assert [x['alter'] for x in zyklusfenster('Jupiter')] == \
+        [11.9, 23.7, 35.6, 47.4, 59.3]
+
+    # F1: Enddispositor nur mit Zulauf. Sonne im Widder -> Mars im Widder
+    # (Zulauf); Pluto im Skorpion folgt keinem und hat keinen Zulauf;
+    # Mond/Venus bilden einen Kreis.
+    _hkf = herrscherketten([{'name': 'Sonne', 'lon': 5.0},
+                            {'name': 'Mars', 'lon': 10.0},
+                            {'name': 'Pluto', 'lon': 215.0},
+                            {'name': 'Mond', 'lon': 195.0},
+                            {'name': 'Venus', 'lon': 100.0}])
+    assert _hkf['enddispositoren'] == ['Mars'], _hkf
+    assert _hkf['zulauf'] == {'Mars': ['Sonne']}, _hkf['zulauf']
+    assert _hkf['ohne_zulauf'] == ['Pluto'] and \
+        _hkf['eigenes_zeichen'] == ['Mars', 'Pluto'], _hkf
+    # Streuung zaehlt weiter ALLE Planeten im eigenen Zeichen (ohne Kreis)
+    _fst = [{'name': 'Sonne', 'lon': 5.0}, {'name': 'Mars', 'lon': 10.0},
+            {'name': 'Pluto', 'lon': 215.0}, {'name': 'Jupiter', 'lon': 250.0}
+            ] + _ax()
+    _sbst = strukturbild(_fst, _c)
+    assert _sbst['enddispositor_streuung'] == 3, _sbst['enddispositor_streuung']
+    _t3f = strukturbild_text(_sbst)
+    assert 'Enddispositoren (im eigenen Zeichen, und eine fremde Kette endet ' \
+           'bei ihm): Mars (Ketten von Sonne).' in _t3f, _t3f
+    assert 'ohne Zulauf' in _t3f and 'Jupiter, Pluto.' in _t3f
+    assert '⚠ 3 Planeten im eigenen Zeichen (davon 1 mit Zulauf)' in _t3f
+
+    # W33 (1): Brennpunkt auf dem Mondknoten -> Spitze auf dem Suedknoten,
+    # obwohl der Suedknoten (Vertrag) nicht in factors steht.
+    _fk1 = [{'name': 'Mondknoten', 'lon': 0.0}, {'name': 'Sonne', 'lon': 90.0},
+            {'name': 'Mond', 'lon': 270.0}]
+    _tq1 = konfigurationen(_fk1, huber_aspects(_fk1))['t_quadrat']
+    _ls1 = [t for t in _tq1 if t['apex'] == 'Mondknoten'][0]['leere_spitze']
+    assert [b['name'] for b in _ls1['besetzt']] == ['Südknoten'], _ls1
+    assert _ls1['besetzt'][0].get('abgeleitet') and _ls1['besetzt'][0]['orb'] < 1e-9
+    assert _ls1['achsenende'] == [{'ende': 'Mondknoten', 'gegenende': 'Südknoten',
+                                   'art': 'auf'}], _ls1
+    # ... Brennpunkt in Konjunktion zum Mondknoten (3°, geerbter Orb)
+    _fk2 = [{'name': 'Mondknoten', 'lon': 0.0}, {'name': 'Mars', 'lon': 3.0},
+            {'name': 'Sonne', 'lon': 93.0}, {'name': 'Mond', 'lon': 273.0}]
+    _ls2k = [t for t in konfigurationen(_fk2, huber_aspects(_fk2))['t_quadrat']
+             if t['apex'] == 'Mars'][0]['leere_spitze']
+    assert any(b['name'] == 'Südknoten' and abs(b['orb'] - 3.0) < 1e-9
+               for b in _ls2k['besetzt']), _ls2k
+    assert {'ende': 'Mondknoten', 'gegenende': 'Südknoten',
+            'art': 'konjunktion'} in _ls2k['achsenende'], _ls2k
+    # W33 (2): Brennpunkt auf einem Winkel -> Gegenende besetzt; fehlt DC in
+    # factors, wird es abgeleitet.
+    _fw2 = [{'name': 'Sonne', 'lon': 92.0}, {'name': 'Mond', 'lon': 272.0},
+            {'name': 'Pluto', 'lon': 135.0}] + _ax(0.0, 250.0)
+    _kw2 = konfigurationen(_fw2, huber_aspects(_fw2), cusps=_c)
+    _lsw = [t for t in _kw2['t_quadrat'] if t['apex'] == 'AC'][0]['leere_spitze']
+    assert 'DC' in [b['name'] for b in _lsw['besetzt']], _lsw
+    assert {'ende': 'AC', 'gegenende': 'DC', 'art': 'auf'} in _lsw['achsenende']
+    _tw2 = strukturbild_text(strukturbild(_fw2, _c))
+    assert 'Brennpunkt auf dem AC: die Spitze ist das Gegenende DC und gilt ' \
+           'als besetzt' in _tw2, _tw2.split('### 6')[1][:900]
+    _fw3 = [f for f in _fw2 if f['name'] not in ('DC', 'IC')]
+    _lsw3 = [t for t in konfigurationen(_fw3, huber_aspects(_fw3))['t_quadrat']
+             if t['apex'] == 'AC'][0]['leere_spitze']
+    assert [b for b in _lsw3['besetzt'] if b['name'] == 'DC'][0].get('abgeleitet')
+    # W33 (3): Grosskreuz -> Gegenpaare, keine leere Spitze.
+    _fgk = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 180.0},
+            {'name': 'Mars', 'lon': 90.0}, {'name': 'Jupiter', 'lon': 270.0}]
+    _kgk = konfigurationen(_fgk, huber_aspects(_fgk))
+    assert _kgk['t_quadrat'] == [] and len(_kgk['grosskreuz']) == 1, _kgk
+    assert _kgk['grosskreuz_achsen'] == [[['Jupiter', 'Mars'], ['Mond', 'Sonne']]]
+    _tgk = strukturbild_text(strukturbild(_fgk + _ax(45.0, 315.0), _c))
+    assert 'Gegenpaare Jupiter ☍ Mars und Mond ☍ Sonne; keine leere Spitze' \
+        in _tgk, _tgk.split('### 6')[1][:600]
+
+    # L9: zwei Grosstrigone mit zwei gemeinsamen Ecken, dritte Ecken 6°30′
+    # auseinander (nicht konjunkt) -> EIN Befund, die engere Figur fuehrt.
+    _fl9 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+            {'name': 'Jupiter', 'lon': 237.0}, {'name': 'Saturn', 'lon': 243.5}]
+    _al9 = huber_aspects(_fl9)
+    _gl9 = gruppiere_figuren(konfigurationen(_fl9, _al9), _al9)
+    assert _gl9['grosstrigon_anzahl'] == 2, _gl9
+    _nl9 = _gl9['grosstrigon_nebenlesarten']
+    assert len(_nl9) == 1 and len(_nl9[0]['neben']) == 1, _nl9
+    assert _gl9['grosstrigon_figuren'][_nl9[0]['fuehrt']]['ecken'] == \
+        ['Jupiter', 'Mond', 'Sonne'], _nl9
+    assert abs(_nl9[0]['orbsummen'][0] - 6.0) < 1e-9 and \
+        abs(_nl9[0]['orbsummen'][1] - 7.0) < 1e-9, _nl9
+    _tl9 = strukturbild_text(strukturbild(_fl9 + _ax(45.0, 315.0), _c))
+    assert 'EIN Befund: geführt von Jupiter, Mond, Sonne (die engere Figur, ' \
+           'Orbsumme 6°00′); Mond, Saturn, Sonne ist die Nebenlesart' in _tl9
+
+    # L8: zwei Nebenlesarten -> strikt vor grenzwertig, dann das engere Muster.
+    _v8 = verteilungsmuster(_synth([0, 20, 40, 60, 80, 100, 120, 140, 150, 184]),
+                            _c)
+    assert _v8['muster'] == 'Eimer', _v8['muster']
+    assert [(z['muster'], z['strikt'], z['rang']) for z in _v8['auch_lesbar']] \
+        == [('Lokomotive', True, 1), ('Schüssel', False, 2)], _v8['auch_lesbar']
+
+    # F19: typ='transit' ohne Getriebe/Instrument/Typmodul; Vorgabe unveraendert.
+    # _fsy: Lichter in Konjunktion (§9 mit Syzygie-Zeile).
+    _fsy = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 5.0},
+            {'name': 'Mars', 'lon': 200.0}, {'name': 'Mondknoten', 'lon': 10.0}
+            ] + _ax(45.0, 315.0)
+    _sbsy = strukturbild(_fsy, _c)
+    assert 'darf über Rang 5 ein Thema tragen' in strukturbild_text(_sbsy)
+    for _sbx in (_sb, _sbst, _sbsy):
+        _tt = strukturbild_text(_sbx, typ='transit')
+        for _w in ('Getriebe', 'Instrument', 'Typmodul'):
+            assert _w not in _tt, (_w, [z for z in _tt.splitlines() if _w in z])
+        assert strukturbild_text(_sbx) == strukturbild_text(_sbx, typ='ea') \
+            == strukturbild_text(_sbx, typ='Geburtshoroskop')
+    try:
+        strukturbild_text(_sb, typ='synastrie')
+        raise AssertionError('unbekannter typ muss abbrechen')
+    except ValueError as _e:
+        assert 'typ=' in str(_e) and 'transit' in str(_e)
+
+    # F24: leere Glyphen -> Vertrags-Kuerzel, gemeldet; Original unveraendert.
+    _fg = [{'name': 'AC', 'glyph': ''}, {'name': 'Pholus', 'glyph': ''},
+           {'name': 'Sonne', 'glyph': '☉'}, {'name': 'DC'}]
+    _fg2 = glyphen_ergaenzen(_fg, melden=False)
+    assert [g['glyph'] for g in _fg2] == ['AC', 'Pho', '☉', 'DC'], _fg2
+    assert _fg[0]['glyph'] == '' and 'glyph' not in _fg[3]
+    try:
+        glyphen_ergaenzen([{'name': 'Unbekannt', 'glyph': ''}], melden=False)
+        raise AssertionError('unbekannter Name ohne Glyphe muss abbrechen')
+    except ValueError:
+        pass
+
+    # U2: Rangzeilen — dieselben Zahlen wie §1 und §4, parsebar.
+    assert _wettkampf([9, 7, 7, 3]) == [1, 2, 2, 4]
+    assert _minuten(1.4917) == 90 and _minuten(0.9999) == 60
+    _t10 = strukturbild_text(_sb)
+    assert '### 10 · Rangzeilen' in _t10 and 'Orb 9°' not in _t10
+    _t4 = _t10.split('### 4')[1].split('### 5')[0]
+    assert 'Mars (gewichtet 1, gezählt 2)' in _t4, _t4       # vorher „Mars (1)"
+    assert '(Winkel, Orb 5°)' in _t4, _t4
+    _rz = rangzeilen_lesen(_t10)
+    assert sorted(_rz) == sorted([
+        'engste-aspekte', 'engste-aspekte-planeten', 'verbindungen-gezaehlt',
+        'verbindungen-gewichtet', 'elemente-gezaehlt', 'elemente-gewichtet',
+        'modi-gezaehlt', 'modi-gewichtet']), sorted(_rz)
+    assert not any('roh' in e for v in _rz.values() for e in v['eintraege']), _rz
+    _ad = _sb['aspektdichte']
+    assert {e['faktor']: e['wert'] for e in
+            _rz['verbindungen-gewichtet']['eintraege']} == \
+        {n: w for n, w in _ad['gewichtet'].items() if n not in WINKEL}
+    assert {e['faktor']: e['wert'] for e in
+            _rz['verbindungen-gezaehlt']['eintraege']} == \
+        {n: w for n, w in _ad['anzahl'].items() if n not in WINKEL}
+    for _art, _key in (('elemente', 'elemente'), ('modi', 'modi')):
+        assert {e['name']: e['wert'] for e in
+                _rz[_art + '-gewichtet']['eintraege']} == \
+            _sb['verteilung_gewichtet'][_key]
+        assert {e['name']: e['wert'] for e in
+                _rz[_art + '-gezaehlt']['eintraege']} == \
+            _sb['verteilung_planeten'][_key]
+    _az = aspektliste(_f)
+    assert _sb['rang']['engste_aspekte']['gesamt'] == len(_az)
+    _e1 = _rz['engste-aspekte']['eintraege'][0]
+    assert _e1['orb_min'] == min(_minuten(a['orb']) for a in _az), _e1
+    # Achsen-Spiegel als eine Zeile, Zusatz im Eintrag
+    _fsp = [{'name': 'Mars', 'lon': 0.2}, {'name': 'Sonne', 'lon': 150.0},
+            {'name': 'Pluto', 'lon': 250.0}] + _ax(0.0, 270.0)
+    _rsp = rangzeilen_lesen(strukturbild_text(strukturbild(_fsp, _c)))
+    _esp = [e for e in _rsp['engste-aspekte']['eintraege']
+            if {e['a'], e['b']} == {'Mars', 'AC'}]
+    assert _esp and _esp[0]['zusatz'] == 'zugleich Opposition DC', _rsp
+    assert rangzeilen_lesen('- RANG engste-aspekte [leer]: —') == \
+        {'engste-aspekte': {'menge': 'leer', 'eintraege': []}}
+    print('Wartungslauf-A-Test (2026-09-19): OK — W2, W6, F1, W33, L9, L8, '
+          'F19, F24, U2')
+
+    # W34: Zeichengrenze der Faktoren, gegen die Ephemeride.
+    try:
+        import swisseph as _swe
+    except Exception:
+        _swe = None
+    if _swe is None:
+        print('Faktor-Kippminuten-Test: uebersprungen (kein pyswisseph)')
+    else:
+        _FL = _swe.FLG_SWIEPH
+
+        def _l(t, b):
+            return _swe.calc_ut(t, b, _FL)[0][0]
+
+        def _eintritt(b, t0, schritt):
+            # erster Zeichenwechsel nach t0, per Bisektion auf 1e-9 Tage
+            z0, t1 = zeichen_index(_l(t0, b)), t0
+            while zeichen_index(_l(t1, b)) == z0:
+                t1 += schritt
+            a, e = t1 - schritt, t1
+            for _ in range(60):
+                m = (a + e) / 2
+                if zeichen_index(_l(m, b)) == z0:
+                    a = m
+                else:
+                    e = m
+            return e
+        # Sonne 17″ hinter einer Zeichengrenze (Sonnenlauf ~2,5″ je Minute)
+        _ts = _eintritt(_swe.SUN, 2451600.0, 1.0)
+        _jd = _ts + (17.0 / 3600.0) / _swe.calc_ut(
+            _ts, _swe.SUN, _FL | _swe.FLG_SPEED)[0][3]
+        _LA, _LO = 50.0, 10.0
+        _cw = list(_swe.houses_ex(_jd, _LA, _LO, b"K")[0][:12])
+        _fw = [{'name': n, 'lon': _l(_jd, b)} for n, b in (
+            ('Sonne', _swe.SUN), ('Mond', _swe.MOON), ('Merkur', _swe.MERCURY),
+            ('Mars', _swe.MARS), ('Mondknoten', _swe.TRUE_NODE))]
+        _fw += _ax(_cw[0], _cw[9])
+        _fw.append({'name': 'Glückspunkt', 'lon': glueckspunkt(_fw, _cw)['lon']})
+        _fkm = faktor_kippminuten(_jd, _fw, lat=_LA, lon=_LO, cusps=_cw)
+        _so = [e for e in _fkm if e['name'] == 'Sonne'][0]
+        assert 6 <= _so['frueher'] <= 8 and _so['spaeter'] is None, _so
+        assert _so['lage'] == 'hinter' and _so['abstand_grenze'] < 18 / 3600.0
+        assert _so['zeichen_frueher'] == SIGN_NAMES[(zeichen_index(
+            _so['lon']) - 1) % 12]
+        # Die gemeldete Minute ist die ERSTE mit anderem Zeichen (wie kippminuten)
+        for _e in _fkm:
+            if _e['name'] in ('Glückspunkt',) or _e['fehler']:
+                continue
+            _b = getattr(_swe, _KIPP_KOERPER[_e['name']])
+            for _key, _vz in (('frueher', -1), ('spaeter', 1)):
+                if _e[_key] is None:
+                    continue
+                assert zeichen_name(_l(_jd + _vz * _e[_key] / 1440.0, _b)) != \
+                    _e['zeichen'], (_e, _key)
+                assert zeichen_name(_l(_jd + _vz * (_e[_key] - 1) / 1440.0, _b)) \
+                    == _e['zeichen'], (_e, _key)
+        _gp = [e for e in _fkm if e['name'] == 'Glückspunkt'][0]
+        assert _gp['gerechnet'] and _gp['fehler'] is None and _gp['min'], _gp
+        _fw_ohne = faktor_kippminuten(_jd, _fw)          # ohne lat/lon
+        assert [e for e in _fw_ohne if e['name'] == 'Glückspunkt'][0]['fehler']
+        _fkw = faktor_kipp_warnungen(_fkm)
+        assert _fkw[0]['minuten'] <= _fkw[-1]['minuten']
+        assert any(w['name'] == 'Sonne' for w in _fkw), _fkw
+        assert faktor_kipp_warnungen(None) is None
+        _sbw = strukturbild(_fw, _cw, jd_geburt=_jd, lat=_LA, lon=_LO)
+        _t3w = strukturbild_text(_sbw).split('### 3')[1].split('### 4')[0]
+        assert 'Sonne 0°00′1' in _t3w and 'hinter der Grenze' in _t3w, _t3w
+        assert '⚠ Kippminute unter %d: Sonne wechselt' % KIPP_SCHWELLE in _t3w
+        _fn = zeichengrenze_fussnote(_sbw['kippminuten'],
+                                     faktoren=_sbw['faktor_kippminuten'])
+        assert 'ie Sonne steht %d Minute' % _so['frueher'] in _fn, _fn
+        # ohne faktoren: wortgleich wie vorher (nur Spitzen)
+        assert zeichengrenze_fussnote(_sbw['kippminuten']) == \
+            zeichengrenze_fussnote(_sbw['kippminuten'], faktoren=None)
+        _nur = zeichengrenze_fussnote(None, faktoren=[_so])
+        assert _nur.startswith('Die Sonne steht') and _nur.endswith(
+            'Die Zeichendeutung hängt damit an der Geburtszeit.'), _nur
+        # Spitzen UND Faktoren in einem Satz; Planet ohne Artikel bleibt gross
+        _kpf = [dict(haus=i + 1, zeichen='Widder', frueher=3, spaeter=None, min=3,
+                     richtung='früher', zeichen_frueher='Fische',
+                     zeichen_spaeter=None, grad_je_minute=0.25) for i in range(12)]
+        _mk = dict(_so, name='Merkur', min=4, frueher=4)
+        _bd = zeichengrenze_fussnote(_kpf, faktoren=[_so, _mk])
+        assert _bd.startswith('Die Achse AC/DC steht 3 Minuten') and \
+            '; Merkur steht 4 Minuten' in _bd and '; die Sonne steht' in _bd and \
+            _bd.endswith('die Zeichendeutung der Faktoren hängen damit an der '
+                         'Geburtszeit.'), _bd
+        assert zeichengrenze_fussnote(None, faktoren=[_mk, _so]).endswith(
+            'Die Zeichendeutung dieser Faktoren hängt damit an der Geburtszeit.')
+        assert zeichengrenze_fussnote(None, faktoren=[]) is None
+        # F19 mit Spitzen-Warnung: im Transit ohne Typmodul-Verweis
+        _tkt = strukturbild_text(_sbk, typ='transit')
+        assert 'Gewichtungsrang' not in _tkt and 'Kippminute unter' in _tkt
+        # Mond 3′ hinter einer Zeichengrenze (~0,5′ je Minute -> ~6 Minuten)
+        _tm = _eintritt(_swe.MOON, 2451545.0, 0.05)
+        _jdm = _tm + (3.0 / 60.0) / _swe.calc_ut(
+            _tm, _swe.MOON, _FL | _swe.FLG_SPEED)[0][3]
+        _mo = faktor_kippminuten(_jdm, [{'name': 'Mond',
+                                         'lon': _l(_jdm, _swe.MOON)}])[0]
+        assert 4 <= _mo['frueher'] <= 8 and _mo['richtung'] == 'früher', _mo
+        # Falsche Laenge (anderes jd): kein Befund, aber ein lauter Grund
+        _fx = faktor_kippminuten(_jdm, [{'name': 'Mond', 'lon': 1.0}])[0]
+        assert _fx['fehler'] and _fx['min'] is None, _fx
+        print('Faktor-Kippminuten-Test: OK — Sonne', _so['frueher'],
+              'Minuten, Mond', _mo['frueher'], 'Minuten, Glückspunkt',
+              _gp['min'], 'Minuten')

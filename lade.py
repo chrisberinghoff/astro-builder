@@ -1,19 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Ladeweg fuer die Astro-Builder — holt sie aus dem Repo direkt auf die Disk.
+"""Ladeweg fuer die Astro-Builder — stellt sie auf der Platte bereit und sagt,
+welcher Schritt welche braucht.
 
 Warum es dieses Modul gibt: Builder per `project_read` zu holen legt ihren
 kompletten Quelltext in den Kontext (build.py allein ~18.000 Token) und der
-bleibt dort fuer den Rest des Chats liegen. Ueber diesen Weg landen sie
-ausschliesslich auf der Platte und kosten null Token.
+bleibt dort fuer den Rest des Chats liegen. Ueber die Platte kosten sie null
+Token.
 
-Verwendung — zwei Zeilen am Anfang des Laufs:
+DIE LEITER (Werkzeuge-Modul Punkt 3, Design-Render-Modul „Builder beschaffen";
+hier neu gefasst am 2026-09-19, W5 — der alte Docstring beschrieb noch den
+Repo-Download von lade.py per urlretrieve als ersten Schritt):
 
-    import urllib.request; urllib.request.urlretrieve(
-        "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/lade.py",
-        "/home/claude/lade.py")
-    import sys; sys.path.insert(0, "/home/claude")
+  Stufe 1 — der BUILDER-Ordner auf Chris' Rechner (Chris-Entscheidung
+  2026-09-17). Alle .py des Ordners in EINEM device_stage_files-Aufruf holen,
+  an den Arbeitsplatz kopieren, importieren:
+
+    import glob, os, shutil, sys
+    for q in glob.glob("/mnt/user-data/uploads/Projektanweisung und dateien/"
+                       "BUILDER/*.py"):
+        shutil.copy(q, "/home/claude/" + os.path.basename(q))
+    sys.path.insert(0, "/home/claude")
     from lade import lade, lade_schritt, ephemeriden, uebersicht, pruefe_repo
+
+  Stufe 2 — Rechner nicht verbunden oder das Stagen klemmt: `curl` aus dem
+  Repo, einzeln nach den Namen aus SCHRITTE, ohne etwas auszufuehren:
+
+    curl -sS -o /home/claude/<datei> <REPO><datei>
+
+  Klemmen beide Stufen: anhalten und Chris fragen. `project_read` ist kein
+  Ladeweg fuer Builder mehr (2026-09-19, W5): Er legte in einem Lauf rund
+  620.000 Zeichen Quelltext inline in den Kontext und brachte grosse Builder
+  trotzdem nicht auf die Platte. Code aus dem Netz AUSFUEHREN (python3 -c,
+  Skriptdatei, timeout-Praefix) ist kein Weg.
+
+lade() und lade_schritt() HOLEN NICHTS, WAS SCHON LOKAL LIEGT (seit
+2026-09-19, W5). Vorher lud lade() jede Datei bei jedem Aufruf per urlretrieve
+neu — anders als beide Module sagten — und ueberschrieb damit still die Kopien
+aus dem BUILDER-Ordner mit dem Repo-Stand; hing der Repo-Upload nach, rechnete
+der Lauf mit altem Code. Jetzt wird eine Datei, die unter `ziel` (Vorgabe
+/home/claude) liegt, nur auf Nullgroesse und gueltiges Python geprueft; aus
+dem Repo geholt wird allein, was dort fehlt. `frisch=True` holt trotzdem neu
+und ueberschreibt — nur auf Chris' Ansage.
 
 Dann EINE Zeile je Schritt — welche Builder das sind, steht in SCHRITTE und
 nirgends sonst:
@@ -35,11 +63,11 @@ dreifach und liefen dreifach auseinander).
 `pruefe_repo()` haelt BEKANNT gegen das echte Repo — einmal laufen lassen,
 wenn ein Builder sich merkwuerdig verhaelt.
 
-Alle Builder kommen aus dem Repo, hd.py und REFERENZ_Chart_Builder_Ultimativ.py
-seit dem 2026-09-08 ebenfalls (davor per project_read, weil sie Klientendaten
-trugen — die sind an dem Tag anonymisiert worden). NICHT ueber diesen Weg:
-blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module, die nur im
-Projektwissen liegen.
+Alle Builder liegen im BUILDER-Ordner und im Repo, hd.py und
+REFERENZ_Chart_Builder_Ultimativ.py seit dem 2026-09-08 ebenfalls (davor per
+project_read, weil sie Klientendaten trugen — die sind an dem Tag anonymisiert
+worden). NICHT ueber diesen Weg: blocks_bundle.txt (die Bibliothek selbst,
+Werkzeuge-Modul Punkt 1) und alle .md-Module, die nur im Projektwissen liegen.
 
 Wer wirklich rechnet — Pholus in Schritt 1, transit.py im Transit- und
 Ultimativ-Lauf — braucht die Swiss-Ephemeris-Dateien. EINE Zeile beschafft sie
@@ -55,8 +83,16 @@ Fassungen — Einzelheiten im Kommentar ueber PAKETE.
 
 Ohne die Dateien faellt transit.py fuer die Hauptplaneten auf Moshier zurueck
 (bis zu einer Bogensekunde bei den Langsamen) und kann Transit-Chiron gar nicht
-rechnen; seit dem 2026-09-06 bricht es in dem Fall ab. `lade()` warnt darum beim
-Laden von `transit`, wenn keine `seas_*.se1` erreichbar ist.
+rechnen; seit dem 2026-09-06 bricht es in dem Fall ab. `lade()` nennt darum beim
+Laden von `transit` den naechsten Schritt `ephemeriden()`, solange keine
+`seas_*.se1` erreichbar ist — seit 2026-09-19 (F23) als Hinweis, nicht als
+Warnung: In der vorgeschriebenen Reihenfolge (erst lade_schritt("transit"),
+dann ephemeriden()) sind die Dateien in einem frischen Container an dieser
+Stelle nie da.
+
+Selbsttest ohne Netz: `python3 lade.py` (urlretrieve gemockt). Mit
+`python3 lade.py --netz` zusaetzlich der alte Repo-Test (holt alle Builder
+frisch nach /tmp/ladeselbsttest).
 """
 
 import glob
@@ -93,7 +129,10 @@ BEKANNT = {
 # Die Module nennen ab jetzt keine Dateilisten und keine Aufrufe mehr, sondern
 # verweisen hierher. Wer wissen will, was ein Schritt zieht: `uebersicht()`.
 SCHRITTE = {
-    "1":        ("radix", "build"),
+    # `selektor` seit dem 2026-09-19 (W40): Die Referenzdatei-Liste am Ende von
+    # Schritt 1 kommt aus `selektor.py --liste` (Nur-Liste-Modus, ohne
+    # Bibliothek). Ein Import kostet keine Token.
+    "1":        ("radix", "build", "selektor"),
     # Schritt 2 zieht seit dem 2026-09-16 auch `build` (das Werkzeuge-Modul
     # verlangt dort `build.parse_analyse()`) und `inhaltsprobe` (Analyse gegen
     # chart_data, nach dem Schreiben); Schritt 3+4 laesst die Inhaltsprobe vor
@@ -119,7 +158,7 @@ SCHRITTE = {
 
 # Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
 _SCHRITT_TEXT = {
-    "1":        "Datenblatt (Heimat-Probe braucht build)",
+    "1":        "Datenblatt (Heimat-Probe braucht build, Referenzdatei-Liste selektor)",
     "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
     "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render)",
     "transit":  "zusaetzlich bei Transit- und Ultimativ-Lauf",
@@ -312,47 +351,67 @@ def _ephemeriden_warnung():
     regelmaessig mit, ohne je zu rechnen (er parst nur den fertigen Report aus
     der chart_data). Wer wirklich rechnet, bekommt in transit.py den harten
     Fehler.
+
+    SEIT 2026-09-19 (F23, T12-18c Nr. 26) ein HINWEIS auf den naechsten
+    Schritt statt „[WARNUNG]" auf stderr: Die Module schreiben die Reihenfolge
+    lade_schritt("transit") -> ephemeriden() vor, und in einem frischen
+    Container sind die Dateien an dieser Stelle nie da. Die Warnung schlug
+    deshalb in jedem Transit-Lauf an, und vier Pruefberichte fuehrten sie als
+    Meldung, obwohl nichts fehlte.
     """
     if ephemeriden_pfad():
         return
     print(
-        "\n[WARNUNG] transit geladen, aber keine Swiss-Ephemeris-Dateien "
-        "gefunden (seas_*.se1).\n"
-        "  Solange nur der fertige Report aus der chart_data geparst wird, ist "
-        "das folgenlos.\n"
-        "  Sobald transit.py RECHNET, fehlt Transit-Chiron und die "
-        "Hauptplaneten laufen auf Moshier. Dann:\n"
+        "[lade] Hinweis, kein Fehler: transit ist geladen, die "
+        "Swiss-Ephemeris-Dateien (seas_*.se1) sind\n"
+        "  noch nicht geholt — in einem frischen Container normal. Vor dem "
+        "ersten Rechenlauf von transit.py:\n"
         "      from lade import ephemeriden\n"
-        "      ephe = ephemeriden()      # installiert und liefert den Pfad\n"
-        "  Notfalls diesen Pfad an --ephe uebergeben.\n",
-        file=sys.stderr,
+        "      ephe = ephemeriden()      # installiert nur, wenn noetig, und "
+        "liefert den Pfad fuer --ephe\n"
+        "  Wer nur den fertigen Report aus der chart_data parst "
+        "(Schritt 3+4), braucht sie nicht.\n"
+        "  Rechnet transit.py ohne sie, bricht es selbst hart ab."
     )
 
 
 def lade(*module, ziel="/home/claude", frisch=False, still=False):
-    """Builder aus dem Repo auf die Disk holen und `ziel` in den sys.path legen.
+    """Builder bereitstellen: was unter `ziel` liegt, nehmen; nur FEHLENDES aus
+    dem Repo holen; `ziel` in den sys.path legen.
 
     module  Modulnamen ohne oder mit .py — `lade("build", "chartdoc")`
     ziel    Zielverzeichnis, Vorgabe /home/claude (dort erwarten die Builder
             einander; build.BASE_DIR und die sys.path-Zeilen in chartdoc.py und
-            den Uhr-Modulen sind fest darauf eingestellt)
-    frisch  True umgeht den ~5-Minuten-Cache von raw.githubusercontent.com —
-            direkt nach einem Upload benutzen, sonst kommt die alte Fassung
+            den Uhr-Modulen sind fest darauf eingestellt). Hierhin kopiert
+            Stufe 1 die Dateien aus dem BUILDER-Ordner, hierhin schreibt Stufe 2
+            per curl.
+    frisch  True holt AUCH vorhandene Dateien neu aus dem Repo und
+            UEBERSCHREIBT die lokale Kopie; umgeht dabei den ~5-Minuten-Cache
+            von raw.githubusercontent.com. Nur auf Chris' Ansage, etwa direkt
+            nach einem Repo-Upload — sonst gilt der BUILDER-Ordner.
     still   True unterdrueckt die Erfolgsmeldung
 
-    Prueft jede Datei nach dem Download auf Nullgroesse und laesst sie von
-    py_compile uebersetzen. Damit faellt eine Fehlerseite, die der Proxy statt
-    der Datei ausliefert, sofort auf — und nicht erst als raetselhafter
+    SEIT 2026-09-19 (W5): Eine Datei, die schon unter `ziel` liegt, wird NICHT
+    mehr geladen. Vorher lief urlretrieve bei jedem Aufruf und ueberschrieb
+    still die Kopien aus dem BUILDER-Ordner mit dem Repo-Stand — anders als
+    Werkzeuge- und Design-Render-Modul sagten („laedt nichts mehr nach").
+
+    Prueft jede Datei — lokal vorgefundene wie frisch geholte — auf
+    Nullgroesse und laesst sie von py_compile uebersetzen. Damit faellt eine
+    Fehlerseite, die der Proxy statt der Datei ausliefert, oder eine
+    abgeschnittene Kopie sofort auf — und nicht erst als raetselhafter
     SyntaxError mitten im Render.
 
+    Rueckgabe: LISTE der Dateinamen in der Reihenfolge von `module` (lokal
+    vorgefundene und geholte), kein dict.
+
     Wirft bei jedem Fehlschlag. NICHT abfangen und stillschweigend auf eine
-    Altfassung ausweichen: in dem Fall auf project_read zurueckfallen UND melden,
-    dass der Ladeweg klemmt.
+    Altfassung ausweichen: Klemmt der Ladeweg, anhalten und Chris fragen.
     """
     pfad_ziel = pathlib.Path(ziel)
     pfad_ziel.mkdir(parents=True, exist_ok=True)
 
-    geholt = []
+    geladen = []            # (Dateiname, Anzeige) in der Reihenfolge von `module`
     for m in module:
         name = m if m.endswith(".py") else m + ".py"
         stamm = name[:-3]
@@ -362,13 +421,38 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
                 + ", ".join(sorted(BEKANNT - {'lade'}))
             )
         pfad = pfad_ziel / name
+        if pfad.exists() and not frisch:
+            # 2026-09-19 (W5): lokal vorhanden -> nicht holen, nur pruefen.
+            if pfad.stat().st_size == 0:
+                raise RuntimeError(
+                    f"{name} liegt unter {ziel}, ist aber LEER. Die Kopie aus dem "
+                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1) oder die "
+                    "Datei per curl holen (Stufe 2); klemmt beides: anhalten und "
+                    "Chris fragen.")
+            try:
+                py_compile.compile(str(pfad), cfile="/tmp/_ladecheck.pyc",
+                                   doraise=True)
+            except py_compile.PyCompileError as e:
+                raise RuntimeError(
+                    f"{name} liegt unter {ziel}, ist aber kein gueltiges Python "
+                    "(abgeschnittene oder falsche Datei?). Die Kopie aus dem "
+                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1) oder per "
+                    "curl holen (Stufe 2); klemmt beides: anhalten und Chris "
+                    "fragen."
+                ) from e
+            geladen.append((name, f"{name} ({pfad.stat().st_size} B, lokal)"))
+            continue
         url = REPO + name + ("?frisch=1" if frisch else "")
         try:
             urllib.request.urlretrieve(url, pfad)
         except Exception as e:
+            # 2026-09-19 (W5): Stufe 3 (project_read) ist gestrichen.
             raise RuntimeError(
-                f"{name} liess sich nicht laden ({type(e).__name__}: {e}). "
-                "Ladeweg klemmt — auf project_read zurueckfallen und melden."
+                f"{name} liess sich nicht aus dem Repo laden ({type(e).__name__}: "
+                f"{e}). Ladeweg klemmt — anhalten und Chris fragen. Liegt die "
+                f"Datei nicht unter {ziel}: Stufe 1 (BUILDER-Ordner per "
+                "device_stage_files) oder Stufe 2 (curl) nehmen; project_read "
+                "ist kein Ladeweg fuer Builder."
             ) from e
         if pfad.stat().st_size == 0:
             raise RuntimeError(f"{name} kam leer an — Ladeweg pruefen")
@@ -379,20 +463,21 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
                 f"{name} kam beschaedigt an (kein gueltiges Python). "
                 "Vermutlich hat der Proxy eine Fehlerseite geliefert statt der Datei."
             ) from e
-        geholt.append(f"{name} ({pfad.stat().st_size} B)")
+        geladen.append((name, f"{name} ({pfad.stat().st_size} B, aus dem Repo)"))
 
     if ziel not in sys.path:
         sys.path.insert(0, ziel)
 
     if not still:
-        print("geladen:", ", ".join(geholt))
+        print("geladen:", ", ".join(a for _, a in geladen))
     if any((m[:-3] if m.endswith(".py") else m) == "transit" for m in module):
         _ephemeriden_warnung()
-    return [g.split(" ")[0] for g in geholt]
+    return [n for n, _ in geladen]
 
 
 def lade_schritt(schritt, **kw):
-    """Holt genau die Builder, die dieser Schritt braucht — s. SCHRITTE.
+    """Stellt genau die Builder bereit, die dieser Schritt braucht — s.
+    SCHRITTE. Holt seit 2026-09-19 (W5) nur, was unter `ziel` fehlt.
 
         lade_schritt("1")        # Datenblatt
         lade_schritt("3+4")      # Design/Render
@@ -445,8 +530,12 @@ def uebersicht():
     """Druckt, welcher Schritt was zieht und woher — die Antwort auf
     'von wo wird was geholt'. Die Anweisungsmodule verweisen hierher,
     statt eigene Listen zu fuehren."""
-    print("Ladeweg — Quelle ist immer das Repo:")
-    print(" ", REPO)
+    # 2026-09-19 (W5): Die Quelle ist nicht mehr „immer das Repo".
+    print("Ladeweg — Stufe 1: BUILDER-Ordner per device_stage_files, nach "
+          "/home/claude kopiert;")
+    print("          Stufe 2: curl aus", REPO)
+    print("          lade()/lade_schritt() holen nur, was lokal fehlt "
+          "(frisch=True: alles neu).")
     print("\nJe Schritt:")
     for s, mods in SCHRITTE.items():
         print("  lade_schritt(%-12s -> %-42s # %s"
@@ -461,10 +550,92 @@ def uebersicht():
     print("  blocks_bundle.txt (die Bibliothek selbst) und alle .md-Module.")
 
 
+def _selbsttest():
+    """Selbsttest OHNE Netz (neu 2026-09-19, W5 und F23): urlretrieve gemockt,
+    Temp-Verzeichnis. Prueft: vorhandene Dateien werden nicht geholt und nicht
+    ueberschrieben, fehlende schon; frisch=True holt neu; leere oder kaputte
+    lokale Kopie und ein scheiternder Abruf werfen mit klarer Meldung (ohne
+    project_read); lade_schritt("1") enthaelt selektor (W40); der
+    Ephemeriden-Hinweis ist keine Warnung mehr."""
+    import contextlib
+    import io
+    import tempfile
+    from unittest import mock
+
+    abrufe = []
+
+    def falscher_abruf(url, pfad):
+        abrufe.append(url)
+        pathlib.Path(pfad).write_text("GEHOLT = True\n", encoding="utf-8")
+        return str(pfad), None
+
+    pfad_vorher = list(sys.path)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            (pathlib.Path(tmp) / "build.py").write_text("LOKAL = True\n",
+                                                        encoding="utf-8")
+            with mock.patch.object(urllib.request, "urlretrieve", falscher_abruf):
+                namen = lade("build", "chartdoc", ziel=tmp, still=True)
+                assert namen == ["build.py", "chartdoc.py"], namen
+                assert [u.rsplit("/", 1)[-1] for u in abrufe] == ["chartdoc.py"], abrufe
+                assert "LOKAL" in (pathlib.Path(tmp) / "build.py").read_text(
+                    encoding="utf-8"), "lokale Datei wurde ueberschrieben"
+                abrufe.clear()
+                lade("build", ziel=tmp, frisch=True, still=True)
+                assert abrufe and abrufe[0].endswith("build.py?frisch=1"), abrufe
+                assert "GEHOLT" in (pathlib.Path(tmp) / "build.py").read_text(
+                    encoding="utf-8")
+                abrufe.clear()
+                namen = lade_schritt("1", ziel=tmp, still=True)
+                assert "selektor.py" in namen, namen
+            (pathlib.Path(tmp) / "radix.py").write_text("", encoding="utf-8")
+            try:
+                lade("radix", ziel=tmp, still=True)
+                raise AssertionError("leere lokale Datei nicht erkannt")
+            except RuntimeError as e:
+                assert "LEER" in str(e) and "Chris fragen" in str(e), e
+            (pathlib.Path(tmp) / "radix.py").write_text("def kaputt(:\n",
+                                                        encoding="utf-8")
+            try:
+                lade("radix", ziel=tmp, still=True)
+                raise AssertionError("kaputte lokale Datei nicht erkannt")
+            except RuntimeError as e:
+                assert "kein gueltiges Python" in str(e), e
+
+            def abruf_scheitert(url, pfad):
+                raise OSError("kein Netz (Selbsttest)")
+
+            with mock.patch.object(urllib.request, "urlretrieve", abruf_scheitert):
+                try:
+                    lade("hd", ziel=tmp, still=True)
+                    raise AssertionError("gescheiterter Abruf nicht gemeldet")
+                except RuntimeError as e:
+                    assert "anhalten und Chris fragen" in str(e), e
+                    assert "auf project_read zurueckfallen" not in str(e), e
+            puffer, fehler = io.StringIO(), io.StringIO()
+            with mock.patch(__name__ + ".ephemeriden_pfad", return_value=None), \
+                    contextlib.redirect_stdout(puffer), \
+                    contextlib.redirect_stderr(fehler):
+                _ephemeriden_warnung()
+            text = puffer.getvalue() + fehler.getvalue()
+            assert "WARNUNG" not in text and "ephemeriden()" in text, text
+            assert not fehler.getvalue(), "Hinweis gehoert nicht nach stderr"
+    finally:
+        sys.path[:] = pfad_vorher
+    print("[lade-Selbsttest ohne Netz bestanden: lokal vorhandene Dateien "
+          "bleiben (W5), frisch=True holt neu, klare Fehlermeldungen, "
+          "Schritt 1 mit selektor (W40), Ephemeriden-Hinweis (F23)]")
+
+
 if __name__ == "__main__":
-    # Selbsttest: holt alle Builder und meldet, ob jeder ankommt.
-    alle = sorted(BEKANNT - {"lade"})
-    lade(*alle, ziel="/tmp/ladeselbsttest")
-    print(f"\n[Selbsttest bestanden: {len(alle)} Builder geladen und uebersetzbar]")
+    _selbsttest()
+    if "--netz" in sys.argv[1:]:
+        # Der bisherige Selbsttest: holt alle Builder aus dem Repo und meldet,
+        # ob jeder ankommt. Seit 2026-09-19 mit frisch=True — sonst naehme er
+        # Dateien, die von einem frueheren Lauf in /tmp/ladeselbsttest liegen,
+        # und pruefte das Repo gar nicht.
+        alle = sorted(BEKANNT - {"lade"})
+        lade(*alle, ziel="/tmp/ladeselbsttest", frisch=True)
+        print(f"\n[Selbsttest bestanden: {len(alle)} Builder geladen und uebersetzbar]")
     print()
     uebersicht()

@@ -673,6 +673,11 @@ _DB_ENDE_RE = re.compile(r'^@@ENDE\s*$')
 # nicht als Feld erkannt wurde und sich stumm an den GLYPHEN-Wert anhaengte
 # (heraus kam '♇ ♂ ☊ ☋ GLYPHEN_').
 _DB_FELD_RE = re.compile(r'^([A-ZÄÖÜ][A-ZÄÖÜ_]{3,24})\s*:\s*(.*)$')
+# 2026-09-19 (W14, Frage 3 = Option 1): KICKER und UNTERTITEL sind gestrichen.
+# Sie werden in jeder Schreibweise als unbekanntes Feld erkannt und gemeldet,
+# damit eine Zeile „Untertitel: …" nicht still im Wert davor landet.
+DECKBLATT_GESTRICHEN = ('KICKER', 'UNTERTITEL')
+_DB_GESTRICHEN_RE = re.compile(r'^(KICKER|UNTERTITEL)\s*:\s*(.*)$', re.I)
 
 
 def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
@@ -687,6 +692,14 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
     Mehrzeilige Werte werden zusammengezogen: eine Zeile gehoert zum
     vorherigen Feld, solange sie nicht selbst mit `FELD:` beginnt. Damit sind
     umbrochene TITELMOTIV-/PALETTE-Zeilen unproblematisch.
+
+    Eine Zeile `FELD:` mit einem Feld, das der Block nicht kennt (etwa
+    `KICKER:` oder `UNTERTITEL:`), wird seit 2026-09-19 (W14) NICHT mehr still
+    an das vorige Feld gehaengt: Sie wird samt ihren Folgezeilen verworfen und
+    laut gemeldet (Zeile „!! @@DECKBLATT …“ auf stdout, kein Abbruch).
+    KICKER und UNTERTITEL gibt es nicht (Chris-Entscheidung 2026-09-19): Die
+    Kickerzeile des Covers traegt den Dokumenttyp aus der H1 der analyse.md,
+    einen Untertitel hat das Cover nicht.
 
     Rueckgabe: {'LEITSATZ':…, 'LEITACHSE':…, 'TITELMOTIV':…,
                 'PALETTE':… , 'GLYPHEN':…, 'GLYPHEN_GRUND':…} — die letzten
@@ -716,16 +729,33 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
             '  BEIDEN Dateien nach "@@DECKBLATT" greppen und das Ergebnis\n'
             '  nennen. Ein ungeprueftes "fehlt" gilt nicht.')
 
-    felder, key = {}, None
+    felder, key, unbekannt = {}, None, []
     for z in zeilen[start:]:
         if _DB_ENDE_RE.match(z):
             break
-        m = _DB_FELD_RE.match(z)
+        m = _DB_FELD_RE.match(z) or _DB_GESTRICHEN_RE.match(z)
         if m and m.group(1) in DECKBLATT_FELDER + DECKBLATT_ABGELEITET:
             key = m.group(1)
             felder[key] = m.group(2).strip()
+        elif m:
+            # 2026-09-19 (W14): unbekanntes Feld nicht an das vorige haengen —
+            # vorher landete eine KICKER-Zeile still im Wert davor.
+            unbekannt.append(m.group(1))
+            key = None
         elif key and z.strip():
             felder[key] = (felder[key] + ' ' + z.strip()).strip()
+    for feld in unbekannt:
+        if feld.upper() in DECKBLATT_GESTRICHEN:
+            grund = ('KICKER und UNTERTITEL sind seit 2026-09-19 kein Feld des '
+                     'Blocks: Die Kickerzeile des Covers traegt den Dokumenttyp '
+                     'aus der H1 der analyse.md, einen Untertitel hat das Cover '
+                     'nicht. Die Zeile kann aus dem Block gestrichen werden.')
+        else:
+            grund = ('Tippfehler? Erlaubt sind '
+                     + ', '.join(DECKBLATT_FELDER + DECKBLATT_ABGELEITET) + '.')
+        print(f'  !! @@DECKBLATT in {os.path.basename(pfad)}: unbekanntes Feld '
+              f'"{feld}:" — die Zeile und ihre Folgezeilen werden NICHT '
+              f'uebernommen und nicht an das vorige Feld gehaengt. {grund}')
 
     fehlt = [k for k in DECKBLATT_PFLICHT if not felder.get(k)]
     if fehlt:
@@ -943,8 +973,42 @@ def _consume_klartext_head(cur, text):
     return False
 
 
-def parse_analyse(path: str, client: str = None) -> dict:
+def _analyse_quelle(quelle):
+    """Text und Anzeigename der analyse.md — aus einem Pfad ODER dem Text selbst.
+
+    Neu 2026-09-19 (W61): Wer den Text übergab, bekam `OSError [Errno 36] File
+    name too long` samt dem ganzen Text als Dateinamen. Text ist ein str mit
+    Zeilenumbruch oder einer, der mit '# ' beginnt (die H1); alles andere ist
+    ein Pfad. Keine Meldung enthält den ganzen Text."""
+    if isinstance(quelle, os.PathLike):
+        pfad = os.fspath(quelle)
+    elif isinstance(quelle, str):
+        if "\n" in quelle or quelle.lstrip("\ufeff \t").startswith("# "):
+            return quelle, "analyse.md (als Text übergeben)"
+        pfad = quelle
+    else:
+        raise TypeError(
+            "parse_analyse(): erwartet wird der Pfad der <klient>_analyse.md "
+            "(str oder Path) ODER ihr Text als str, bekommen: "
+            f"{type(quelle).__name__}.")
+    if not os.path.isfile(pfad):
+        kurz = pfad if len(pfad) <= 120 else pfad[:117] + "…"
+        raise FileNotFoundError(
+            f"parse_analyse(): Datei nicht gefunden: {kurz!r}. Erwartet wird "
+            "der Pfad der <klient>_analyse.md ODER ihr Text als str "
+            "(mehrzeilig bzw. mit der H1 '# <Dokumenttyp> — <Klientenname>' "
+            "am Anfang).")
+    with open(pfad, encoding="utf-8") as f:
+        return f.read(), os.path.basename(pfad)
+
+
+def parse_analyse(path, client: str = None) -> dict:
     """Liest <klient>_analyse.md strikt nach ANALYSE_SCHEMA.
+
+    path: Pfad der analyse.md (str oder Path) ODER ihr Text als str — seit
+    2026-09-19 (W61). Als Text gilt ein str mit Zeilenumbruch oder mit '# '
+    am Anfang; sonst ist es ein Pfad, und eine fehlende Datei meldet
+    FileNotFoundError mit dem, was erwartet ist.
 
     client: erwarteter Klientenname; weicht die H1 ab, ist das ein Fehler
     (Identitäts-Guardrail gegen Datei-Verwechslung).
@@ -952,8 +1016,8 @@ def parse_analyse(path: str, client: str = None) -> dict:
     Rückgabe: {'h1','doctype','client','chapters':[{'kicker','title','line',
     'blocks':[{'type':'p'|'li'|'subhead','text','line'},...]},...]}
     Wirft SchemaError mit ALLEN Funden (Zeilennummer + Erwartung)."""
-    with open(path, encoding="utf-8") as f:
-        raw = f.read().replace("\r\n", "\n").replace("\r", "\n")
+    raw, quelle_name = _analyse_quelle(path)
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n")
     lines = raw.split("\n")
     errors = []
 
@@ -1129,7 +1193,7 @@ def parse_analyse(path: str, client: str = None) -> dict:
         errors.sort()
         listing = "\n".join(f"  Zeile {ln}: {m}" for ln, m in errors)
         raise SchemaError(
-            f"{os.path.basename(path)} verletzt das analyse.md-Schema "
+            f"{quelle_name} verletzt das analyse.md-Schema "
             f"({len(errors)} Fund(e)):\n{listing}\n"
             f"Schema: build.ANALYSE_SCHEMA. Quelle korrigieren statt rendern.")
     return {"h1": h1, "doctype": doctype, "client": client_name,
@@ -1145,8 +1209,10 @@ def chapter_markers(parsed: dict, nur_titel: bool = False) -> list:
     Fundstelle eines Titels im PDF-Text. Ein Titel, der vorher in der Prosa
     vorkommt oder Präfix eines anderen ist („The way up" / „The way up into
     Taurus"), wurde damit auf der falschen Seite gefunden, und die
-    Reihenfolgeprobe blieb grün. Mit dem Kicker daneben kann `verify()` die
-    Fundstelle auf die Seite festnageln, die auch den Kicker trägt.
+    Reihenfolgeprobe blieb grün. Mit dem Kicker daneben nagelt `verify()` die
+    Fundstelle auf die Überschrift fest: Titel allein auf eigener Zeile,
+    Kicker direkt darüber (seit 2026-09-19, W47 — vorher genügte eine Seite,
+    die den Kicker irgendwo trug, auch in einem Querverweis).
 
     `nur_titel=True` gibt die alte Form zurück — für Aufrufer, die die Liste
     ausgeben statt sie an `verify()` zu übergeben."""
@@ -1545,6 +1611,48 @@ def _find_marker(marker, hay, start=0):
     return pat.search(hay, start)
 
 
+def _kopf_schluessel(s: str) -> str:
+    """Vergleichsform fuer Kapitelkoepfe (neu 2026-09-19, W47): nur Buchstaben
+    und Ziffern, klein geschrieben. Sperrung ('K A P I T E L 2'),
+    Zeilenumbruch, Trenn- und Bindestrich, Anfuehrungszeichen und
+    Glyphen-Varianten (U+FE0E) fallen weg."""
+    return re.sub(r"[\W_]+", "", _nrm(s or "")).casefold()
+
+
+def _kopf_finden(seiten_zeilen, kick, titel, ab=(0, -1), max_zeilen=4):
+    """(Seite, letzte Titelzeile) der ersten Kapitelueberschrift `titel` hinter
+    der Position `ab` — oder None. Neu 2026-09-19 (W47).
+
+    Ueberschrift heisst: Der Titel fuellt eine bis `max_zeilen` GANZE Zeilen
+    allein, und — wenn ein Kicker mitgegeben ist — die Zeile (oder die zwei
+    Zeilen) direkt darueber sind genau der Kicker. Ein Querverweis im
+    Fliesstext („… in Kapitel 2, ‚Titel‘, …") erfuellt das nicht: Seine
+    Zeile traegt anderen Text, und ueber ihr steht kein Kicker. Vorher
+    genuegte die erste Fundstelle auf einer Seite, die den Kicker IRGENDWO
+    trug — ein Querverweis „Kapitel 2 … Titel" nannte beides."""
+    t_key = _kopf_schluessel(titel)
+    k_key = _kopf_schluessel(kick) if kick else ""
+    if not t_key:
+        return None
+    s0, z0 = ab
+    for s in range(max(0, s0), len(seiten_zeilen)):
+        keys = [_kopf_schluessel(z) for z in seiten_zeilen[s]]
+        for i in range(z0 + 1 if s == s0 else 0, len(keys)):
+            if not keys[i] or not t_key.startswith(keys[i]):
+                continue
+            acc = ""
+            for j in range(i, min(i + max_zeilen, len(keys))):
+                acc += keys[j]
+                if acc == t_key:
+                    if not k_key or any("".join(keys[max(0, i - n):i]) == k_key
+                                        for n in (1, 2)):
+                        return (s, j)
+                    break
+                if not t_key.startswith(acc):
+                    break
+    return None
+
+
 def _pdf_pages_text(pdf_path: str) -> list:
     out = subprocess.run(["pdftotext", "-layout", "-enc", "UTF-8",
                           pdf_path, "-"], capture_output=True, check=True)
@@ -1735,7 +1843,11 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
 
       expected_pages     int oder (min, max): erwartete Seitenzahl
       markers            Kapiteltitel in Reihenfolge (chapter_markers(parsed));
-                         jeder muss vorkommen, Reihenfolge wird geprüft
+                         jeder muss vorkommen, Reihenfolge wird geprüft.
+                         Seit 2026-09-19 (W47) nur als ÜBERSCHRIFT: Der Titel
+                         steht allein auf eigener Zeile (auch umbrochen), bei
+                         (Kicker, Titel) mit dem Kicker direkt darüber — ein
+                         Querverweis im Fließtext zählt nicht
       kickers            Kicker-Liste; Präsenz (uppercase) wird geprüft
       aspect_rows        erwartete Zeilen der Aspekttabelle (= len(aspektliste))
       aspect_section     (start_marker, end_marker|None) grenzt den Tabellen-
@@ -1757,7 +1869,10 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
                          Textdeckung < min_coverage => verlorene Absätze
       sample_page        genau EINE Seite als PNG rastern (Report['sample_png'])
 
-    Rückgabe: Report-dict. Wirft VerifyError mit ALLEN Befunden."""
+    Rückgabe: Report-dict; `report['ok']` ist True, wenn die Prüfung grün ist
+    (seit 2026-09-19, W61 — ein zurückgegebener Report ist immer grün).
+    Wirft VerifyError mit ALLEN Befunden; der Fehler trägt den Report als
+    Attribut `report` (dort ok=False)."""
     pdf_path = os.path.abspath(pdf_path)
     fails, warns = [], []
     info = pdf_info(pdf_path)
@@ -1780,46 +1895,40 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
     marker_pages = {}
     if markers:
         # KAPITELKOPF STATT ERSTER FUNDSTELLE (neu 2026-09-17). markers nimmt
-        # (Kicker, Titel) aus chapter_markers(); nackte Titel gehen weiter und
-        # verhalten sich wie vorher. Mit Kicker wird die Fundstelle akzeptiert,
-        # deren SEITE auch den Kicker traegt — Kicker sind gesperrt gesetzt, der
-        # Vergleich laeuft darum ohne Leerstellen, wie unten bei `kickers`.
-        pos = 0
+        # (Kicker, Titel) aus chapter_markers(); nackte Titel gehen weiter.
+        # 2026-09-19 (W47): Die Marke gilt nur noch als UEBERSCHRIFT — der Titel
+        # steht allein auf ganzen Zeilen, der Kicker direkt darueber
+        # (_kopf_finden). Vorher genuegte eine Seite, die den Kicker irgendwo
+        # trug, und ein Querverweis „Kapitel 2, ‚Titel‘" im Lagebild wurde als
+        # Kapitelanfang verortet; die Reihenfolgeprobe lief darueber gruen.
+        seiten_zeilen = [[z for z in p.splitlines() if z.strip()]
+                         for p in pages]
+        pos = (0, -1)
         for eintrag in markers:
             if isinstance(eintrag, (tuple, list)):
                 kick, mk = eintrag[0], eintrag[1]
             else:
                 kick, mk = None, eintrag
-            needle = _dehyph(_nrm(mk))
-            kick_ds = (kick or "").upper().replace(" ", "")
-            stellen = []
-            i = whole_d.find(needle, pos)
-            while i >= 0:
-                stellen.append(i)
-                i = whole_d.find(needle, i + 1)
-            treffer = None
-            for i in stellen:
-                seite = whole_d.count("\x0c", 0, i)        # 0-basiert
-                if not kick_ds:
-                    treffer = (i, seite)
-                    break
-                pt = pages_n[seite] if seite < len(pages_n) else ""
-                if kick_ds in _dehyph(pt).upper().replace(" ", ""):
-                    treffer = (i, seite)
-                    break
+            treffer = _kopf_finden(seiten_zeilen, kick, mk, pos)
             if treffer is None:
-                if stellen:
-                    fails.append(f"MARKER nicht am Kapitelkopf: {mk!r} — "
-                                 f"gefunden, aber auf keiner Seite mit dem "
-                                 f"Kicker {kick!r}.")
+                needle = _dehyph(_nrm(mk))
+                wo = f" unter dem Kicker {kick!r}" if kick else ""
+                if _kopf_finden(seiten_zeilen, kick, mk) is not None:
+                    fails.append(f"MARKER-REIHENFOLGE verletzt: {mk!r} — die "
+                                 f"Ueberschrift steht vor der des vorigen "
+                                 f"Markers.")
                 elif whole_d.find(needle) >= 0:
-                    fails.append(f"MARKER-REIHENFOLGE verletzt: {mk!r}.")
+                    fails.append(f"MARKER nicht am Kapitelkopf: {mk!r} — im "
+                                 f"PDF-Text gefunden, aber nicht als "
+                                 f"Ueberschrift (Titel allein auf eigener "
+                                 f"Zeile{wo}); nur Fliesstext oder "
+                                 f"Querverweis. Fehlt der Kapitelkopf im "
+                                 f"Render, oder weicht der Titel ab?")
                 else:
                     fails.append(f"MARKER fehlt im PDF-Text: {mk!r}.")
                 continue
-            i, seite = treffer
-            pos = i + len(needle)
-            marker_pages[mk] = seite + 1
+            pos = treffer
+            marker_pages[mk] = treffer[0] + 1
     if kickers:
         # Kicker sind gesperrt gesetzt (letter-spacing) -> pdftotext liefert
         # 'Z U R L E S A RT'; Vergleich darum ohne jede Leerstelle.
@@ -1943,7 +2052,8 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
 
     report = {"pdf": pdf_path, "pages": n_pages, "marker_pages": marker_pages,
               "aspect_rows_found": found_rows, "coverage": ratio,
-              "warnings": warns, "failures": fails, "sample_png": sample_png}
+              "warnings": warns, "failures": fails, "sample_png": sample_png,
+              "ok": not fails}                  # 2026-09-19 (W61): True = gruen
     if verbose:
         ok = "FEHLGESCHLAGEN" if fails else "OK"
         asp = f", Aspekte {found_rows}/{aspect_rows}" if aspect_rows is not None else ""
@@ -1954,11 +2064,13 @@ def verify(pdf_path: str, expected_pages=None, markers=None, kickers=None,
         for w in warns:
             print(f"  ! {w}")
     if fails:
-        raise VerifyError(
+        fehler = VerifyError(
             f"PDF-Prüfung fehlgeschlagen ({len(fails)} Befund(e)):\n"
             + "\n".join(f"  [{i + 1}] {f}" for i, f in enumerate(fails))
             + ("\nWarnungen:\n" + "\n".join(f"  - {w}" for w in warns)
                if warns else ""))
+        fehler.report = report          # 2026-09-19 (W61): ok=False darin
+        raise fehler
     return report
 
 
@@ -2008,8 +2120,35 @@ def verify_visual(pdf_path: str, pages=None, dpi: int = 80,
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_fonts(force="--force" in sys.argv)
-    else:
+    elif "--selbsttest" not in sys.argv[1:]:   # 2026-09-19: Aufruf am Dateiende
         print(__doc__)
+
+
+# --- Orb-Formatierung ---------------------------------------------------------
+# Neu 2026-09-19 (Wartungslauf A, W2). radix liefert den Orb seither
+# UNGERUNDET; gerundet wird genau einmal, beim Schreiben — und zwar ueberall
+# mit dieser Funktion: Aspekttabelle des Datenblatts, Aspektseite
+# (chartdoc.aspekt_page) und was build selbst ausgibt. Vorher rundete radix
+# auf 0,01° und chartdoc danach auf die Minute; die Aspektseite stand dadurch
+# bis zu 1′ neben Tabelle und Belegen. Die Rundung ist wortgleich die von
+# radix._gr() (Grad abschneiden, Minuten runden, Uebertrag bei 60), mit der
+# radix seine eigenen Texte schreibt; _selbsttest() haelt beide gegeneinander.
+
+def orb_text(grad) -> str:
+    """Orb in Grad (ungerundet) -> 'N°NN′', genau einmal auf die Bogenminute
+    gerundet — dieselbe Rundung wie radix._gr() und die Aspekttabelle des
+    Datenblatts. Beispiel: 1.4917 -> '1°30′' (die alte Doppelrundung über
+    round(1.4917, 2) = 1.49 ergab '1°29′'). Nie einen schon gerundeten Wert
+    übergeben — das wäre wieder die Doppelrundung."""
+    if grad is None:
+        raise TypeError("orb_text(): Orb fehlt (None) — erwartet wird der "
+                        "ungerundete Orb in Grad aus radix (Feld 'orb').")
+    deg = abs(float(grad))
+    d = int(deg)
+    m = int(round((deg - d) * 60))
+    if m == 60:
+        d, m = d + 1, 0
+    return f"{d}°{m:02d}′"
 
 
 # --- Aspekt-Heimat-Probe -----------------------------------------------------
@@ -2048,6 +2187,15 @@ _AH_SCHNITT = r"\n(?:#{2,3} |@@)"
 # gilt an ALLEN drei Stellen dieselbe Trennermenge.
 _AH_WORT = r"\u2013[A-Za-z\u00c4\u00d6\u00dca-z\u00e4\u00f6\u00fc\u00df]+\u2013"
 
+# Trennzeile einer Markdown-Tabelle (|---|:---:|) — keine Datenzeile (F2).
+_AH_TRENNZEILE = re.compile(r"^\s*\|[\s:|\-]*-[\s:|\-]*$")
+# Erwartete Form einer Tabellenzeile, fuer die Meldung unlesbarer Zeilen (F2).
+_AH_ZEILENFORM = ("| Faktor | <Glyphe> <Aspektname> | Faktor | Orb | … |, "
+                  "Faktorzellen mit nacktem Namen; Glyphen ☌ ☍ □ △ ⚹ ⚻ ⚺, "
+                  "in der Untergrund-Tabelle ∠ Halbquadrat und "
+                  "⚼ Anderthalbquadrat (oder der –Wort–-Trenner). Eine leere "
+                  "Tabelle steht als Satz („Keine.“), nicht als Tabellenzeile.")
+
 
 def _ah_abschnitt(txt, marke, ab=0):
     """Text ab `marke` bis zur naechsten Ueberschrift oder zum naechsten
@@ -2063,6 +2211,62 @@ def _ah_abschnitt(txt, marke, ab=0):
     return teil, ende
 
 
+# FELDGRENZE DER THEMENLISTE (neu 2026-09-19, W9). Ein Feld endet an der
+# naechsten Feldgrenze — gleich welcher: „| name=" oder ein Zeilenanfang mit
+# „name=". Vorher standen die Folgefelder einzeln in einer Liste; was darin
+# fehlte (klingt=, fuehrt=, familie=, leitachse=, grund=, titel=, teil=),
+# wurde dem aspekte=-Feld zugeschlagen, und eine Feldreihenfolge schreibt
+# kein Modul vor.
+_THEMA_FELDGRENZE = re.compile(r"(?:\||\n)\s*[a-zäöüß_]+\s*=")
+
+
+def _themen_feld(blk, name):
+    """Inhalt des Feldes `name=` eines THEMA-Blocks bis zur naechsten
+    Feldgrenze — oder None, wenn das Feld fehlt."""
+    m = re.search(r"(?<![\w-])%s\s*=" % re.escape(name), blk)
+    if not m:
+        return None
+    rest = blk[m.end():]
+    g = _THEMA_FELDGRENZE.search(rest)
+    return rest[:g.start()] if g else rest
+
+
+# DER RECHENSCHAFTS-BLOCK EINES FOLGEPRODUKTS (neu 2026-09-19, W9): beginnt
+# an „TRANSIT-RECHENSCHAFT:" (EA, Transit; im Ultimativ „SAMMELKAPITEL:") und
+# endet an der naechsten Ueberschrift, am naechsten @@-Block, an der
+# naechsten THEMA-Zeile oder an der naechsten Pflichtzeile der Themenliste.
+# Der Rest der Kopfzeile hinter dem Doppelpunkt gehoert dazu: Die
+# Ultimativ-Pflichtzeile „SAMMELKAPITEL: T-… , T-…" traegt ihre Kontakte
+# oft direkt dort.
+_TR_BLOCK_START = re.compile(
+    r"^[ \t>*-]*(?:TRANSIT-RECHENSCHAFT|SAMMELKAPITEL)\s*:", re.M)
+_TR_BLOCK_ENDE = re.compile(
+    r"^(?:#{1,6} |@@|THEMA \d+ \||[ \t>*-]*(?:GESTRICHEN|RECHENSCHAFT|"
+    r"REGISTER|SAMMELKAPITEL|TRANSIT-RECHENSCHAFT)\s*:)", re.M)
+
+
+def _wirkorb_im_fenster(e, orb_wirk=1.5, orb_json=None):
+    """Steht diese Passage (ein Eintrag aus events.json) im Wirkorb INNERHALB
+    des Fensters? Neu 2026-09-19 (W22) als eine Stelle fuer die Soll-Menge von
+    kontakt_heimat() und die Ressourcen-Zaehlmenge des Transits.
+
+    Maßgeblich ist das Feld `wirkorb_im_fenster` (transit.py seit 2026-09-19,
+    aus dem engsten Orb im Fenster — nicht `im_wirkorb`, das den Rueckblick
+    einschliesst). Weicht `orb_wirk` vom Wirk-Orb des Laufs (`orb_json`) ab,
+    zaehlt `min_orb_im_fenster`. Ein events.json von vor dem 2026-09-19 hat
+    beide Felder nicht; dann gilt die bisherige Naeherung (exakt im Fenster,
+    oder ein Quartal im Fenster und ein engster Orb der Passage im Wirkorb)."""
+    if "wirkorb_im_fenster" in e:
+        if orb_json is None or abs(float(orb_wirk) - float(orb_json)) < 1e-9:
+            return bool(e["wirkorb_im_fenster"])
+        mf = e.get("min_orb_im_fenster")
+        return mf is not None and mf <= orb_wirk
+    return bool(e.get("exakt_im_fenster")) or bool(
+        [q for q in (e.get("quartale") or []) if q > 0]
+        and e.get("min_orb_grad") is not None
+        and e["min_orb_grad"] <= orb_wirk)
+
+
 def aspekt_heimat(chart_data_pfad: str) -> dict:
     """Prüft die Aspekt-Heimat der Themenliste gegen die Aspekttabellen.
 
@@ -2071,13 +2275,18 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
 
     Rückgabe: {'tabelle': n, 'mit_heimat': [...], 'ohne_heimat': [...],
                'dokumentiert': [...], 'offen': [...], 'doppelt': [...],
-               'ok': bool}
+               'unlesbar': [(abschnitt, zeile), ...], 'ok': bool}
     `offen` ist die Fehlerliste: weder Heimat noch dokumentierte Weglassung.
+    `unlesbar` (neu 2026-09-19, F2): Zeilen der Aspekttabellen, die wie eine
+    Tabellenzeile aussehen, aber kein Paar ergeben — etwa ein Zeichen, das die
+    Probe nicht kennt (`∡` statt `⚼`), oder ein Symbol in der Faktorzelle.
+    Vorher fielen sie still aus der Prüfmenge (falsch-grün); jetzt ist die
+    Probe dann nicht grün, und der Bericht nennt die Zeile.
     """
     import re as _re
     txt = open(chart_data_pfad, encoding="utf-8").read()
 
-    def _paare(block, trenner):
+    def _paare(block, trenner, unlesbar=None, abschnitt=""):
         """Aspektpaare aus einer Markdown-Tabelle ziehen.
 
         Zwei Tabellenformen werden erkannt (zweite neu am 2026-09-06,
@@ -2085,16 +2294,30 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
           A  | Sonne ☍ Pluto | 2°30′ |          — Paar in EINER Zelle
           B  | Sonne | ☍ Opposition | Pluto | 2°30′ |   — Paar über drei Zellen
         Form B ist die, die Datenblatt- und Typmodul tatsächlich schreiben; sie
-        wurde bis dahin nicht erkannt, weshalb die Probe leer lief."""
+        wurde bis dahin nicht erkannt, weshalb die Probe leer lief.
+
+        `unlesbar` (Liste, 2026-09-19, F2): Tabellenzeilen, die kein Paar
+        ergeben, werden dort mit `abschnitt` gesammelt statt still
+        übersprungen — außer Kopf- und Trennzeilen."""
         out = set()
         pa = _re.compile(r"\|\s*(%s)\s*(?:%s)\s*(%s)\s*\|"
                          % (_AH_NAME, trenner, _AH_NAME))
         pb = _re.compile(r"\|\s*(%s)\s*\|\s*(?:%s|[A-Za-zÄÖÜäöüß]+)[^|]*\|\s*(%s)\s*\|"
                          % (_AH_NAME, trenner, _AH_NAME))
-        for z in block.splitlines():
+        zeilen = block.splitlines()
+        for n, z in enumerate(zeilen):
             m = pa.match(z) or pb.match(z)
             if m and m.group(1) not in ("Aspekt", "Faktor", "Punkt"):
                 out.add(frozenset([m.group(1), m.group(2)]))
+            elif unlesbar is not None and z.lstrip().startswith("|"):
+                if _AH_TRENNZEILE.match(z):
+                    continue
+                folge = zeilen[n + 1] if n + 1 < len(zeilen) else ""
+                erste = z.strip().strip("|").split("|")[0].strip()
+                if _AH_TRENNZEILE.match(folge) or erste in (
+                        "Aspekt", "Faktor", "Punkt"):
+                    continue                    # Kopfzeile der Tabelle
+                unlesbar.append((abschnitt, z.strip()))
         return out
 
     # ÜBERSCHRIFTEN (korrigiert 2026-09-06, Prüfbericht Transit 1.4).
@@ -2104,13 +2327,13 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     # Folge: Die Prüftabelle bestand in JEDEM Standardlauf nur aus den drei
     # Untergrund-Aspekten, die Probe übersah den Rest und meldete trotzdem
     # "keine offenen" — ein stiller Freispruch.
-    tabelle = set()
+    tabelle, unlesbar = set(), []
     for kopf in ("### Hauptaspekte", "### Volle Aspekte",
                  "### Einseitige Aspekte", "### Nebenaspekte"):
         if kopf not in txt:
             continue
         teil, _ = _ah_abschnitt(txt, kopf)
-        tabelle |= _paare(teil, "[%s]" % _AH_GLYPH)
+        tabelle |= _paare(teil, "[%s]" % _AH_GLYPH, unlesbar, kopf)
     if "### Untergrund-Aspekte" in txt:
         teil, _ = _ah_abschnitt(txt, "### Untergrund-Aspekte")
         # TRENNER DER UNTERGRUND-TABELLE (korrigiert 2026-09-16, Pruefbericht
@@ -2127,7 +2350,11 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         # `aspekte=`-Felder der Themenliste, und dort verlangt das
         # Datenblatt-Modul fuer Zusatzaspekte ausdruecklich den
         # –Wort–-Trenner statt der Glyphe.
-        tabelle |= _paare(teil, "[—⚼∠]|" + _AH_WORT)
+        # 2026-09-19 (F2): Glyphen der Tabelle sind ∠ Halbquadrat und
+        # ⚼ Anderthalbquadrat (Datenblatt-Modul); jedes andere Zeichen
+        # (etwa ∡) landet in `unlesbar`, statt still zu fehlen.
+        tabelle |= _paare(teil, "[—⚼∠]|" + _AH_WORT, unlesbar,
+                          "### Untergrund-Aspekte")
 
     heimat, doppelt = {}, []
     # EINSTIEGSMARKE DER THEMENLISTE (korrigiert 2026-09-16, Pruefbericht
@@ -2155,8 +2382,9 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
             titel = (t.group(1).strip()[:40] if t else "?")
             if "teil=jetzt" in blk:       # Transit-Kapitel: eigene Aspektmenge
                 continue
-            feld = _re.split(r"\|\s*(?:traegt|rang|form|verweis|praxis)=",
-                             blk.split("aspekte=")[1])[0]
+            # 2026-09-19 (W9): dieselbe Feldgrenze wie in kontakt_heimat() —
+            # vorher endete das Feld nur an traegt|rang|form|verweis|praxis=.
+            feld = _themen_feld(blk, "aspekte") or ""
             feld = _re.sub(r"[TR]-\w+", " ", feld)
             for m in _re.finditer(r"(%s)\s*(?:[%s]|–[A-Za-zä]+–)\s*(%s)"
                                   % (_AH_NAME, _AH_GLYPH, _AH_NAME), feld):
@@ -2212,7 +2440,8 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         "dokumentiert": [" — ".join(sorted(p)) for p in ohne if p in dok],
         "offen": [" — ".join(sorted(p)) for p in offen],
         "doppelt": [(" — ".join(a), b, c) for a, b, c in doppelt],
-        "ok": bool(tabelle) and not offen and not doppelt,
+        "unlesbar": unlesbar,
+        "ok": bool(tabelle) and not offen and not doppelt and not unlesbar,
     }
 
 
@@ -2253,11 +2482,10 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         alle.add((e["transit"], e["aspekt"], e["ziel"]))
         if not e.get("primaer"):
             continue
-        im_fenster = bool(e.get("exakt_im_fenster")) or (
-            [q for q in (e.get("quartale") or []) if q > 0]
-            and e.get("min_orb_grad") is not None
-            and e["min_orb_grad"] <= orb_wirk)
-        if im_fenster:
+        # 2026-09-19 (W22): eine Definition fuer Soll-Menge und
+        # Ressourcen-Zaehlmenge (_wirkorb_im_fenster); fuer ein events.json
+        # von vor dem 2026-09-19 dieselbe Naeherung wie bisher.
+        if _wirkorb_im_fenster(e, orb_wirk, daten.get("orb_wirk")):
             soll.add((e["transit"], e["aspekt"], e["ziel"]))
 
     # Namensbrücke: das analyse-/chart_data-Deutsch schreibt Umlaute
@@ -2267,31 +2495,47 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
             n = n.replace(a, b)
         return n
-    namen = {}
+    # 2026-09-19 (W9): getrennt fuer Transiter und Ziele. Vorher teilten beide
+    # EIN Woerterbuch; stand `Mondknoten` unter den Zielen, wurde `T-Mondknoten`
+    # (die Beleg-Notation des laufenden Knotens) als Ziel `Mondknoten` gelesen
+    # und als unbekannter Kontakt gemeldet.
+    tnamen, znamen = {}, {}
     for t, a, z in alle:
-        namen.setdefault(_norm(t), t)
-        namen.setdefault(_norm(z), z)
-    namen.setdefault("mondknoten", "Knoten")
+        tnamen.setdefault(_norm(t), t)
+        znamen.setdefault(_norm(z), z)
+    tnamen.setdefault("mondknoten", "Knoten")
 
-    # 2) Ist-Menge: die aspekte=-Felder der Themenliste
+    # 2) Ist-Menge: die Felder fuehrt= und aspekte= der Themenliste.
+    #    2026-09-19 (L19): Im Transit traegt `fuehrt=` den fuehrenden KONTAKT
+    #    (Transit-Modul); er muss nicht in aspekte= wiederholt werden.
+    #    2026-09-19 (W9): Ein Feld endet an der naechsten Feldgrenze, gleich
+    #    welche (_themen_feld) — vorher fehlten klingt=, fuehrt=, familie=,
+    #    leitachse=, grund=, titel= und teil= in der Trennerliste, und ein
+    #    solches Feld hinter aspekte= wurde mitgezaehlt. Die Liste beginnt an
+    #    der ersten THEMA-Zeile (wie in aspekt_heimat()) und endet an der
+    #    naechsten Ueberschrift oder dem naechsten @@-Block.
     heimat, doppelt, unbekannt = {}, [], []
-    if "THEMA 1 |" in txt:
-        tl = "\nTHEMA 1 |" + txt.split("THEMA 1 |", 1)[1]
-        for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:"):
+    _erste = _re2.search(r"THEMA \d+ \|", txt)
+    if _erste:
+        tl = "\n" + txt[_erste.start():]
+        _ende = _re2.search(_AH_SCHNITT, tl)
+        if _ende:
+            tl = tl[:_ende.start()]
+        for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:",
+                        "SAMMELKAPITEL:"):
             tl = tl.split(schluss)[0]
         for blk in _re2.split(r"\nTHEMA \d+ \|", tl):
-            if "aspekte=" not in blk:
+            felder = [f for f in (_themen_feld(blk, "fuehrt"),
+                                  _themen_feld(blk, "aspekte")) if f]
+            if not felder:
                 continue
             t = _re2.search(r"titel=(.+)", blk)
             titel = (t.group(1).strip()[:40] if t else "?")
-            feld = _re2.split(r"\|\s*(?:verweis|spanne|exakt|station|rang|form|"
-                              r"praxis|dicht|haus|hinweis|befund|traegt)=",
-                              blk.split("aspekte=", 1)[1])[0]
             for m in _re2.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
-                                   % "".join(GLYPH), feld):
-                k = (namen.get(_norm(m.group(1)), m.group(1)),
+                                   % "".join(GLYPH), " ".join(felder)):
+                k = (tnamen.get(_norm(m.group(1)), m.group(1)),
                      GLYPH[m.group(2)],
-                     namen.get(_norm(m.group(3)), m.group(3)))
+                     znamen.get(_norm(m.group(3)), m.group(3)))
                 # Sekundäre Ziele dürfen ein Thema tragen (Selbst-Transite!),
                 # sie stehen nur nicht in der Rechenschaftspflicht. Gemeldet
                 # wird deshalb nur ein Kontakt, den der Builder gar nicht kennt.
@@ -2318,17 +2562,36 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     # Freispruch, der nichts prueft. Gezaehlt werden jetzt nur noch Zeilen, die
     # sich auch als Transit-Zeile zu erkennen geben: T-Praefix, das Wort
     # Transit, oder "laufend".
+    # 2026-09-19 (W9): gelesen wird NUR der Block TRANSIT-RECHENSCHAFT (im
+    # Ultimativ die Zeile SAMMELKAPITEL:), bis zur naechsten Ueberschrift, zum
+    # naechsten @@-Block oder zur naechsten Pflichtzeile. Vorher zaehlte alles
+    # ab dem ersten „RECHENSCHAFT" — auch der Ressourcen-Block, dessen
+    # Deckel-Zeile eine Negativkontrolle gruen hielt (T12-18c). Und die Zeile
+    # muss die Aspektart nennen (Glyphe oder Wort): eine Zeile zu Saturn □
+    # Sonne verbucht nicht mehr Saturn △ Sonne mit.
     _TR_MARKE = _re2.compile(r"(?:\bt-|transit|laufend)")
-    for marke in ("RECHENSCHAFT", "Was sonst noch läuft"):
-        if marke in txt:
-            teil = txt.split(marke, 1)[1].lower()
-            zeilen_tr = "\n".join(z for z in teil.splitlines()
-                                  if _TR_MARKE.search(z))
-            for k in soll:
-                a, b = _mst(k[0]), _mst(k[2])
-                if _re2.search(r"%s[^\n]{0,80}%s" % (a, b), zeilen_tr) or \
-                   _re2.search(r"%s[^\n]{0,80}%s" % (b, a), zeilen_tr):
-                    rech.add(k)
+    bloecke = []
+    for m in _TR_BLOCK_START.finditer(txt):
+        rest = txt[m.end():]
+        # Kopfzeilen-Rest immer mit; die Blockgrenze gilt ab der Folgezeile.
+        nl = rest.find("\n")
+        kopf, folge = (rest, "") if nl < 0 else (rest[:nl], rest[nl:])
+        ende = _TR_BLOCK_ENDE.search(folge)
+        bloecke.append(kopf + (folge[:ende.start()] if ende else folge))
+    zeilen_tr = [z for z in "\n".join(bloecke).lower().splitlines()
+                 if _TR_MARKE.search(z)]
+    zeichen = {v: k for k, v in GLYPH.items()}
+    # Zwischen Name und Aspekt kein fremdes Aspektzeichen: Auf einer Zeile mit
+    # mehreren Kontakten („T-Jupiter △ R-Sonne, T-Saturn □ R-Mond") gilt
+    # sonst Jupiter □ Mond als benannt.
+    zw = r"[^\n%s]{0,40}?" % "".join(GLYPH)
+    for k in soll:
+        a, b = _mst(k[0]), _mst(k[2])
+        asp = "(?:%s|%s)" % (_re2.escape(zeichen.get(k[1], k[1])),
+                             _re2.escape(k[1].lower()))
+        muster = (a + zw + asp + zw + b, b + zw + asp + zw + a)
+        if any(_re2.search(p, z) for z in zeilen_tr for p in muster):
+            rech.add(k)
 
     ohne = sorted(soll - set(heimat) - rech)
     return {
@@ -2368,11 +2631,22 @@ def kontakt_heimat_bericht(chart_data_pfad: str, events_json_pfad: str,
                                        r["rechenschaft"])]
     for k in r["ohne_heimat"]:
         L.append("  OHNE HEIMAT und nicht in der Rechenschaft: %s" % k)
+    if r["ohne_heimat"]:
+        # 2026-09-19 (W9, L19): sagen, wo die Probe liest.
+        L.append("  Gelesen wird: Heimat in fuehrt= und aspekte= der Themenliste "
+                 "(klingt= ist keine Heimat), Rechenschaft nur im Block "
+                 "TRANSIT-RECHENSCHAFT: bzw. im Ultimativ SAMMELKAPITEL:, je "
+                 "Kontakt mit Transiter, Aspektzeichen oder -wort und Radixpunkt. "
+                 "Den Block liefert build.transit_rechenschaft_block(chart_data, "
+                 "events_json).")
     for k, a, b in r["doppelt"]:
         L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (k, a, b))
     for titel, k in r["unbekannt"]:
-        L.append("  IM THEMA, aber kein primaerer Wirkorb-Kontakt: %s (%s)"
-                 % (k, titel))
+        # 2026-09-19 (W9): Die Meldung sagte „kein primaerer Wirkorb-Kontakt";
+        # gemeint ist ein Kontakt, den events.json gar nicht fuehrt.
+        L.append("  IM THEMA, aber in events.json kein solcher Kontakt: %s (%s)"
+                 " — Namen, Aspektzeichen und Notation T-<Transiter> <Glyphe> "
+                 "R-<Radixpunkt> pruefen" % (k, titel))
     return "\n".join(L)
 
 
@@ -2382,8 +2656,120 @@ GLYPH_ZU_ASPEKT = {"☌": "Konjunktion", "☍": "Opposition", "□": "Quadrat",
 ASPEKT_ZU_GLYPH = {v: k for k, v in GLYPH_ZU_ASPEKT.items()}
 
 
+def _datum_de(d):
+    """2030-01-02 -> 02.01.2030; unbekanntes Format bleibt stehen."""
+    teile = str(d).split("-")
+    return ("%s.%s.%s" % (teile[2], teile[1], teile[0])
+            if len(teile) == 3 else str(d))
+
+
+def _bogenminuten(grad):
+    """Annaeherung in Grad -> 'n.n′' — dieselbe Form wie der transit.py-Report
+    („Annaeherung bis 1.8′")."""
+    return "%.1f′" % (float(grad) * 60)
+
+
+def _passagen_zeitangaben(sel, start, end):
+    """Zeitangaben eines Kontakts aus seinen Passagen mit Wirkorb im Fenster
+    (neu 2026-09-19, W7): Nulldurchgaenge im, vor und nach dem Fenster (samt
+    Vorlauf und Fortsetzung), Annaeherungen, engster Orb IM Fenster, die
+    Wirkorb-Perioden im Fenster und das wahre Wirkorb-Ende bzw. den Beginn.
+    `neu_format` ist False fuer ein events.json von vor dem 2026-09-19 (dann
+    fehlen Fortsetzung und Vorlauf, und „nie exakt" ist nicht belegbar)."""
+    neu_format = all("exakt_gesamt" in e for e in sel)
+    alle_ex = sorted({d for e in sel
+                      for d in (e.get("exakt_gesamt") or e.get("exakt") or [])})
+    ex_f = [d for d in alle_ex if start <= d <= end]
+    ex_vor = [d for d in alle_ex if d < start]
+    ex_nach = sorted(set(alle_ex + [d for e in sel
+                                    for d in (e.get("exakt_nach_fenster")
+                                              or [])]))
+    ex_nach = [d for d in ex_nach if d > end]
+    ann = []
+    for e in sel:
+        ann += [tuple(a) for a in (e.get("annaeherung") or [])]
+        for teil in ("vorlauf", "fortsetzung"):
+            ann += [tuple(a) for a in ((e.get(teil) or {}).get("annaeherung")
+                                       or [])]
+    ann = sorted(set(ann))
+    orbs_f = [e.get("min_orb_im_fenster") for e in sel
+              if e.get("min_orb_im_fenster") is not None]
+    if not orbs_f and not neu_format:          # altes Format: Passagenwert
+        orbs_f = [e.get("min_orb_grad") for e in sel
+                  if e.get("min_orb_grad") is not None]
+    per = []
+    for e in sel:
+        wp = e.get("wirkorb_perioden")
+        if wp is None:                         # altes Format
+            wp = e.get("perioden") if e.get("im_wirkorb") else []
+        for a, b in wp or []:
+            if b >= start and a <= end:
+                per.append((max(a, start), min(b, end), a < start, b >= end))
+    per.sort()
+    von_g = min((e["wirkorb_von_gesamt"] for e in sel
+                 if e.get("wirkorb_von_gesamt")), default=None)
+    bis_g = max((e["wirkorb_bis_gesamt"] for e in sel
+                 if e.get("wirkorb_bis_gesamt")), default=None)
+    return {"neu_format": neu_format, "ex_f": ex_f, "ex_vor": ex_vor,
+            "ex_nach": ex_nach, "alle_ex": sorted(set(ex_vor + ex_f + ex_nach)),
+            "ann": ann, "ann_f": [a for a in ann if start <= a[0] <= end],
+            "orb_f": min(orbs_f) if orbs_f else None, "perioden": per,
+            "von_g": von_g, "bis_g": bis_g}
+
+
+def _wirkorb_text(z, start, end):
+    """„Wirkorb im Fenster A–B[, C–D] (begonnen X, bis Y nach dem Fenster)"."""
+    per = z["perioden"]
+    if not per:
+        return "im Fenster nicht im Wirkorb"
+    txt = "Wirkorb im Fenster " + ", ".join(
+        "%s–%s" % (_datum_de(a), _datum_de(b)) for a, b, _, _ in per)
+    zusatz = []
+    if per[0][2] and z["von_g"] and z["von_g"] < start:
+        zusatz.append("begonnen %s" % _datum_de(z["von_g"]))
+    if per[-1][3] and z["bis_g"] and z["bis_g"] > end:
+        zusatz.append("bis %s, nach dem Fenster" % _datum_de(z["bis_g"]))
+    return txt + (" (%s)" % "; ".join(zusatz) if zusatz else "")
+
+
+def _kontakt_zeit_text(z, start, end):
+    """Zeitangaben eines Transit-Kontakts als eine Zeile (W7, W22): exakt im
+    Fenster — sonst Annaeherung oder engster Orb im Fenster („nie exakt" nur
+    ohne jeden Nulldurchgang der Passage) —, dazu exakt vor/nach dem Fenster
+    und die Wirkorb-Perioden. `z` aus _passagen_zeitangaben()."""
+    orb_f = ("%s°" % z["orb_f"]) if z["orb_f"] is not None else "?"
+    teile = []
+    if z["ex_f"]:
+        teile.append("exakt " + ", ".join(_datum_de(d) for d in z["ex_f"]))
+    elif z["ann_f"]:
+        d, o = min(z["ann_f"], key=lambda a: a[1])
+        teile.append("im Fenster nicht exakt, Annäherung bis %s am %s"
+                     % (_bogenminuten(o), _datum_de(d)))
+    elif z["alle_ex"] or not z["neu_format"]:
+        teile.append("im Fenster nicht exakt (engster Orb im Fenster %s)"
+                     % orb_f)
+    else:
+        teile.append("nie exakt (engster Orb im Fenster %s)" % orb_f)
+    if z["ex_vor"]:
+        teile.append("exakt vor dem Fenster "
+                     + ", ".join(_datum_de(d) for d in z["ex_vor"]))
+    if z["ex_nach"]:
+        teile.append("exakt nach dem Fenster "
+                     + ", ".join(_datum_de(d) for d in z["ex_nach"]))
+    for d, o in z["ann"]:
+        if d < start or d > end:
+            teile.append("Annäherung %s dem Fenster bis %s am %s"
+                         % ("vor" if d < start else "nach",
+                            _bogenminuten(o), _datum_de(d)))
+    if not z["neu_format"]:
+        teile.append("Fortsetzung nach dem Fenster unbekannt")
+    teile.append(_wirkorb_text(z, start, end))
+    return " · ".join(teile)
+
+
 def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
-                         stichtag: str = None, orb_wirk: float = 1.5) -> dict:
+                         stichtag: str = None, orb_wirk: float = 1.5,
+                         typ: str = None) -> dict:
     """Die fertigen Zeilen des Blocks `TRANSIT-RECHENSCHAFT:` — neu 2026-09-15.
 
     Gebaut nach dem Prüfbericht EA Schritt 1+2 vom 15.09., Rubrik 2
@@ -2404,9 +2790,30 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
 
     `stichtag` wird, wenn nicht übergeben, aus dem JSON gelesen
     (`jetzt.stichtag`, sonst `asof`). Die Zeilen sind nach dem ersten
-    Exaktdatum sortiert, undatierte ans Ende.
+    Exaktdatum sortiert (seit 2026-09-19 auch vor und nach dem Fenster; ohne
+    Nulldurchgang nach dem Datum der engsten Annäherung), undatierte ans Ende.
 
-    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'stichtag'}
+    Seit 2026-09-19 (W7) — was eine Zeile sagt und woher es kommt
+    (events.json von transit.py, Stand 2026-09-19):
+      * Gewertet werden die Passagen des Kontakts mit Wirkorb IM FENSTER (vorher
+        die „engste" — und der exakte Wert 0,0 galt dabei als 99, sodass eine
+        Teilspanne ohne Exaktkontakt gewann und die Zeile „nie exakt" sagte).
+      * „exakt …" nennt die Nulldurchgänge im Fenster; die davor und danach
+        (auch aus Vorlauf und Fortsetzung) stehen ausdrücklich als „exakt vor
+        dem Fenster" / „exakt nach dem Fenster". „nie exakt" steht nur, wenn
+        die ganze Passage keinen Nulldurchgang hat; ein Minimum ohne
+        Nulldurchgang heißt „Annäherung bis x′ am D".
+      * Der engste Orb ist der IM FENSTER (`min_orb_im_fenster`), nicht der der
+        Passage, der im Rückblick liegen kann; die Wirkorb-Perioden stehen mit
+        Datum, ein Beginn vor dem Fenster und ein Ende danach ausdrücklich.
+      * typ='transit' (Transit-Horoskop, Ultimativ): Grund „ohne eigenes
+        Kapitel, Zeile in ‚Mitlaufendes'". typ='ea': der Wortlaut der
+        Momentaufnahme wie bisher. typ=None: EA, wenn die Themenliste `teil=`
+        mit `jetzt`/`zeitlos` trägt oder der Dateiname `_EA_` enthält, sonst
+        Transit — `r['typ']` sagt, welcher Wortlaut gewählt wurde.
+
+    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'stichtag', 'typ',
+               'fenster'}
     """
     import json as _json
 
@@ -2418,72 +2825,143 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     daten = _json.load(open(events_json_pfad, encoding="utf-8"))
     if not stichtag:
         stichtag = (daten.get("jetzt") or {}).get("stichtag") or daten.get("asof")
+    start, end = daten.get("start") or "", daten.get("end") or "9999"
+    typ = _rechenschaft_typ(chart_data_pfad, typ)
 
-    def _de(d):
-        """2030-01-02 -> 02.01.2030; unbekanntes Format bleibt stehen."""
-        teile = str(d).split("-")
-        return "%s.%s.%s" % (teile[2], teile[1], teile[0]) if len(teile) == 3 else str(d)
-
-    # Ereignis-Datensatz je Schluessel; bei Mehrfachtreffern der engste.
+    # Passagen je Schluessel: nur die mit Wirkorb IM FENSTER (die Soll-Menge
+    # zaehlt genau diese). 2026-09-19 (W7): vorher „die engste" per
+    # `(min_orb_grad or 99)` — 0,0 (exakt) wurde dabei zu 99.
     nach_key = {}
     for e in daten.get("events", []):
         if e.get("spiegel"):
             continue
         k = (e["transit"], e["aspekt"], e["ziel"])
-        if k not in rest:
-            continue
-        alt = nach_key.get(k)
-        if alt is None or (e.get("min_orb_grad") or 99) < (alt.get("min_orb_grad") or 99):
-            nach_key[k] = e
+        if k in rest:
+            ok = _wirkorb_im_fenster(e, orb_wirk, daten.get("orb_wirk"))
+            nach_key.setdefault(k, []).append((ok, e))
 
+    alt_format = False
     zeilen, sortier = [], []
     for k in sorted(rest):
-        e = nach_key.get(k, {})
-        ex = e.get("exakt") or []
-        if ex:
-            datum = ", ".join(_de(d) for d in ex)
-            if all(d < (stichtag or "") for d in ex):
-                grund = ("exakt %s — lag vor der Momentaufnahme, Orb am Stichtag "
-                         "offen" % datum)
+        paare = nach_key.get(k, [])
+        sel = [e for ok, e in paare if ok] or [e for _, e in paare]
+        z = _passagen_zeitangaben(sel, start, end)
+        alt_format = alt_format or not z["neu_format"]
+        orb_f = ("%s°" % z["orb_f"]) if z["orb_f"] is not None else "?"
+        if typ == "ea":
+            if z["alle_ex"]:
+                datum = ", ".join(_datum_de(d) for d in z["alle_ex"])
+                if all(d < (stichtag or "") for d in z["alle_ex"]):
+                    grund = ("exakt %s — lag vor der Momentaufnahme, Orb am "
+                             "Stichtag %s" % (datum, _orb_am_stichtag(
+                                 daten, k, stichtag)))
+                else:
+                    grund = ("exakt %s — liegt außerhalb der Momentaufnahme "
+                             "vom %s" % (datum, _datum_de(stichtag)))
+            elif z["ann"]:
+                d, o = min(z["ann"], key=lambda a: a[1])
+                grund = ("nicht exakt, Annäherung bis %s am %s — liegt außerhalb "
+                         "der Momentaufnahme vom %s"
+                         % (_bogenminuten(o), _datum_de(d), _datum_de(stichtag)))
+            elif z["neu_format"]:
+                grund = ("nie exakt (engster Orb im Fenster %s) — streift das "
+                         "Fenster nur" % orb_f)
             else:
-                grund = ("exakt %s — liegt außerhalb der Momentaufnahme vom %s"
-                         % (datum, _de(stichtag)))
-            schluessel = ex[0]
+                grund = ("im Rechenzeitraum nicht exakt (engster Orb %s) — "
+                         "Fortsetzung unbekannt, transit.py neu laufen lassen"
+                         % orb_f)
         else:
-            grund = ("nie exakt (engster Orb %.2f°) — streift das Fenster nur"
-                     % (e.get("min_orb_grad") or 0.0))
-            schluessel = "9999"
+            grund = (_kontakt_zeit_text(z, start, end)
+                     + " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
         zeile = "- T-%s %s R-%s — %s" % (k[0], ASPEKT_ZU_GLYPH.get(k[1], k[1]),
                                          k[2], grund)
-        sortier.append((schluessel, zeile))
+        erstes = (z["alle_ex"] or [a[0] for a in z["ann"]] or ["9999"])[0]
+        sortier.append((erstes, zeile))
 
+    if alt_format:
+        print("  !! transit_rechenschaft(): events.json im Format vor "
+              "2026-09-19 (ohne exakt_gesamt/Fortsetzung) — die Zeilen sagen "
+              "nur, was im Rechenzeitraum liegt. transit.py neu laufen lassen.")
     sortier.sort()
     zeilen = [z for _, z in sortier]
     return {"zeilen": zeilen, "kontakte": r["kontakte"],
             "in_themen": r["in_themen"], "offen": len(zeilen),
-            "stichtag": stichtag}
+            "stichtag": stichtag, "typ": typ, "fenster": (start, end)}
+
+
+def _orb_am_stichtag(daten, k, stichtag):
+    """Stichtags-Orb eines Kontakts fuer den EA-Wortlaut (W7, 2026-09-19):
+    genau die Zahl der JETZT-Liste (`jetzt.im_orb[].orb_grad`, zwei Stellen,
+    wie Report und Anhang sie zeigen) — nicht `orb_stichtag` ein zweites Mal
+    gerundet, sonst stuende dieselbe Groesse an zwei Stellen verschieden da.
+    Fehlt der Kontakt in der Liste, lag er am Stichtag ausserhalb des
+    Erfassungsorbs; ohne Liste oder bei einem anderen Stichtag: „offen"."""
+    jetzt = daten.get("jetzt") or {}
+    if "im_orb" not in jetzt or (jetzt.get("stichtag") or stichtag) != stichtag:
+        return "offen"
+    for x in jetzt["im_orb"]:
+        if (x.get("transit"), x.get("aspekt"), x.get("ziel")) == tuple(k):
+            return "%.2f°" % x["orb_grad"]
+    weit = jetzt.get("orb_weit") or daten.get("orb_weit")
+    return ("über %s° (außerhalb des Erfassungsorbs)" % weit) if weit else "offen"
+
+
+def _rechenschaft_typ(chart_data_pfad, typ):
+    """'transit' oder 'ea' fuer den Wortlaut der Rechenschaftszeilen (W7)."""
+    if typ is not None:
+        t = str(typ).strip().casefold()
+        if t in ("transit", "ultimativ"):
+            return "transit"
+        if t == "ea":
+            return "ea"
+        raise ValueError(
+            "transit_rechenschaft(): typ=%r ist unbekannt — erlaubt sind "
+            "'transit' (Transit-Horoskop, Ultimativ: Grund „ohne eigenes "
+            "Kapitel“), 'ea' (Wortlaut der Momentaufnahme) oder None "
+            "(aus der chart_data erkannt)." % (typ,))
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+    if (re.search(r"\bteil\s*=\s*(?:jetzt|zeitlos)\b", txt)
+            or "_EA_" in os.path.basename(chart_data_pfad)):
+        return "ea"
+    return "transit"
 
 
 def transit_rechenschaft_block(chart_data_pfad: str, events_json_pfad: str,
                                stichtag: str = None,
-                               orb_wirk: float = 1.5) -> str:
+                               orb_wirk: float = 1.5, typ: str = None) -> str:
     """Der fertige Block samt Kopfzeile — 1:1 ans Ende des `chart_data`.
 
     Gehört hinter `GESTRICHEN:`. Nach dem Einfügen läuft
     `kontakt_heimat_bericht()` grün; die Zeilen tragen den `T-`-Präfix, an dem
-    die Probe seit dem 14.09. eine Transit-Zeile erkennt.
+    die Probe seit dem 14.09. eine Transit-Zeile erkennt. Was die Zeilen sagen
+    und `typ=`: s. transit_rechenschaft(). Die Kopfzeile nennt seit
+    2026-09-19 das Fenster, auf das sich „im Fenster" bezieht.
     """
-    r = transit_rechenschaft(chart_data_pfad, events_json_pfad, stichtag, orb_wirk)
-    kopf = ("TRANSIT-RECHENSCHAFT: %d primaere Wirkorb-Kontakte im Rechenfenster, "
-            "%d tragen ein Kapitel, %d ohne Kapitel — hier einzeln benannt "
-            "(Stichtag %s)." % (r["kontakte"], r["in_themen"], r["offen"],
-                                r["stichtag"]))
+    r = transit_rechenschaft(chart_data_pfad, events_json_pfad, stichtag,
+                             orb_wirk, typ)
+    kopf = ("TRANSIT-RECHENSCHAFT: %d primaere Wirkorb-Kontakte im Fenster "
+            "%s–%s, %d tragen ein Kapitel, %d ohne Kapitel — hier einzeln "
+            "benannt (Stichtag %s)."
+            % (r["kontakte"], _datum_de(r["fenster"][0]),
+               _datum_de(r["fenster"][1]), r["in_themen"], r["offen"],
+               _datum_de(r["stichtag"])))
     return "\n".join([kopf, ""] + r["zeilen"])
 
 
 def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
     """Einzeiliger Prüftext für Schritt 1; nur Abweichungen werden ausführlich."""
     r = aspekt_heimat(chart_data_pfad)
+    # 2026-09-19 (F2): unlesbare Tabellenzeilen werden genannt, nie still
+    # uebergangen — vorher meldete die Probe gruen ueber eine Pruefmenge, in
+    # der eine Zeile fehlte.
+    unl = ["  UNLESBARE TABELLENZEILE (nicht in der Pruefmenge): %s: %s"
+           % (abschnitt, zeile) for abschnitt, zeile in r.get("unlesbar", [])]
+    if unl:
+        unl.append("  Erwartete Form: " + _AH_ZEILENFORM)
+    if r.get("aussagelos") and unl:
+        return "\n".join(["Aspekt-Heimat: KEINE PRUEFUNG MOEGLICH — die "
+                          "Aspekttabellen tragen %d Zeile(n), aber keine ist "
+                          "lesbar." % (len(unl) - 1)] + unl)
     if r.get("aussagelos"):
         return ("Aspekt-Heimat: KEINE PRUEFUNG MOEGLICH — im chart_data steht "
                 "keine Aspekttabelle (weder Volle/Einseitige/Nebenaspekte noch "
@@ -2499,7 +2977,7 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
         L.append("  OHNE HEIMAT und nicht dokumentiert: %s" % p)
     for p, a, b in r["doppelt"]:
         L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (p, a, b))
-    return "\n".join(L)
+    return "\n".join(L + unl)
 
 
 # ---------------------------------------------------------------------------
@@ -2558,7 +3036,123 @@ def _ressourcen_zeilen(chart_data_pfad: str, faktoren=None) -> list:
     return out
 
 
-def ressourcen_liste(chart_data_pfad: str, faktoren=None) -> dict:
+# Zaehlmenge des Transits (Transit-Modul, „Die Ressourcen-Pflicht des
+# Transit-Horoskops"; neu 2026-09-19, W22): die langsamen Transiter, so wie
+# events.json sie nennt (`Knoten` = laufender Mondknoten). Mars gehoert nie
+# dazu, auch nicht mit --mars.
+RESSOURCEN_TRANSITER = ("Jupiter", "Saturn", "Uranus", "Neptun", "Pluto",
+                        "Chiron", "Knoten")
+_HARMONISCH_NAMEN = ("Trigon", "Sextil", "Konjunktion")
+
+
+def _ist_knotenrueckkehr(e):
+    """L16 (2026-09-19): Transit-Knoten ☌ Radix-Mondknoten ist ein Wendepunkt,
+    keine Gabe — er zaehlt nicht zur Ressourcen-Zaehlmenge."""
+    return (e.get("transit") == "Knoten" and e.get("aspekt") == "Konjunktion"
+            and (e.get("selbst_transit")
+                 or e.get("ziel") in ("Mondknoten", "Nordknoten")))
+
+
+def _achsen_spiegel_zusammenziehen(treffer):
+    """F18 (2026-09-19): Eine Achsen-Spiegelzeile ist EINE Gabe mit EINEM
+    Eintrag (Datenblatt-Modul, geklaert 2026-09-18). Harmonisch trifft ein
+    Faktor beide Enden einer Achse nur als Trigon zum einen und Sextil zum
+    anderen (Konjunktion/Opposition: die Opposition ist nicht harmonisch).
+    Die Aspekttabelle fuehrt solche Paare als zwei Zeilen (Design-Modul: bei
+    Huber eigene Klassen), der Ressourcen-Block fuehrte darum zwei Eintraege
+    mit je eigenem Deutungsort. Jetzt EIN Eintrag, das andere Ende als
+    `spiegel` ('Sextil DC'). Es fuehrt die hoehere Staerkestufe (sie setzt
+    die Deutungstiefe), bei gleicher Stufe AC vor DC und MC vor IC — die
+    Achsenregel aus radix. Achsenpaare und Rangfolgen kommen aus radix, nicht
+    aus einer zweiten Liste hier."""
+    if not treffer:
+        return []
+    try:
+        import radix as _rx
+    except Exception as fehler:                 # noqa: BLE001
+        raise BuildError(
+            "ressourcen_liste(): radix.py ist nicht importierbar (%s). Der "
+            "Ressourcen-Block braucht radix fuer den Achsen-Spiegel; "
+            "lade_schritt('1') laedt radix und build gemeinsam." % fehler)
+    gegen, rang = _rx._GEGENACHSE, _rx._STAERKE_RANG
+    out, weg = [], set()
+    for i, e in enumerate(treffer):
+        if i in weg:
+            continue
+        ach = (e["b"] if _rx.ist_achse(e["b"])
+               else (e["a"] if _rx.ist_achse(e["a"]) else None))
+        if ach is None or (_rx.ist_achse(e["a"]) and _rx.ist_achse(e["b"])):
+            out.append(e)
+            continue
+        fak = e["a"] if ach == e["b"] else e["b"]
+        j = next((j for j in range(i + 1, len(treffer)) if j not in weg
+                  and {treffer[j]["a"], treffer[j]["b"]} == {fak, gegen[ach]}),
+                 None)
+        if j is None:
+            out.append(e)
+            continue
+        weg.add(j)
+        f = treffer[j]
+
+        def _vorn(x, achse):
+            return (rang.get(x["stufe"], 9),
+                    0 if achse in _rx._FUEHRT_QUADRAT else 1)
+        if _vorn(f, gegen[ach]) < _vorn(e, ach):
+            fuehrt, zweit, z_ach = f, e, ach
+        else:
+            fuehrt, zweit, z_ach = e, f, gegen[ach]
+        r = dict(fuehrt)
+        r["spiegel"] = "%s %s" % (zweit["name"], z_ach)
+        out.append(r)
+    return out
+
+
+def _transit_ressourcen(events_json_pfad, orb_wirk=None):
+    """Die Transit-Zaehlmenge aus events.json (W22, 2026-09-19): jeder
+    harmonische Kontakt (Trigon, Sextil, Konjunktion) eines langsamen
+    Transiters an einem PRIMAEREN Ziel, im Wirkorb INNERHALB des Fensters
+    (`wirkorb_im_fenster`, nicht `im_wirkorb` — das schliesst den Rueckblick
+    ein), ohne Mars und ohne Spiegelziele. Ein Kontakt ist EIN Eintrag, auch
+    wenn er mehrere Passagen hat. Die Knotenrueckkehr steht getrennt unter
+    `nicht_gezaehlt` (L16) — sichtbar, nicht still weggelassen."""
+    import json as _json
+    daten = _json.load(open(events_json_pfad, encoding="utf-8"))
+    orb_json = daten.get("orb_wirk")
+    orb = orb_wirk if orb_wirk is not None else (orb_json or 1.5)
+    start, end = daten.get("start") or "", daten.get("end") or "9999"
+    passagen = {}
+    for e in daten.get("events", []):
+        if (e.get("spiegel") or not e.get("primaer")
+                or e.get("transit") not in RESSOURCEN_TRANSITER
+                or e.get("aspekt") not in _HARMONISCH_NAMEN
+                or not _wirkorb_im_fenster(e, orb, orb_json)):
+            continue
+        passagen.setdefault((e["transit"], e["aspekt"], e["ziel"]), []).append(e)
+    eintraege, nicht = [], []
+    for (t, a, z), sel in passagen.items():
+        zeit = _passagen_zeitangaben(sel, start, end)
+        label = "T-%s %s R-%s" % (t, ASPEKT_ZU_GLYPH.get(a, a), z)
+        eintrag = {"transit": t, "aspekt": a, "ziel": z, "label": label,
+                   "orb_f": zeit["orb_f"], "zeit": zeit,
+                   "text": _kontakt_zeit_text(zeit, start, end)}
+        if any(_ist_knotenrueckkehr(e) for e in sel):
+            nicht.append(eintrag)
+        else:
+            eintraege.append(eintrag)
+    def _enge(x):
+        per = x["zeit"]["perioden"]
+        return (x["orb_f"] if x["orb_f"] is not None else 99.0,
+                per[0][0] if per else "9999", x["label"])
+    eintraege.sort(key=_enge)
+    nicht.sort(key=_enge)
+    return {"eintraege": eintraege, "nicht_gezaehlt": nicht,
+            "fenster": (start, end), "orb_wirk": orb,
+            "primaer": list(daten.get("primary") or [])}
+
+
+def ressourcen_liste(chart_data_pfad: str, faktoren=None,
+                     events_json_pfad: str = None, radix: bool = None,
+                     orb_wirk: float = None) -> dict:
     """Die Zaehlmenge des Ressourcen-Blocks, nach Enge sortiert.
 
     faktoren: Tupel der Punkte, an denen gezaehlt wird. Ohne Angabe die Menge
@@ -2566,42 +3160,555 @@ def ressourcen_liste(chart_data_pfad: str, faktoren=None) -> dict:
     ein MERKMAL der Zeile und kein Filter (Datenblatt-Modul, 14.09.2026): Jeder
     harmonische Aspekt zaehlt, die Stufe ordnet nur.
 
+    events_json_pfad (neu 2026-09-19, W22): die events.json aus
+    `transit.py --json`. Mit ihr kommt die Transit-Zaehlmenge dazu — jeder
+    harmonische Kontakt eines langsamen Transiters (RESSOURCEN_TRANSITER) an
+    einem primaeren Ziel, im Wirkorb innerhalb des Fensters, ohne Mars, ohne
+    Spiegelziele und ohne die Knotenrueckkehr (L16: ein Wendepunkt, keine
+    Gabe; sie steht unter 'nicht_gezaehlt').
+    radix: Radix-Aspekte zaehlen? Vorgabe: ja ohne events_json_pfad, nein mit
+    — das Transit-Horoskop fuehrt im Block NUR Kontakte (ein uebernommener
+    Radix-Block wird ersetzt, Transit-Modul). Das Ultimativ zaehlt beide
+    Mengen und gibt radix=True mit.
+    orb_wirk: Wirk-Orb; Vorgabe der des transit.py-Laufs (events.json).
+
+    Achsen-Spiegel (F18, 2026-09-19): Trifft ein Faktor beide Enden einer
+    Achse harmonisch (Trigon zum einen, Sextil zum anderen), ist das EIN
+    Eintrag unter dem fuehrenden Ende; das andere steht als 'spiegel'.
+
     -> {'faktoren': (...), 'tabelle': n, 'zeilen': [str], 'eintraege': [dict],
-        'konjunktionen': [str]}
-    `konjunktionen` nennt die Konjunktionen der Menge — sie bleiben nach der
-    Regel vom 15.09.2026 in der Liste, sind aber nicht in jedem Fall eine Gabe
-    und brauchen die Anmerkung darunter. Welche das sind, entscheidet die
-    Deutung, nicht diese Funktion.
+        'konjunktionen': [str], 'radix': bool}
+       mit events_json_pfad zusaetzlich 'transit': [dict], 'transit_zeilen',
+       'nicht_gezaehlt': [dict], 'fenster': (start, end), 'orb_wirk', 'primaer'
+    `zeilen` sind alle Zeilen der Menge (erst Radix, dann Transit) mit leerem
+    Deutungsort. `konjunktionen` nennt die Konjunktionen der Menge — sie
+    bleiben nach der Regel vom 15.09.2026 in der Liste, sind aber nicht in
+    jedem Fall eine Gabe und brauchen die Anmerkung darunter. Welche das sind,
+    entscheidet die Deutung, nicht diese Funktion.
     """
+    if radix is None:
+        radix = events_json_pfad is None
+    if not radix and not events_json_pfad:
+        raise ValueError("ressourcen_liste(): radix=False ohne "
+                         "events_json_pfad — dann gibt es nichts zu zaehlen. "
+                         "Fuer das Transit-Horoskop events_json_pfad=<events.json> "
+                         "angeben.")
     fak = tuple(faktoren or RESSOURCEN_FAKTOREN)
     roh = _ressourcen_zeilen(chart_data_pfad)
-    treffer = [e for e in roh if e["a"] in fak or e["b"] in fak]
+    treffer = []
+    if radix:
+        treffer = [e for e in roh if e["a"] in fak or e["b"] in fak]
+        treffer = _achsen_spiegel_zusammenziehen(treffer)
     treffer.sort(key=lambda e: e["orb"])
-    zeilen = ["%s %s %s %s %s — Deutungsort: "
-              % (e["a"], e["glyph"], e["b"], e["orb_txt"], e["stufe"])
+    zeilen = ["%s %s %s %s %s%s — Deutungsort: "
+              % (e["a"], e["glyph"], e["b"], e["orb_txt"], e["stufe"],
+                 (" (zugleich %s)" % e["spiegel"]) if e.get("spiegel") else "")
               for e in treffer]
     konj = ["%s %s %s" % (e["a"], e["glyph"], e["b"])
             for e in treffer if e["glyph"] == "☌"]
-    return {"faktoren": fak, "tabelle": len(roh), "zeilen": zeilen,
-            "eintraege": treffer, "konjunktionen": konj}
+    out = {"faktoren": fak, "tabelle": len(roh), "zeilen": zeilen,
+           "eintraege": treffer, "konjunktionen": konj, "radix": radix}
+    if events_json_pfad:
+        t = _transit_ressourcen(events_json_pfad, orb_wirk)
+        t_zeilen = ["%s · %s — Deutungsort: " % (e["label"], e["text"])
+                    for e in t["eintraege"]]
+        out.update({"transit": t["eintraege"], "transit_zeilen": t_zeilen,
+                    "nicht_gezaehlt": t["nicht_gezaehlt"],
+                    "fenster": t["fenster"], "orb_wirk": t["orb_wirk"],
+                    "primaer": t["primaer"]})
+        out["zeilen"] = zeilen + t_zeilen
+        out["konjunktionen"] = konj + [e["label"] for e in t["eintraege"]
+                                       if e["aspekt"] == "Konjunktion"]
+    return out
 
 
-def ressourcen_block(chart_data_pfad: str, faktoren=None) -> str:
+def ressourcen_block(chart_data_pfad: str, faktoren=None,
+                     events_json_pfad: str = None, radix: bool = None,
+                     orb_wirk: float = None) -> str:
     """Der fertige Abschnitt `## Ressourcen` — 1:1 ins chart_data.
 
     Gehoert hinter die Themenliste und vor den Abschnitt „Aspekte ohne
     Deutungs-Heimat". Der Deutungsort bleibt hinter jeder Zeile leer und wird
     von Hand gesetzt; ohne ihn ist der Block unfertig (Datenblatt-Modul).
+    Parameter wie ressourcen_liste(): im Transit-Horoskop
+    `ressourcen_block(chart_data, events_json_pfad=<events.json>)` — dann
+    traegt der Block nur die Transit-Zaehlmenge (W22, 2026-09-19); im
+    Ultimativ zusaetzlich radix=True.
     """
-    r = ressourcen_liste(chart_data_pfad, faktoren)
-    L = ["## Ressourcen", "",
-         "Zählmenge: jeder harmonische Aspekt (Trigon, Sextil, Konjunktion) an "
-         + ", ".join(r["faktoren"][:-1]) + " oder " + r["faktoren"][-1]
-         + " — ohne Stärkefilter, die Stufe steht als Merkmal in der Zeile und "
-           "ordnet nur die Reihenfolge. Sortiert nach Enge.", ""]
-    L += r["zeilen"]
+    r = ressourcen_liste(chart_data_pfad, faktoren, events_json_pfad, radix,
+                         orb_wirk)
+    L = ["## Ressourcen", ""]
+    if r["radix"]:
+        satz = ("Zählmenge: jeder harmonische Aspekt (Trigon, Sextil, "
+                "Konjunktion) an "
+                + ", ".join(r["faktoren"][:-1]) + " oder " + r["faktoren"][-1]
+                + " — ohne Stärkefilter, die Stufe steht als Merkmal in der "
+                  "Zeile und ordnet nur die Reihenfolge. Sortiert nach Enge.")
+        if any(e.get("spiegel") for e in r["eintraege"]):
+            satz += (" Ein Achsen-Spiegel (derselbe Faktor im Trigon zum einen "
+                     "und im Sextil zum anderen Ende einer Achse) ist EIN "
+                     "Eintrag unter dem führenden Ende; das andere steht in "
+                     "Klammern.")
+        L += [satz, ""]
+        L += r["zeilen"][:len(r["eintraege"])]
+    if "transit" in r:
+        if r["radix"]:
+            L += [""]
+        prim = ", ".join(r["primaer"]) if r["primaer"] else "laut events.json"
+        L += ["Zählmenge (Transit): jeder harmonische Kontakt (Trigon, Sextil, "
+              "Konjunktion) eines langsamen Transiters (Jupiter, Saturn, "
+              "Uranus, Neptun, Pluto, Chiron, Mondknoten) an einem primären "
+              "Ziel (%s), im Wirkorb (%s°) innerhalb des Fensters %s–%s — ohne "
+              "Mars, ohne Spiegelziele und ohne die Knotenrückkehr (ein "
+              "Wendepunkt, keine Gabe). Sortiert nach Enge (engster Orb im "
+              "Fenster)." % (prim, r["orb_wirk"], _datum_de(r["fenster"][0]),
+                              _datum_de(r["fenster"][1])), ""]
+        L += r["transit_zeilen"] or ["— (kein Kontakt der Zählmenge im "
+                                     "Fenster)"]
+        if r["nicht_gezaehlt"]:
+            L += ["", "Nicht in der Zählmenge (die Knotenrückkehr ist ein "
+                      "Wendepunkt, keine Gabe):"]
+            L += ["- %s · %s" % (e["label"], e["text"])
+                  for e in r["nicht_gezaehlt"]]
     if r["konjunktionen"]:
-        L += ["", "Konjunktionen der Menge (bleiben in der Liste; je Zeile "
-                  "Gabe: ja — oder nein mit Begründung):"]
+        kopf = ("Konjunktionen der Menge (bleiben in der Liste; je Zeile "
+                "Gabe: ja — oder nein mit Begründung):")
+        if r.get("transit") and any(e["aspekt"] == "Konjunktion"
+                                    for e in r["transit"]):
+            kopf = kopf[:-2] + ("; Transit-Modul: eine Konjunktion zählt nur, "
+                                "wenn der Transiter sie trägt — eine Saturn- "
+                                "oder Pluto-Konjunktion ist eine "
+                                "Verdichtung):")
+        L += ["", kopf]
         L += ["- %s — Gabe: " % k for k in r["konjunktionen"]]
     return "\n".join(L)
+
+
+# ---------------------------------------------------------------------------
+# Selbsttest (neu 2026-09-19, Wartungslauf A) — python3 build.py --selbsttest
+# Nur konstruierte Daten: erfundene Aspekttabellen und ein erfundenes
+# events.json (Fenster ab 2031), keine Person, kein Echtfall.
+# ---------------------------------------------------------------------------
+
+def _selbsttest():
+    import contextlib
+    import io
+    import json
+    import pathlib
+    import shutil
+    import tempfile
+
+    fehler = []
+
+    def pruefe(bed, text):
+        if not bed:
+            fehler.append(text)
+
+    tmp = tempfile.mkdtemp(prefix="build_selbsttest_")
+
+    def datei(name, text):
+        p = os.path.join(tmp, name)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return p
+
+    def still(fn, *a, **kw):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            wert = fn(*a, **kw)
+        return wert, buf.getvalue()
+
+    try:
+        # --- W2: eine Orb-Rundung ------------------------------------------
+        pruefe(orb_text(0.4917) == "0°30′", "W2: 0.4917 -> %s" % orb_text(0.4917))
+        pruefe(orb_text(1.4917) == "1°30′", "W2: 1.4917 -> %s" % orb_text(1.4917))
+        pruefe(orb_text(round(1.4917, 2)) == "1°29′",
+               "W2: Doppelrundung nicht nachgestellt")
+        pruefe(orb_text(29.9999) == "30°00′", "W2: Uebertrag bei 60′")
+        try:
+            import radix as _rx
+            abw = [i for i in range(0, 30 * 3600, 7)
+                   if orb_text(i / 3600.0) != _rx._gr(i / 3600.0)]
+            pruefe(not abw, "W2: orb_text weicht von radix._gr ab bei %s"
+                   % abw[:3])
+        except ImportError:
+            print("  (W2: radix nicht ladbar — Abgleich mit radix._gr "
+                  "uebersprungen)")
+
+        # --- W14: unbekannte Felder im @@DECKBLATT-Block -------------------
+        cd = datei("deck_chart_data.md", "\n".join([
+            "# konstruiert", "@@DECKBLATT", "LEITSATZ: Ein Satz.",
+            "LEITACHSE: Eine Achse.", "TITELMOTIV: Ein Motiv,",
+            "  das weiterlaeuft.", "KICKER: Transit-Horoskop",
+            "Untertitel: Zweite Zeile", "  Folgezeile des Untertitels",
+            "PALETTE: dunkel", "FARBE: rot", "GLYPHEN: ♄ ☉", "@@ENDE", ""]))
+        deck, aus = still(lies_deckblatt, cd)
+        pruefe(deck["TITELMOTIV"] == "Ein Motiv, das weiterlaeuft.",
+               "W14: TITELMOTIV verschmutzt: %r" % deck["TITELMOTIV"])
+        pruefe(deck["PALETTE"] == "dunkel" and deck["GLYPHEN"] == "♄ ☉",
+               "W14: PALETTE/GLYPHEN verschmutzt: %r / %r"
+               % (deck["PALETTE"], deck["GLYPHEN"]))
+        pruefe(set(deck) == set(DECKBLATT_FELDER + DECKBLATT_ABGELEITET),
+               "W14: Rueckgabeschluessel veraendert")
+        pruefe(aus.count("!! @@DECKBLATT") == 3 and '"KICKER:"' in aus
+               and '"Untertitel:"' in aus and '"FARBE:"' in aus
+               and "Dokumenttyp" in aus and "Tippfehler" in aus,
+               "W14: Warnungen fehlen oder unklar: %r" % aus[:300])
+
+        # --- W61: parse_analyse nimmt Pfad ODER Text -------------------------
+        text = ("# Transit-Horoskop — Alex Muster\n\n"
+                "## Kapitel 1 · Ein Titel\n\nEin Absatz, der endet.\n")
+        pa = datei("x_analyse.md", text)
+        p1, p2, p3 = (parse_analyse(pa), parse_analyse(text),
+                      parse_analyse(pathlib.Path(pa)))
+        pruefe(p1 == p2 == p3 and p1["chapters"][0]["title"] == "Ein Titel",
+               "W61: Pfad, Text und Path lesen verschieden")
+        try:
+            parse_analyse("x" * 100000)
+            pruefe(False, "W61: langer Nicht-Pfad ohne Fehler")
+        except FileNotFoundError as e:
+            pruefe(len(str(e)) < 600 and "Datei nicht gefunden" in str(e)
+                   and "Text" in str(e), "W61: Meldung unklar/zu lang (%d)"
+                   % len(str(e)))
+        try:
+            parse_analyse(123)
+            pruefe(False, "W61: Zahl statt Pfad ohne Fehler")
+        except TypeError as e:
+            pruefe("Pfad" in str(e), "W61: TypeError ohne Erklaerung")
+        try:
+            parse_analyse(text.replace("Ein Absatz, der endet.", "ohne Ende"))
+            pruefe(False, "W61: Schemafehler im Text nicht erkannt")
+        except SchemaError as e:
+            pruefe("als Text übergeben" in str(e), "W61: Quelle in der "
+                   "Schemameldung fehlt")
+
+        # --- F2 und W9: Aspekt-Heimat -------------------------------------
+        tab = "\n".join([
+            "### Volle Aspekte (2)", "",
+            "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+            "|---|---|---|---|---|---|",
+            "| Sonne | △ Trigon | Mond | 1°00′ | blau |  |",
+            "| Venus | △ Trigon | Saturn | 2°00′ | blau |  |", "",
+            "### Untergrund-Aspekte (2)", "",
+            "| Faktor | Aspekt | Faktor | Orb |", "|---|---|---|---|",
+            "| Merkur | ∠ Halbquadrat | Venus | 0°40′ |",
+            "| Mars | ⚼ Anderthalbquadrat | Jupiter | 1°10′ |", "",
+            "## Themenliste", ""])
+        th1 = ("THEMA 1 | titel=Eins | fuehrt=Sonne Krebs H4 | aspekte=Sonne "
+               "△ Mond, Merkur –Halbquadrat– Venus | grund=Venus △ Saturn "
+               "traegt mit | rang=1\n")
+        th2 = ("THEMA 2 | titel=Zwei | fuehrt=Mars Widder H1 | aspekte=Mars "
+               "–Anderthalbquadrat– Jupiter | rang=2\n")
+        schluss = "\nRECHENSCHAFT: konstruiert.\nGESTRICHEN: keine.\n"
+        r = aspekt_heimat(datei("g1.md", tab + th1 + th2 + schluss))
+        pruefe(r["tabelle"] == 4 and r["offen"] == ["Saturn — Venus"]
+               and not r["ok"], "W9: grund= als Heimat gezaehlt: %r" % r)
+        th2b = th2.replace("Jupiter |", "Jupiter, Venus △ Saturn |")
+        r = aspekt_heimat(datei("g2.md", tab + th1 + th2b + schluss))
+        pruefe(r["ok"] and r["tabelle"] == 4 and not r["unlesbar"]
+               and "Merkur — Venus" in r["mit_heimat"],
+               "F2: lesbare Tabelle nicht gruen: %r" % r)
+        r = aspekt_heimat(datei("g3.md", tab.replace("⚼", "∡") + th1 + th2b
+                                + schluss))
+        b = aspekt_heimat_bericht(os.path.join(tmp, "g3.md"))
+        pruefe(r["tabelle"] == 3 and len(r["unlesbar"]) == 1 and not r["ok"]
+               and "UNLESBARE TABELLENZEILE" in b and "∡" in b and "⚼" in b,
+               "F2: unlesbare Zeile nicht gemeldet: %r / %s" % (r, b))
+
+        # --- W7, W9, L19, W22, L16: Transit mit konstruiertem events.json ---
+        S0, E0 = "2031-01-01", "2032-12-31"
+
+        def ev(t, a, z, **kw):
+            e = dict(transit=t, aspekt=a, ziel=z, exakt=[], exakt_im_fenster=[],
+                     exakt_vor_start=[], fast_exakt=[], min_orb_grad=0.5,
+                     im_wirkorb=True, fenster_von=S0, fenster_bis=E0,
+                     weit_von=S0, weit_bis=E0, dauer_tage=90, dauer_monate=3.0,
+                     perioden=[[S0, "2031-04-01"]], kontakte=0, mehrfach=False,
+                     quartale=[1], primaer=True, spiegel=False, wird_exakt=False,
+                     annaeherung=[], wirkorb_perioden=[[S0, "2031-04-01"]],
+                     min_orb_im_fenster=0.5, wirkorb_im_fenster=True,
+                     orb_stichtag=1.0, selbst_transit=False, vorlauf=None,
+                     beginn_abgeschnitten=False, fortsetzung=None,
+                     exakt_nach_fenster=[], exakt_gesamt=[],
+                     wirkorb_von_gesamt=S0, wirkorb_bis_gesamt="2031-04-01")
+            e.update(kw)
+            if e["exakt_im_fenster"] or e["exakt_vor_start"]:
+                e["exakt"] = sorted(e["exakt_vor_start"] + e["exakt_im_fenster"])
+            e["exakt_gesamt"] = sorted(set(e["exakt"] + e["exakt_nach_fenster"]
+                                           + e["exakt_gesamt"]))
+            return e
+
+        events = [
+            ev("Saturn", "Quadrat", "Sonne", exakt_im_fenster=["2031-03-02"],
+               min_orb_grad=0.0, min_orb_im_fenster=0.0),
+            ev("Jupiter", "Trigon", "Mond", exakt_im_fenster=["2031-06-10"],
+               min_orb_grad=0.0, min_orb_im_fenster=0.0,
+               wirkorb_perioden=[["2031-05-01", "2031-07-20"]]),
+            ev("Neptun", "Sextil", "MC", min_orb_grad=0.4, min_orb_im_fenster=0.4,
+               exakt_nach_fenster=["2033-02-11"],
+               wirkorb_perioden=[["2032-11-14", E0]],
+               wirkorb_von_gesamt="2032-11-14", wirkorb_bis_gesamt="2033-03-30",
+               fortsetzung={"exakt": ["2033-02-11"], "annaeherung": []}),
+            ev("Pluto", "Sextil", "Sonne", exakt_vor_start=["2030-09-13"],
+               min_orb_grad=0.0, min_orb_im_fenster=0.738,
+               wirkorb_perioden=[["2030-08-01", "2031-02-10"]],
+               wirkorb_von_gesamt="2030-08-01", wirkorb_bis_gesamt="2031-02-10"),
+            ev("Pluto", "Sextil", "Sonne", min_orb_grad=2.847,
+               min_orb_im_fenster=2.847, im_wirkorb=False,
+               wirkorb_im_fenster=False, wirkorb_perioden=[], quartale=[7],
+               wirkorb_von_gesamt=None, wirkorb_bis_gesamt=None),
+            ev("Uranus", "Trigon", "Venus", min_orb_grad=0.03,
+               min_orb_im_fenster=0.03, annaeherung=[["2031-05-06", 0.0295]],
+               wirkorb_perioden=[["2031-03-01", "2031-08-01"]]),
+            ev("Chiron", "Konjunktion", "Venus", min_orb_grad=0.61,
+               min_orb_im_fenster=0.61,
+               wirkorb_perioden=[["2032-02-01", "2032-05-01"]]),
+            ev("Knoten", "Konjunktion", "Mondknoten", selbst_transit=True,
+               exakt_im_fenster=["2031-10-05"], min_orb_grad=0.0,
+               min_orb_im_fenster=0.0),
+            ev("Mars", "Trigon", "Sonne", exakt_im_fenster=["2031-04-04"],
+               min_orb_grad=0.0, min_orb_im_fenster=0.0),
+            ev("Jupiter", "Sextil", "Merkur", primaer=False),
+            ev("Saturn", "Sextil", "DC", spiegel=True),
+            ev("Jupiter", "Konjunktion", "Sonne", exakt_vor_start=["2030-08-20"],
+               min_orb_grad=0.0, min_orb_im_fenster=None,
+               wirkorb_im_fenster=False, quartale=[0],
+               wirkorb_perioden=[["2030-08-01", "2030-09-10"]]),
+        ]
+        evj = datei("t_events.json", json.dumps({
+            "start": S0, "end": E0, "asof": "2031-02-14",
+            "lookback_start": "2030-07-01", "orb_wirk": 1.5, "orb_weit": 3.0,
+            "primary": ["Sonne", "Mond", "Venus", "MC", "Mondknoten"],
+            "jetzt": {"stichtag": "2031-02-14"}, "events": events},
+            ensure_ascii=False))
+        themen = (
+            "# Transit-Datenblatt (konstruiert)\n\n## Themenliste\n\n"
+            "THEMA 1 | titel=Erstes Thema | fuehrt=T-Saturn □ R-Sonne | "
+            "aspekte=T-Jupiter △ R-Mond | klingt=T-Neptun ⚹ R-MC | rang=2\n"
+            "THEMA 2 | titel=Zweites Thema | aspekte=T-Mondknoten ☌ R-Mondknoten\n"
+            "  | grund=T-Chiron ☌ R-Venus traegt mit | rang=1\n\n"
+            "RECHENSCHAFT: konstruiert.\nGESTRICHEN: keine.\n")
+        t1 = datei("t1_Transit_chart_data.md", themen)
+        k = kontakt_heimat(t1, evj)
+        ohne = {x.split()[0] for x in k["ohne_heimat"]}
+        pruefe(k["kontakte"] == 8 and k["in_themen"] == 3 and not k["unbekannt"]
+               and ohne == {"Neptun", "Pluto", "Uranus", "Chiron", "Mars"},
+               "W9/L19: Heimat falsch: %r" % k)
+        tr, _ = still(transit_rechenschaft, t1, evj)
+        z = {x.split()[1].replace("T-", ""): x for x in tr["zeilen"]}
+        pruefe(tr["typ"] == "transit" and len(tr["zeilen"]) == 5,
+               "W7: Zahl/Typ der Zeilen: %r" % tr)
+        pruefe("exakt nach dem Fenster 11.02.2033" in z["Neptun"]
+               and "nie exakt" not in z["Neptun"] and "streift" not in z["Neptun"]
+               and "bis 30.03.2033, nach dem Fenster" in z["Neptun"],
+               "W7: Kontakt, der nach dem Fenster exakt wird: %s" % z["Neptun"])
+        pruefe("exakt vor dem Fenster 13.09.2030" in z["Pluto"]
+               and "0.738°" in z["Pluto"] and "2.847" not in z["Pluto"]
+               and "begonnen 01.08.2030" in z["Pluto"],
+               "W7: 0,0-Fehler/Orb im Fenster: %s" % z["Pluto"])
+        pruefe("Annäherung bis 1.8′ am 06.05.2031" in z["Uranus"]
+               and "exakt 0" not in z["Uranus"], "W7: Annaeherung: %s" % z["Uranus"])
+        pruefe("nie exakt (engster Orb im Fenster 0.61°)" in z["Chiron"],
+               "W7: nie exakt: %s" % z["Chiron"])
+        pruefe(all("Momentaufnahme" not in x and "ohne eigenes Kapitel" in x
+                   for x in tr["zeilen"]), "W7: Transit-Wortlaut")
+        pruefe([x.split()[1] for x in tr["zeilen"]]
+               == ["T-Pluto", "T-Mars", "T-Uranus", "T-Neptun", "T-Chiron"],
+               "W7: Sortierung: %r" % [x.split()[1] for x in tr["zeilen"]])
+        tr_ea, _ = still(transit_rechenschaft, t1, evj, typ="ea")
+        pruefe(all("Momentaufnahme" in x or "streift" in x
+                   for x in tr_ea["zeilen"]), "W7: EA-Wortlaut")
+        # EA: Stichtags-Orb = die Zahl der JETZT-Liste (zwei Stellen), sonst
+        # „über orb_weit" (nicht in der Liste) bzw. „offen" (keine Liste).
+        pl = [x for x in tr_ea["zeilen"] if x.startswith("- T-Pluto")][0]
+        pruefe("Orb am Stichtag offen" in pl, "W7: EA ohne Jetzt-Liste: %s" % pl)
+        d_ev = json.load(open(evj, encoding="utf-8"))
+        for liste, soll in (([{"transit": "Pluto", "aspekt": "Sextil",
+                               "ziel": "Sonne", "orb_grad": 0.62}],
+                             "Orb am Stichtag 0.62°"),
+                            ([], "Orb am Stichtag über 3.0°")):
+            d_ev["jetzt"] = {"stichtag": "2031-02-14", "orb_weit": 3.0,
+                             "im_orb": liste}
+            evj2 = datei("t_events_jetzt.json", json.dumps(d_ev))
+            pl = [x for x in still(transit_rechenschaft, t1, evj2,
+                                   typ="ea")[0]["zeilen"]
+                  if x.startswith("- T-Pluto")][0]
+            pruefe(soll in pl, "W7: EA-Stichtagsorb: %s" % pl)
+        pruefe(_rechenschaft_typ(datei("t_ea.md", themen.replace(
+            "| rang=1", "| teil=jetzt | rang=1")), None) == "ea",
+            "W7: EA nicht erkannt")
+        block, _ = still(transit_rechenschaft_block, t1, evj)
+        pruefe(block.startswith("TRANSIT-RECHENSCHAFT: 8 primaere Wirkorb-Kontakte "
+                                "im Fenster 01.01.2031–31.12.2032, 3 tragen"),
+               "W7: Kopfzeile: %s" % block[:120])
+
+        # W22 / L16: Ressourcen-Zaehlmenge des Transits
+        rr = ressourcen_liste(t1, events_json_pfad=evj)
+        pruefe([e["label"] for e in rr["transit"]]
+               == ["T-Jupiter △ R-Mond", "T-Uranus △ R-Venus", "T-Neptun ⚹ R-MC",
+                   "T-Chiron ☌ R-Venus", "T-Pluto ⚹ R-Sonne"]
+               and not rr["eintraege"] and not rr["radix"],
+               "W22: Zaehlmenge: %r" % [e["label"] for e in rr["transit"]])
+        pruefe([e["label"] for e in rr["nicht_gezaehlt"]]
+               == ["T-Knoten ☌ R-Mondknoten"], "L16: Knotenrueckkehr")
+        pruefe(rr["konjunktionen"] == ["T-Chiron ☌ R-Venus"], "W22: Konjunktionen")
+        rb = ressourcen_block(t1, events_json_pfad=evj)
+        pruefe("Zählmenge (Transit)" in rb and "Nicht in der Zählmenge" in rb
+               and "- T-Chiron ☌ R-Venus — Gabe: " in rb
+               and "Saturn- oder Pluto-Konjunktion" in rb
+               and "T-Mars" not in rb and "Merkur" not in rb,
+               "W22: Block: %s" % rb[:300])
+
+        # W9: Block eingefuegt -> gruen; Negativkontrollen -> rot
+        voll = datei("t2_Transit_chart_data.md", themen + "\n" + block + "\n\n"
+                     + rb + "\nDeckel: Transit Chiron ☌ Venus ausgedeutet.\n")
+        k = kontakt_heimat(voll, evj)
+        pruefe(k["ok"] and k["rechenschaft"] == 5, "W9: mit Block nicht gruen: %r" % k)
+        ohne_chiron = "\n".join(x for x in open(voll, encoding="utf-8").read()
+                                .splitlines() if not x.startswith("- T-Chiron ☌"))
+        k = kontakt_heimat(datei("t3.md", ohne_chiron + "\n"), evj)
+        pruefe(not k["ok"] and k["ohne_heimat"] == ["Chiron Konjunktion Venus"],
+               "W9: Negativkontrolle (Ressourcen-/Deckelzeile) blieb gruen: %r"
+               % k["ohne_heimat"])
+        falsche_art = "\n".join(
+            ("- T-Pluto □ R-Sonne — Testzeile" if x.startswith("- T-Pluto ⚹")
+             else x) for x in open(voll, encoding="utf-8").read().splitlines())
+        k = kontakt_heimat(datei("t4.md", falsche_art + "\n"), evj)
+        pruefe(k["ohne_heimat"] == ["Pluto Sextil Sonne"],
+               "W9: Zeile einer anderen Aspektart verbucht: %r" % k["ohne_heimat"])
+        doppel = themen.replace("RECHENSCHAFT:", "THEMA 3 | titel=Drittes | "
+                                "aspekte=T-Saturn □ R-Sonne\n\nRECHENSCHAFT:")
+        k = kontakt_heimat(datei("t5.md", doppel), evj)
+        pruefe(len(k["doppelt"]) == 1 and "Saturn" in k["doppelt"][0][0],
+               "L19: fuehrt=/aspekte=-Doppelheimat nicht gemeldet: %r" % k["doppelt"])
+        unb = themen.replace("T-Jupiter △ R-Mond", "T-Jupiter △ R-Mondd")
+        b = kontakt_heimat_bericht(datei("t6.md", unb), evj)
+        pruefe("in events.json kein solcher Kontakt" in b, "W9: Meldung unbekannt")
+        # Ultimativ: Kontakte direkt auf der Pflichtzeile SAMMELKAPITEL: —
+        # der Rest der Kopfzeile gehoert zum Block.
+        sk = ("SAMMELKAPITEL: T-Neptun ⚹ R-MC, T-Pluto ⚹ R-Sonne, "
+              "T-Uranus △ R-Venus, T-Chiron ☌ R-Venus, T-Mars △ R-Sonne\n")
+        k = kontakt_heimat(datei("u1.md", themen.replace(
+            "GESTRICHEN: keine.", "GESTRICHEN: keine.\n" + sk)), evj)
+        pruefe(k["ok"] and k["rechenschaft"] == 5,
+               "W9: SAMMELKAPITEL-Zeile nicht gelesen: %r" % k["ohne_heimat"])
+        # Mehrere Kontakte auf einer Zeile: Chiron und Venus stehen nur in
+        # ZWEI verschiedenen Kontakten — das ist nicht Chiron ☌ Venus.
+        quer = sk.replace("T-Chiron ☌ R-Venus", "T-Chiron △ R-Mond, T-Saturn ☌ R-Venus")
+        pq = datei("u2.md", themen.replace("GESTRICHEN: keine.",
+                                           "GESTRICHEN: keine.\n" + quer))
+        k = kontakt_heimat(pq, evj)
+        pruefe(k["ohne_heimat"] == ["Chiron Konjunktion Venus"],
+               "W9: Kontakt ueber Nachbarkontakte verbucht: %r" % k["ohne_heimat"])
+        pruefe("Gelesen wird: Heimat in fuehrt= und aspekte=" in
+               kontakt_heimat_bericht(pq, evj), "W9: Lesehinweis im Bericht fehlt")
+
+        # --- F18: Achsen-Spiegel im Ressourcen-Block (Radix) ----------------
+        rtab = "\n".join([
+            "### Volle Aspekte (3)", "",
+            "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+            "|---|---|---|---|---|---|",
+            "| Venus | △ Trigon | AC | 1°00′ | blau |  |",
+            "| Mond | ⚹ Sextil | MC | 2°10′ | blau |  |",
+            "| Mond | △ Trigon | IC | 2°10′ | blau |  |", "",
+            "### Nebenaspekte (1)", "",
+            "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+            "|---|---|---|---|---|---|",
+            "| Venus | ⚹ Sextil | DC | 1°00′ | blau |  |", ""])
+        rg = datei("r_chart_data.md", rtab)
+        try:
+            rl = ressourcen_liste(rg)
+            pruefe(rl["zeilen"] == [
+                "Venus △ AC 1°00′ voll (zugleich Sextil DC) — Deutungsort: ",
+                "Mond ⚹ MC 2°10′ voll (zugleich Trigon IC) — Deutungsort: "],
+                "F18: %r" % rl["zeilen"])
+            pruefe("EIN Eintrag" in ressourcen_block(rg), "F18: Kopfsatz")
+            beide = ressourcen_liste(rg, events_json_pfad=evj, radix=True)
+            pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 5
+                   and len(beide["zeilen"]) == 7, "W22: Ultimativ (radix=True)")
+        except BuildError as e:
+            print("  (F18: radix nicht ladbar — uebersprungen: %s)" % e)
+
+        # --- W47 und W61: verify() ------------------------------------------
+        _selbsttest_verify(tmp, pruefe)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    if fehler:
+        print("Selbsttest build.py: %d Fehler" % len(fehler))
+        for f_ in fehler:
+            print("  - " + f_)
+        raise SystemExit(1)
+    print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
+          "L16, F18, F2, W47, W61)")
+
+
+def _selbsttest_verify(tmp, pruefe):
+    """W47/W61 am gerenderten Mini-PDF: Ein Querverweis „Kapitel 2, ‚Titel‘"
+    im Lagebild darf nicht als Kapitelanfang gelten; `ok` im Report."""
+    try:
+        import weasyprint
+        subprocess.run(["pdftotext", "-v"], capture_output=True, check=False)
+    except Exception as e:                      # noqa: BLE001
+        print("  (W47/W61: WeasyPrint/pdftotext fehlt — verify-Teil "
+              "uebersprungen: %s)" % e)
+        return
+
+    def seite(kicker, titel, text):
+        return ('<section><div class="kicker">%s</div><h2>%s</h2><p>%s</p>'
+                '</section>' % (kicker, titel, text))
+    css = ("@page { size: A5; margin: 1.5cm; @top-right { content: "
+           "string(kk, start); font-size: 7pt } } .kicker { text-transform: "
+           "uppercase; letter-spacing: 0.3em; string-set: kk content() } "
+           "section { break-before: page } h2 { font-size: 15pt }")
+    lage = seite("Der Stand heute", "Wo du gerade stehst",
+                 "Was in Kapitel 2, „Rückenwind im Auftreten“, beschrieben "
+                 "wird, beginnt früh; Kapitel 1 · Das eigene Maß folgt.")
+    k1 = seite("Kapitel 1", "Das eigene Maß", "Text eins.")
+    k2 = seite("Kapitel 2", "Rückenwind im Auftreten", "Text zwei.")
+    k3 = seite("Kapitel 3", "Ein sehr langer Titel, der in dieser schmalen "
+               "Spalte sicher auf eine zweite Zeile umbricht", "Text drei.")
+    marker = [("Der Stand heute", "Wo du gerade stehst"),
+              ("Kapitel 1", "Das eigene Maß"),
+              ("Kapitel 2", "Rückenwind im Auftreten"),
+              ("Kapitel 3", "Ein sehr langer Titel, der in dieser schmalen "
+                            "Spalte sicher auf eine zweite Zeile umbricht")]
+
+    def pdf(name, *teile):
+        p = os.path.join(tmp, name)
+        weasyprint.HTML(string="<html><head><style>%s</style></head><body>%s"
+                        "</body></html>" % (css, "".join(teile))).write_pdf(p)
+        return p
+
+    import contextlib
+    import io as _io
+    aus = _io.StringIO()
+    with contextlib.redirect_stdout(aus):
+        rep = verify(pdf("gut.pdf", lage, k1, k2, k3), markers=marker,
+                     sample_page=None)
+    pruefe(rep.get("ok") is True and rep["marker_pages"] == {
+        "Wo du gerade stehst": 1, "Das eigene Maß": 2,
+        "Rückenwind im Auftreten": 3, marker[3][1]: 4},
+        "W47: Marken falsch verortet: %r" % rep["marker_pages"])
+    ohne_kopf = k2.replace("<h2>Rückenwind im Auftreten</h2>", "")
+    try:
+        with contextlib.redirect_stdout(aus):
+            verify(pdf("ohne.pdf", lage, k1, ohne_kopf, k3), markers=marker,
+                   sample_page=None)
+        pruefe(False, "W47: fehlende Ueberschrift nicht erkannt (Querverweis "
+                      "als Kapitelanfang gewertet)")
+    except VerifyError as e:
+        pruefe("nicht am Kapitelkopf" in str(e) and "Rückenwind" in str(e)
+               and getattr(e, "report", {}).get("ok") is False,
+               "W47/W61: Meldung oder report.ok falsch: %s" % e)
+    try:
+        with contextlib.redirect_stdout(aus):
+            verify(pdf("folge.pdf", lage, k2, k1, k3), markers=marker,
+                   sample_page=None)
+        pruefe(False, "W47: vertauschte Kapitel nicht erkannt")
+    except VerifyError as e:
+        pruefe("REIHENFOLGE" in str(e), "W47: Reihenfolge-Meldung: %s" % e)
+
+
+if __name__ == "__main__" and "--selbsttest" in sys.argv[1:]:
+    _selbsttest()

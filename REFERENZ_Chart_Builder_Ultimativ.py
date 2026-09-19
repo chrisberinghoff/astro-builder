@@ -147,8 +147,6 @@ section.cover {{ page: cover; position:relative; width:21cm; height:29.7cm;
 .cv-rule {{ width:3.2cm; height:1pt; background:{GOLD_L}; margin:0 auto; }}
 .cv-sub {{ font-family:"EB Garamond"; font-size:11.4pt; letter-spacing:0.05em;
    color:#cfd9d8; }}
-.cv-sub2 {{ font-family:"EB Garamond Italic"; font-style:italic; font-size:10.4pt;
-   color:#b9c8c8; }}
 .cv-leit {{ font-family:"EB Garamond Italic"; font-style:italic; font-size:15.4pt;
    color:#4a3512; letter-spacing:0.02em; }}
 .cv-birth {{ font-family:"EB Garamond"; font-size:8.6pt; letter-spacing:0.2em;
@@ -253,20 +251,27 @@ def glyphe(x, y, size, color, zeichen, op=0.9):
 def cover_html():
     # KEINE VORGABEWERTE (geaendert 2026-09-17, Klasse-2-Entscheidungslauf).
     # Hier standen "GEBURTSBILD · SEELE · ZEIT" und "Anlage, Seelenweg und die
-    # Jahre <von> bis <bis>" als eingesetzte Texte, waehrend das Design-Modul
-    # Kicker und Untertitel ausdruecklich als NICHT vorgeschrieben fuehrt. Wer
-    # die Vorlage uebernimmt und die Zeilen nicht anfasst, rendert die Vorgabe
-    # eines anderen Typs. Jetzt stehen sichtbare Marken: bleiben sie stehen,
-    # faellt es im ersten Rasterblick auf.
+    # Jahre <von> bis <bis>" als eingesetzte Texte. Wer die Vorlage uebernimmt
+    # und die Zeile nicht anfasst, rendert die Vorgabe eines anderen Typs.
+    # Jetzt steht eine sichtbare Marke: bleibt sie stehen, faellt es im ersten
+    # Rasterblick auf.
+    # 2026-09-19 (Frage 3): Die Kickerzeile traegt den DOKUMENTTYP AUS DER H1
+    # DER analyse.md (Design-Render-Modul, Abschnitt „Deckblatt") — im laufenden
+    # Chart also `parsed['doctype']`, in Versalien. KICKER und UNTERTITEL sind
+    # KEINE Felder des @@DECKBLATT-Blocks mehr: build.lies_deckblatt() meldet
+    # eine solche Zeile und uebernimmt sie nicht. Einen beschreibenden
+    # Untertitel hat das Cover nicht mehr; die Zeile darunter ist deshalb
+    # ersatzlos gestrichen, die Hoehen der uebrigen Bloecke bleiben, wie sie
+    # waren (88 Kicker, 112 Name, 168 Linie, 186 Zeile "Horoskop", 788
+    # Leitsatz, 822 Geburtsdaten).
     return f"""<section class="cover">
 <div class="cv-sky"></div>
 {cover_stars()}
 {cover_svg()}
-<div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">&lt;&lt;KICKER — aus dem @@DECKBLATT-Block, KEIN Vorgabewert&gt;&gt;</div>
+<div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">&lt;&lt;KICKER — Dokumenttyp aus der H1 der analyse.md (parsed['doctype']), in VERSALIEN; KEIN Feld des @@DECKBLATT-Blocks&gt;&gt;</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
 <div class="cv-block cv-sub" style="top:{y2cm(186):.2f}cm">Horoskop</div>
-<div class="cv-block cv-sub2" style="top:{y2cm(208):.2f}cm">&lt;&lt;UNTERTITEL — aus dem @@DECKBLATT-Block&gt;&gt;</div>
 <div class="cv-block cv-leit" style="top:{y2cm(788):.2f}cm">{html.escape(LEITSATZ)}</div>
 <div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">&lt;TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT&gt;</div>
 </section>"""

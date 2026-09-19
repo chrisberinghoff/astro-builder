@@ -40,10 +40,20 @@ als Zugang (`_ist_zugang()`); der nackte Kicker gilt fuer aeltere Analysen weite
 
 Schnittstelle
 -------------
-    inhaltsprobe.pruefe(analyse_pfad, chart_data_pfad, typ=None) -> dict
-    inhaltsprobe.bericht(analyse_pfad, chart_data_pfad, typ=None) -> str
+    inhaltsprobe.pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None) -> dict
+    inhaltsprobe.bericht(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None) -> str
     python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|ea|transit|ultimativ]
+                            [--events <klient>_Transit_events.json]
     python3 inhaltsprobe.py --selbsttest
+
+`events_pfad` / `--events` (2026-09-19, W24): die events.json des Transit-Laufs
+(`transit.py … --json <pfad>`, Schema in `transit.run()`). Mit ihr haelt P1 jedes
+Transit-Segment gegen die Rechnung, P5 nimmt die Soll-Menge des Registers aus
+`build.kontakt_heimat()`, P11 und P13 zaehlen ihre Daten, Lebensalter und Kontakte
+als Fundstelle. Ohne sie prueft P1 nur die Form der Transit-Segmente und meldet den
+Abgleich als „teilweise übersprungen" mit Grund; P5 nimmt die Soll-Menge dann aus dem
+Block TRANSIT-RECHENSCHAFT der chart_data. Eine events.json, die sich nicht lesen
+laesst, ist wie eine unlesbare Analyse: Abbruch mit Rueckgabewert 2.
 
 `typ` wird aus der H1 der Analyse abgeleitet (Dokumenttyp links vom " — "); der
 Parameter ueberstimmt. Ein unbekannter Typ laeuft mit den typunabhaengigen Proben,
@@ -74,20 +84,46 @@ Beleg-Segmente, keine Themenliste, kein Rechenschaftskapitel —, meldet sie das
 ausdruecklich und nie "bestanden". Der stille Freispruch ist der Fehler, der in
 `aspekt_heimat()` zweimal gebaut wurde (06.09. und 14.09.); er wird hier nicht ein
 drittes Mal gebaut. UEBERSPRUNGEN heisst: bewusst nicht gelaufen (Typ unbekannt,
-Getriebe-Beleg, kein Rechenschaftskapitel im Typ) — mit Grund.
+kein Rechenschaftskapitel im Typ, englische Analyse bei P11/P12) — mit Grund.
+TEILWEISE UEBERSPRUNGEN (2026-09-19, W44): Was eine laufende Probe bewusst nicht
+prueft (der Getriebe-Beleg in P1, der Abgleich gegen events.json ohne `--events`),
+steht mit Grund unter der Probe und zaehlt in die Schlusszeile „s übersprungen" —
+vorher stand es nur als Hinweis, und die Schlusszeile meldete „0 übersprungen".
 
-Die neun Proben
----------------
+Die fuenfzehn Proben
+--------------------
 P1  Beleg-Aspekte    jedes Aspekt-Segment eines Normal-Belegs (Faktor A, Aspektart,
                      Faktor B, Orb) muss so in einer der vier Aspekttabellen stehen,
                      Orb auf 1' genau; Stufe (voll/einseitig/neben) nur PRUEFEN.
                      Instrument- und Zugang-Beleg: nur die Aspektangaben hinter den
-                     Staenden; Getriebe-Beleg (Struktur-Format) uebersprungen.
+                     Staenden; Getriebe-Beleg (Struktur-Format) teilweise
+                     uebersprungen (zaehlt in die Schlusszeile). Eine Zeile der
+                     vier Aspekttabellen, die sich nicht lesen laesst (fremde
+                     Glyphe, Orb nicht N°NN′), ist ein FEHLER mit Grund — vorher
+                     lief sie still vorbei (2026-09-19, F2); gelesen werden alle
+                     Glyphen aus ASPEKTE, darunter ∠ Halbquadrat und ⚼
+                     Anderthalbquadrat, und der Wort-Trenner –Wort–.
+                     TRANSIT (2026-09-19, W24, W10): das Segment
+                     `T-X Aspekt R-Y — exakt TT.MM.JJJJ, …` wird auf seine Form
+                     geprueft und mit events.json gegen die Rechnung: Kontakt
+                     vorhanden, jedes Exaktdatum ein Nulldurchgang (exakt_gesamt),
+                     „nicht exakt" nur ohne Nulldurchgang im Fenster, „Annäherung
+                     bis x′ am D" gegen `annaeherung`, „am Stichtag Orb 0,57°"
+                     gegen `orb_stichtag` (halbe Rundungsbreite), jedes weitere
+                     Datum in irgendeinem Feld des Kontakts, der Jetzt-Liste oder
+                     der Stationen des Transiters (sonst PRUEFEN). Im Lagebild
+                     („Der Stand heute") traegt jedes Kontakt-Segment den Orb am
+                     Stichtag in Dezimalgrad statt der Pflicht zum Exaktdatum.
+                     Sonnenbogen, progressiver Mond, Finsternis gegen `zusatz`
+                     (nur PRUEFEN).
 P2  Beleg-Staende    Segment 1 jedes Normal-Belegs und jedes Instrument-Segment:
                      Zeichen und Haus gegen den @@SELEKTOR-Block (bei Grenzlage das
                      fuehrende Haus vorn), Gradminute gegen die Staendetabelle.
-P3  Kapitel/Themen   nummerierte Themenkapitel (Kapitel n, n >= 2) in
-                     Dokumentreihenfolge gegen die THEMA-Zeilen: gleiche Zahl, an
+P3  Kapitel/Themen   die nummerierten Themenkapitel in Dokumentreihenfolge
+                     gegen die THEMA-Zeilen (seit 2026-09-19, L7: `Kapitel n` ist
+                     das Kapitel zu `THEMA n`; in Analysen alter Form, die das
+                     Getriebe-Kapitel als `Kapitel 1` fuehren, beginnen sie bei
+                     `Kapitel 2` — s. `_zaehlung_ab()`): gleiche Zahl, an
                      jeder Stelle der Fuehrer aus fuehrt= in Segment 1 des Belegs
                      UND in der Signatur; Titel nur PRUEFEN. (Nur Geburtshoroskop —
                      das Kapitel-Skelett der anderen Typen ist hier nicht hinterlegt.)
@@ -98,6 +134,14 @@ P5  Rechenschaft     jeder Faktor des @@SELEKTOR-Blocks, der kein Thema fuehrt,
                      braucht eine Zeile im Kapitel `Rechenschaft`, die mit seinem
                      Namen beginnt; eine Zeile fuer einen Fuehrer: PRUEFEN. Achsen
                      zaehlen nicht, der Suedknoten mit eigener FAKTOR-Zeile schon.
+                     TRANSIT (2026-09-19, W43): das Register heisst `Mitlaufendes`;
+                     jeder primaere Wirkorb-Kontakt im Fenster, der kein Thema
+                     FUEHRT, braucht eine Zeile, die Transiter und Ziel nennt (und,
+                     wo sie ein Aspektwort traegt, das richtige); klingt er in einem
+                     Kapitel mit, nennt die Zeile das Kapitel (sonst PRUEFEN).
+                     Soll-Menge mit events.json aus build.kontakt_heimat(), ohne sie
+                     aus dem Block TRANSIT-RECHENSCHAFT (+ mitklingende Kontakte aus
+                     `aspekte=` als PRUEFEN).
 P6  Leitsatz         LEITSATZ aus @@DECKBLATT im Schlusswort (wortgleich nach
                      Leerraum-Normalisierung, ersatzweise vier Fuenftel der Woerter
                      in Reihenfolge); genau EINE THEMA-Zeile mit leitachse=ja.
@@ -111,7 +155,8 @@ P8  Wortlisten       ueber den Fliesstext aller Kapitel ausser Auftakt und
 P9  Zwei Saetze      der Nichtwissens-Satz in jeder Wurzel-Bewegung ("weiss ich
                      nicht" oder "steht in keinem Horoskop"); die
                      Verwerfungs-ERLAUBNIS ausserhalb von Auftakt und erstem
-                     Themenkapitel. Nur PRUEFEN.
+                     Themenkapitel. Nur PRUEFEN. Der Transit-Auftakt `Zur Lesart`
+                     zaehlt als Auftakt (2026-09-19, W23 — auch fuer P8 und P10).
 P10 Wortscan        die vier Listen der Inneren Arbeit, Probe 9 — Superlative
                      (Prinzip 8), Klinisches (Guardrail Pathologisierung),
                      Bestaetigung und Optimierung (Prinzipien 12 und 14), Zeit
@@ -122,14 +167,61 @@ P10 Wortscan        die vier Listen der Inneren Arbeit, Probe 9 — Superlative
                      Fehlalarm-Klassen standen offen — "Zerstoerung" traf
                      "Stoerung", "solltest du" traf die von Prinzip 12 VERLANGTE
                      Lassen-Formulierung. Beides ist hier eine Zeile. Nur
+                     PRUEFEN. Der Superlativ-Deckel (drei) zaehlt nur die
+                     Treffer dieser Liste; „zum tiefsten Punkt" gilt als IC-Fuegung
+                     wie die volle Form (2026-09-19, W29). Dazu die ZEITFORM der
+                     Widerstands-Bewegung (2026-09-19, W4): Perfekt und Praeteritum
+                     („Er hat dich geschützt", „It has spared you") — das Argument
+                     kommt aus der Form, nicht aus der Geschichte.
+P11 Zahlen-Deckung   (2026-09-19, U1 a) jedes Tagesdatum, jeder Monat, jede
+                     Jahreszeit mit Jahr, jede Jahreszahl und jedes Lebensalter im
+                     Fliesstext braucht eine Fundstelle in der chart_data (im
+                     Transit auch in events.json: Exaktdaten, `fortsetzung`,
+                     `fruehere_durchgaenge` mit Alter). Ein Alter gilt als gedeckt,
+                     wenn es als Alter dasteht oder ±1,5 Jahre an einem
+                     Zyklusfenster (Strukturbild §7) eines im Satz (oder im Satz
+                     davor) genannten Faktors liegt; „das n. Lebensjahr" ist Alter
+                     n−1. Nur PRUEFEN; englisch: uebersprungen.
+P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", „die
+                     zweitengste", „die meisten Verbindungen", „einzige", „kein
+                     anderer", „x von y", „mehr als die Hälfte", „n Verbindungen",
+                     „alle n": wo die Rangzeilen des Strukturbilds (§10, `RANG …`)
+                     stehen, gegen sie gehalten — Gleichstand, falsche Zaehlung
+                     (gezaehlt/gewichtet), falscher Rang, gewichtete Dichte als
+                     Anzahl; ohne Rangzeilen jede Aussage PRUEFEN. Achsen-Spiegel
+                     (Knoten △ AC / Knoten ⚹ DC) belegen EINEN Rang. Nur PRUEFEN;
+                     englisch: uebersprungen.
+P13 Beleg-Deckung    (2026-09-19, U1 c; Klartext-Regel, Chris-Entscheidung Frage
+                     4 = 1) jede im Fliesstext benannte Konstellation — Aspektwort
+                     oder Bild der Uebersetzungstabelle zwischen zwei Faktoren —
+                     steht im Beleg dieses oder eines anderen Kapitels oder in der
+                     Aspekttabelle; im Transit auch als Kontakt der Rechnung. Nur
                      PRUEFEN.
+P14 Kopfblock        (2026-09-19, W10, W43) jedes Kapitel gegen die
+                     Kopfblock-Tabelle (KOPFBLOCK): fehlt Signatur oder Beleg, wo
+                     sie Pflicht sind (Themen-, Getriebe-, Instrument-, Zugang-
+                     Kapitel, Lagebild „Der Stand heute"; Signatur der
+                     Bündel-Kapitel), oder traegt ein Bündel-Kapitel einen Beleg:
+                     FEHLER. Im Lagebild traegt Segment 1 die Staende des zuerst
+                     genannten Ziels (sonst PRUEFEN). Traegt kein Kapitel einen
+                     Kopfblock (Fachmodus), laeuft P14 nicht.
+P15 Ressourcen-Tiefe (2026-09-19, W37) je Zeile des Ressourcen-Blocks am
+                     Deutungsort (Thema n, Ressource n, Was trägt) die Saetze ueber
+                     den Aspekt: volle und einseitige mindestens drei, Nebenaspekte
+                     mindestens einer (Transit: jeder Kontakt drei). Gezaehlt ab
+                     dem Satz, der beide Faktoren nennt (oder zwei Saetzen, die
+                     sie zusammen nennen), bis zu einem Satz nur ueber andere
+                     Faktoren. Nur PRUEFEN.
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
 Fall ohne reales Geburtsdatum, ohne Uhrzeit, ohne Namen, ohne Staende eines realen
 Charts (Datenschutz-Guardrail des Kerns) — einmal fehlerfrei, einmal mit je einem
-eingebauten Fehler je Probe P1–P6 und je einem Treffer fuer P8, P9 und P10. Eine Probe,
-die ihren Testfehler nicht findet, ist nicht fertig. Der Selbsttest ist Teil des
-Moduls und laeuft bei jedem spaeteren Umbau wieder.
+eingebauten Fehler je Probe P1–P6 und P11–P15 und je einem Treffer fuer P8, P9 und
+P10, einmal mit Zugang-Kapitel; dazu ein Transit-Fall mit konstruierter events.json
+(Daten aus Julianischen Tageszahlen gerechnet, kein Datum im Quelltext), fehlerfrei,
+mit eingebauten Fehlern und ohne events.json. Eine Probe, die ihren Testfehler nicht
+findet, ist nicht fertig. Der Selbsttest ist Teil des Moduls und laeuft bei jedem
+spaeteren Umbau wieder.
 
 Phase 1 (2026-09-16): Bau des Werkzeugs. Der Aufruf in den Modulen (Datenblatt-,
 Klartext-, Design-Render-Modul) ist Phase 2 und kommt erst, wenn die Probe in
@@ -357,11 +449,19 @@ def _kicker_nr(kicker):
 
 # Wort-Kicker der englischen Fassung (Sprachfassung, 2026-09-16d); jeder deutsche
 # Name gilt weiter, die englischen Namen zaehlen als derselbe Kicker.
-_KICKER_ALIAS = {"auftakt": ("prelude",), "schlusswort": ("closing word", "closing words"),
+_KICKER_ALIAS = {"auftakt": ("prelude", "zur lesart"), "schlusswort": ("closing word", "closing words"),
                  "rechenschaft": ("account",), "instrument": ("instrument",),
                  "hauptthemen": ("core themes", "main themes"),
                  "konfliktfelder": ("fields of conflict",), "lebensaufgaben": ("life tasks",),
-                 "zugang": ("access",)}
+                 "zugang": ("access",),
+                 # 2026-09-19 (W43, W10): Register und Lagebild des Transits; die
+                 # englischen Namen aus T12-18 (Werkzeuge A3 traegt sie noch nicht).
+                 "mitlaufendes": ("running alongside",),
+                 "der stand heute": ("where things stand",)}
+# 2026-09-19 (W23): Der Transit-Auftakt heisst `Zur Lesart` (Transit-Modul, Ablauf 2,
+# Kapitelueberschriften). P8, P9 und P10 erkannten den Auftakt nur am Kicker
+# `Auftakt` — der Fehlalarm zur Verwerfungs-Erlaubnis erzwang in T34-18c eine
+# Rueckfrage. Seither gilt `Zur Lesart` als derselbe Kicker (Alias oben).
 
 def _kurz(s, n=110):
     s = _ws(s)
@@ -388,6 +488,39 @@ def _ist_zugang(ch):
             return True
     return False
 
+# Getriebe-Kapitel und Kapitelzaehlung (2026-09-19, L7)
+# Bis zum 2026-09-18 trug das Getriebe-Kapitel des Geburtshoroskops den Kicker
+# `Kapitel 1`, die Themen begannen bei `Kapitel 2`: jeder Querverweis auf THEMA n
+# musste von Hand um eins verschoben werden (31 Stellen im Typmodul). Seit dem
+# Typmodul-Stand vom 2026-09-19 traegt es den Wort-Kicker `Getriebe`, und
+# `Kapitel n` ist das Kapitel zu `THEMA n`. BEIDE Formen muessen laufen — aeltere
+# Analysen werden weiter geprueft —, deshalb erkennt die Probe die Form am
+# DOKUMENT und nicht am Typ: steht irgendwo der Kicker `Getriebe`, gilt die neue
+# Zaehlung. Das gilt damit auch fuer EA und Ultimativ, sobald ihre Module
+# nachziehen, ohne dass hier etwas zu aendern ist.
+_TYPEN_MIT_GETRIEBE = ("geburt", "ea", "ultimativ")
+
+def _zaehlung_ab(chapters, typ):
+    """Nummer des ersten nummerierten Kapitels, das ein THEMA deutet (1 oder 2)."""
+    if typ == "transit":
+        return 1                    # kein Getriebe-Kapitel; `Kapitel 1` ist THEMA 1
+    if any(_ist_kicker(ch, "Getriebe") for ch in (chapters or ())):
+        return 1                    # neue Form (L7)
+    return 2                        # alte Form: `Kapitel 1` ist das Getriebe-Kapitel
+
+def _getriebe_kapitel(ch, typ, chapters=None):
+    """Ist DIESES Kapitel das Getriebe-Kapitel?
+
+    Neue Form: Wort-Kicker `Getriebe` (gilt in jedem Typ). Alte Form: `Kapitel 1`
+    in einem Typ mit Getriebe-Kapitel, solange im Dokument kein Kicker `Getriebe`
+    steht. Ohne `chapters` (Aufruf ohne Dokument) gilt die alte Form.
+    """
+    if _ist_kicker(ch, "Getriebe"):
+        return True
+    return (typ in _TYPEN_MIT_GETRIEBE
+            and _kicker_nr(ch.get("kicker")) == 1
+            and _zaehlung_ab(chapters, typ) == 2)
+
 def _saetze(text):
     return [s for s in re.split(r"(?<=[.!?…])\s+(?=[„\"(A-ZÄÖÜ])", text) if s.strip()]
 
@@ -407,6 +540,11 @@ class _Probe:
     def __init__(self, nr, name):
         self.nr, self.name = nr, name
         self.fehler, self.pruefen, self.hinweise = [], [], []
+        # 2026-09-19 (W44): bewusst nicht Geprueftes INNERHALB einer Probe
+        # (Getriebe-Beleg, Abgleich ohne events.json). Zaehlt in die Zusammenfassung
+        # "s übersprungen" — vorher stand es nur als Hinweis, und die Schlusszeile
+        # meldete "0 übersprungen".
+        self.teilweise = []
         self.geprueft = 0
         self.status = None          # OK | FEHLER | PRUEFEN | AUSSAGELOS | UEBERSPRUNGEN
         self.grund = ""
@@ -435,7 +573,8 @@ class _Probe:
         return {"nr": self.nr, "name": self.name, "status": self.status,
                 "geprueft": self.geprueft, "einheit": self.einheit,
                 "fehler": list(self.fehler), "pruefen": list(self.pruefen),
-                "hinweise": list(self.hinweise), "grund": self.grund}
+                "hinweise": list(self.hinweise), "teilweise": list(self.teilweise),
+                "grund": self.grund}
 
 # ---------------------------------------------------------------------------
 # Datenblatt lesen
@@ -443,8 +582,17 @@ class _Probe:
 
 _AH_NAME = build._AH_NAME            # '(?:AC|MC|DC|IC|[A-ZÄÖÜ][a-zäöüß]+)'
 
-def _tabellen_lesen(txt):
+def _tabellen_lesen(txt, unlesbar=None):
     """Alle Aspektzeilen der vier Tabellen als Liste von dicts.
+
+    unlesbar: optional eine Liste; jede Tabellenzeile in einem der vier
+    Abschnitte, die weder Kopf- noch Trennzeile ist und sich nicht lesen laesst,
+    kommt als (Abschnitt, Zeile, Grund) hinein (2026-09-19, F2). Vorher lief sie
+    STILL vorbei: Mit `∡` statt `⚼` in der Untergrund-Tabelle meldete P1 zwei
+    FEHLER auf einen korrekten Beleg (G12-18, Klasse 1 Nr. 1.1). Gelesen werden
+    in der Aspektspalte die Glyphen aus ASPEKTE — darunter ∠ Halbquadrat und
+    ⚼ Anderthalbquadrat — und der Wort-Trenner des Datenblatt-Moduls
+    (`–Anderthalbquadrat–`, Halbgeviertstriche).
 
     Zeilenregex woertlich aus `build._ressourcen_zeilen()` (sechsspaltige Form des
     Datenblatt-Moduls, Spalte 6 "zugleich" seit 15.09.2026 optional):
@@ -457,8 +605,10 @@ def _tabellen_lesen(txt):
     mit `spiegel=True` gefuehrt.
     """
     glyphen = "".join(g for _, g in ASPEKTE)
+    # 2026-09-19 (F2): Wort-Trenner `–Wort–` (U+2013) in der Aspektspalte
+    # zugelassen, wie ihn das Datenblatt-Modul fuer die Untergrund-Tabelle nennt.
     zeile = re.compile(
-        r"\|\s*(%s)\s*\|\s*([%s])?\s*([A-Za-zÄÖÜäöüß]*)\s*\|\s*(%s)\s*\|"
+        r"\|\s*(%s)\s*\|\s*([%s])?\s*[–—-]?\s*([A-Za-zÄÖÜäöüß]*)\s*[–—-]?\s*\|\s*(%s)\s*\|"
         r"\s*(\d{1,3}°\d{2}′)\s*\|(?:\s*([^|]*)\|)?(?:\s*([^|]*)\|)?"
         % (_AH_NAME, glyphen, _AH_NAME))
     koepfe = [(k, s) for k, s in build._STAERKE_KOPF] + [("### Hauptaspekte", "voll"),
@@ -474,6 +624,8 @@ def _tabellen_lesen(txt):
         for z in teil.splitlines():
             m = zeile.match(z)
             if not m:
+                if unlesbar is not None and _tabellenzeile_mit_inhalt(z):
+                    unlesbar.append((kopf, _ws(z), _grund_unlesbar(z)))
                 continue
             a, g, w, b, orb = m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
             if a in ("Aspekt", "Faktor", "Punkt"):
@@ -482,6 +634,8 @@ def _tabellen_lesen(txt):
             if art is None and g:
                 art = _ASP_GLYPH.get(g)
             if art is None:
+                if unlesbar is not None:
+                    unlesbar.append((kopf, _ws(z), "Aspektart nicht erkannt"))
                 continue
             gr, mi = orb.split("°")
             mins = _min(gr, mi.rstrip("′"))
@@ -496,6 +650,38 @@ def _tabellen_lesen(txt):
                             "orb": mins, "orb_txt": orb, "stufe": stufe,
                             "zeile": _ws(z), "spiegel": True})
     return out
+
+def _tabellenzeile_mit_inhalt(z):
+    """Traegt die Zeile Tabelleninhalt, der gelesen werden muesste? Nein bei
+    Leerzeilen, Prosa, Trennzeilen (`|---|`), Kopfzeilen und Leerzeilen der
+    Tabelle (`| _keine_ |`, `| — |`). (2026-09-19, F2)"""
+    s = z.strip()
+    if not s.startswith("|"):
+        return False
+    if re.match(r"^\|[\s:|\-–—]*$", s):
+        return False
+    zellen = [c.strip() for c in s.strip("|").split("|")]
+    if zellen and zellen[0] in ("Faktor", "Aspekt", "Punkt"):
+        return False
+    return any(c not in ("", "_keine_", "keine", "Keine", "—", "-", "–") for c in zellen)
+
+def _grund_unlesbar(z):
+    """Sagt, WAS an einer Tabellenzeile nicht lesbar ist (2026-09-19, F2)."""
+    zellen = [c.strip() for c in z.strip().strip("|").split("|")]
+    erlaubt = " ".join(g for _, g in ASPEKTE)
+    if len(zellen) >= 4:
+        fremd = sorted({c for c in zellen[1] if not (c.isalpha() or c in " -–—" or
+                                                    c in "".join(g for _, g in ASPEKTE))})
+        if fremd:
+            return ("unbekanntes Zeichen %s in der Aspektspalte — erlaubt sind %s mit dem "
+                    "Aspektwort oder der Wort-Trenner –Wort–"
+                    % (", ".join("„%s“" % c for c in fremd), erlaubt))
+        if not re.fullmatch(r"\d{1,3}°\d{2}′", zellen[3]):
+            return "Orb „%s“ nicht in der Form N°NN′ (Grad, U+00B0; Bogenminuten zweistellig, U+2032)" % zellen[3]
+        return ("Faktorname nicht lesbar („%s“ / „%s“) — erwartet ist der nackte Name "
+                "(Sonne, Mondknoten, AC …)" % (zellen[0], zellen[2]))
+    return ("Zeilenform nicht erkannt — erwartet: | Faktor | <Glyphe> <Aspektwort> | "
+            "Faktor | N°NN′ | Farbe | zugleich |")
 
 def _staende_lesen(txt):
     """Staendetabelle (`## Staende`): Faktor -> (Minuten, Zeichen). None, wenn nicht
@@ -629,24 +815,212 @@ def _eintrag(a, t, rest, mehrfach):
     return {"a": a, "art": art, "b": b, "orb": orb, "orb_sicher": sicher,
             "stufe": stufe, "roh": _ws(rest), "mehrfach": mehrfach}
 
-def _beleg_form(ch, typ):
-    """'struktur' | 'instrument' | 'zugang' | 'normal' | None (kein Beleg)."""
+def _beleg_form(ch, typ, chapters=None):
+    """'struktur' | 'instrument' | 'zugang' | 'normal' | None (kein Beleg).
+
+    `chapters` (2026-09-19, L7) sagt, ob die Analyse das Getriebe-Kapitel als
+    `Getriebe` oder als `Kapitel 1` fuehrt; ohne sie gilt die alte Form.
+    """
     if not ch.get("beleg"):
         return None
     if _ist_kicker(ch, "Instrument"):
         return "instrument"
     if _ist_zugang(ch):
         return "zugang"
+    # 2026-09-19 (L7): Der Wort-Kicker `Getriebe` ist der Struktur-Beleg, in jedem
+    # Typ; die Nummer 1 nur dort, wo sie schon vorher dafuer stand.
+    if _ist_kicker(ch, "Getriebe"):
+        return "struktur"
     segs = _segmente(ch["beleg"])
-    if typ in ("geburt", "ultimativ") and _kicker_nr(ch["kicker"]) == 1:
+    if typ in ("geburt", "ultimativ") and _getriebe_kapitel(ch, typ, chapters):
         return "struktur"
     if segs and _staende_segment(segs[0]) is None:
         # Segment 1 sind keine Staende: Struktur-Format, wenn kein Aspekt darin
-        # steht oder es das erste nummerierte Kapitel ist; sonst ein Normal-Beleg
+        # steht oder es das Getriebe-Kapitel ist; sonst ein Normal-Beleg
         # mit kaputtem Segment 1, den P2 meldet.
-        if not ASPEKT_RE.search(ch["beleg"]) or _kicker_nr(ch["kicker"]) == 1:
+        # 2026-09-19 (L7): „das erste nummerierte Kapitel" war das Getriebe-Kapitel
+        # nur in der alten Form. In der neuen ist `Kapitel 1` das erste THEMA — ein
+        # kaputtes Segment 1 gehoert dort gemeldet und nicht uebersprungen. In
+        # Typen ohne Getriebe-Kapitel bleibt die Nummer 1 die alte Notbremse.
+        erstes = (_getriebe_kapitel(ch, typ, chapters)
+                  or (typ not in _TYPEN_MIT_GETRIEBE and _kicker_nr(ch["kicker"]) == 1))
+        if not ASPEKT_RE.search(ch["beleg"]) or erstes:
             return "struktur"
     return "normal"
+
+# ---------------------------------------------------------------------------
+# Transit-Kontakte und events.json (2026-09-19, W24, W10, W43)
+# Schema: log/SCHNITTSTELLE_events_json.md des Wartungslaufs A. Ein Kontakt-Segment
+# sieht so aus (Transit-Modul, „Signatur, Beleg und ihre Darstellung"):
+#   T-<Faktor> <Glyphe> <Aspekt> <Glyphe> R-<Faktor> <Glyphe> — exakt TT.MM.JJJJ, …
+# Im Lagebild traegt es zusaetzlich den Orb am Stichtag in Dezimalgrad
+# („am Stichtag Orb 0,57°") wie die Anhangtabelle. Die Namen aus events.json
+# laufen durch kanon(): `Knoten` (laufender wahrer Mondknoten) wird MONDKNOTEN,
+# `Glückspunkt` GLUECKSPUNKT — dieselben Schluessel wie im Beleg.
+# ---------------------------------------------------------------------------
+_KONTAKT_SEG_RE = re.compile(
+    r"(?<![\wäöüÄÖÜß])T-\s*(?P<t>" + _FAKTOR_RE + r"|Knoten)(?![\wäöüÄÖÜß])(?P<mitte>.*?)"
+    r"(?<![\wäöüÄÖÜß])R-\s*(?P<r>" + _FAKTOR_RE + r"|Knoten)(?![\wäöüÄÖÜß])"
+    r"(?:\s*\((?:AC|MC|DC|IC)\))?", re.S)
+_DATUM_DE_RE = re.compile(r"(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?![\d])")
+_DATUM_ISO_RE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
+_TAIL_RE = re.compile(
+    r"(?P<nichtexakt>(?:im\s+Fenster\s+)?(?:nicht\s+(?:mehr\s+)?exakt|kein\w*\s+Exakt\w*|nie\s+exakt))"
+    r"|(?P<exakt>exakt\w*)"
+    r"|(?P<annae>Ann(?:ä|ae)herung\w*)"
+    r"|(?P<wirkorb>Wirkorb\w*)"
+    r"|(?P<station>Stillst(?:a|ä)nd\w*|Station\w*)"
+    r"|(?P<stichtag>Stichtag\w*)"
+    r"|(?P<datum>(?<![\d.])\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})(?![\d])|(?<!\d)\d{4}-\d{2}-\d{2}(?!\d))"
+    r"|(?P<bogen>\d+(?:[.,]\d+)?\s*[′'](?!\d))", re.I)
+# Orb am Stichtag in Dezimalgrad: „am Stichtag Orb 0,57°", „Orb am Stichtag 0.57°",
+# „Stichtag-Orb 0,57°" — nie in Gradminuten (dann folgt eine Ziffer auf °).
+_STICHTAG_ORB_RE = re.compile(
+    r"(?:(?:am\s+)?Stichtag\w*[\s\-–]*Orb|Orb\s+am\s+Stichtag)\s*:?\s*"
+    r"(\d{1,2}(?:[.,](\d{1,4}))?)\s*°(?!\s*\d)", re.I)
+# Zusatz-Zeitmasse im Beleg (W46; das Beleg-Format dafuer setzt der Textlauf).
+_ZUSATZ_SEG_RE = re.compile(r"Sonnenbogen|progressiv\w*|Finsternis", re.I)
+
+def _datum_iso(s):
+    """'TT.MM.JJJJ' / 'TT.MM.JJ' / 'JJJJ-MM-TT' -> 'JJJJ-MM-TT' (None, wenn keines)."""
+    m = _DATUM_ISO_RE.search(s or "")
+    if m:
+        return "%s-%s-%s" % m.groups()
+    m = _DATUM_DE_RE.search(s or "")
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if y < 100:
+            y += 2000
+        return "%04d-%02d-%02d" % (y, mo, d)
+    return None
+
+def _kontakt_aus_segment(seg):
+    """Ein Transit-Kontakt im Beleg -> dict(t, art, r, tail) mit kanonischen
+    Schluesseln, oder None. `tail` ist der Text hinter dem Ziel."""
+    m = _KONTAKT_SEG_RE.search(seg or "")
+    if not m:
+        return None
+    ma = ASPEKT_RE.search(m.group("mitte"))
+    art = None
+    if ma:
+        art = _art(ma.group(1)) if ma.group(1) else _ASP_GLYPH.get(ma.group(2))
+    return {"t": kanon(m.group("t")), "art": art, "r": kanon(m.group("r")),
+            "tail": seg[m.end():]}
+
+def _kontakt_tail_lesen(tail):
+    """Liest Exaktdaten, Annaeherungen, sonstige Daten und den Stichtag-Orb aus dem
+    Text hinter dem Ziel. Ein Stichwort gilt fuer alle folgenden Daten bis zum
+    naechsten Stichwort („exakt TT.MM.JJJJ, TT.MM.JJJJ, wieder TT.MM.JJJJ")."""
+    out = {"exakt": [], "annaeherung": [], "andere": [], "nicht_exakt": False,
+           "nicht_exakt_fenster": False, "annae_min": None, "annae_dez": 0,
+           "stichtag_orb": None, "stichtag_dez": 0}
+    modus = None
+    for m in _TAIL_RE.finditer(tail or ""):
+        if m.group("nichtexakt"):
+            out["nicht_exakt"] = True
+            if (m.group("nichtexakt").lower().startswith("im")
+                    or re.match(r"\s*im\s+Fenster", tail[m.end():m.end() + 20])):
+                out["nicht_exakt_fenster"] = True
+            modus = "sonst"
+        elif m.group("exakt"):
+            modus = "exakt"
+        elif m.group("annae"):
+            modus = "annaeherung"
+        elif m.group("wirkorb"):
+            modus = "Wirkorb"
+        elif m.group("station"):
+            modus = "Station"
+        elif m.group("stichtag"):
+            modus = "Stichtag"
+        elif m.group("bogen"):
+            if modus == "annaeherung" and out["annae_min"] is None:
+                zahl = re.sub(r"[′'\s]", "", m.group("bogen")).replace(",", ".")
+                out["annae_min"] = float(zahl)
+                out["annae_dez"] = len(zahl.partition(".")[2])
+        elif m.group("datum"):
+            d = _datum_iso(m.group("datum"))
+            if modus == "exakt":
+                out["exakt"].append(d)
+            elif modus == "annaeherung":
+                out["annaeherung"].append(d)
+            else:
+                out["andere"].append((d, modus or "ohne Stichwort"))
+    ms = _STICHTAG_ORB_RE.search(tail or "")
+    if ms:
+        out["stichtag_orb"] = float(ms.group(1).replace(",", "."))
+        out["stichtag_dez"] = len(ms.group(2) or "")
+    return out
+
+def _json_strings(obj, out):
+    """Alle Zeichenketten eines JSON-Baums (fuer Datumsfelder)."""
+    if isinstance(obj, str):
+        out.append(obj)
+    elif isinstance(obj, dict):
+        for v in obj.values():
+            _json_strings(v, out)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            _json_strings(v, out)
+    return out
+
+def _json_daten(obj):
+    """Menge aller ISO-Tagesdaten (JJJJ-MM-TT) eines JSON-Baums."""
+    return {s for s in _json_strings(obj, []) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s)}
+
+def _events_laden(pfad):
+    """events.json von `transit.py --json <pfad>` lesen; laut, wenn es nicht geht."""
+    import json
+    try:
+        with open(pfad, encoding="utf-8") as f:
+            daten = json.load(f)
+    except OSError as e:
+        raise InhaltsprobeFehler("events.json nicht lesbar: %s (%s) — Pfad prüfen. Ohne "
+                                 "--events läuft die Probe weiter, hält Transit-Belege "
+                                 "dann aber nur auf ihre Form." % (pfad, e))
+    except ValueError as e:
+        raise InhaltsprobeFehler("events.json ist kein gültiges JSON: %s (%s) — die Datei "
+                                 "aus `transit.py <chart_data> … --json <pfad>` nehmen."
+                                 % (pfad, _kurz(str(e), 120)))
+    if not isinstance(daten, dict) or not isinstance(daten.get("events"), list):
+        raise InhaltsprobeFehler("%s trägt keinen Schlüssel 'events' (Liste) — ist das die "
+                                 "Ausgabe von `transit.py --json`?" % pfad)
+    return daten
+
+def _ev_index(daten):
+    """{(Transiter, Aspektart, Ziel) kanonisch: [Ereignis, …]} ueber alle Passagen."""
+    idx = {}
+    for e in (daten or {}).get("events", []):
+        k = (kanon(e.get("transit") or ""), e.get("aspekt"), kanon(e.get("ziel") or ""))
+        idx.setdefault(k, []).append(e)
+    return idx
+
+def _ev_jetzt(daten, k):
+    """Eintraege von jetzt.im_orb zu einem Kontakt."""
+    return [j for j in ((daten or {}).get("jetzt") or {}).get("im_orb", [])
+            if (kanon(j.get("transit") or ""), j.get("aspekt"), kanon(j.get("ziel") or "")) == k]
+
+def _ev_exakt(evs):
+    """Alle Nulldurchgaenge der Passagen eines Kontakts (exakt_gesamt; bei einer
+    events.json von vor dem 2026-09-19 exakt samt Vorlauf/Fortsetzung)."""
+    out = set()
+    for e in evs:
+        if e.get("exakt_gesamt") is not None:
+            out.update(e.get("exakt_gesamt") or [])
+        else:
+            out.update(e.get("exakt") or [])
+            out.update(e.get("exakt_nach_fenster") or [])
+            out.update(((e.get("vorlauf") or {}).get("exakt")) or [])
+    return out
+
+def _ev_annaeherung(evs):
+    """{Datum: Orb in Grad} aller Annaeherungen ohne Nulldurchgang (Passage,
+    Vorlauf, Fortsetzung) — seit W1 getrennt von `exakt`."""
+    out = {}
+    for e in evs:
+        for quelle in (e, e.get("vorlauf") or {}, e.get("fortsetzung") or {}):
+            for d, orb in (quelle.get("annaeherung") or []):
+                out[d] = orb
+    return out
 
 # ---------------------------------------------------------------------------
 # Typ und Kapitelklassen
@@ -688,13 +1062,16 @@ def _hat_bewegungen(ch):
 
 def _themenkapitel(chapters, typ):
     """Kapitel mit Bewegungsfolge, in Dokumentreihenfolge.
-    geburt: Kicker `Kapitel n` mit n >= 2, dazu `Zugang <Bereich>`. Andere Typen: jedes
+    geburt: Kicker `Kapitel n` ab der ersten Themennummer (`_zaehlung_ab()`: 1 in
+    der neuen Form, 2 in einer Analyse, die das Getriebe-Kapitel als `Kapitel 1`
+    fuehrt — 2026-09-19, L7), dazu `Zugang <Bereich>`. Andere Typen: jedes
     Kapitel, das einen bekannten Bewegungs-Wortlaut traegt, plus jedes `Kapitel n`."""
     out = []
+    ab = _zaehlung_ab(chapters, typ)
     for ch in chapters:
         n = _kicker_nr(ch["kicker"])
         if typ == "geburt":
-            if (n is not None and n >= 2) or _ist_zugang(ch):
+            if (n is not None and n >= ab) or _ist_zugang(ch):
                 out.append(ch)
         else:
             if n is not None or _ist_zugang(ch) or _hat_bewegungen(ch):
@@ -708,13 +1085,24 @@ def _bezeichnung(ch):
 # Die Proben
 # ---------------------------------------------------------------------------
 
-def _p1_beleg_aspekte(chapters, typ, tabelle):
+def _p1_beleg_aspekte(chapters, typ, tabelle, events=None, unlesbar=None):
+    """events: gelesene events.json (dict) oder None; unlesbar: Liste aus
+    `_tabellen_lesen(txt, unlesbar)` (beide Parameter 2026-09-19, W24 und F2)."""
     p = _Probe("P1", "Beleg-Aspekte")
     p.einheit = "Segmente"
+    # 2026-09-19 (F2): eine Tabellenzeile, die die Probe nicht lesen kann, ist ein
+    # FEHLER des Datenblatts — sonst erscheint ein korrekter Beleg als „nicht in
+    # der Tabelle", und build.aspekt_heimat() laeuft ueber eine zu kleine Menge grün.
+    for kopf, z, grund in (unlesbar or []):
+        p.fehler.append("Aspekttabelle „%s“: Zeile nicht lesbar — %s: „%s“. Die Probe "
+                        "kann sie gegen keinen Beleg halten; die Zeile im Datenblatt "
+                        "berichtigen" % (kopf.lstrip("# "), grund, _kurz(z, 100)))
     # Ohne Aspekttabellen ist im Geburtshoroskop nichts zu pruefen. Im TRANSIT
     # schon: Dort wird die FORM des Kontakt-Segments geprueft (eine Aspektbeziehung,
     # Exaktdaten), und die haengt nicht an den Radix-Tabellen (neu 2026-09-18).
     if not tabelle and typ != "transit":
+        if unlesbar:
+            return p.abschluss()
         return p.aussagelos("keine Aspektzeile in den vier Aspekttabellen gefunden")
     if not tabelle:
         p.hinweise.append("Keine Radix-Aspekttabellen in der chart_data — im Transit "
@@ -797,37 +1185,176 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
             p.pruefen.append("%s — Beleg nennt Stufe „%s“, Tabelle führt „%s“"
                              % (stelle, e["stufe"], passend[0]["stufe"]))
 
-    def pruefe_transit_segment(stelle, seg, eintr):
+    ev_idx = _ev_index(events) if events is not None else None
+    transit_gesehen = []
+
+    def pruefe_transit_segment(stelle, seg, eintr, lagebild=False):
         """Transit-Beleg: Form pruefen, nicht gegen die Radix-Tabellen halten.
 
         Der Kontakt traegt statt des Orbs die Exaktdaten (Transit-Modul). Ein
         Tabellenabgleich waere sinnlos und faellt gelegentlich zufaellig aus:
         Die Radix-Aspekttabellen des Transit-Datenblatts fuehren Radix-Paare,
         nicht Transit-Kontakte. Zustaendig ist dort build.kontakt_heimat_bericht().
-        Geprueft wird: genau EINE Aspektbeziehung, und Exaktdaten vorhanden.
+        Geprueft wird: genau EINE Aspektbeziehung, und Exaktdaten vorhanden —
+        im Lagebild statt der Exaktdaten der Orb am Stichtag (W10). Mit events.json
+        zusaetzlich die Sache selbst (2026-09-19, W24): Kontakt vorhanden,
+        Exaktdaten = Nulldurchgaenge, Annaeherungen, Stichtag-Orb, sonstige Daten.
         """
         p.geprueft += 1
+        transit_gesehen.append(stelle)
         if len(eintr) > 1:
             p.fehler.append("%s — %d Aspektbeziehungen im Segment; ab Segment 2 gilt "
                             "auch im Transit genau EINE" % (stelle, len(eintr)))
             return
-        if not _TRANSIT_EXAKT_RE.search(seg):
+        k = _kontakt_aus_segment(seg)
+        lesung = _kontakt_tail_lesen(k["tail"]) if k else None
+        if lagebild:
+            if lesung is None or lesung["stichtag_orb"] is None:
+                p.pruefen.append("%s — Lagebild-Segment ohne Orb am Stichtag; Beleg-Format "
+                                 "des Lagebilds: je Kontakt „am Stichtag Orb 0,57°“ in "
+                                 "Dezimalgrad wie in der Anhangtabelle: „%s“"
+                                 % (stelle, _kurz(seg, 90)))
+        elif not _TRANSIT_EXAKT_RE.search(seg) and not (
+                lesung and (lesung["nicht_exakt"] or lesung["annaeherung"])):
             p.pruefen.append("%s — kein Exaktdatum; das Transit-Segment trägt statt "
                              "des Orbs die Exaktdaten (Transit-Modul, „Signatur, "
-                             "Beleg und ihre Darstellung“): „%s“"
-                             % (stelle, _kurz(seg, 90)))
+                             "Beleg und ihre Darstellung“), ein Kontakt ohne "
+                             "Nulldurchgang „nicht exakt, Annäherung bis x′ am "
+                             "TT.MM.JJJJ“: „%s“" % (stelle, _kurz(seg, 90)))
+        if events is None or k is None:
+            return
+        schluessel = (k["t"], k["art"], k["r"])
+        name = "T-%s %s R-%s" % (ANZEIGE.get(k["t"], k["t"]), k["art"] or "?",
+                                 ANZEIGE.get(k["r"], k["r"]))
+        evs = ev_idx.get(schluessel, [])
+        if not evs:
+            andere = sorted({a for (t, a, r) in ev_idx if t == k["t"] and r == k["r"]})
+            p.fehler.append("%s — Kontakt %s steht nicht in events.json%s"
+                            % (stelle, name, "; dort mit diesem Ziel nur: " + ", ".join(andere)
+                               if andere else " (auch mit keiner anderen Aspektart)"))
+            return
+        exakt = _ev_exakt(evs)
+        im_fenster = set(d for e in evs for d in (e.get("exakt_im_fenster") or []))
+        annae = _ev_annaeherung(evs)
+        for d in lesung["exakt"]:
+            if d in exakt:
+                continue
+            nah = [x for x in sorted(exakt) if abs(_tage(x, d)) <= 1]
+            p.fehler.append("%s — exakt %s ist kein Nulldurchgang von %s; events.json: %s%s"
+                            % (stelle, _de(d), name,
+                               ", ".join(_de(x) for x in sorted(exakt)) or "keiner",
+                               " — %s ist eine Annäherung ohne Nulldurchgang" % _de(d)
+                               if d in annae else
+                               " — %s liegt einen Tag daneben (Zeitzone? events.json gibt "
+                               "Ortstage in `zeitzone`)" % _de(nah[0]) if nah else ""))
+        if lesung["exakt"] and not lagebild:
+            fehlt = sorted(im_fenster - set(lesung["exakt"]))
+            if fehlt:
+                p.pruefen.append("%s — im Fenster auch exakt %s; ein Mehrfachkontakt nennt "
+                                 "alle Exaktdaten (Transit-Modul)"
+                                 % (stelle, ", ".join(_de(x) for x in fehlt)))
+        if lesung["nicht_exakt"]:
+            if im_fenster:
+                p.fehler.append("%s — der Beleg sagt „nicht exakt“, events.json kennt "
+                                "Nulldurchgänge im Fenster: %s"
+                                % (stelle, ", ".join(_de(x) for x in sorted(im_fenster))))
+            elif exakt and not lesung["nicht_exakt_fenster"]:
+                p.pruefen.append("%s — „nicht exakt“, aber außerhalb des Fensters exakt "
+                                 "(Vorlauf/Fortsetzung): %s — gemeint „im Fenster nicht "
+                                 "exakt“?" % (stelle, ", ".join(_de(x) for x in sorted(exakt))))
+        for d in lesung["annaeherung"]:
+            if d not in annae:
+                p.fehler.append("%s — Annäherung am %s steht nicht in events.json "
+                                "(`annaeherung` von Passage, Vorlauf, Fortsetzung: %s)%s"
+                                % (stelle, _de(d),
+                                   ", ".join(_de(x) for x in sorted(annae)) or "keine",
+                                   " — %s ist ein Nulldurchgang" % _de(d) if d in exakt else ""))
+            elif lesung["annae_min"] is not None and \
+                    abs(lesung["annae_min"] - annae[d] * 60.0) > \
+                    0.5 * 10 ** -lesung["annae_dez"] + 0.01:      # halbe Rundungsbreite des Belegs
+                p.pruefen.append("%s — Annäherung bis %s′, events.json: %s′ am %s"
+                                 % (stelle, ("%.1f" % lesung["annae_min"]).replace(".", ","),
+                                    ("%.1f" % (annae[d] * 60.0)).replace(".", ","), _de(d)))
+        if lesung["stichtag_orb"] is not None:
+            soll = [e.get("orb_stichtag") for e in evs if e.get("orb_stichtag") is not None]
+            tafel = [j.get("orb_grad") for j in _ev_jetzt(events, schluessel)
+                     if j.get("orb_grad") is not None]
+            if not soll and not tafel:
+                p.hinweise.append("%s — Stichtag-Orb nicht prüfbar: events.json ohne "
+                                  "`orb_stichtag` (Stand vor 2026-09-19?) und Kontakt nicht "
+                                  "in jetzt.im_orb" % stelle)
+            else:
+                tol = (0.5 * 10 ** -lesung["stichtag_dez"] if lesung["stichtag_dez"] else 0.5)
+                ok = any(abs(lesung["stichtag_orb"] - v) <= tol + 0.00006 for v in soll) or \
+                    any(abs(lesung["stichtag_orb"] - v) <= tol + 1e-9 for v in tafel)
+                if not ok:
+                    p.fehler.append("%s — Orb am Stichtag %s° weicht ab; events.json: "
+                                    "orb_stichtag %s%s"
+                                    % (stelle, (("%%.%df" % lesung["stichtag_dez"]) %
+                                                lesung["stichtag_orb"]).replace(".", ","),
+                                       ", ".join(("%.4f°" % v).replace(".", ",") for v in soll)
+                                       or "—",
+                                       " (Anhangtabelle %s)" % ", ".join(
+                                           ("%.2f°" % v).replace(".", ",") for v in tafel)
+                                       if tafel else ""))
+        bekannt = set(exakt) | set(annae) | _json_daten(evs) | \
+            _json_daten(_ev_jetzt(events, schluessel)) | \
+            {s.get("datum") for s in (events.get("stations") or [])
+             if kanon(s.get("transit") or "") == k["t"]}
+        for d, art in lesung["andere"]:
+            if d not in bekannt:
+                p.pruefen.append("%s — %s %s steht bei %s in keinem Feld von events.json "
+                                 "(Wirkorb-Perioden, Erfassungsspanne, Vorlauf, Fortsetzung, "
+                                 "Stationen des Transiters, Jetzt-Liste)"
+                                 % (stelle, art, _de(d), name))
+
+    def pruefe_zusatz_segment(stelle, seg):
+        """Sonnenbogen, progressiver Mond, Finsternis im Transit-Beleg (W24/W46):
+        jedes Datum gegen `zusatz` der events.json. Das Beleg-Format dieser Masse
+        setzt der Textlauf; deshalb nur PRUEFEN."""
+        p.geprueft += 1
+        transit_gesehen.append(stelle)
+        daten = [_datum_iso(m.group(0)) for m in _TAIL_RE.finditer(seg) if m.group("datum")]
+        if events is None or not daten:
+            return
+        z = events.get("zusatz") or {}
+        if not z:
+            p.hinweise.append("%s — events.json ohne `zusatz` (transit.py ohne --geburt): "
+                              "Datum nicht prüfbar" % stelle)
+            return
+        s = seg.casefold()
+        if "sonnenbogen" in s:
+            soll = {x.get("exakt") for x in z.get("sonnenbogen", [])}
+            welche = "zusatz.sonnenbogen[].exakt"
+        elif "finsternis" in s:
+            soll = {x.get("datum") for x in z.get("finsternisse", [])}
+            welche = "zusatz.finsternisse[].datum"
+        else:
+            soll = {x.get("datum") for x in z.get("prog_mond_wechsel", [])} | \
+                {x.get("datum") for x in z.get("prog_mond", [])}
+            welche = "zusatz.prog_mond_wechsel[].datum / prog_mond[].datum"
+        for d in daten:
+            if d not in soll:
+                p.pruefen.append("%s — Datum %s nicht in %s der events.json"
+                                 % (stelle, _de(d), welche))
 
     for ch in chapters:
-        form = _beleg_form(ch, typ)
+        form = _beleg_form(ch, typ, chapters)
         if form is None:
             continue
         bez = _bezeichnung(ch)
         segs = _segmente(ch["beleg"])
         if form == "struktur":
-            p.hinweise.append("Getriebe-Beleg (Struktur-Format) übersprungen: %s" % bez)
+            # 2026-09-19 (W44): zaehlt in die Zusammenfassung „s übersprungen".
+            p.teilweise.append("Getriebe-Beleg (Struktur-Format) nicht gegen die "
+                               "Aspekttabellen gehalten: %s" % bez)
             continue
         if form == "normal":
             for i, seg in enumerate(segs[1:], start=2):
+                if typ == "transit" and _ZUSATZ_SEG_RE.search(seg) \
+                        and not _TRANSIT_KONTAKT_RE.search(seg):
+                    pruefe_zusatz_segment("%s, Segment %d" % (bez, i), seg)
+                    continue
                 eintr = _aspekt_eintraege(seg)
                 if not eintr:
                     p.pruefen.append("%s, Segment %d: „%s“ — kein Aspekt im Segment (Normalformat: "
@@ -835,7 +1362,8 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
                                      % (bez, i, _kurz(seg, 90)))
                     continue
                 if typ == "transit" and _TRANSIT_KONTAKT_RE.search(seg):
-                    pruefe_transit_segment("%s, Segment %d" % (bez, i), seg, eintr)
+                    pruefe_transit_segment("%s, Segment %d" % (bez, i), seg, eintr,
+                                           lagebild=_ist_kicker(ch, "Der Stand heute"))
                     continue
                 for e in eintr:
                     pruefe_eintrag("%s, Segment %d" % (bez, i), e)
@@ -863,9 +1391,30 @@ def _p1_beleg_aspekte(chapters, typ, tabelle):
                          "orb": _min(m.group(4), m.group(5)), "orb_sicher": True,
                          "stufe": None, "roh": m.group(0), "mehrfach": False}
                     pruefe_eintrag("%s, Segment %d" % (bez, i), e)
+    if transit_gesehen and events is None:
+        # 2026-09-19 (W24): ohne events.json bleibt es bei der Form — gesagt, nicht still.
+        p.teilweise.append("%d Transit-Segment(e) nur auf ihre Form geprüft — Abgleich gegen "
+                           "events.json (Kontakt, Exaktdaten, Annäherungen, Stichtag-Orb) "
+                           "übersprungen: keine events.json übergeben (`--events <pfad>` bzw. "
+                           "pruefe(…, events_pfad=…))" % len(transit_gesehen))
     if p.geprueft == 0:
+        if p.fehler:
+            return p.abschluss()
         return p.aussagelos("kein Aspekt-Segment in einem Normal-, Instrument- oder Zugang-Beleg gefunden")
     return p.abschluss()
+
+def _de(iso):
+    """'JJJJ-MM-TT' -> 'TT.MM.JJJJ' (die Form des Belegs)."""
+    t = (iso or "").split("-")
+    return "%s.%s.%s" % (t[2], t[1], t[0]) if len(t) == 3 else (iso or "")
+
+def _tage(a, b):
+    """Abstand zweier ISO-Daten in Tagen (b - a); 9999 bei unlesbarem Datum."""
+    from datetime import date
+    try:
+        return (date.fromisoformat(b) - date.fromisoformat(a)).days
+    except (TypeError, ValueError):
+        return 9999
 
 def _erwartete_haeuser(f):
     """(fuehrendes Haus, Nebenhaus) aus einer FAKTOR-Zeile — Schwellenlage (<= 2°)
@@ -944,7 +1493,7 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                                     % (stelle, st["zeichen"], tab[1]))
 
     for ch in chapters:
-        form = _beleg_form(ch, typ)
+        form = _beleg_form(ch, typ, chapters)
         if form not in ("normal", "instrument"):
             continue
         bez = _bezeichnung(ch)
@@ -1024,15 +1573,23 @@ def _p3_p7_kapitel_themen(chapters, typ, themen, sprache_analyse="de"):
     if not themen:
         return p3.aussagelos("keine THEMA-Zeile in der chart_data gefunden"), \
                p7.aussagelos("keine THEMA-Zeile in der chart_data gefunden"), {}
-    # Im Geburtshoroskop ist Kapitel 1 das Getriebe-Kapitel, die Themen beginnen
-    # bei 2; im Transit ist Kapitel 1 schon das erste Thema (Auftakt, Lagebild,
-    # Sammelkapitel und Schlusswort tragen Wort-Kicker).
-    _ab = 1 if typ == "transit" else 2
+    # 2026-09-19 (L7): Wo die Themenzaehlung beginnt, sagt `_zaehlung_ab()` — im
+    # Transit immer bei 1, im Geburtshoroskop bei 1 (Getriebe-Kapitel mit
+    # Wort-Kicker) oder bei 2 (Analyse alter Form: `Kapitel 1` ist das Getriebe).
+    _ab = _zaehlung_ab(chapters, typ)
     kap = [ch for ch in chapters if (_kicker_nr(ch["kicker"]) or 0) >= _ab]
     zuordnung = {}
     if len(kap) != len(themen):
-        p3.fehler.append("Zahl: %d nummerierte Themenkapitel (Kapitel 2 ff.), aber %d THEMA-Zeilen"
-                         % (len(kap), len(themen)))
+        # Der haeufigste Grund fuer genau ein fehlendes Kapitel: Das
+        # Getriebe-Kapitel traegt seinen Wort-Kicker `Getriebe` nicht, die Probe
+        # liest die Analyse deshalb in der alten Form und verliert THEMA 1.
+        wink = ""
+        if typ != "transit" and _ab == 2 and len(kap) == len(themen) - 1:
+            wink = (" — trägt das Getriebe-Kapitel den Wort-Kicker `Getriebe`? Ohne ihn "
+                    "zählt die Probe `Kapitel 1` als Getriebe-Kapitel (alte Form) und "
+                    "beginnt die Themen bei `Kapitel 2`")
+        p3.fehler.append("Zahl: %d nummerierte Themenkapitel (Kapitel %d ff.), aber %d "
+                         "THEMA-Zeilen%s" % (len(kap), _ab, len(themen), wink))
     for i, (ch, th) in enumerate(zip(kap, themen)):
         p3.geprueft += 1
         p7.geprueft += 1
@@ -1191,13 +1748,23 @@ def _register_eintraege(ch):
                 out.append(_ws(stueck))
     return out
 
-def _p5_rechenschaft(chapters, chart, themen):
+def _p5_rechenschaft(chapters, chart, themen, typ=None, txt=None, events=None,
+                     chart_data_pfad=None, events_pfad=None, sprache_analyse="de"):
+    """Geburtshoroskop, EA, Ultimativ: Faktor-Register im Kapitel `Rechenschaft`.
+    Transit (2026-09-19, W43): Kontakt-Register im Kapitel `Mitlaufendes` —
+    s. `_p5_mitlaufendes()`; die Zusatzparameter braucht nur dieser Zweig."""
     p = _Probe("P5", "Rechenschafts-Register")
     p.einheit = "Faktoren"
     rech = [ch for ch in chapters if _ist_kicker(ch, "Rechenschaft")]
+    if typ == "transit" or (typ is None and not rech
+                            and any(_ist_kicker(ch, "Mitlaufendes") for ch in chapters)):
+        return _p5_mitlaufendes(p, chapters, themen, txt or "", events,
+                                chart_data_pfad, events_pfad, sprache_analyse)
     if not rech:
-        return p.uebersprungen("kein Kapitel mit Kicker „Rechenschaft“ (der Transit führt sein "
-                               "Register in der chart_data)")
+        # 2026-09-19 (W43): Die alte Begruendung „der Transit führt sein Register in
+        # der chart_data" war falsch — es steht unter `Mitlaufendes` in der Analyse.
+        return p.uebersprungen("kein Kapitel mit Kicker „Rechenschaft“ (das Register des "
+                               "Transits heißt „Mitlaufendes“ und wird mit Typ transit geprüft)")
     if not chart.get("faktoren"):
         return p.aussagelos("keine FAKTOR-Zeile im @@SELEKTOR-Block")
     if not themen:
@@ -1229,6 +1796,176 @@ def _p5_rechenschaft(chapters, chart, themen):
         elif not z:
             p.fehler.append("%s führt kein Thema und hat keine Zeile im Rechenschaftskapitel, "
                             "die mit seinem Namen beginnt" % ANZEIGE.get(name, name))
+    return p.abschluss()
+
+def _kontakte_in(text):
+    """Alle Kontakte `T-X <Aspekt> R-Y` eines Textes (Themenliste, Block
+    TRANSIT-RECHENSCHAFT; Glyphe oder Aspektwort) -> [(T, Aspektart, R)] kanonisch
+    (2026-09-19, W43)."""
+    out = []
+    for m in re.finditer(r"T-\s*(?:%s|Knoten)[^·|\n]*?R-\s*(?:%s|Knoten)(?![\wäöüÄÖÜß])"
+                         % (_FAKTOR_RE, _FAKTOR_RE), text or ""):
+        k = _kontakt_aus_segment(m.group(0))
+        if k and k["art"]:
+            out.append((k["t"], k["art"], k["r"]))
+    return out
+
+def _thema_feld(roh, name):
+    """Wert eines Feldes einer THEMA-Zeile (`aspekte=`, `fuehrt=` …) oder ''."""
+    m = re.search(r"(?:^|\|)\s*%s=(.*?)(?=\s*\|\s*[a-z_]+=|\s*$)" % name, roh or "", re.S)
+    return _ws(m.group(1)) if m else ""
+
+def _kontakt_name(k):
+    return "T-%s %s R-%s" % (ANZEIGE.get(k[0], k[0]), k[1], ANZEIGE.get(k[2], k[2]))
+
+def _registerzeile(k, zeilen):
+    """Die Registerzeile, die den Kontakt k nennt: Transiter UND Ziel; traegt die
+    Zeile ein Aspektwort, muss es passen; beim Selbst-Transit (Saturn □ Saturn,
+    Knotenrueckkehr) der Name zweimal oder „Rückkehr"/„eigen…"."""
+    t, art, r = k
+    for z in zeilen:
+        if not (_name_in_text(t, z) and _name_in_text(r, z)):
+            continue
+        if t == r:
+            n = sum(len(re.findall(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", z))
+                    for s, kk in _FAKTOR_SCHREIBWEISEN if kk == t)
+            if t == "MONDKNOTEN":
+                n += len(re.findall(r"(?<![\wäöüÄÖÜß])Knoten(?![\wäöüÄÖÜß])", z))
+            if n < 2 and not re.search(r"R(?:ü|ue)ckkehr|Wiederkehr|eigen", z):
+                continue
+        arten = {(_art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2)))
+                 for m in ASPEKT_RE.finditer(z)}
+        if arten and art not in arten:
+            continue
+        return z
+    return None
+
+# Block TRANSIT-RECHENSCHAFT (Ultimativ: SAMMELKAPITEL) der chart_data: Anfang und
+# Ende wie build._TR_BLOCK_START / build._TR_BLOCK_ENDE und dessen Leseweise in
+# kontakt_heimat() (seit 2026-09-19, W9) — der Rest der Kopfzeile gehoert zum Block,
+# die Grenze gilt ab der Folgezeile. Hier nachgebildet, damit die Probe auch mit
+# einer aelteren build-Fassung dieselbe Zeilenmenge liest.
+_TR_START_RE = re.compile(r"^[ \t>*-]*(?:TRANSIT-RECHENSCHAFT|SAMMELKAPITEL)\s*:", re.M)
+_TR_ENDE_RE = re.compile(r"^(?:#{1,6} |@@|THEMA \d+ \||[ \t>*-]*(?:GESTRICHEN|RECHENSCHAFT|"
+                         r"REGISTER|SAMMELKAPITEL|TRANSIT-RECHENSCHAFT)\s*:)", re.M)
+
+def _tr_block(txt):
+    """Der Text des Blocks TRANSIT-RECHENSCHAFT (samt Rest der Kopfzeile) oder ''."""
+    out = []
+    for m in _TR_START_RE.finditer(txt or ""):
+        rest = txt[m.end():]
+        nl = rest.find("\n")
+        kopf, folge = (rest, "") if nl < 0 else (rest[:nl], rest[nl:])
+        e = _TR_ENDE_RE.search(folge)
+        out.append(kopf + (folge[:e.start()] if e else folge))
+    return "\n".join(out)
+
+def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_pfad,
+                     sprache_analyse="de"):
+    """P5 im Transit (2026-09-19, W43): das Register `Mitlaufendes` gegen die
+    Kontakte, die dort stehen muessen — jeder primaere Wirkorb-Kontakt im Fenster,
+    der kein Thema FUEHRT (Transit-Modul, Struktur 5: „auch der, der in einem
+    Kapitel mitklingt … dann nennt die Zeile zusätzlich das Kapitel").
+    Soll-Menge mit events.json aus `build.kontakt_heimat()` (dieselbe Menge wie die
+    Heimat-Probe in Schritt 1); ohne events.json aus der chart_data: die Zeilen
+    des Blocks TRANSIT-RECHENSCHAFT (sicher im Register) und die `aspekte=`-Kontakte
+    der Themenliste (ob primaer, sagt erst events.json — dort nur PRUEFEN)."""
+    p.einheit = "Kontakte"
+    reg = [ch for ch in chapters if _ist_kicker(ch, "Mitlaufendes")]
+    if not reg:
+        alt = [ch for ch in chapters if _ist_kicker(ch, "Rechenschaft")]
+        if alt:
+            p.pruefen.append("Das Register heißt „%s“ — im Transit seit 2026-09-14 "
+                             "„Mitlaufendes“ (Transit-Modul, Struktur 5); geprüft wird es "
+                             "trotzdem" % alt[0]["kicker"])
+            reg = alt
+    if not reg:
+        (p.fehler if sprache_analyse == "de" else p.pruefen).append(
+            "kein Kapitel mit Kicker „Mitlaufendes“ — das Register des Transits "
+            "fehlt (Transit-Modul, Struktur 5: jeder Wirkorb-Kontakt an einem "
+            "primären Ziel, der kein Thema führt, bekommt dort eine Zeile)")
+        return p.abschluss()
+    zeilen = _register_eintraege(reg[0])
+    if not zeilen:
+        return p.aussagelos("Kapitel „Mitlaufendes“ ohne Zeilen")
+    if not themen:
+        return p.aussagelos("keine THEMA-Zeile in der chart_data — führende Kontakte nicht "
+                            "bestimmbar")
+    fuehrend, mitklingend = {}, {}
+    for th in themen:
+        kf = _kontakte_in(th.get("fuehrt_roh"))
+        if kf:
+            fuehrend[kf[0]] = th["nr"]
+        for k in _kontakte_in(_thema_feld(th.get("roh"), "aspekte")):
+            if k not in fuehrend:
+                mitklingend.setdefault(k, th["nr"])
+    sicher, quelle = set(), ""
+    if events is not None and chart_data_pfad and events_pfad:
+        try:
+            kh = build.kontakt_heimat(chart_data_pfad, events_pfad)
+            sicher = {(kanon(t), a, kanon(z)) for t, a, z in kh["soll_keys"]}
+            quelle = "build.kontakt_heimat()"
+        except Exception as e:      # Fassung von build ohne soll_keys o. ae.
+            p.hinweise.append("build.kontakt_heimat() nicht nutzbar (%s: %s) — Soll-Menge aus "
+                              "events.json selbst gefiltert (primär, kein Spiegel, Wirkorb im "
+                              "Fenster)" % (type(e).__name__, _kurz(str(e), 80)))
+    if events is not None and not quelle:
+        for e in events.get("events", []):
+            if e.get("spiegel") or not e.get("primaer"):
+                continue
+            wf = e.get("wirkorb_im_fenster")
+            if wf is None:
+                wf = bool(e.get("exakt_im_fenster")) or (
+                    any(q > 0 for q in (e.get("quartale") or []))
+                    and (e.get("min_orb_grad") is not None)
+                    and e["min_orb_grad"] <= (events.get("orb_wirk") or 1.5))
+            if wf:
+                sicher.add((kanon(e["transit"]), e["aspekt"], kanon(e["ziel"])))
+        quelle = "events.json"
+    unsicher = set()
+    if events is None:
+        tr = _tr_block(txt)
+        sicher = set(_kontakte_in(tr))
+        unsicher = set(mitklingend) - sicher
+        p.hinweise.append("ohne events.json: Soll-Menge aus der chart_data — %d Kontakte aus "
+                          "TRANSIT-RECHENSCHAFT (müssen ins Register), %d mitklingende aus "
+                          "`aspekte=` (nur PRÜFEN: ob primär, sagt erst events.json)"
+                          % (len(sicher), len(unsicher)))
+        if not tr:
+            p.hinweise.append("kein Block TRANSIT-RECHENSCHAFT in der chart_data "
+                              "(build.transit_rechenschaft_block())")
+    for k in sorted(sicher | unsicher):
+        if k in fuehrend:
+            continue
+        p.geprueft += 1
+        z = _registerzeile(k, zeilen)
+        if not z:
+            if k in sicher:
+                # englische Fassung: Namen und Aspektwoerter sind uebersetzt, eine
+                # nicht gefundene Zeile kann an der Schreibweise liegen — PRUEFEN.
+                (p.fehler if sprache_analyse == "de" else p.pruefen).append(
+                    "%s — primärer Wirkorb-Kontakt im Fenster, führt kein Thema, "
+                    "und keine Zeile im Kapitel „%s“ nennt ihn (Transiter und Ziel)"
+                    "%s" % (_kontakt_name(k), reg[0]["kicker"],
+                            "; er klingt mit in Kapitel %d" % mitklingend[k]
+                            if k in mitklingend else ""))
+            else:
+                p.pruefen.append("%s — klingt mit in Kapitel %d, keine Registerzeile; ohne "
+                                 "events.json nicht entscheidbar, ob das Ziel primär ist — "
+                                 "wenn ja, fehlt die Zeile" % (_kontakt_name(k), mitklingend[k]))
+        elif k in mitklingend and not re.search(r"Kapitel\s+%d(?!\d)" % mitklingend[k], z):
+            p.pruefen.append("%s — die Registerzeile nennt das Kapitel %d nicht, in dem der "
+                             "Kontakt mitklingt (Transit-Modul, Struktur 5): „%s“"
+                             % (_kontakt_name(k), mitklingend[k], _kurz(z, 80)))
+    for k, nr in sorted(fuehrend.items(), key=lambda x: x[1]):
+        z = _registerzeile(k, zeilen)
+        if z:
+            p.pruefen.append("%s führt Thema %d und hat trotzdem eine Registerzeile: „%s“"
+                             % (_kontakt_name(k), nr, _kurz(z, 80)))
+    if p.geprueft == 0 and not p.fehler and not p.pruefen:
+        return p.aussagelos("keine Kontakte für das Register gefunden (%s)"
+                            % (quelle or "chart_data ohne TRANSIT-RECHENSCHAFT und ohne "
+                               "mitklingende Kontakte"))
     return p.abschluss()
 
 def _p6_leitsatz(chapters, chart_data_pfad, themen):
@@ -1408,9 +2145,19 @@ VERWERF_RE = re.compile(r"(?:darfst|kannst|darf|kann)\s+(?:du\s+)?"
 # Dokument — und die Pflichtformulierung des Auftakts ("ausdruecklich als die
 # staerkste", Typmodul) verbrauchte ihn, weshalb der Konflikt in zwei
 # Laufabschnitten als Befund stand.
+# 2026-09-19 (W29, Chris-Entscheidung Frage 9 = 1): Der Deckel gilt NUR fuer die
+# Treffer dieser Wortliste — andere Superlative ("die meisten", "am weitesten",
+# "hoechsten") zaehlen nicht mit; so rechnet `_p10_wortscan()` seit jeher
+# (`supertreffer` sammelt allein SUPERLATIV_RE). Die IC-Fuegung gilt auch in der
+# KURZFORM: "zum tiefsten Punkt" (ohne "des Horoskops") ist derselbe Fachname, wie
+# ihn ein Text beim zweiten Vorkommen schreibt (G12-17 Nr. 10, G12-18 Nr. 9). Ein
+# Treffer bleibt "tiefst… Punkt" mit einem ANDEREN Bezug ("der tiefste Punkt
+# deines Lebens"): Ausgenommen ist "tiefst… Punkt" ohne Genitiv-/im-Anschluss oder
+# mit Horoskop/Bild/Chart/Radix.
 SUPERLATIV_DECKEL = 3
 SUPERLATIV_RE = re.compile(
-    r"tiefst\w*\b(?!\s+Punkt\s+(?:des|im|deines|in\s+deinem)\s+(?:Horoskop|Bild|Chart))"
+    r"tiefst\w*\b(?!\s+Punkt\b(?!\s+(?:des|der|deines|deiner|im|in)\s)"
+    r"|\s+Punkt\s+(?:des|im|deines|in\s+deinem)\s+(?:Horoskop|Bild|Chart|Radix))"
     r"|dichtest\w*\b(?!\s+verschaltet)|\bam\s+dichtesten\b(?!\s+verschaltet)"
     r"|prägendst\w*|markantest\w*|stärkst\w*|größt\w*|wichtigst\w*"
     r"|zentralst\w*|entscheidendst\w*", re.I)
@@ -1437,7 +2184,88 @@ FRIST_RE = re.compile(
     r"du hast noch|spätestens|bis dahin musst|damals hast du|damals ist"
     r"|wird sich entscheiden|steht bevor", re.I)
 
-def _p10_wortscan(chapters):
+# ---------------------------------------------------------------------------
+# Zeitform-Probe der Widerstands-Bewegung (2026-09-19, W4; Chris-Entscheidung
+# Frage 7 = 1). Die Bewegung „Der Teil von dir, der das nicht aufgeben will"
+# schrieb in acht von zehn Laeufen Vergangenheit im Indikativ („Er hat dich
+# geschützt", „It has spared you", „Das war einmal so") — das Argument aus der
+# GESCHICHTE, das Prinzip 4 bis dahin selbst vorgab. Gesucht wird nur in dieser
+# Bewegung, und nur die finite Vergangenheit: haben + Partizip II im selben
+# Satzteil, sein + Partizip der Veraenderungsverben, Praeteritum der Hilfs- und
+# Modalverben und einiger Verben, mit denen das Argument erzaehlt wird. Nicht
+# gemeldet: Konjunktiv II (haette, waere, wuerde, koennte — Umlaut), „sollte" und
+# „wollte" (meist Konjunktiv), Zustandspassiv („du bist so gebaut"), „zu" +
+# Infinitiv („hat nichts zu verlieren"), ein gebeugtes Adjektiv mitten im Satzteil
+# („hat einen verlässlichen Instinkt" — das Partizip steht am Ende des Satzteils),
+# Saetze, die P8 schon meldet. Nur PRUEFEN.
+# ---------------------------------------------------------------------------
+WIDERSTAND_RE = re.compile(r"^(?:Der Teil von dir, der|The part of you that)", re.I)
+_PARTIZIP_RE = re.compile(
+    r"^(?:(?:auf|ab|an|aus|bei|ein|mit|nach|vor|weg|zu|zurück|zurueck|los|fest|hin|her|"
+    r"dar|um|durch|über|ueber|unter|wieder|heraus|hinaus|voran|zusammen|hoch|frei|fort)?"
+    r"ge[a-zäöüß]{2,}(?:t|en)|[a-zäöüß]{2,}iert|(?:be|er|ver|zer|ent|emp|miss)[a-zäöüß]{2,}(?:t|en))$")
+_KEIN_PARTIZIP = {"gegen", "genau", "gerade", "gern", "gerne", "genug", "gemeinsam", "gesamt",
+                  "gestern", "gelegentlich", "geradezu", "gewiss", "gewöhnlich", "gesund",
+                  "geheim", "gering", "gerecht", "geduldig", "gefährlich", "besonders",
+                  "bereits", "bereit", "bevor", "entweder", "eben", "ebenso", "vergeblich",
+                  "vielleicht", "verschieden", "verschiedenen", "bekannt", "entgegen",
+                  "bestimmt", "berechtigt", "bequem", "bescheiden", "ernst", "erst"}
+_HABEN_RE = re.compile(r"(?<![\wäöüß])(?:hat|hast|habe|haben|habt)(?![\wäöüß])", re.I)
+_SEIN_PARTIZIP = (r"(?:gewesen|geworden|worden|gekommen|gegangen|geblieben|entstanden|"
+                  r"aufgewachsen|gewachsen|passiert|geschehen|gelungen|gescheitert|gefolgt)")
+_SEIN_PERFEKT_RE = re.compile(
+    r"(?<![\wäöüß])(?:ist|bist|sind|seid)(?![\wäöüß])(?:\s+[\wäöüß]+){0,6}?\s+"
+    + _SEIN_PARTIZIP + r"(?![\wäöüß])"
+    r"|(?<![\wäöüß])" + _SEIN_PARTIZIP + r"\s+(?:ist|bist|sind|seid)(?![\wäöüß])", re.I)
+_PRAETERITUM_RE = re.compile(
+    r"(?<![\wäöüß])(?:war|warst|waren|wart|hatte|hattest|hatten|hattet|wurde|wurdest|wurden|"
+    r"wurdet|konnte|konntest|konnten|musste|musstest|mussten|durfte|durftest|durften|gab|"
+    r"gaben|ging|gingen|kam|kamen|blieb|blieben|hielt|hielten|trug|trugen|half|halfen|"
+    r"schützte|schützten|bewahrte|bewahrten|lernte|lerntest|lernten|funktionierte|"
+    r"funktionierten|sorgte|sorgten|brachte|brachten|rettete|retteten|ersparte|ersparten|"
+    r"sicherte|sicherten|verhinderte|verhinderten)(?![\wäöüß])", re.I)
+# „-ed" ohne die Woerter auf „-eed" (need, proceed, exceed); „have to" ist kein Perfekt.
+_EN_PERFEKT_RE = re.compile(
+    r"\b(?:has|have|'ve)(?!\s+to\b)\s+(?:\w+\s+){0,2}?(?:been|(?!\w*eed\b)\w{2,}ed|kept|made|"
+    r"done|given|taken|held|brought|taught|got|gotten|known|shown|seen|won|lost|built|left|"
+    r"felt|found|paid|meant|become|grown|come|gone)\b", re.I)
+_EN_PRAETERITUM_RE = re.compile(
+    r"\b(?:was|were|had|did|used to)\b"
+    r"|\b(?:it|this|that|he|she|they|you|which|who)(?:\s+\w+ly)?\s+(?:(?!\w*eed\b)\w{2,}ed|"
+    r"made|kept|gave|held|brought|taught|got|felt|built|found|paid|meant|went|came|took|knew|"
+    r"saw|became|grew|won|lost)\b"
+    r"|\b(?:this|that|the|your)\s+\w+\s+(?:made|kept|gave|held|brought|taught|spared|"
+    r"protected|carried|saved|served|helped|worked)\b", re.I)
+
+def _zeitform_treffer(satz, sprache_analyse="de"):
+    """Der erste Treffer finiter Vergangenheit in einem Satz der Widerstands-
+    Bewegung, oder None (s. Kommentarblock oben). Deutsch und Englisch getrennt:
+    „was", „war", „hat" sind in der jeweils anderen Sprache gewoehnliche Woerter."""
+    if sprache_analyse == "en":
+        m = _EN_PERFEKT_RE.search(satz) or _EN_PRAETERITUM_RE.search(satz)
+        return m.group(0) if m else None
+    m = _PRAETERITUM_RE.search(satz) or _SEIN_PERFEKT_RE.search(satz)
+    if m:
+        return m.group(0)
+    for teil in re.split(r"[,;:–—()]|\s(?:und|oder|aber|sondern|denn)\s", satz):
+        if not _HABEN_RE.search(teil):
+            continue
+        woerter = re.findall(r"[\wäöüß]+", teil)
+        # Das Partizip steht am Ende des Satzteils („Er hat dich geschützt.") oder
+        # vor dem Hilfsverb am Ende („…, weil er dich geschützt hat"). Ein gebeugtes
+        # Adjektiv mitten im Satzteil („hat einen verlässlichen Instinkt") ist keins.
+        i = len(woerter) - (2 if len(woerter) >= 2 and _HABEN_RE.fullmatch(woerter[-1]) else 1)
+        if i < 0:
+            continue
+        w = woerter[i]
+        if w in _KEIN_PARTIZIP or not _PARTIZIP_RE.match(w):
+            continue
+        if i and woerter[i - 1].lower() == "zu":
+            continue
+        return "%s … %s" % (_HABEN_RE.search(teil).group(0), w)
+    return None
+
+def _p10_wortscan(chapters, sprache_analyse="de"):
     p = _Probe("P10", "Wortscan (Innere Arbeit, Probe 9)")
     p.einheit = "Absätze"
     supertreffer = []
@@ -1458,6 +2286,18 @@ def _p10_wortscan(chapters):
                     continue
                 supertreffer.append((ch, bewegung, m.group(0),
                                      _satz_mit(t, m.start())))
+            # 2026-09-19 (W4): Zeitform der Widerstands-Bewegung.
+            if WIDERSTAND_RE.match(bewegung):
+                for satz in _saetze(t):
+                    if VERGANGENHEIT_RE.search(satz) or NICHTWISSEN_RE.search(satz):
+                        continue            # meldet P8 bzw. ist der Nichtwissens-Satz
+                    w = _zeitform_treffer(satz, sprache_analyse)
+                    if w:
+                        p.pruefen.append(
+                            "Zeitform (Widerstand) · %s · %s: „%s“ — Vergangenheit im "
+                            "Indikativ („%s“); das Argument des Widerstands kommt aus der "
+                            "Form, nicht aus der Geschichte (Innere Arbeit, Prinzip 4 und "
+                            "Prüfung 4)" % (_bezeichnung(ch), bewegung, _kurz(satz, 140), w))
             for name, rx in listen:
                 gesehen = set()
                 for m in rx.finditer(t):
@@ -1534,6 +2374,1215 @@ def _p9_zwei_saetze(chapters, typ):
         return p.aussagelos("kein Kapitel mit Bewegungsfolge gefunden")
     return p.abschluss()
 
+# ===========================================================================
+# Neue Proben P11–P15 (Wartungslauf A, 2026-09-19)
+#   P11 Zahlen-Deckung              U1 (a)     nur PRUEFEN
+#   P12 Rang- und Einzigkeitswörter U1 (b)     nur PRUEFEN
+#   P13 Text-Beleg-Deckung          U1 (c)     nur PRUEFEN
+#   P14 Kopfblock                   W10, W43
+#   P15 Ressourcen-Tiefe            W37        nur PRUEFEN
+# Grundlage: Ursachenanalyse im Pruefbericht Transit Schritt 3+4 vom 18.09.b —
+# 78 Inhaltsbefunde in zehn Laeufen, keiner von der Probe gefunden; die Klassen A
+# (Rang- und Zaehlaussagen), C (Zeit- und Zahlenangaben ohne Quelle) und D
+# (Beleg-Deckung) sind 44 davon. Chris-Entscheidungen: Frage 18 = 1 (U1),
+# Frage 4 = 1 (Beleg-Deckung nach der Klartext-Regel). Die Proben pruefen, sie
+# beurteilen nicht: Ein Treffer heisst „ansehen", nie „falsch".
+# ===========================================================================
+
+_MONATE = {"januar": 1, "jänner": 1, "jaenner": 1, "februar": 2, "märz": 3, "maerz": 3,
+           "april": 4, "mai": 5, "juni": 6, "juli": 7, "august": 8, "september": 9,
+           "oktober": 10, "november": 11, "dezember": 12}
+_MONAT_RE = (r"(?:Januar|Jänner|Jaenner|Februar|März|Maerz|April|Mai|Juni|Juli|August|"
+             r"September|Oktober|November|Dezember)")
+_JAHR_RE = r"(?:19|20|21)\d\d"
+_NICHT_TRENNEN_RE = re.compile(r"(?:%s|Haus|Hauses|Lebensjahr\w*|Jahrhundert\w*|Mal|Quartal\w*)\b"
+                               % _MONAT_RE)
+_ABKUERZUNG_RE = re.compile(r"(?:^|[\s(])(?:[zdhuaosB]|ca|bzw|vgl|etc|usw|Nr|evtl|ggf|bspw|inkl|"
+                            r"sog|Abs|Dr|St)$")
+
+def _saetze_pos(text):
+    """[(anfang, ende, satz)] — wie `_saetze()`, trennt aber nicht hinter einer
+    Ordinalzahl vor Monat/Haus/Lebensjahr („3. Mai", „im 12. Haus") und nicht
+    hinter gaengigen Abkuerzungen („z. B."). Fuer die Proben P11–P15."""
+    out, start = [], 0
+    for m in re.finditer(r"([.!?…])([“”\"»«’)]*)(\s+)(?=[„\"»(A-ZÄÖÜ])", text):
+        vorher = text[start:m.start(1)]
+        if m.group(1) == ".":
+            if re.search(r"(?:^|[\s(])\d{1,2}$", vorher) and _NICHT_TRENNEN_RE.match(text, m.end()):
+                continue
+            if _ABKUERZUNG_RE.search(vorher):
+                continue
+        out.append((start, m.end(2), text[start:m.end(2)]))
+        start = m.end()
+    if text[start:].strip():
+        out.append((start, len(text), text[start:]))
+    return out
+
+def _fliesstext(chapters):
+    """(Kapitel, Bewegung, Absatztext) fuer jeden Absatz- und Listenblock —
+    Signatur und Beleg gehoeren nicht dazu (build.parse_analyse() fuehrt sie
+    getrennt)."""
+    for ch in chapters:
+        bewegung = "—"
+        for b in ch["blocks"]:
+            if b.get("type") == "subhead":
+                bewegung = _ws(b["text"])
+                continue
+            yield ch, bewegung, b["text"]
+
+def _satz_an(saetze, pos):
+    for a, e, s in saetze:
+        if a <= pos < e:
+            return s
+    return saetze[-1][2] if saetze else ""
+
+# --- Zahlwoerter (Alter, „x von y") ----------------------------------------
+_EINER_W = r"(?:ein|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun)"
+_ZEHNER_W = r"(?:zwanzig|dreißig|dreissig|vierzig|fünfzig|fuenfzig|sechzig|siebzig|achtzig|neunzig)"
+_ZAHLWORT = (r"(?:%sund%s|%s|zehn|elf|zwölf|zwoelf|dreizehn|vierzehn|fünfzehn|fuenfzehn|"
+             r"sechzehn|siebzehn|achtzehn|neunzehn|zwei|drei|vier|fünf|fuenf|sechs|sieben|"
+             r"acht|neun|hundert)" % (_EINER_W, _ZEHNER_W, _ZEHNER_W))
+_ZAHL = r"(?:\d{1,3}|%s)" % _ZAHLWORT
+_ORDWORT = (r"(?:(?:%sund)?%sst|hundertst|(?:drei|vier|fünf|fuenf|sech|sieb|acht|neun)zehnt|"
+            r"erst|zweit|dritt|viert|fünft|fuenft|sechst|siebent|siebt|acht|neunt|zehnt|elft|"
+            r"zwölft|zwoelft)(?:e|en|er|es|em)" % (_EINER_W, _ZEHNER_W))
+_EINER_WERT = {"ein": 1, "eins": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "fuenf": 5,
+               "sechs": 6, "sieben": 7, "acht": 8, "neun": 9}
+_ZEHNER_WERT = {"zwanzig": 20, "dreißig": 30, "dreissig": 30, "vierzig": 40, "fünfzig": 50,
+                "fuenfzig": 50, "sechzig": 60, "siebzig": 70, "achtzig": 80, "neunzig": 90}
+_TEEN_WERT = {"zehn": 10, "elf": 11, "zwölf": 12, "zwoelf": 12, "dreizehn": 13, "vierzehn": 14,
+              "fünfzehn": 15, "fuenfzehn": 15, "sechzehn": 16, "siebzehn": 17, "achtzehn": 18,
+              "neunzehn": 19, "hundert": 100}
+
+def _zahl_wert(w):
+    """Grundzahl (Ziffern oder Wort bis 100) -> int oder None."""
+    w = (w or "").casefold().strip()
+    if w.isdigit():
+        return int(w)
+    for tafel in (_EINER_WERT, _TEEN_WERT, _ZEHNER_WERT):
+        if w in tafel:
+            return tafel[w]
+    m = re.fullmatch(r"(ein|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun)und(\w+)", w)
+    if m and m.group(2) in _ZEHNER_WERT:
+        return _EINER_WERT[m.group(1)] + _ZEHNER_WERT[m.group(2)]
+    return None
+
+def _ordinal_wert(w):
+    """Ordnungszahl („dreizehnte", „13.") -> int oder None."""
+    w = (w or "").casefold().strip().rstrip(".")
+    if w.isdigit():
+        return int(w)
+    stamm = re.sub(r"(?:e|en|er|es|em)$", "", w)
+    besonders = {"erst": 1, "dritt": 3, "siebt": 7, "siebent": 7, "acht": 8}
+    if stamm in besonders:
+        return besonders[stamm]
+    if stamm.endswith("t") and _zahl_wert(stamm[:-1]):
+        return _zahl_wert(stamm[:-1])
+    if stamm.endswith("st") and _zahl_wert(stamm[:-2]):
+        return _zahl_wert(stamm[:-2])
+    return None
+
+# --- P11 Zahlen-Deckung ------------------------------------------------------
+_JAHRESZEIT_MONATE = {"frühjahr": (3, 4, 5), "frühling": (3, 4, 5), "sommer": (6, 7, 8),
+                      "herbst": (9, 10, 11), "winter": (12, 1, 2), "anfang": (1, 2, 3, 4),
+                      "beginn": (1, 2, 3, 4), "mitte": (5, 6, 7, 8), "ende": (9, 10, 11, 12),
+                      "jahresanfang": (1, 2, 3), "jahresbeginn": (1, 2, 3),
+                      "jahresmitte": (5, 6, 7, 8), "jahresende": (10, 11, 12),
+                      "jahreswechsel": (12, 1)}
+_JAHRESZEIT_RE = (r"(?:(?:Früh|Spät|Hoch)(?:sommer|herbst|winter)|Frühjahr|Frühling|Sommer|"
+                  r"Herbst|Winter|Jahresanfang|Jahresbeginn|Jahresmitte|Jahresende|"
+                  r"Jahreswechsel|Anfang|Beginn|Mitte|Ende)")
+_P11_MUSTER = (
+    ("iso", re.compile(r"(?<!\d)(?P<j>\d{4})-(?P<m>\d{2})-(?P<t>\d{2})(?!\d)")),
+    ("numerisch", re.compile(r"(?<![\d.])(?P<t>\d{1,2})\.(?P<m>\d{1,2})\.(?P<j>\d{4}|\d{2})(?![\d])")),
+    ("monatsspanne", re.compile(
+        r"(?<![\wäöüß])(?:(?P<t1>\d{1,2})\.\s*)?(?P<m1>%s)\s*(?:bis|und|oder|–|-|/)\s*"
+        r"(?:(?P<t2>\d{1,2})\.\s*)?(?P<m2>%s)\s+(?P<j>%s)(?![\d])" % (_MONAT_RE, _MONAT_RE, _JAHR_RE))),
+    ("monat", re.compile(r"(?<![\wäöüß])(?:(?P<t>\d{1,2})\.\s*)?(?P<m>%s)\s+(?P<j>%s)(?![\d])"
+                         % (_MONAT_RE, _JAHR_RE))),
+    ("jahreszeit", re.compile(r"(?<![\wäöüß])(?P<jz>%s)\s+(?:des\s+Jahres\s+|von\s+|des\s+)?"
+                              r"(?P<j>%s)(?:\s*/\s*(?P<j2>\d{2}|%s))?(?![\d])"
+                              % (_JAHRESZEIT_RE, _JAHR_RE, _JAHR_RE))),
+    ("tag_ohne_jahr", re.compile(r"(?<![\wäöüß.])(?P<t>\d{1,2})\.\s*(?P<m>%s)(?![\wäöüß])"
+                                 % _MONAT_RE)),
+    ("jahr", re.compile(r"(?<![\d.,/-])(?P<j>%s)(?:\s*/\s*(?P<j2>%s|\d{2}))?(?![\d]|er\b|ern\b|ers\b)"
+                        % (_JAHR_RE, _JAHR_RE))),
+    ("monat_ohne_jahr", re.compile(r"(?<![\wäöüß])(?P<m>%s)(?![\wäöüß])" % _MONAT_RE)),
+)
+_P11_ALTER = (
+    re.compile(r"(?<![\wäöüß])mit\s+(?:gut\s+|knapp\s+|etwa\s+|rund\s+)?(?P<n>%s)(?:\s+Jahren)?"
+               r"(?=\s*(?:[.,;:!?–—)]|$)|\s+Jahren\b|\s+(?:und|oder|bis|wieder|erneut|zum|zur|"
+               r"noch|schon|erstmals|zuletzt|dann)\b)" % _ZAHL, re.I),
+    re.compile(r"(?<![\wäöüß])als\s+du\s+(?:gut\s+|knapp\s+|etwa\s+|rund\s+)?(?P<n>%s)"
+               r"(?:\s+Jahre\s+alt)?\s+(?:warst|bist|wirst)\b" % _ZAHL, re.I),
+    re.compile(r"(?<![\wäöüß])im\s+Alter\s+von\s+(?:gut\s+|knapp\s+|etwa\s+|rund\s+)?(?P<n>%s)"
+               r"(?![\wäöüß])" % _ZAHL, re.I),
+    re.compile(r"(?<![\wäöüß])(?P<n>%s)\s+Jahre\s+alt\b" % _ZAHL, re.I),
+    re.compile(r"(?<![\wäöüß])(?P<n>%s)-?jährig" % _ZAHL, re.I),
+    re.compile(r"(?<![\wäöüß])(?:du\s+bist|bist\s+du)\s+(?:jetzt\s+|heute\s+|gerade\s+|nun\s+)?"
+               r"(?P<n>%s)(?=\s*(?:[.,;:!?–—)]|$)|\s+Jahre\b|\s+und\b)" % _ZAHL, re.I),
+)
+_P11_LEBENSJAHR = re.compile(
+    r"(?<![\wäöüß])(?:(?P<z>\d{1,3})\.\s*Lebensjahr|(?:das|dem|dein|deinem|deines|ins|im|bis|und|"
+    r"um\s+das)\s+(?P<w>%s)(?=\s*(?:,|und\b|oder\b|bis\b|–|Lebensjahr|wenn\b|\.|$)))" % _ORDWORT,
+    re.I)
+_P11_DEKADE = re.compile(r"(?<![\wäöüß])(?:(?P<wo>Anfang|Mitte|Ende)|um\s+die)\s+(?P<z>%s)(?![\wäöüß])"
+                         % _ZEHNER_W, re.I)
+
+def _zahlen_index(txt, events=None):
+    """Fundstellen der chart_data (und der events.json): Tage, Monate, Jahre,
+    exakte Lebensalter, Zyklusfenster je Faktor (Strukturbild §7)."""
+    idx = {"tage": set(), "monate": set(), "jahre": set(), "alter": set(),
+           "zyklen": {}, "zyklen_alle": []}
+
+    def tag(j, m, t=None):
+        j, m = int(j), int(m)
+        if j < 100:
+            j += 2000
+        idx["jahre"].add(j)
+        idx["monate"].add((j, m))
+        if t is not None:
+            idx["tage"].add((j, m, int(t)))
+    texte = [txt or ""]
+    if events is not None:
+        texte.append("\n".join(_json_strings(events, [])))
+    for t in texte:
+        for m in _DATUM_ISO_RE.finditer(t):
+            tag(m.group(1), m.group(2), m.group(3))
+        for m in re.finditer(r"(?<![\d-])(\d{4})-(\d{2})(?![\d-])", t):
+            tag(m.group(1), m.group(2))
+        for m in _DATUM_DE_RE.finditer(t):
+            tag(m.group(3), m.group(2), m.group(1))
+        for m in re.finditer(r"(?:(\d{1,2})\.\s*)?(%s)\s+(%s)(?![\d])" % (_MONAT_RE, _JAHR_RE), t):
+            tag(m.group(3), _MONATE[m.group(2).casefold()], m.group(1))
+        for m in re.finditer(r"(?<![\d.,])(%s)(?![\d])" % _JAHR_RE, t):
+            idx["jahre"].add(int(m.group(1)))
+    txt = txt or ""
+    for m in re.finditer(r"\bAlter(?:\s+der\s+Person|\s+heute)?\s*(?:\([^)\n]*\))?\s*[:*]*\s*"
+                         r"(\d{1,3})(?![\d.,])", txt):
+        idx["alter"].add(int(m.group(1)))
+    for m in re.finditer(r"(?<![\d.,])(\d{1,3})\s+Jahre\b", txt):
+        idx["alter"].add(int(m.group(1)))
+
+    def _alter_json(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in ("alter", "min_orb_alter") and isinstance(v, int):
+                    idx["alter"].add(v)
+                else:
+                    _alter_json(v)
+        elif isinstance(o, list):
+            for v in o:
+                _alter_json(v)
+    if events is not None:
+        _alter_json(events)
+    m7 = re.search(r"\n#{2,4}\s*7\s*·[^\n]*", txt)
+    if m7:
+        teil = txt[m7.end():]
+        schnitt = re.search(r"\n#{2,4} |\n@@", teil)
+        teil = teil[:schnitt.start()] if schnitt else teil
+    else:
+        teil = "\n".join(z for z in txt.splitlines()
+                         if re.search(r"R(?:ü|ue)ckkehr|Quadrat|Opposition", z) and "~" in z)
+    for z in teil.splitlines():
+        werte = [float(w.replace(",", ".")) for w in re.findall(r"~\s*(\d{1,3}(?:[.,]\d+)?)", z)]
+        if not werte:
+            continue
+        idx["zyklen_alle"] += werte
+        mf = re.match(r"^\s*[-*]\s*(%s)\s*:" % _FAKTOR_RE, z)
+        if mf:
+            idx["zyklen"].setdefault(kanon(mf.group(1)), []).extend(werte)
+    return idx
+
+# Faktorname im Fliesstext: gebeugt („des Mondes", „Saturns", „zum Aszendenten",
+# „des Mondknotens") und in Bindestrich-Zusammensetzungen; Komposita ohne
+# Bindestrich („Mondlicht", „Sonnenseite") zaehlen nicht.
+_FLIESS_FAKTOR_RE = re.compile(r"(?<![\wäöüÄÖÜß])(%s|Knoten)(?:es|s|en|n)?(?![\wäöüÄÖÜß])"
+                               % _FAKTOR_RE)
+_FLIESS_WINKEL_RE = re.compile(r"(?<![\wäöüß])(?:(tiefst|höchst|hoechst)\w*\s+Punkt\w*"
+                               r"|(Fu(?:ß|ss)punkt|Scheitelpunkt)\w*)", re.I)
+
+def _faktoren_im_satz(satz):
+    """Kanonische Faktoren eines Fliesstext-Satzes, auch gebeugt und in
+    Zusammensetzungen („Fische-Sonne", „Saturn-Rückkehr", „deines Mondes",
+    „zum Aszendenten"); `Knoten` allein zaehlt als Mondknoten, „tiefste(r) Punkt"
+    und „Fußpunkt" als IC, „höchste(r) Punkt" und „Scheitelpunkt" als MC.
+    -> [(anfang, ende, Schluessel)] in Textreihenfolge."""
+    out = []
+    for m in _FLIESS_FAKTOR_RE.finditer(satz or ""):
+        out.append((m.start(), m.end(), kanon(m.group(1))))
+    for m in _FLIESS_WINKEL_RE.finditer(satz or ""):
+        tief = (m.group(1) or "").lower() == "tiefst" or bool(m.group(2)) and \
+            m.group(2).lower().startswith("fu")
+        out.append((m.start(), m.end(), "IC" if tief else "MC"))
+    out.sort()
+    return out
+
+def _alter_gedeckt(n, faktoren, idx, spanne=1.5):
+    """Lebensalter n gedeckt? Exakt (Alter-Angaben, fruehere Durchgaenge) oder
+    innerhalb ±1,5 Jahren eines Zyklusfensters (§7). Nennt der Satz (oder der
+    Satz davor) Faktoren, zaehlen NUR deren Fenster — ein Knoten-Alter wird nicht
+    von einem zufaellig nahen Lilith-Fenster gedeckt; ohne Faktor zaehlt jedes."""
+    if n in idx["alter"]:
+        return True
+    werte = [w for f in faktoren for w in idx["zyklen"].get(f, [])] if faktoren \
+        else idx["zyklen_alle"]
+    return any(abs(n - w) <= spanne + 1e-9 for w in werte)
+
+def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
+    p = _Probe("P11", "Zahlen-Deckung (Daten und Lebensalter)")
+    p.einheit = "Angaben"
+    if sprache_analyse != "de":
+        return p.uebersprungen("englisch — Monats-, Jahreszeiten- und Zahlwörter der Probe sind "
+                               "deutsch verdrahtet (W57, Frage 20: erst beim nächsten englischen "
+                               "Auftrag)")
+    idx = _zahlen_index(txt, events)
+    quelle = "chart_data und events.json" if events is not None else "chart_data"
+    for ch, bewegung, text in _fliesstext(chapters):
+        saetze = _saetze_pos(text)
+        belegt = []                      # schon verbrauchte Spannen (laengere Muster zuerst)
+
+        def frei(a, e):
+            return all(e <= x or a >= y for x, y in belegt)
+
+        def melde(stelle_txt, was, pos):
+            p.pruefen.append("%s · %s: „%s“ — %s „%s“ ohne Fundstelle in %s"
+                             % (_bezeichnung(ch), bewegung, _kurz(_satz_an(saetze, pos), 140),
+                                was, stelle_txt, quelle))
+        for art, rx in _P11_MUSTER:
+            for m in rx.finditer(text):
+                if not frei(m.start(), m.end()):
+                    continue
+                belegt.append((m.start(), m.end()))
+                g = m.groupdict()
+                p.geprueft += 1
+                if art in ("iso", "numerisch"):
+                    j = int(g["j"]) + (2000 if len(g["j"]) == 2 else 0)
+                    ok = (j, int(g["m"]), int(g["t"])) in idx["tage"]
+                    was = "Datum"
+                elif art == "monatsspanne":
+                    j = int(g["j"])
+                    ok = True
+                    for mm, tt in ((g["m1"], g["t1"]), (g["m2"], g["t2"])):
+                        mo = _MONATE[mm.casefold()]
+                        ok = ok and (((j, mo, int(tt)) in idx["tage"]) if tt else
+                                     ((j, mo) in idx["monate"] or (j - 1, mo) in idx["monate"]))
+                    was = "Zeitraum"
+                elif art == "monat":
+                    mo = _MONATE[g["m"].casefold()]
+                    ok = ((int(g["j"]), mo, int(g["t"])) in idx["tage"]) if g["t"] else \
+                        (int(g["j"]), mo) in idx["monate"]
+                    was = "Datum" if g["t"] else "Monat"
+                elif art == "jahreszeit":
+                    j = int(g["j"])
+                    jz = g["jz"].casefold()
+                    for vor in ("früh", "spät", "hoch"):
+                        if jz.startswith(vor) and jz[len(vor):] in ("sommer", "herbst", "winter"):
+                            jz = jz[len(vor):]
+                    monate = _JAHRESZEIT_MONATE.get(jz, tuple(range(1, 13)))
+                    kandidaten = {(j, mo) for mo in monate}
+                    if jz in ("winter", "jahreswechsel"):
+                        kandidaten |= {(j + 1, mo) for mo in (1, 2)} | {(j - 1, 12)}
+                    ok = bool(kandidaten & idx["monate"])
+                    was = "Zeitangabe"
+                elif art == "tag_ohne_jahr":
+                    mo, tt = _MONATE[g["m"].casefold()], int(g["t"])
+                    ok = any((x[1], x[2]) == (mo, tt) for x in idx["tage"])
+                    was = "Datum"
+                elif art == "jahr":
+                    jahre = [int(g["j"])]
+                    if g.get("j2"):
+                        jahre.append(int(g["j2"]) if len(g["j2"]) == 4 else int(g["j"][:2] + g["j2"]))
+                    ok = all(j in idx["jahre"] for j in jahre)
+                    was = "Jahreszahl"
+                else:                    # monat_ohne_jahr
+                    mo = _MONATE[g["m"].casefold()]
+                    ok = any(x[1] == mo for x in idx["monate"])
+                    was = "Monat"
+                if not ok:
+                    melde(m.group(0), was, m.start())
+        for i_s, (s_a, s_e, satz) in enumerate(saetze):
+            fak = [f for _, _, f in _faktoren_im_satz(satz)] or \
+                ([f for _, _, f in _faktoren_im_satz(saetze[i_s - 1][2])] if i_s else [])
+            funde = []
+            for rx in _P11_ALTER:
+                for m in rx.finditer(satz):
+                    n = _zahl_wert(m.group("n"))
+                    if n is not None and (n >= 5 or m.group("n").isdigit()):
+                        funde.append((m.group(0), n, n))
+            if "Lebensjahr" in satz:
+                for m in _P11_LEBENSJAHR.finditer(satz):
+                    n = int(m.group("z")) if m.group("z") else _ordinal_wert(m.group("w"))
+                    if n and n >= 2:
+                        funde.append((m.group(0), n - 1, n - 1))      # n. Lebensjahr = Alter n-1
+            for m in _P11_DEKADE.finditer(satz):
+                z = _ZEHNER_WERT[m.group("z").casefold()]
+                wo = (m.group("wo") or "").casefold()
+                lo, hi = {"anfang": (z, z + 3), "mitte": (z + 4, z + 6),
+                          "ende": (z + 7, z + 9)}.get(wo, (z - 2, z + 2))
+                funde.append((m.group(0), lo, hi))
+            gesehen = set()
+            for roh, lo, hi in funde:
+                if (roh, lo) in gesehen:
+                    continue
+                gesehen.add((roh, lo))
+                p.geprueft += 1
+                if any(_alter_gedeckt(n, fak, idx) for n in range(lo, hi + 1)):
+                    continue
+                bekannt = sorted(idx["alter"])
+                zyk = sorted({round(w, 1) for f in fak for w in idx["zyklen"].get(f, [])})
+                p.pruefen.append("%s · %s: „%s“ — Altersangabe „%s“ (Alter %s) ohne Fundstelle in %s"
+                                 "%s%s" % (_bezeichnung(ch), bewegung, _kurz(satz, 140), roh,
+                                           lo if lo == hi else "%d–%d" % (lo, hi), quelle,
+                                           "; dort Alter: " + ", ".join(map(str, bekannt[:8]))
+                                           if bekannt else "",
+                                           "; Zyklusfenster der Faktoren im Satz: " +
+                                           ", ".join("~%g" % w for w in zyk) if zyk else ""))
+    if p.geprueft == 0:
+        p.hinweise.append("keine Datums- oder Altersangabe im Fließtext")
+    return p.abschluss()
+
+# --- P12 Rang- und Einzigkeitswörter -----------------------------------------
+# Rangzeilen des Strukturbilds (§10, seit 2026-09-19, U2). Die Muster stehen
+# WOERTLICH wie `radix.RANG_ZEILE_RE` / `radix.RANG_EINTRAG_RE` (Schnittstelle:
+# log/SCHNITTSTELLE_rangzeilen.md des Wartungslaufs A) — radix wird hier nicht
+# importiert, weil Schritt 2 es nicht laedt (lade.SCHRITTE["2"]). Der Selbsttest
+# vergleicht beide Fassungen, wo radix importierbar ist; aendert sich das Format,
+# schlaegt er an.
+RANG_ZEILE_RE = re.compile(
+    r'^- RANG (?P<schluessel>[a-z0-9-]+) \[(?P<menge>[^\]]*)\]: '
+    r'(?P<eintraege>.*)$', re.M)
+RANG_EINTRAG_RE = {
+    'aspekt': re.compile(
+        r'^(?P<rang>\d+)\. (?P<a>\S+) (?P<aspekt>\S+) (?P<b>\S+) '
+        r'(?P<orb>\d+°\d{2}′) \((?P<staerke>[a-z]+)(?:, (?P<zusatz>[^)]*))?\)$'),
+    'verbindung': re.compile(
+        r'^(?P<rang>\d+)\. (?P<faktor>\S+) (?P<wert>\d+(?:\.\d+)?)'
+        r'(?: \(Aspekttabelle (?P<aspekttabelle>\d+)\))?$'),
+    'verteilung': re.compile(
+        r'^(?P<rang>\d+)\. (?P<name>\S+) (?P<wert>\d+(?:\.\d+)?) von '
+        r'(?P<summe>\d+(?:\.\d+)?) = (?P<prozent>\d+) % '
+        r'\((?P<traeger>[^)]*)\)$'),
+}
+
+def _rangzeilen_lesen(text):
+    """Wie radix.rangzeilen_lesen(): {schluessel: {'menge', 'eintraege'}}; ein
+    unlesbarer Eintrag kommt als {'roh': text}, nie still verworfen."""
+    out = {}
+    for m in RANG_ZEILE_RE.finditer(text or ""):
+        schl = m.group("schluessel")
+        fam = ("aspekt" if schl.startswith("engste-") else
+               "verbindung" if schl.startswith("verbindungen-") else "verteilung")
+        eintraege = []
+        roh = m.group("eintraege").strip()
+        for teil in ([] if roh in ("", "—") else roh.split(" · ")):
+            e = RANG_EINTRAG_RE[fam].match(teil)
+            if not e:
+                eintraege.append({"roh": teil})
+                continue
+            d = e.groupdict()
+            d["rang"] = int(d["rang"])
+            if fam == "aspekt":
+                g, mi = d["orb"].split("°")
+                d["orb_min"] = int(g) * 60 + int(mi.rstrip("′"))
+            elif fam == "verbindung":
+                d["wert"] = (float(d["wert"]) if schl.endswith("gewichtet") or "." in d["wert"]
+                             else int(d["wert"]))
+                d["aspekttabelle"] = int(d["aspekttabelle"]) if d["aspekttabelle"] else None
+            else:
+                d["wert"], d["summe"] = float(d["wert"]), float(d["summe"])
+                d["prozent"] = int(d["prozent"])
+                tr = []
+                for t in ([] if d["traeger"] in ("", "—") else d["traeger"].split(", ")):
+                    n, _, gw = t.partition(" ×")
+                    tr.append((n, float(gw) if gw else 1.0))
+                d["traeger"] = tr
+            eintraege.append(d)
+        out[schl] = {"menge": m.group("menge"), "eintraege": eintraege}
+    return out
+
+_ELEMENT_RE = re.compile(r"(?<![\wäöüß])(?:(Feuer|Erde|Luft|Wasser)(?:zeichen\w*|element\w*)?"
+                         r"|(Erd)(?:zeichen\w*|element\w*))(?![\wäöüß])")
+_MODUS_RE = re.compile(r"(?<![\wäöüß])([Kk]ardinal|[Ff]ix|[Vv]eränderlich|[Bb]eweglich)"
+                       r"(?:e|en|er|es|em)?(?![\wäöüß])")
+_REFERENT_RE = re.compile(
+    r"(?<![\wäöüß])(?:Planet\w*|Punkt\w*|Aspekt\w*|Verbindung\w*|Kontakt\w*|Faktor\w*|"
+    r"Zeichen|Element\w*|Häuser\w*|Haus|Hauses|Figur\w*|Stellium\w*|Achse\w*|Winkel\w*|"
+    r"Konstellation\w*|Transit\w*|Quadrant\w*|Hemisphäre\w*)(?![\wäöüß])")
+# 2026-09-19 (U1 b): gesucht wird die AUSSAGE, nicht das Wort — „die meisten
+# Menschen", „wo du am wenigsten sicher bist" und „eine Verbindung, die hält"
+# (unbestimmter Artikel) sind keine Rang- oder Zaehlaussagen ueber das Chart.
+_ANZAHLWORT = r"(?:beiden|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn|\d{1,2})"
+_CHART_NOMEN = (r"(?:Verbindung|Aspekt|Kontakt|Planet|Faktor|Punkt|Träger|Verkehr|Winkel"
+                r"|Konjunktion|Opposition|Quadrat|Trigon|Sextil)")
+_CHART_VERB = r"(?:verbunden|verschaltet|vernetzt|angebunden|besetzt|aspektiert|beteiligt)"
+_RANG_MUSTER = (
+    ("engste", re.compile(
+        r"(?<![\wäöüß])(?:(?P<eine>(?:eine[rnms]?|einer)\s+der\s+(?:(?P<n>%s)\s+)?engst\w*)"
+        r"|(?:die|den|der)\s+(?P<n2>%s)\s+engst\w*"
+        r"|(?P<ord>zweit|dritt|viert)?engst(?:e|en|er|es|em)?"
+        r"|am\s+engsten)(?![\wäöüß])" % (_ANZAHLWORT, _ANZAHLWORT), re.I)),
+    ("meiste", re.compile(
+        r"(?<![\wäöüß])(?P<mit>mit\s+(?=die\s))?(?:die|den|der)\s+meisten(?=\s+(?:[\wäöüß]+\s+){0,2}?%s)"
+        r"|(?<![\wäöüß])am\s+meisten(?=\s+(?:[\wäöüß]+\s+)?%s)"
+        r"|(?<![\wäöüß])meist(?:verbunden|verschaltet|vernetzt)\w*"
+        r"|(?<![\wäöüß])am\s+(?:dichtesten|stärksten|häufigsten)\s+(?:verschaltet|verbunden|vernetzt)\w*"
+        % (_CHART_NOMEN, _CHART_VERB), re.I)),
+    ("wenigste", re.compile(
+        r"(?<![\wäöüß])(?:die|den|der)\s+wenigsten(?=\s+(?:[\wäöüß]+\s+){0,2}?%s)"
+        r"|(?<![\wäöüß])am\s+wenigsten(?=\s+(?:[\wäöüß]+\s+)?%s)"
+        r"|(?<![\wäöüß])am\s+(?:schwächsten|dünnsten|losesten)\s+"
+        r"(?:verschaltet|verbunden|vernetzt|angebunden)\w*" % (_CHART_NOMEN, _CHART_VERB), re.I)),
+    ("einzig", re.compile(r"(?<![\wäöüß])einzig(?:e|en|er|es|em)?(?![\wäöüß])"
+                          r"|(?<![\wäöüß])nur\s+(?:ein|eine|einen|einem|einer)\s+"
+                          r"(?=(?:einzig\w*\s+)?(?:Planet|Punkt|Aspekt|Verbindung|Kontakt|Faktor|"
+                          r"Zeichen|Element|Haus|Figur))", re.I)),
+    ("kein_anderer", re.compile(r"(?<![\wäöüß])(?:kein(?:e|en|em|er)?\s+(?:andere[rnms]?|weitere[rnms]?)"
+                                r"|sonst\s+kein\w*)(?![\wäöüß])", re.I)),
+    ("x_von_y", re.compile(r"(?<![\wäöüß])(?P<x>%s|eine[rns]?|ein)\s+von\s+(?P<y>%s)(?![\wäöüß])"
+                           % (_ZAHL, _ZAHL), re.I)),
+    ("haelfte", re.compile(r"(?<![\wäöüß])(?:(?P<vgl>mehr|weniger)\s+als\s+)?die\s+Hälfte"
+                           r"(?![\wäöüß])(?!\s+(?:eines\s+)?Grad)"
+                           r"|(?<![\wäöüß])(?P<drittel>ein|zwei)\s+Drittel(?![\wäöüß])(?!\s+(?:eines\s+)?Grad)"
+                           r"|(?<![\wäöüß])(?P<proz>\d{1,3})\s*(?:%|Prozent)(?![\wäöüß])", re.I)),
+    # Grundzahl ab zwei, oder „nur/genau … eine" — der unbestimmte Artikel allein
+    # („eine Verbindung, die von selbst hält") ist keine Zaehlaussage.
+    ("n_verbindungen", re.compile(
+        r"(?<![\wäöüß])(?:(?P<n>zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn|elf|zwölf|"
+        r"zwoelf|\d{1,2})|(?:nur|genau|bloß|lediglich|gerade\s+einmal|nicht\s+mehr\s+als)\s+"
+        r"(?P<ein>eine[rnm]?|ein))\s+(?:[\wäöüß]+\s+)?Verbindung(?:en)?(?![\wäöüß])", re.I)),
+    ("alle_n", re.compile(r"(?<![\wäöüß])alle\s+(?:%s)(?![\wäöüß])" % _ZAHLWORT, re.I)),
+)
+
+def _hat_referent(satz):
+    """Spricht der Satz ueber das Chart? Nur dann ist ein Rangwort eine Aussage,
+    die eine Zahl braucht („die engste Verbindung deines Bildes" — nicht „deine
+    engsten Freunde")."""
+    return bool(_REFERENT_RE.search(satz) or _faktoren_im_satz(satz) or _ELEMENT_RE.search(satz)
+                or _MODUS_RE.search(satz) or ASPEKT_RE.search(satz)
+                or re.search(r"(?<![\wäöüß])%s(?![\wäöüß])" % ZEICHEN_RE, satz))
+
+def _rang_txt(e):
+    if "a" in e:
+        return "%d. %s %s %s %s" % (e["rang"], e["a"], e["aspekt"], e["b"], e["orb"])
+    if "faktor" in e:
+        return "%d. %s %g" % (e["rang"], e["faktor"], e["wert"])
+    return "%d. %s %g von %g = %d %% (%s)" % (e["rang"], e["name"], e["wert"], e["summe"],
+                                             e["prozent"], ", ".join(n for n, _ in e["traeger"]))
+
+def _achs_norm(f):
+    """Achsen-Spiegel auf ein Ende (DC -> AC, IC -> MC) — fuer Rangvergleiche."""
+    return {"DC": "AC", "IC": "MC"}.get(f, f)
+
+def _rang_paar(e):
+    return frozenset((_achs_norm(kanon(e["a"])), _achs_norm(kanon(e["b"]))))
+
+def _rang_einmal(ls):
+    """Achsen-Spiegel mit gleichem Orb (Mondknoten Trigon AC / Mondknoten Sextil DC)
+    sind EIN Kontakt und belegen einen Rang, nicht zwei."""
+    out, gesehen = [], set()
+    for e in ls:
+        art = e["aspekt"]
+        if kanon(e["a"]) in ("DC", "IC") or kanon(e["b"]) in ("DC", "IC"):
+            art = SPIEGEL_ASPEKT.get(art, art)
+        k = (_rang_paar(e), art, e["orb_min"])
+        if k not in gesehen:
+            gesehen.add(k)
+            out.append(e)
+    return out
+
+def _paare_von(fak):
+    return {frozenset((_achs_norm(a), _achs_norm(b))) for i, a in enumerate(fak)
+            for b in fak[i + 1:] if _achs_norm(a) != _achs_norm(b)}
+
+def _rang_befund(art, m, satz, rz, typ, vorher=""):
+    """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
+    vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …")."""
+    if not rz:
+        return ("Rang-, Zähl- oder Einzigkeitsaussage — das Datenblatt hat keine Rangzeilen "
+                "(Strukturbild §10, seit 2026-09-19); die Zahl von Hand gegen die Tabellen halten")
+    if typ == "transit" and re.search(r"laufend|Transit|Kontakt|Stichtag", satz):
+        return ("Rangwort über Transit-Kontakte — die Rangzeilen gelten der Radix; gegen "
+                "Jetzt-Liste und events.json halten")
+    g = m.groupdict()
+    fak = [f for _, _, f in _faktoren_im_satz(satz)]
+    fak_v = [f for _, _, f in _faktoren_im_satz(vorher)] if vorher else []
+    me = _ELEMENT_RE.search(satz)
+    mm = _MODUS_RE.search(satz)
+    if not (me or mm) and art in ("einzig", "kein_anderer", "x_von_y", "haelfte") and vorher \
+            and re.search(r"Planet|Faktor|Element|Zeichen", satz):
+        me, mm = _ELEMENT_RE.search(vorher), _MODUS_RE.search(vorher)
+    element = ({"Erd": "Erde"}.get(me.group(1) or me.group(2), me.group(1) or me.group(2))
+               if me else None)
+    modus = ({"beweglich": "veränderlich"}.get(mm.group(1).lower(), mm.group(1).lower())
+             if mm else None)
+
+    def liste(schl):
+        return [e for e in rz.get(schl, {}).get("eintraege", []) if "rang" in e]
+
+    def zaehlungen():
+        """Welche Zaehlung meint der Satz? Keine Angabe: beide muessen es tragen."""
+        if re.search(r"gewichtet", satz):
+            return ["gewichtet"]
+        if re.search(r"gezählt|von\s+zehn|Planet", satz):
+            return ["gezaehlt"]
+        if re.search(r"Faktor|Punkt|Stelle", satz):
+            return ["gewichtet"]
+        return ["gezaehlt", "gewichtet"]
+
+    def verteilung(name, fam, zl=None):
+        return [(a, next((e for e in liste("%s-%s" % (fam, a)) if e["name"] == name), None))
+                for a in (zl or zaehlungen())]
+
+    if art == "engste":
+        n = g.get("n") or g.get("n2")
+        grenze = (2 if n.lower() == "beiden" else _zahl_wert(n)) if n else None
+        eine = bool(g.get("eine")) or bool(g.get("n2"))
+        k = {"zweit": 2, "dritt": 3, "viert": 4}.get((g.get("ord") or "").lower(), 1)
+        schl = ("engste-aspekte-planeten" if re.search(r"zwischen\s+(?:zwei\s+)?Planeten|unter\s+den\s+"
+                                                       r"Planeten|Planeten\s+untereinander", satz)
+                else "engste-aspekte")
+        # Einschraenkungen aus den drei Woertern hinter dem Rangwort
+        # („die engste harmonische Verbindung", „die zweitengste volle Reibung",
+        # „die engste Winkel-Spannung", „die engste Konjunktion").
+        nach = re.findall(r"[\wäöüÄÖÜß-]+", satz[m.end():])[:3]
+        arten = {_art(w) for w in nach if w in _ASP_WORT}
+        filt = []
+        if arten:
+            filt.append(("nur " + "/".join(sorted(arten)), lambda e: e["aspekt"] in arten))
+        if any(w.lower().startswith("harmonisch") for w in nach):
+            filt.append(("harmonisch", lambda e: e["aspekt"] in ("Trigon", "Sextil")))
+        if any(re.match(r"(?:Winkel-)?(?:Spannung|Reibung)|spannungsvoll", w, re.I) for w in nach):
+            filt.append(("Spannung", lambda e: e["aspekt"] in ("Quadrat", "Opposition",
+                                                               "Halbquadrat", "Anderthalbquadrat")))
+        if any(w.lower().startswith("winkel") for w in nach):
+            filt.append(("an einem Winkel", lambda e: kanon(e["a"]) in ACHSEN or kanon(e["b"]) in ACHSEN))
+        if any(w.lower() in ("voll", "volle", "vollen", "voller", "volles", "vollem") for w in nach):
+            filt.append(("voll", lambda e: e["staerke"] == "voll"))
+        ls = _rang_einmal([e for e in liste(schl) if all(f(e) for _, f in filt)])
+        beschr = schl + (" (%s)" % ", ".join(n_ for n_, _ in filt) if filt else "")
+
+        def rang(e):
+            return 1 + sum(1 for x in ls if x["orb_min"] < e["orb_min"])
+        paare = _paare_von(fak) or _paare_von(fak + fak_v)
+        treffer = [e for e in ls if _rang_paar(e) in paare]
+        oben = [e for e in ls if rang(e) == k]
+        if not treffer:
+            if not paare:
+                return ("Rangaussage ohne benanntes Paar in diesem oder dem vorigen Satz — "
+                        "Rangzeile %s, Rang %d: %s"
+                        % (beschr, k, "; ".join(_rang_txt(e) for e in oben) or "—"))
+            return ("kein Paar dieses Satzes unter den Rängen der Rangzeile %s — Rang %d: %s"
+                    % (beschr, k, "; ".join(_rang_txt(e) for e in oben) or "—"))
+        e = min(treffer, key=rang)
+        r = rang(e)
+        if eine:
+            if grenze is None or r <= grenze:
+                return None
+            return ("%s steht auf Rang %d der Rangzeile %s — „eine der %d engsten“ trägt "
+                    "nur Rang %d oder besser" % (_rang_txt(e).split(". ", 1)[1], r, beschr,
+                                                   grenze, grenze))
+        gleich = [x for x in ls if rang(x) == r and x is not e]
+        if r == k and not gleich:
+            return None
+        if r == k:
+            return ("Gleichstand auf Rang %d der Rangzeile %s (%s) — richtig ist „eine der "
+                    "engsten“" % (k, beschr, "; ".join(_rang_txt(x) for x in [e] + gleich)))
+        return ("%s steht auf Rang %d der Rangzeile %s — Rang %d: %s"
+                % (_rang_txt(e).split(". ", 1)[1], r, beschr, k,
+                   "; ".join(_rang_txt(x) for x in oben) or "—"))
+    if art in ("einzig", "kein_anderer"):
+        null = art == "einzig" and re.search(r"kein\w*\s+$", satz[max(0, m.start() - 12):m.start()])
+        if element or modus:
+            name, fam = (element, "elemente") if element else (modus, "modi")
+            werte = [(a, e) for a, e in verteilung(name, fam) if e]
+            if not werte:
+                return "keine Rangzeile für %s gefunden" % name
+            falsch = []
+            for a, e in werte:
+                traeger = [kanon(n_) for n_, _ in e["traeger"]]
+                ok = (not traeger) if null else (
+                    len(traeger) == 1 and (not fak or traeger[0] in fak or len(set(fak)) > 1))
+                if not ok:
+                    falsch.append("%s-%s: %s — %d Träger" % (fam, a, _rang_txt(e).split(". ", 1)[1],
+                                                            len(traeger)))
+            if not falsch:
+                return None
+            gilt = [a for a, e in werte if "%s-%s:" % (fam, a) not in " ".join(falsch)]
+            return ("Rangzeile %s%s" % ("; ".join(falsch), " — gilt nur %s; die Zählung nennen"
+                                        % gilt[0] if gilt else ""))
+        if re.match(r"\s*(?:[\wäöüß]+\s+)?(?:Verbindung|Aspekt)", satz[m.end():], re.I):
+            # „Jupiter mit einer einzigen Verbindung" — der Faktor steht davor oder im
+            # selben Satzglied dahinter; „eine einzige Verbindung: die zwischen Neptun
+            # und Pluto" zaehlt keine Verbindungen eines Faktors.
+            vor = [f for a_, e_, f in _faktoren_im_satz(satz) if a_ < m.start()]
+            glied = re.split(r"[:;—–]", satz[m.end():], 1)[0]
+            nach = [f for _, _, f in _faktoren_im_satz(glied)]
+            f = vor[-1] if vor else (nach[0] if nach else None)
+            gz = next((e for e in liste("verbindungen-gezaehlt") if f and kanon(e["faktor"]) == f), None)
+            if gz is not None:
+                if 1 in (gz["wert"], gz["aspekttabelle"] or gz["wert"]):
+                    return None
+                return ("Rangzeile verbindungen-gezaehlt: %s %s%s — nicht eine"
+                        % (ANZEIGE.get(f, f), gz["wert"], " (Aspekttabelle %d)" % gz["aspekttabelle"]
+                           if gz["aspekttabelle"] else ""))
+        return "Einzigkeitsaussage ohne passende Rangzeile — gegen Tabellen und Strukturbild halten"
+    if art == "x_von_y":
+        x = _zahl_wert(m.group("x")) or (1 if m.group("x").lower().startswith("ein") else None)
+        y = _zahl_wert(m.group("y"))
+        if (element or modus) and x is not None and y is not None:
+            name, fam = (element, "elemente") if element else (modus, "modi")
+            werte = [(a, e) for a, e in verteilung(name, fam, ["gezaehlt", "gewichtet"]) if e]
+            if any(abs(e["wert"] - x) < 1e-9 and abs(e["summe"] - y) < 1e-9 for _, e in werte):
+                return None
+            return "Rangzeilen: %s" % "; ".join("%s-%s %s" % (fam, a, _rang_txt(e).split(". ", 1)[1])
+                                                for a, e in werte)
+        return ("Zählaussage ohne passende Rangzeile (Hemisphären und Quadranten stehen in "
+                "Strukturbild §8) — von Hand prüfen")
+    if art in ("meiste", "wenigste"):
+        eine = bool(g.get("mit"))           # „mit die meisten": einer der ersten drei Ränge
+                                            # („der Faktor mit den meisten" bleibt Rang 1 allein)
+        if element or modus:
+            name, fam = (element, "elemente") if element else (modus, "modi")
+            schl = ["%s-%s" % (fam, a) for a in zaehlungen()]
+            gemeint = [name]
+        else:
+            gemeint = fak or fak_v
+            if not gemeint:
+                return "Rangaussage ohne Faktor in diesem oder dem vorigen Satz — von Hand prüfen"
+            schl = (["verbindungen-gewichtet"] if re.search(r"verschalt|dicht|Verkehr|vernetzt|gewichtet",
+                                                            satz)
+                    else ["verbindungen-gezaehlt"])
+        falsch = []
+        for s_ in schl:
+            ls = liste(s_)
+            if not ls:
+                falsch.append("Rangzeile %s fehlt im Datenblatt" % s_)
+                continue
+            ziel = ls[0]["rang"] if art == "meiste" else ls[-1]["rang"]
+            oben = [e for e in ls if e["rang"] == ziel]
+            namen = {kanon(e.get("faktor") or e.get("name") or "") for e in oben} | \
+                {e.get("name") for e in oben}
+            if eine and art == "meiste":
+                vorn = {kanon(e.get("faktor") or e.get("name") or "") for e in ls if e["rang"] <= 3} | \
+                    {e.get("name") for e in ls if e["rang"] <= 3}
+                if any(x in vorn for x in gemeint):
+                    continue
+            elif len(oben) == 1 and any(x in namen for x in gemeint):
+                continue
+            falsch.append("Rangzeile %s — %s Rang: %s" % (s_, "erster" if art == "meiste" else "letzter",
+                                                          "; ".join(_rang_txt(e) for e in oben)))
+        return "; ".join(falsch) if falsch else None
+    if art == "haelfte":
+        if not (element or modus):
+            return "Anteilsaussage ohne Element oder Modus — von Hand prüfen"
+        name, fam = (element, "elemente") if element else (modus, "modi")
+        vgl = (m.group("vgl") or "").lower()
+
+        def ok(pz):
+            if m.group("proz"):
+                return abs(pz - int(m.group("proz"))) <= 1
+            if m.group("drittel"):
+                return abs(pz - (33 if m.group("drittel").lower() == "ein" else 67)) <= 3
+            return pz > 50 if vgl == "mehr" else pz < 50 if vgl == "weniger" else pz == 50
+        werte = [(a, e) for a, e in verteilung(name, fam) if e]
+        passt = [a for a, e in werte if ok(e["prozent"])]
+        if werte and len(passt) == len(werte):
+            return None
+        return ("Rangzeilen %s: %s%s" % (name, "; ".join("%s %d %%" % (a, e["prozent"]) for a, e in werte),
+                                         " — gilt nur %s; die Zählung nennen" % passt[0] if passt else ""))
+    if art == "n_verbindungen":
+        n = _zahl_wert(g["n"]) if g.get("n") else 1
+        vor = [f for a_, e_, f in _faktoren_im_satz(satz) if a_ < m.start()]
+        f = vor[-1] if vor else (fak[0] if fak else (fak_v[-1] if fak_v else None))
+        if f is None or n is None:
+            return "Zählaussage ohne Faktor — von Hand prüfen"
+        gz = next((e for e in liste("verbindungen-gezaehlt") if kanon(e["faktor"]) == f), None)
+        gw = next((e for e in liste("verbindungen-gewichtet") if kanon(e["faktor"]) == f), None)
+        if gz and n in (gz["wert"], gz["aspekttabelle"] or gz["wert"]):
+            return None
+        if gw and abs(gw["wert"] - n) < 1e-9:
+            return ("gewichtete Dichte als Anzahl gelesen — %s gezählt %s%s, gewichtet %g"
+                    % (ANZEIGE.get(f, f), gz["wert"] if gz else "?",
+                       " (Aspekttabelle %d)" % gz["aspekttabelle"] if gz and gz["aspekttabelle"] else "",
+                       gw["wert"]))
+        return ("Rangzeile verbindungen-gezaehlt: %s %s%s — eine Teilmenge (nur die harmonischen, "
+                "nur die engen …) von Hand zählen"
+                % (ANZEIGE.get(f, f), gz["wert"] if gz else "—",
+                   " (Aspekttabelle %d)" % gz["aspekttabelle"] if gz and gz["aspekttabelle"] else ""))
+    return "Zählaussage — von Hand gegen Tabellen und Strukturbild halten"
+
+def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
+    p = _Probe("P12", "Rang- und Einzigkeitswörter")
+    p.einheit = "Aussagen"
+    if sprache_analyse != "de":
+        return p.uebersprungen("englisch — die Rang- und Zahlwörter der Probe sind deutsch "
+                               "verdrahtet (W57, Frage 20: erst beim nächsten englischen Auftrag)")
+    rz = _rangzeilen_lesen(txt)
+    if not rz:
+        p.hinweise.append("Datenblatt ohne Rangzeilen (Strukturbild §10, seit 2026-09-19) — jede "
+                          "Aussage bleibt PRÜFEN; die Zahl von Hand gegen die Tabellen halten")
+    for schl, v in sorted(rz.items()):
+        for e in v["eintraege"]:
+            if "roh" in e:
+                p.pruefen.append("Rangzeile %s: Eintrag nicht lesbar „%s“ — von Hand verändert?"
+                                 % (schl, _kurz(e["roh"], 80)))
+    for ch, bewegung, text in _fliesstext(chapters):
+        saetze = _saetze_pos(text)
+        for i, (_a, _e, satz) in enumerate(saetze):
+            if not _hat_referent(satz):
+                continue
+            treffer = sorted(((m.start(), m.end(), art, m) for art, rx in _RANG_MUSTER
+                              for m in rx.finditer(satz)), key=lambda t: (t[0], -t[1]))
+            belegt = []
+            for a, e, art, m in treffer:
+                if any(not (e <= x or a >= y) for x, y in belegt):
+                    continue
+                belegt.append((a, e))
+                p.geprueft += 1
+                befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "")
+                if befund:
+                    p.pruefen.append("%s · %s: „%s“ — „%s“: %s"
+                                     % (_bezeichnung(ch), bewegung, _kurz(satz, 140),
+                                        _ws(m.group(0)), befund))
+    if p.geprueft == 0:
+        p.hinweise.append("keine Rang-, Zähl- oder Einzigkeitsaussage im Fließtext")
+    return p.abschluss()
+
+# --- P13 Text-Beleg-Deckung --------------------------------------------------
+# Klartext-Modul, Pruefung „Beleg-Deckung" (Chris-Entscheidung Frage 4 = 1): Eine im
+# Fliesstext benannte Konstellation steht im Beleg dieses oder eines anderen
+# Kapitels oder in der Aspekttabelle — im Transit auch als Kontakt der Rechnung
+# (events.json, Report, Themenliste). Erkannt wird eine Konstellation an einem
+# Aspektwort („dein Mond … im Trigon zu Saturn") oder an einem Bild der
+# Uebersetzungstabelle des Klartext-Moduls („verschmilzt mit", „fließt mühelos
+# mit", „reibt sich an", „steht … gegenüber", „eine Verbindung zu") mit je einem
+# Faktor davor und danach im selben Satz; bei Nachstellung („Merkur steht deinem
+# Glückspunkt gegenüber") die zwei Faktoren davor, bei „Er/Sie/Es …" am
+# Satzanfang ohne Faktor davor der letzte Faktor des Vorsatzes. Ein Aspektwort
+# muss mit seiner Aspektart gedeckt sein; „verschmilzt" mit einer Konjunktion,
+# „fließt mühelos" mit einem Trigon oder Sextil; jedes andere Bild mit irgendeiner
+# Aspektart (es sagt die Art nicht sicher). Verneintes („kein Quadrat") zaehlt
+# nicht, ebenso wenig ein Faktor „zu sich selbst" ausserhalb des Transits
+# (Zyklusaussage, Strukturbild §7). Stehen mehrere
+# Faktoren davor oder danach, genuegt EINE gedeckte Paarung — lieber still als
+# falsch; gemeldet wird, was sich mit keiner Paarung decken laesst.
+_VERNEINUNG_RE = re.compile(r"(?<![\wäöüß])(?:kein\w*|nicht|ohne|weder|no|not|without|neither)"
+                            r"(?![\wäöüß])", re.I)
+_REPORT_KONTAKT_RE = re.compile(
+    r"(?m)^\s*(?:\[[^\]\n]*\]\s*)?(Jupiter|Saturn|Uranus|Neptun|Pluto|Knoten|Chiron|Mars)\s+"
+    r"(Konjunktion|Opposition|Quadrat|Trigon|Sextil|Quincunx|Halbsextil)\s+(\S+)")
+
+_BILD_RE = re.compile(
+    r"(?<![\wäöüß])(?:verschm(?:ilzt|elzen|olzen)\w*|am\s+selben\s+Punkt\s+wie"
+    r"|einen\s+(?:einzigen\s+)?Strom|(?-i:gegenüber)|Zerreißprobe|zwischen\s+zwei\s+Polen?"
+    r"|reib(?:t|en)\s+sich\s+an|dräng(?:t|en)\s+gegen|in\s+Spannung\s+(?:zu|mit)"
+    r"|fließ(?:t|en)\s+mühelos|(?:eine|die)\s+Gelegenheit\s+(?:zu|mit)"
+    r"|passt\s+nicht\s+(?:mit|zu)|leiser\s+Reiz|Suchbewegung"
+    r"|(?:Verbindung|Kontakt)\s+(?:zu|mit|zwischen)|verbunden\s+mit)(?![\wäöüß])", re.I)
+# nur Personalpronomen: „Dasselbe Quadrat trifft deinen Merkur" meint den Aspekt,
+# nicht den letzten Faktor des Vorsatzes
+_PRONOMEN_ANFANG_RE = re.compile(r"^\W*(?:Er|Sie|Es|It|He|She)(?![\wäöüß])")
+_FENSTER = 90                # Zeichen: so weit darf ein Faktor vom Aspektwort/Bild stehen
+
+def _bild_arten(wort):
+    """Aspektarten, fuer die ein Bild steht — None: jede (s. Kommentar oben)."""
+    w = wort.casefold()
+    if w.startswith("verschm"):
+        return ("Konjunktion",)
+    if w.startswith("fließ") or w.startswith("fliess"):
+        return ("Trigon", "Sextil")
+    return None
+
+def _konstellationen(satz, vorher=""):
+    """Konstellationen eines Fliesstext-Satzes (s. Kommentar oben) ->
+    [(Faktoren davor, Art, Faktoren danach, Treffer)]; Art ist bei einem Aspektwort
+    die Aspektart (str), bei einem Bild das Tupel der Arten, fuer die es steht —
+    leer, wenn es fuer keine bestimmte steht."""
+    fak = _faktoren_im_satz(satz)
+    marker = [(m, _art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2)))
+              for m in ASPEKT_RE.finditer(satz)]
+    for m in _BILD_RE.finditer(satz):
+        if not any(m.start() < x.end() and x.start() < m.end() for x, _ in marker):
+            marker.append((m, _bild_arten(m.group(0)) or ()))
+    out = []
+    for m, art in marker:
+        if _VERNEINUNG_RE.search(satz[max(0, m.start() - 25):m.start()]):
+            continue
+        davor = [f for a, e, f in fak if e <= m.start() and m.start() - e <= _FENSTER]
+        danach = [f for a, e, f in fak if a >= m.end() and a - m.end() <= _FENSTER]
+        if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
+                                               or m.group(0).casefold().endswith("zwischen")):
+            davor, danach = [danach[0]], danach[1:]
+        if not davor and vorher and _PRONOMEN_ANFANG_RE.match(satz):
+            fv = _faktoren_im_satz(vorher)
+            davor = [fv[-1][2]] if fv else []
+        if not danach and len(set(davor)) >= 2:
+            danach = [davor[-1]]
+            davor = [f for f in davor[:-1] if f != danach[0]]
+        if davor and danach:
+            out.append((davor, art, danach, m))
+    return out
+
+def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
+    p = _Probe("P13", "Text-Beleg-Deckung")
+    p.einheit = "Konstellationen"
+    paare = {(frozenset((e["a"], e["b"])), e["art"]) for e in tabelle}
+    kontakte = set()
+    for ch in chapters:
+        form = _beleg_form(ch, typ, chapters)
+        if not ch.get("beleg") or form == "struktur":
+            continue
+        for seg in _segmente(ch["beleg"]):
+            k = _kontakt_aus_segment(seg)
+            if k and k["art"]:
+                kontakte.add((k["t"], k["art"], k["r"]))
+                continue
+            if form == "instrument":        # alle Angaben gehoeren zur Funktion des Segments
+                st = _staende_segment(seg)
+                fa = st["faktor"] if st else None
+                eintr = _aspekt_eintraege(seg.split(" — ", 1)[-1], faktor_a=fa) if fa else []
+            else:
+                eintr = _aspekt_eintraege(seg)
+            for e in eintr:
+                if e["a"] and e["b"] and e["art"]:
+                    paare.add((frozenset((e["a"], e["b"])), e["art"]))
+    # Kontakte der Rechnung (Themenliste, TRANSIT-RECHENSCHAFT, Report, events.json) —
+    # im Transit und in jedem Typ mit Jetzt-Teil (EA, Ultimativ Teil III).
+    kontakte.update(_kontakte_in(txt))
+    for m in _REPORT_KONTAKT_RE.finditer(txt or ""):
+        kontakte.add((kanon(m.group(1)), m.group(2), kanon(m.group(3))))
+    if events is not None:
+        kontakte.update(_ev_index(events).keys())
+
+    paare_art = {fs for fs, _ar in paare}
+    kontakte_art = {frozenset((t, r)) for t, _ar, r in kontakte}
+
+    def gedeckt(a, art, b):
+        """art: Aspektart (str), Tupel erlaubter Arten (Bild) oder () — dann
+        gedeckt, wenn IRGENDEIN Aspekt das Paar verbindet."""
+        arten = (art,) if isinstance(art, str) else tuple(art or ())
+
+        def spiegel(ars):
+            return tuple(SPIEGEL_ASPEKT.get(x, x) for x in ars)
+        kand = [(a, arten, b)]
+        if "SUEDKNOTEN" in (a, b):          # Suedknoten: Spiegel des Nordknoten-Aspekts
+            kand.append(("MONDKNOTEN" if a == "SUEDKNOTEN" else a, spiegel(arten),
+                         "MONDKNOTEN" if b == "SUEDKNOTEN" else b))
+        for x, y in ((a, b), (b, a)):       # Achsen-Spiegel: zum DC = Gegenaspekt zum AC
+            if y in ACHSEN:
+                kand.append((x, spiegel(arten), SPIEGEL_FAKTOR[y]))
+        for x, ars, y in kand:
+            if not ars:
+                if frozenset((x, y)) in paare_art or frozenset((x, y)) in kontakte_art:
+                    return True
+            elif any((frozenset((x, y)), ar) in paare or (x, ar, y) in kontakte
+                     or (y, ar, x) in kontakte for ar in ars):
+                return True
+        return False
+    for ch, bewegung, text in _fliesstext(chapters):
+        saetze = _saetze_pos(text)
+        for i, (_a, _e, satz) in enumerate(saetze):
+            gesehen = set()
+            for davor, art, danach, m in _konstellationen(satz, saetze[i - 1][2] if i else ""):
+                if (art, m.start()) in gesehen:
+                    continue
+                gesehen.add((art, m.start()))
+                paarungen = [(x, y) for x in reversed(davor) for y in danach
+                             if x != y or typ == "transit"]
+                if not paarungen:           # „Pluto … zu sich selbst": Zyklus, kein Radix-Aspekt
+                    continue
+                p.geprueft += 1
+                if any(gedeckt(x, art, y) for x, y in paarungen):
+                    continue
+                x, y = paarungen[0]
+                if isinstance(art, str):
+                    was = "%s %s %s steht in keinem Beleg und nicht in den Aspekttabellen" % (
+                        ANZEIGE.get(x, x), art, ANZEIGE.get(y, y))
+                elif art:
+                    anders = sorted({e["art"] for e in tabelle
+                                     if frozenset((e["a"], e["b"])) == frozenset((x, y))})
+                    was = ("das Bild „%s“ steht für %s; %s–%s steht so in keinem Beleg und "
+                           "nicht in den Aspekttabellen%s"
+                           % (_ws(m.group(0)), " oder ".join(art), ANZEIGE.get(x, x),
+                              ANZEIGE.get(y, y), " (Tabelle: %s)" % ", ".join(anders)
+                              if anders else ""))
+                else:
+                    was = ("das Bild „%s“ verknüpft %s und %s — das Paar steht mit keiner "
+                           "Aspektart in einem Beleg oder in den Aspekttabellen"
+                           % (_ws(m.group(0)), ANZEIGE.get(x, x), ANZEIGE.get(y, y)))
+                p.pruefen.append("%s · %s: „%s“ — %s%s" % (
+                    _bezeichnung(ch), bewegung, _kurz(satz, 140), was,
+                    " (auch nicht als Kontakt in Rechnung, Themenliste oder events.json)"
+                    if typ == "transit" else ""))
+    if p.geprueft == 0:
+        p.hinweise.append("keine Konstellation mit Aspektwort im Fließtext")
+    return p.abschluss()
+
+# --- P14 Kopfblock -----------------------------------------------------------
+# Die Kopfblock-Tabelle der Probe (2026-09-19, W10, W43) — Quelle: Design-Render-
+# Modul, „Welches Kapitel welchen Kopfblock trägt", Klartext-Modul „Kopfblöcke",
+# Transit-Modul Struktur 2–7 und Ablauf 2 (Kicker). Kapitelart -> (Signatur, Beleg).
+# Vorher prueften P3/P7 nur „Kapitel N"; das Lagebild kam in vier von vier
+# Transit-Laeufen ohne Kopfblock aus Schritt 2 und stoppte Schritt 3.
+KOPFBLOCK = {
+    "Auftakt": (False, False),           # Auftakt, Zur Lesart (Transit), Prelude
+    "Rechenschaft": (False, False),
+    "Mitlaufendes": (False, False),      # Register des Transits (W43)
+    "Schlusswort": (False, False),
+    "Teiler": (False, False),            # Teil I–III, Vertiefung, Zweiter Teil
+    "Getriebe-Kapitel": (True, True),    # Kicker `Getriebe` (alt: Kapitel 1), Struktur-Beleg
+    "Instrument": (True, True),          # ein Segment je Funktion
+    "Themenkapitel": (True, True),       # auch Ressourcen-Kapitel
+    "Zugang": (True, True),              # ein Segment je zugeordnetem Haus
+    "Bündel-Kapitel": (True, False),     # Hauptthemen, Konfliktfelder, Lebensaufgaben
+    "Lagebild": (True, True),            # Der Stand heute (Transit; Ultimativ Teil III)
+}
+_TEILER_KICKER = {"teil i", "teil ii", "teil iii", "vertiefung", "erster teil", "zweiter teil",
+                  "dritter teil", "part i", "part ii", "part iii", "first part", "second part",
+                  "third part"}
+
+def _kapitelart(ch, typ, chapters=None):
+    """Kapitelart nach der Kopfblock-Tabelle, oder None (unbekannter Kicker).
+
+    `chapters` (2026-09-19, L7) entscheidet, ob `Kapitel 1` das Getriebe-Kapitel
+    ist (Analyse alter Form) oder das erste Themenkapitel (neue Form, in der das
+    Getriebe-Kapitel den Wort-Kicker `Getriebe` traegt).
+    """
+    if _ist_kicker(ch, "Auftakt"):
+        return "Auftakt"
+    for art in ("Rechenschaft", "Mitlaufendes", "Schlusswort", "Instrument"):
+        if _ist_kicker(ch, art):
+            return art
+    if (ch.get("kicker") or "").strip().casefold() in _TEILER_KICKER:
+        return "Teiler"
+    if _ist_kicker(ch, "Hauptthemen", "Konfliktfelder", "Lebensaufgaben"):
+        return "Bündel-Kapitel"
+    if _ist_zugang(ch):
+        return "Zugang"
+    if _ist_kicker(ch, "Der Stand heute"):
+        return "Lagebild"
+    # 2026-09-19 (L7): erst der Wort-Kicker, dann die Nummer der alten Form.
+    if _getriebe_kapitel(ch, typ, chapters):
+        return "Getriebe-Kapitel"
+    if _kicker_nr(ch.get("kicker")) is not None:
+        return "Themenkapitel"
+    return None
+
+def _p14_kopfblock(chapters, typ):
+    p = _Probe("P14", "Kopfblock (Signatur und Beleg je Kapitelart)")
+    p.einheit = "Kapitel"
+    if not any((ch.get("signatur") or "").strip() or (ch.get("beleg") or "").strip()
+               for ch in chapters):
+        # Fachmodus (Kern): Aspektnamen, Grade und Termini im Fliesstext, KEIN
+        # Signatur/Beleg-Kopf — dort ist das Fehlen die Regel, kein Fehler.
+        return p.uebersprungen("kein Kapitel trägt Signatur oder Beleg — Fachmodus oder "
+                               "Analyse ohne Klartext-Kopfblöcke; die Kopfblock-Tabelle gilt "
+                               "nur im Klartext-Modus")
+    for ch in chapters:
+        bez = _bezeichnung(ch)
+        art = _kapitelart(ch, typ, chapters)
+        if art is None:
+            p.hinweise.append("%s: Kicker „%s“ steht nicht in der Kopfblock-Tabelle der Probe — "
+                              "nicht geprüft" % (bez, ch.get("kicker") or "—"))
+            continue
+        p.geprueft += 1
+        sig_soll, bel_soll = KOPFBLOCK[art]
+        sig = bool((ch.get("signatur") or "").strip())
+        bel = bool((ch.get("beleg") or "").strip())
+        fehlt = [n for n, soll, ist in (("Signatur", sig_soll, sig), ("Beleg", bel_soll, bel))
+                 if soll and not ist]
+        if fehlt:
+            p.fehler.append("%s: %s %s — die Kopfblock-Tabelle verlangt für %s Signatur%s; "
+                            "direkt unter die Kapitel-H2 setzen („**Signatur:** …“%s)"
+                            % (bez, " und ".join(fehlt), "fehlen" if len(fehlt) > 1 else "fehlt",
+                               art, " und Beleg" if bel_soll else " ohne Beleg",
+                               ", „**Beleg:** …“" if bel_soll else ""))
+        zuviel = [n for n, soll, ist in (("Signatur", sig_soll, sig), ("Beleg", bel_soll, bel))
+                  if ist and not soll]
+        if zuviel and art == "Bündel-Kapitel":
+            # Design-Render-Modul, Kopfblock-Tabelle: „trägt eines der drei
+            # Bündel-Kapitel einen Beleg, ebenfalls [ein Fehler in Schritt 2]".
+            p.fehler.append("%s: trägt einen Beleg — die Bündel-Kapitel tragen nur eine "
+                            "Signatur (sie machen kein neues Material auf); den Beleg streichen"
+                            % bez)
+        elif zuviel:
+            p.pruefen.append("%s: trägt %s — laut Kopfblock-Tabelle hat %s %s"
+                             % (bez, " und ".join(zuviel), art,
+                                "nur eine Signatur" if sig_soll else "keinen Kopfblock"))
+        if art == "Lagebild" and bel:
+            segs = _segmente(ch["beleg"])
+            st = _staende_segment(segs[0]) if segs else None
+            kontakte = [k for k in (_kontakt_aus_segment(s) for s in segs[1:]) if k]
+            if not kontakte:
+                p.pruefen.append("%s: Lagebild-Beleg ohne Kontakt-Segment (T-… R-…) — Format: "
+                                 "Segment 1 die Stände des zuerst genannten Ziels, je weiteres "
+                                 "Segment ein Kontakt mit Orb am Stichtag" % bez)
+            elif st and st["faktor"] != kontakte[0]["r"]:
+                p.pruefen.append("%s: Segment 1 trägt die Stände von %s, der zuerst genannte "
+                                 "Kontakt trifft %s — Beleg-Format des Lagebilds: Segment 1 = "
+                                 "Stände des zuerst genannten Ziels"
+                                 % (bez, ANZEIGE.get(st["faktor"], st["faktor"]),
+                                    ANZEIGE.get(kontakte[0]["r"], kontakte[0]["r"])))
+    if p.geprueft == 0:
+        return p.aussagelos("kein Kapitel mit einem Kicker aus der Kopfblock-Tabelle")
+    return p.abschluss()
+
+# --- P15 Ressourcen-Tiefe ----------------------------------------------------
+# Typmodul Geburtshoroskop, „Der Deutungsort", und Innere Arbeit, Pruefung 12:
+# volle und einseitige Aspekte brauchen am Deutungsort mindestens DREI Saetze,
+# Nebenaspekte mindestens EINEN; im Transit jeder Kontakt der Zaehlmenge drei
+# (Transit-Modul, Teil 3). Maschinell geht nur eine Naeherung (G12-18, Rubrik 4):
+# Anker ist ein Satz, der beide Faktoren nennt — oder zwei aufeinanderfolgende
+# Saetze, die zusammen beide nennen („… dieser Mond. Er verschmilzt mit Saturn").
+# Ab dem Anker zaehlt jeder Folgesatz derselben Bewegung (im Pflichtteil „Was
+# trägt" desselben Absatzes: je Ressource ein Absatz), solange er einen der
+# beiden oder keinen Faktor nennt — ein Satz allein ueber andere Faktoren beendet
+# die Zaehlung. Massgeblich ist der laengste solche Lauf am Deutungsort. Nur
+# PRUEFEN (W37).
+_RESSOURCE_ZEILE_RE = re.compile(
+    r"^\s*(?:[-*]\s+)?(?:T-\s*)?(?P<a>%s|Knoten)\s*(?P<g>[☌△⚹])\s*(?:R-\s*)?(?P<b>%s|Knoten)"
+    r"(?:\s*\((?:AC|MC|DC|IC)\))?(?P<rest>.*?)Deutungsort\s*:\s*(?P<ort>.*)$"
+    % (_FAKTOR_RE, _FAKTOR_RE))
+
+def _abschnitte(ch):
+    """Die Absaetze eines Kapitels, gruppiert nach ###-Bewegung: [[Absatz, …], …]."""
+    out, akt = [], []
+    for b in ch["blocks"]:
+        if b.get("type") == "subhead":
+            if akt:
+                out.append(akt)
+            akt = []
+            continue
+        akt.append(b["text"])
+    if akt:
+        out.append(akt)
+    return out
+
+def _was_traegt_bloecke(chapters):
+    """Absaetze des Pflichtteils: „Was trägt:" im Hauptthemen-Kapitel bis zum
+    Kapitelende, im Transit `### Was dich durch diese Zeit trägt` bis zum
+    naechsten Zwischentitel. None, wenn es ihn nicht gibt."""
+    for ch in chapters:
+        bl = ch["blocks"]
+        for i, b in enumerate(bl):
+            t = _ws(b["text"]).lstrip("„\"»")
+            if b.get("type") == "subhead" and re.match(r"Was dich durch diese Zeit trägt|What carries", t):
+                out = []
+                for b2 in bl[i + 1:]:
+                    if b2.get("type") == "subhead":
+                        break
+                    out.append(b2["text"])
+                return out
+            if b.get("type") != "subhead" and re.match(r"Was trägt\s*:|What carries", t):
+                return [b2["text"] for b2 in bl[i:] if b2.get("type") != "subhead"]
+    return None
+
+def _saetze_am_ort(a, b, gruppen):
+    """(laengster Lauf, Ankersatz) — s. Kommentar oben. gruppen: Liste von
+    Absatzlisten; gezaehlt wird nie ueber eine Gruppe hinaus."""
+    best, anker = 0, None
+    paar = {a, b}
+    for gruppe in gruppen:
+        saetze = [s for text in gruppe for _x, _y, s in _saetze_pos(text)]
+        fs = [{x for _, _, x in _faktoren_im_satz(s)} for s in saetze]
+        for i, s in enumerate(saetze):
+            zwei = (i + 1 < len(saetze) and fs[i] & paar and fs[i + 1] & paar
+                    and paar <= (fs[i] | fs[i + 1]))
+            if not (paar <= fs[i] or zwei):
+                continue
+            n = 1
+            for f2 in fs[i + 1:]:
+                if f2 and not (f2 & paar):
+                    break
+                n += 1
+            if n > best:
+                best, anker = n, s
+    return best, anker
+
+def _p15_ressourcen(chapters, typ, txt, zuordnung):
+    p = _Probe("P15", "Ressourcen-Tiefe (Sätze am Deutungsort)")
+    p.einheit = "Einträge"
+    m = re.search(r"\n##\s+Ressourcen\b[^\n]*", "\n" + (txt or ""))
+    if not m:
+        return p.aussagelos("kein Abschnitt „## Ressourcen“ in der chart_data")
+    teil = ("\n" + txt)[m.end():]
+    schnitt = re.search(r"\n## |\n@@", teil)
+    teil = teil[:schnitt.start()] if schnitt else teil
+    kap_zu_thema = {th["nr"]: ch for ch in chapters for th in [zuordnung.get(id(ch))] if th}
+    ab = _zaehlung_ab(chapters, typ)        # 2026-09-19 (L7)
+    # Ohne Zuordnung aus P3 (EA, Ultimativ): das Kapitel mit dem Titel der
+    # THEMA-Zeile, erst danach die Kapitelnummer (Thema n = Kapitel n + ab - 1).
+    for th in _themenliste_lesen(txt):
+        if th["nr"] not in kap_zu_thema and th.get("titel"):
+            ch = next((c for c in chapters if _ws(c.get("title")).casefold()
+                       == _ws(th["titel"]).casefold()), None)
+            if ch is not None:
+                kap_zu_thema[th["nr"]] = ch
+    for zeile in teil.splitlines():
+        if "Deutungsort" not in zeile or re.match(r"^\s*(?:Zählmenge|\*\*|>)", zeile):
+            continue
+        mz = _RESSOURCE_ZEILE_RE.match(zeile)
+        if not mz:
+            if re.search(r"Deutungsort\s*:", zeile):
+                p.pruefen.append("Ressourcen-Block: Zeile nicht lesbar „%s“ — erwartet „A △ B "
+                                 "N°NN′ voll — Deutungsort: Thema n“ (Transit: „T-A △ R-B … — "
+                                 "Deutungsort: …“)" % _kurz(zeile, 90))
+            continue
+        p.geprueft += 1
+        a, b = kanon(mz.group("a")), kanon(mz.group("b"))
+        ms = re.search(r"(?<![\wäöüß])(voll|einseitig|neben)(?![\wäöüß])", mz.group("rest"))
+        stufe = ms.group(1) if ms else None
+        soll = 1 if stufe == "neben" else 3
+        name = "%s %s %s" % (ANZEIGE.get(a, a), mz.group("g"), ANZEIGE.get(b, b))
+        ort = mz.group("ort").strip()
+        mo = re.search(r"(Thema|Ressource)\s+(\d+)", ort)
+        if mo:
+            n = int(mo.group(2))
+            ch = kap_zu_thema.get(n) or next((c for c in chapters
+                                              if _kicker_nr(c.get("kicker")) == n + ab - 1), None)
+            if ch is None:
+                p.pruefen.append("%s — Deutungsort %s: kein Kapitel zu diesem Thema gefunden"
+                                 % (name, mo.group(0)))
+                continue
+            gruppen = _abschnitte(ch)
+            wo = "%s (%s)" % (mo.group(0), ch.get("kicker"))
+        elif re.search(r"Was\s+(?:dich\s+durch\s+diese\s+Zeit\s+)?trägt", ort):
+            bloecke = _was_traegt_bloecke(chapters)
+            gruppen = [[x] for x in (bloecke or [])]
+            if bloecke is None:
+                p.pruefen.append("%s — Deutungsort „Was trägt“, aber kein Pflichtteil „Was trägt:“ "
+                                 "im Hauptthemen-Kapitel (Transit: „### Was dich durch diese Zeit "
+                                 "trägt“ im Schlusswort)" % name)
+                continue
+            wo = "„Was trägt“"
+        elif not ort:
+            p.pruefen.append("%s — ohne Deutungsort (kein Eintrag ohne Deutungsort; wer keinen "
+                             "bekommt, geht in „Was trägt“)" % name)
+            continue
+        else:
+            p.pruefen.append("%s — Deutungsort „%s“ unbekannt (erwartet: Thema n, Ressource n, "
+                             "Was trägt)" % (name, _kurz(ort, 40)))
+            continue
+        n_saetze, anker = _saetze_am_ort(a, b, gruppen)
+        # Achsen-Spiegel (build seit 2026-09-19, F18): „Venus △ AC … (zugleich Sextil
+        # DC)" ist EINE Gabe — der Text darf sie am anderen Ende der Achse deuten.
+        msp = re.search(r"zugleich\s+\S+\s+(AC|MC|DC|IC)\b", mz.group("rest"))
+        if msp:
+            n2, anker2 = _saetze_am_ort(a if b in ACHSEN else b, msp.group(1), gruppen)
+            if n2 > n_saetze:
+                n_saetze, anker = n2, anker2
+        if anker is None:
+            p.pruefen.append("%s (%s) — am Deutungsort %s nennt kein Satz beide Faktoren; der "
+                             "Aspekt ist dort nicht als Anker gedeutet" % (name, stufe or "Transit", wo))
+        elif n_saetze < soll:
+            p.pruefen.append("%s (%s) — am Deutungsort %s %d Satz/Sätze ab „%s“, verlangt sind "
+                             "mindestens %d" % (name, stufe or "Transit", wo, n_saetze,
+                                                _kurz(anker, 70), soll))
+    if p.geprueft == 0 and not p.pruefen:
+        return p.aussagelos("Ressourcen-Block ohne lesbare Zeile mit Deutungsort")
+    return p.abschluss()
+
 # ---------------------------------------------------------------------------
 # Hauptaufrufe
 # ---------------------------------------------------------------------------
@@ -1541,13 +3590,19 @@ def _p9_zwei_saetze(chapters, typ):
 class InhaltsprobeFehler(Exception):
     """Eingabe nicht lesbar (fehlende Datei, SchemaError der Analyse)."""
 
-def pruefe(analyse_pfad, chart_data_pfad, typ=None):
+def pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
     """Haelt die Analyse gegen die chart_data. -> dict (s. Docstring des Moduls).
 
-    typ: 'geburt' | 'ea' | 'transit' | 'ultimativ' | None (aus der H1 ableiten)."""
+    typ: 'geburt' | 'ea' | 'transit' | 'ultimativ' | None (aus der H1 ableiten).
+    events_pfad: die events.json des Transit-Laufs (`transit.py … --json <pfad>`),
+    optional (2026-09-19, W24). Mit ihr haelt P1 die Transit-Segmente gegen die
+    Rechnung (Kontakt, Exaktdaten, Annaeherungen, Stichtag-Orb), P5 nimmt die
+    Soll-Menge des Registers daraus, P11 und P13 zaehlen ihre Daten und Kontakte
+    als Fundstelle. Ohne sie: P1 „teilweise übersprungen" mit Grund."""
     for pf in (analyse_pfad, chart_data_pfad):
         if not os.path.isfile(pf):
             raise InhaltsprobeFehler("Datei nicht gefunden: %s" % pf)
+    events = _events_laden(events_pfad) if events_pfad else None
     try:
         parsed = build.parse_analyse(analyse_pfad)
     except Exception as e:
@@ -1565,26 +3620,38 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None):
         typ_quelle = "H1 „%s“" % parsed.get("doctype") if typ else "H1 „%s“ nicht zuordenbar" % parsed.get("doctype")
 
     chart = selektor.parse_chart(txt)
-    tabelle = _tabellen_lesen(txt)
+    unlesbar = []
+    tabelle = _tabellen_lesen(txt, unlesbar)
     staende = _staende_lesen(txt)
     themen = _themenliste_lesen(txt)
+    sprache_analyse = sprache(parsed)
 
-    p1 = _p1_beleg_aspekte(chapters, typ, tabelle)
+    p1 = _p1_beleg_aspekte(chapters, typ, tabelle, events, unlesbar)
     p2 = _p2_beleg_staende(chapters, typ, chart, staende)
-    p3, p7, zuordnung = _p3_p7_kapitel_themen(chapters, typ, themen, sprache(parsed))
+    p3, p7, zuordnung = _p3_p7_kapitel_themen(chapters, typ, themen, sprache_analyse)
     p4 = _p4_bewegungsfolge(chapters, typ, zuordnung)
-    p5 = _p5_rechenschaft(chapters, chart, themen)
+    p5 = _p5_rechenschaft(chapters, chart, themen, typ, txt, events, chart_data_pfad, events_pfad,
+                          sprache_analyse)
     p6 = _p6_leitsatz(chapters, chart_data_pfad, themen)
     p8 = _p8_wortlisten(chapters)
     p9 = _p9_zwei_saetze(chapters, typ)
-    p10 = _p10_wortscan(chapters)
-    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10]
+    p10 = _p10_wortscan(chapters, sprache_analyse)
+    # 2026-09-19: U1 (P11–P13), W10/W43 (P14), W37 (P15)
+    p11 = _p11_zahlen(chapters, txt, events, sprache_analyse)
+    p12 = _p12_rang(chapters, txt, typ, sprache_analyse)
+    p13 = _p13_beleg_deckung(chapters, typ, tabelle, txt, events)
+    p14 = _p14_kopfblock(chapters, typ)
+    p15 = _p15_ressourcen(chapters, typ, txt, zuordnung)
+    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15]
 
     fehler = sum(len(p.fehler) for p in proben)
     pruefen_n = sum(len(p.pruefen) for p in proben)
     ueber = [(p.nr, p.status.lower(), p.grund) for p in proben if p.status in ("UEBERSPRUNGEN", "AUSSAGELOS")]
+    # 2026-09-19 (W44): was INNERHALB einer Probe bewusst ungeprueft blieb, zaehlt mit.
+    ueber += [(p.nr, "teilweise übersprungen", g) for p in proben for g in p.teilweise]
     return {
         "analyse": analyse_pfad, "chart_data": chart_data_pfad,
+        "events": events_pfad,
         "typ": typ, "typ_quelle": typ_quelle, "doctype": parsed.get("doctype"),
         "proben": {p.nr: p.als_dict() for p in proben},
         "fehler": fehler, "pruefen": pruefen_n, "uebersprungen": ueber,
@@ -1608,20 +3675,23 @@ def _zeile(p):
         out = ["%s %s, 0 Fehler" % (kopf, zaehl)]
     out += ["    FEHLER  " + f for f in p["fehler"]]
     out += ["    PRÜFEN  " + f for f in p["pruefen"]]
+    out += ["    Übersprungen " + h for h in p.get("teilweise", [])]
     out += ["    Hinweis " + h for h in p["hinweise"]]
     return out
 
-def bericht(analyse_pfad, chart_data_pfad, typ=None):
+def bericht(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
     """Der Prueftext: eine Zeile je Probe, je Befund eine eingerueckte Zeile,
-    zuletzt `INHALTSPROBE: f FEHLER · p PRÜFEN · s übersprungen (Gründe)`."""
-    return bericht_aus(pruefe(analyse_pfad, chart_data_pfad, typ))
+    zuletzt `INHALTSPROBE: f FEHLER · p PRÜFEN · s übersprungen (Gründe)`.
+    events_pfad: s. pruefe() — im Transit die events.json des Laufs."""
+    return bericht_aus(pruefe(analyse_pfad, chart_data_pfad, typ, events_pfad))
 
 def bericht_aus(r):
     """Prueftext aus einem Ergebnis von pruefe()."""
-    zeilen = ["Inhaltsprobe — %s gegen %s (Typ: %s, aus %s)"
+    zeilen = ["Inhaltsprobe — %s gegen %s%s (Typ: %s, aus %s)"
               % (os.path.basename(r["analyse"]), os.path.basename(r["chart_data"]),
+                 " und %s" % os.path.basename(r["events"]) if r.get("events") else "",
                  r["typ"] or "unbekannt", r["typ_quelle"])]
-    for nr in ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"):
+    for nr in sorted(r["proben"], key=lambda x: int(x[1:])):
         zeilen += _zeile(r["proben"][nr])
     gruende = "; ".join("%s %s: %s" % (nr, art, g) for nr, art, g in r["uebersprungen"])
     zeilen.append("INHALTSPROBE: %d FEHLER · %d PRÜFEN · %d übersprungen%s"
@@ -1675,6 +3745,22 @@ _TEST_CHART = """# Chart-Datenblatt — Prüffall
 ### Untergrund-Aspekte
 
 _keine_
+
+## Strukturbild (konstruiert)
+
+### 7 · Zyklusfenster (Einordnung, keine Prognose)
+- Alter der Person: 41 Jahre.
+  - Saturn: erste Saturn-Opposition ~14.7 [zurückliegend] · Saturn-Rückkehr ~29.5 [zurückliegend] · zweite Saturn-Opposition ~44.2 [bevorstehend]
+
+### 10 · Rangzeilen (Zahlen für Rang-, Zähl- und Einzigkeitsaussagen)
+- RANG engste-aspekte [Zeilen der Aspekttabelle, 5 Zeilen; Rang nach dem Orb in Bogenminuten]: 1. Mars Quadrat AC 0°40′ (voll, zugleich Quadrat DC) · 1. Mars Opposition MC 0°40′ (einseitig, zugleich Konjunktion IC) · 3. Sonne Konjunktion Merkur 1°10′ (voll) · 4. Mond Trigon Saturn 2°05′ (voll) · 5. Sonne Sextil Mond 4°30′ (neben)
+- RANG engste-aspekte-planeten [nur Zeilen zwischen zwei Planeten, 3 Zeilen]: 1. Sonne Konjunktion Merkur 1°10′ (voll) · 2. Mond Trigon Saturn 2°05′ (voll) · 3. Sonne Sextil Mond 4°30′ (neben)
+- RANG verbindungen-gezaehlt [jeder Aspekt zählt 1, ein Kontakt zu beiden Enden einer Achse je Ende]: 1. Mars 4 (Aspekttabelle 2) · 2. Sonne 2 · 2. Mond 2 · 4. Merkur 1 · 4. Saturn 1
+- RANG verbindungen-gewichtet [voll 1, einseitig 0.5, Nebenaspekt 0.5]: 1. Mars 3 · 2. Sonne 1.5 · 2. Mond 1.5 · 4. Merkur 1 · 4. Saturn 1
+- RANG elemente-gezaehlt [fünf Planeten des Prüffalls, je 1, Summe 5]: 1. Feuer 2 von 5 = 40 % (Sonne, Merkur) · 1. Erde 2 von 5 = 40 % (Mond, Saturn) · 3. Wasser 1 von 5 = 20 % (Mars) · 4. Luft 0 von 5 = 0 % (—)
+- RANG elemente-gewichtet [alle Faktoren, Lichter und Achsen ×2; Summe 11]: 1. Feuer 5 von 11 = 45 % (Sonne ×2, Merkur, AC ×2) · 1. Erde 5 von 11 = 45 % (Mond ×2, Saturn, MC ×2) · 3. Wasser 1 von 11 = 9 % (Mars) · 4. Luft 0 von 11 = 0 % (—)
+- RANG modi-gezaehlt [fünf Planeten des Prüffalls, je 1, Summe 5]: 1. kardinal 3 von 5 = 60 % (Sonne, Merkur, Mars) · 2. fix 1 von 5 = 20 % (Mond) · 2. veränderlich 1 von 5 = 20 % (Saturn)
+- RANG modi-gewichtet [alle Faktoren, Lichter und Achsen ×2; Summe 11]: 1. kardinal 8 von 11 = 73 % (Sonne ×2, Merkur, Mars, AC ×2, MC ×2) · 2. fix 2 von 11 = 18 % (Mond ×2) · 3. veränderlich 1 von 11 = 9 % (Saturn)
 
 ## Themenliste
 
@@ -1737,7 +3823,7 @@ Dieses Dokument beschreibt Anlagen, keine Tatsachen. Wenn du ein Kapitel liest u
 
 **Beleg:** Elemente Feuer 3 · Erde 1 · Luft 0 · Wasser 1 · Herrscherkreis Sonne → Mars → Mond → Venus
 
-Das Bild ruht auf wenigen Kräften, die einander kaum stützen. Was fehlt, ersetzt die Anstrengung.
+Das Bild ruht auf wenigen Kräften, die einander kaum stützen. Wasser trägt nur ein einziger Planet, dein Mars. Was fehlt, ersetzt die Anstrengung.
 
 ## Instrument · Wie du gebaut bist
 
@@ -1765,7 +3851,7 @@ Du hast angefangen, bevor die anderen fertig überlegt haben. Und ein Letztes, d
 
 ### Was da arbeitet
 
-Deine Sonne im Widder im ersten Haus, verschmolzen mit Merkur — ein Denken, das im Moment des Anfangens entsteht — sucht den ersten Schritt, weil dort die Kraft ist.
+Deine Sonne im Widder im ersten Haus, verschmolzen mit Merkur — die engste Verbindung zwischen zwei Planeten in deinem Bild — sucht den ersten Schritt, weil dort die Kraft ist.
 
 ### Wie so etwas zur Regel wird
 
@@ -1773,7 +3859,7 @@ Regeln dieser Art entstehen in Umgebungen, in denen Warten teuer war. Wo du das 
 
 ### Der Teil von dir, der das nicht aufgeben will
 
-Der Teil, der zuerst losgeht, hat oft recht gehabt. Er rechnet mit alten Zahlen, aber er rechnet.
+Der Teil, der zuerst losgeht, hat ein gutes Argument: Wer zuerst geht, muss auf niemanden warten. Er rechnet mit alten Zahlen, aber er rechnet.
 
 ### Die zwei Formen und das Dazwischen
 
@@ -1799,7 +3885,7 @@ Du bleibst, wo andere längst gegangen sind. Und ein Letztes, das schwerer zuzug
 
 ### Was da arbeitet
 
-Dein Mond im Stier im zweiten Haus, im Trigon zu Saturn — eine Verbindung, die von selbst hält — braucht keine Bewegung, um sich sicher zu fühlen. Dieses Kapitel läuft in der Kurzform: Ein einzelner harmonischer Aspekt liefert kein Material für Wurzel und Widerstand.
+Dein Mond im Stier im zweiten Haus, im Trigon zu Saturn — eine Verbindung, die von selbst hält — braucht keine Bewegung, um sich sicher zu fühlen. Was Saturn dazugibt, ist Form: Das Gefühl bekommt einen Rahmen, in dem es bleiben kann. Dieses Kapitel läuft in der Kurzform: Ein einzelner harmonischer Aspekt liefert kein Material für Wurzel und Widerstand.
 
 ### Die zwei Formen und das Dazwischen
 
@@ -1811,7 +3897,7 @@ Einmal in der Woche etwas stehen lassen, das fertig ist. Nicht tun: daraus ein P
 
 ### Wohin das gehört
 
-Dies ist die Rückseite von Kapitel 2. Es ist eine ruhige Stelle in deinem Bild.
+Dies ist die Rückseite von Kapitel 2. Saturn kehrt um die dreißig an seinen Ort zurück; dieselbe Frage meldet sich dann noch einmal. Es ist eine ruhige Stelle in deinem Bild.
 
 ## Rechenschaft · Was sonst in deinem Bild steht
 
@@ -1875,39 +3961,356 @@ Die Aspekte dieses Kapitels sind in Kapitel 3 gedeutet; hier stehen sie unter de
 
 """
 
+# Transit-Pruefall fuer den Selbsttest (2026-09-19, W10, W23, W24, W43, U1). Die Daten
+# stehen NICHT im Quelltext: `_transit_fall()` rechnet sie aus Julianischen
+# Tageszahlen (Datenschutz-Guardrail: kein Datumsstring im Code). {dN} ist das Datum
+# N Tage nach dem Fensteranfang (ISO), {eN} dasselbe im Beleg-Format TT.MM.JJJJ,
+# {mN} Monat und Jahr in Worten.
+_TEST_TRANSIT_CHART = """# Chart-Datenblatt — Prüffall Transit
+
+## Stände (konstruiert)
+
+| Faktor | Grad | Zeichen | Haus | Lauf |
+|---|---|---|---|---|
+| Sonne | 10°00′ | Widder ♈ | 1 | direkt |
+| Mond | 20°00′ | Stier ♉ | 2 | direkt |
+| Merkur | 11°10′ | Widder ♈ | 1 | direkt |
+| Mars | 5°00′ | Krebs ♋ | 4 | direkt |
+| AC | 0°00′ | Widder ♈ | 1 | — |
+| MC | 0°00′ | Steinbock ♑ | 10 | — |
+
+## Aspekte (konstruiert)
+
+### Volle Aspekte
+
+| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |
+|---|---|---|---|---|---|
+| Sonne | ☌ Konjunktion | Merkur | 1°10′ | konj |  |
+
+### Nebenaspekte
+
+| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |
+|---|---|---|---|---|---|
+| Sonne | ⚹ Sextil | Mond | 4°30′ | gruen |  |
+
+## Transit-Rechnung (konstruiert, Auszug)
+
+```text
+Fenster {d0} bis {d730}, Stichtag {d45}
+[P] Saturn  Quadrat     Sonne        exakt {d60}, {d200}, {d330}
+[P] Saturn  Quadrat     Merkur       exakt {d75}, {d190}
+[P] Jupiter Trigon      Mond         exakt {d150}
+[P] Neptun  Sextil      Mars         exakt {d400}
+[P] Knoten  Konjunktion Merkur       Annaeherung bis 1.8′ am {d250}
+Frühere Durchgänge mit Datum und Alter
+  [P] Saturn  Quadrat     Sonne        #1 {dF} (Alter 12)
+```
+
+## Themenliste
+
+```
+THEMA 1 | titel=Was unter Druck gerät
+  | fuehrt=T-Saturn □ R-Sonne
+  | aspekte=T-Saturn □ R-Merkur
+  | form=voll | leitachse=ja
+THEMA 2 | titel=Was leichter wird
+  | fuehrt=T-Jupiter △ R-Mond
+  | form=ressource | grund=der führende Kontakt ist harmonisch
+```
+TRANSIT-RECHENSCHAFT: 5 primaere Wirkorb-Kontakte im Fenster, 3 tragen ein Kapitel, 2 ohne Kapitel — hier einzeln benannt.
+
+- T-Neptun ⚹ R-Mars — im Wirkorb, trägt kein Kapitel
+- T-Mondknoten ☌ R-Merkur — im Wirkorb, ohne Nulldurchgang
+
+## Ressourcen
+T-Jupiter △ R-Mond    im Wirkorb    — Deutungsort: Thema 2
+
+@@SELEKTOR
+FAKTOR SONNE zeichen=Widder haus=1
+FAKTOR MOND zeichen=Stier haus=2
+FAKTOR MERKUR zeichen=Widder haus=1
+FAKTOR MARS zeichen=Krebs haus=4
+ACHSE AC zeichen=Widder
+ACHSE MC zeichen=Steinbock
+@@ENDE
+@@DECKBLATT
+LEITSATZ: Du darfst langsamer werden, ohne stehen zu bleiben — und genau dort wächst etwas.
+LEITACHSE: Was unter Druck gerät
+TITELMOTIV: Ein Weg, der im Nebel langsamer wird.
+PALETTE: Grau, ein warmes Ocker.
+GLYPHEN: ♄ □ ☉ — Saturn im Quadrat zur Sonne
+@@ENDE
+"""
+
+_TEST_TRANSIT_ANALYSE = """# Transit-Horoskop — Prüffall
+
+## Zur Lesart · Wie du mit diesem Teil arbeitest
+
+Ein Transit beschreibt einen Prozess, keinen Termin. Wenn du ein Kapitel nicht wiedererkennst, darfst du es verwerfen; das gilt für jedes Kapitel dieses Bandes. Die stärkste, die größte und die wichtigste Linie stehen vorn, die zentralste zuletzt, und ruhige Strecken gehören dazu.
+
+## Der Stand heute · Was gerade anliegt
+
+**Signatur:** Saturn im Quadrat zu deiner Sonne, im Anmarsch Jupiter im Trigon zu deinem Mond
+
+**Beleg:** Sonne ☉ 10°00′ Widder ♈, 1. Haus (Mond ☽ 20°00′ Stier ♉, 2. Haus) · T-Saturn ♄ Quadrat □ R-Sonne ☉ — am Stichtag Orb 0,57°, zulaufend; exakt {e60}, {e200}, {e330} · T-Jupiter ♃ Trigon △ R-Mond ☽ — am Stichtag Orb 2,40°, zulaufend; exakt {e150}
+
+Am Stichtag steht Saturn im Quadrat zu deiner Sonne, und der Druck darauf nimmt zu. Jupiter rückt im Trigon zu deinem Mond heran; beides erzählen die folgenden Kapitel.
+
+## Kapitel 1 · Was unter Druck gerät
+
+**Signatur:** Saturn im Quadrat zu deiner Sonne — mitklingend Saturn im Quadrat zu deinem Merkur
+
+**Beleg:** Sonne ☉ 10°00′ Widder ♈, 1. Haus · T-Saturn ♄ Quadrat □ R-Sonne ☉ — exakt {e60}, {e200}, {e330} · T-Saturn ♄ Quadrat □ R-Merkur ☿ — exakt {e75}, {e190}
+
+### Woran du es merkst
+
+Du merkst, dass Dinge länger dauern, als du geplant hast. Und ein Letztes, das schwerer zuzugeben ist: Es kränkt dich, wenn jemand bremst. Wenn du das nicht kennst, leg das Kapitel weg; das gilt für alle folgenden Kapitel ebenso.
+
+### Was da arbeitet
+
+Der laufende Saturn steht im Quadrat zu deiner Sonne im Widder im ersten Haus — eine Reibung, die dich bremst, wo du sonst losgehst. Dasselbe Quadrat trifft deinen Merkur und macht das Denken vorsichtiger.
+
+### Warum das alt ist
+
+Muster dieser Art entstehen dort, wo Tempo belohnt wurde. Wo du das gelernt hast, weiß ich nicht — das steht in keinem Horoskop.
+
+### Der Teil von dir, der das nicht aufgeben will
+
+Der Teil, der zuerst losgeht, hat ein gutes Argument: Wer schnell ist, muss nicht warten. Er rechnet mit einer Welt, die Tempo belohnt.
+
+### Die zwei Formen und das Dazwischen
+
+Die reife Form lässt Saturn bremsen, wo es sinnvoll ist. Die regressive Form rennt gegen die Wand und fühlt sich dabei wie Mut an. Dazwischen liegt der Normalfall: Du merkst die Bremse und gibst trotzdem Gas.
+
+### Womit du arbeiten kannst
+
+Einmal in der Woche eine Sache absichtlich langsam tun. Nicht tun: alles verschieben. Gut genug ist, es einmal bemerkt zu haben.
+
+### Zeit
+
+Der Prozess läuft vom {m60} bis in den {m330}; die dichten Wochen liegen um die drei Wendepunkte. Diese Frage stand zuletzt an, als du zwölf warst. Eine lange Laufzeit heißt nicht lange Schwere.
+
+## Kapitel 2 · Was leichter wird
+
+**Signatur:** Jupiter im Trigon zu deinem Mond
+
+**Beleg:** Mond ☽ 20°00′ Stier ♉, 2. Haus · T-Jupiter ♃ Trigon △ R-Mond ☽ — exakt {e150}
+
+### Woran du es merkst
+
+Manches geht in diesen Monaten leichter als sonst. Und ein Letztes, das schwerer zuzugeben ist: Es ist dir fast peinlich, wenn etwas ohne Mühe gelingt.
+
+### Was da arbeitet
+
+Der laufende Jupiter steht im Trigon zu deinem Mond im Stier im zweiten Haus. Jupiter weitet, was der Mond braucht, und das Gefühl von Sicherheit wird größer. Das zeigt sich im Alltag daran, dass du weniger festhältst. Ein solcher Transit verspricht nichts; er macht etwas leichter erreichbar.
+
+### Die zwei Formen und das Dazwischen
+
+Genutzt: Du lässt dich tragen, wo es trägt. Verschleudert: Du lässt das Fenster verstreichen, weil nichts drückt. Dazwischen liegt der Normalfall: Du merkst es spät und nimmst es trotzdem.
+
+### Womit du arbeiten kannst
+
+Einmal im Monat etwas annehmen, ohne es zu verdienen. Nicht tun: daraus ein Projekt machen. Gut genug ist, es einmal benutzt zu haben.
+
+### Zeit
+
+Der Kontakt läuft über den {m150} und kommt wieder. Das Fenster schließt nichts.
+
+## Mitlaufendes · Was sonst noch läuft
+
+Hier steht, was im Fenster läuft und kein eigenes Kapitel bekommt.
+
+1. Saturn im Quadrat zu deinem Merkur, bis in den {m190}: das Denken wird vorsichtiger. Klingt mit in Kapitel 1.
+
+2. Neptun im Sextil zu deinem Mars, im {m400}: die Kraft wird weicher.
+
+3. Der Mondknoten in Konjunktion mit deinem Merkur, im {m250}: eine Frage der Richtung im Denken.
+
+## Schlusswort · Was am Ende anders sein könnte
+
+### Was dich durch diese Zeit trägt
+
+Jupiter im Trigon zu deinem Mond trägt in diesen Monaten mit, auch wenn es sich nicht meldet. Du erkennst es daran, dass weniger Kraft nötig ist als sonst.
+
+### Was erreichbar ist
+
+Du darfst langsamer werden, ohne stehen zu bleiben — und genau dort wächst etwas. Mehr verspricht dieser Text nicht.
+"""
+
+def _jd_iso(jd):
+    """Kalendertag (gregorianisch, UT) einer Julianischen Tageszahl, als JJJJ-MM-TT."""
+    from datetime import date, timedelta
+    return (date(2000, 1, 1) + timedelta(days=int(round(jd - 2451544.5)))).isoformat()
+
+def _transit_fall():
+    """-> (chart_data, analyse, events) des Transit-Pruefalls. Fensteranfang ist eine
+    frei gewaehlte Julianische Tageszahl; alle Daten sind Tage danach."""
+    jd0 = 2462867.5
+    monate = ("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
+              "September", "Oktober", "November", "Dezember")
+    tage = (-6000, -2500, 0, 20, 30, 45, 60, 75, 100, 110, 130, 150, 190, 200, 201, 230, 250,
+            300, 330, 360, 400, 500, 520, 730)
+    d = {n: _jd_iso(jd0 + n) for n in tage}
+    werte = {}
+    for n, iso in d.items():
+        j, mo, t = iso.split("-")
+        k = str(n) if n >= 0 else "M%d" % -n
+        werte["d" + k] = iso
+        werte["e" + k] = "%s.%s.%s" % (t, mo, j)
+        werte["m" + k] = "%s %s" % (monate[int(mo) - 1], j)
+    werte["dF"] = d[-6000]
+
+    def ev(t, a, z, exakt, stichtag, von, bis, annae=(), primaer=True):
+        ex = [d[x] for x in exakt]
+        return {"transit": t, "aspekt": a, "ziel": z, "primaer": primaer, "spiegel": False,
+                "exakt": ex, "exakt_im_fenster": ex, "exakt_vor_start": [], "exakt_gesamt": ex,
+                "exakt_nach_fenster": [], "annaeherung": [[d[x], o] for x, o in annae],
+                "fenster_von": d[von], "fenster_bis": d[bis], "weit_von": d[von],
+                "weit_bis": d[bis], "perioden": [[d[von], d[bis]]],
+                "wirkorb_perioden": [[d[von], d[bis]]], "min_orb_grad": 0.0 if ex else 0.0295,
+                "min_orb_im_fenster": 0.0 if ex else 0.0295, "im_wirkorb": True,
+                "wirkorb_im_fenster": True, "orb_stichtag": stichtag, "vorlauf": None,
+                "fortsetzung": None, "beginn_abgeschnitten": False, "selbst_transit": False,
+                "quartale": [1], "kontakte": len(ex), "mehrfach": len(ex) > 1,
+                "wird_exakt": bool(ex)}
+    events = {
+        "start": d[0], "end": d[730], "asof": d[45], "months": 24, "lookback_start": d[0],
+        "orb_wirk": 1.5, "orb_weit": 3.0, "zeitzone": "UT", "zusatz": {},
+        "events": [ev("Saturn", "Quadrat", "Sonne", (60, 200, 330), 0.5712, 20, 360),
+                   ev("Saturn", "Quadrat", "Merkur", (75, 190), 0.9340, 30, 230),
+                   ev("Jupiter", "Trigon", "Mond", (150,), 2.3987, 110, 190),
+                   ev("Neptun", "Sextil", "Mars", (400,), 2.8810, 300, 520),
+                   ev("Knoten", "Konjunktion", "Merkur", (), 1.2034, 200, 300,
+                      annae=((250, 0.0295),)),
+                   ev("Pluto", "Trigon", "Venus", (500,), 2.9502, 400, 730, primaer=False)],
+        "jetzt": {"stichtag": d[45], "orb_weit": 3.0, "orb_wirk": 1.5,
+                  "im_orb": [{"transit": "Saturn", "ziel": "Sonne", "aspekt": "Quadrat", "orb_grad": 0.57},
+                             {"transit": "Saturn", "ziel": "Merkur", "aspekt": "Quadrat", "orb_grad": 0.93},
+                             {"transit": "Knoten", "ziel": "Merkur", "aspekt": "Konjunktion",
+                              "orb_grad": 1.2},
+                             {"transit": "Jupiter", "ziel": "Mond", "aspekt": "Trigon", "orb_grad": 2.4},
+                             {"transit": "Neptun", "ziel": "Mars", "aspekt": "Sextil", "orb_grad": 2.88}]},
+        "stations": [{"transit": "Saturn", "datum": d[130], "richtung": "wird rueckl."}],
+        "fruehere_durchgaenge": [
+            {"transit": "Saturn", "aspekt": "Quadrat", "ziel": "Sonne", "primaer": True,
+             "selbst_transit": False,
+             "durchgaenge": [{"nr": 1, "von": d[-6000], "bis": d[-6000],
+                              "exakt": [{"datum": d[-6000], "alter": 12}], "annaeherung": [],
+                              "min_orb_grad": 0.0, "min_orb_datum": d[-6000], "min_orb_alter": 12,
+                              "ab_rechenbeginn": False}]}],
+    }
+    return (_TEST_TRANSIT_CHART.format(**werte), _TEST_TRANSIT_ANALYSE.format(**werte), events,
+            werte)
+
 def _selbsttest(still=False):
-    """Konstruierter Fall, dreimal: fehlerfrei, mit je einem Fehler je Probe, und mit
-    einem Zugang-Kapitel (Kicker `Zugang <Bereich>`) — einmal sauber, einmal mit
-    falschem Orb im verwiesenen Aspekt."""
+    """Konstruierte Faelle: Geburtshoroskop fehlerfrei, mit je einem Fehler je Probe,
+    mit Zugang-Kapitel; Transit mit events.json fehlerfrei, mit eingebauten Fehlern,
+    ohne Kopfblock im Lagebild und ohne events.json; zuletzt (2026-09-19, L7)
+    dieselbe Geburts-Analyse in der neuen Form (Wort-Kicker `Getriebe`, `Kapitel n`
+    = `THEMA n`) und einmal ohne diesen Kicker. Davor Einzelproben der Muster
+    (Zeitform, Superlativ-Fuegung, Rangzeilen-Format wie in radix)."""
+    import json
     import tempfile
-    def lauf(chart, analyse):
+
+    def lauf(chart, analyse, events=None, typ=None):
         d = tempfile.mkdtemp(prefix="inhaltsprobe_")
         pa, pc = os.path.join(d, "prueffall_analyse.md"), os.path.join(d, "prueffall_chart_data.md")
         open(pa, "w", encoding="utf-8").write(analyse)
         open(pc, "w", encoding="utf-8").write(chart)
-        return pruefe(pa, pc)
+        pe = None
+        if events is not None:
+            pe = os.path.join(d, "prueffall_Transit_events.json")
+            with open(pe, "w", encoding="utf-8") as f:
+                json.dump(events, f)
+        return pruefe(pa, pc, typ, pe)
 
     def ersetze(text, alt, neu):
         assert text.count(alt) == 1, "Selbsttest-Marke nicht eindeutig: %r" % alt
         return text.replace(alt, neu)
 
+    def befunde(r):
+        return "\n".join(f for p in r["proben"].values() for f in p["fehler"] + p["pruefen"])
+
+    def erwarte(r, erwartet, lauf_name):
+        fehlt = []
+        for nr, feld, marke in erwartet:
+            treffer = r["proben"][nr][feld]
+            if not any(marke in t for t in treffer):
+                fehlt.append("%s: erwartet %s mit „%s“, gefunden: %s"
+                             % (nr, feld.upper(), marke, treffer or "nichts"))
+        assert not fehlt, "%s — eine Probe findet ihren Testfehler nicht:\n  %s" % (
+            lauf_name, "\n  ".join(fehlt))
+
     berichte = []
+    # 0) Einzelproben der Muster (2026-09-19)
+    for satz, soll in (("Er hat dich oft geschützt.", True), ("Das war einmal so.", True),
+                       ("Der Teil, der das eingerichtet hat, schützt dich.", True),
+                       ("Er hat einen verlässlichen Instinkt.", False),
+                       ("Er hat nichts zu verlieren.", False),
+                       ("Er hat ein gutes Argument: Wer zuerst geht, muss nicht warten.", False)):
+        assert bool(_zeitform_treffer(satz, "de")) == soll, "W4 Zeitform: %r" % satz
+    for satz, soll in (("It has spared you many battles.", True), ("It spares you many battles.", False),
+                       ("It knows what you need.", False), ("This order made everything possible.", True)):
+        assert bool(_zeitform_treffer(satz, "en")) == soll, "W4 Zeitform (englisch): %r" % satz
+    for satz, soll in (("Dein Gefühl fließt zum tiefsten Punkt.", False),
+                       ("Zum tiefsten Punkt dagegen führt nichts.", False),
+                       ("Am tiefsten Punkt deines Horoskops steht der Mond.", False),
+                       ("Der tiefste Punkt deines Lebens liegt nicht hier.", True),
+                       ("Was am tiefsten liegt, meldet sich zuletzt.", True)):
+        assert bool(SUPERLATIV_RE.search(satz)) == soll, "W29 Superlativ: %r" % satz
+    # W29: der Deckel zaehlt nur die Wortliste — vier andere Superlative bleiben still
+    _k = [{"kicker": "Kapitel 2", "title": "Probe", "blocks": [{"type": "p", "text":
+          "Hier reicht es am weitesten. Die meisten Wochen sind ruhig. Am höchsten steht "
+          "der Mond. Am längsten dauert der Winter."}]}]
+    assert _p10_wortscan(_k).status == "OK", "W29: Deckel zählt fremde Superlative"
+    # F2: Halbquadrat ∠, Anderthalbquadrat ⚼ und der Wort-Trenner werden gelesen,
+    # eine fremde Glyphe nicht — und sie wird genannt, nicht still uebergangen
+    _unl = []
+    _tab = _tabellen_lesen("### Untergrund-Aspekte\n\n| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |\n"
+                           "|---|---|---|---|---|---|\n| Mars | ∠ Halbquadrat | Sonne | 0°30′ | grau |  |\n"
+                           "| Merkur | ⚼ Anderthalbquadrat | Saturn | 1°05′ | grau |  |\n"
+                           "| Venus | –Anderthalbquadrat– | Mond | 1°10′ | grau |  |\n"
+                           "| Merkur | ∡ Anderthalbquadrat | Mond | 1°20′ | grau |  |\n", _unl)
+    assert [e["art"] for e in _tab] == ["Halbquadrat", "Anderthalbquadrat", "Anderthalbquadrat"] \
+        and len(_unl) == 1 and "∡" in _unl[0][2], "F2: Tabellenzeilen %s / %s" % (_tab, _unl)
+    try:                            # U1 b: Rangzeilen-Muster woertlich wie in radix.py
+        import radix as _rx
+        if hasattr(_rx, "RANG_ZEILE_RE"):
+            assert RANG_ZEILE_RE.pattern == _rx.RANG_ZEILE_RE.pattern
+            assert {k: v.pattern for k, v in RANG_EINTRAG_RE.items()} == \
+                {k: v.pattern for k, v in _rx.RANG_EINTRAG_RE.items()}, \
+                "RANG_EINTRAG_RE weicht von radix.RANG_EINTRAG_RE ab — Format nachziehen"
+            berichte.append("Rangzeilen-Muster gleich radix.py")
+    except ImportError:
+        berichte.append("radix.py nicht importierbar — Mustervergleich übersprungen")
+    assert _p14_kopfblock([{"kicker": "Kapitel 2", "title": "Probe", "signatur": "", "beleg": "",
+                            "blocks": []}], "geburt").status == "UEBERSPRUNGEN", \
+        "P14 meldet im Fachmodus (kein Kopfblock im ganzen Dokument) Fehler"
+    for fn, args in ((_p11_zahlen, ([], "", None, "en")), (_p12_rang, ([], "", None, "en"))):
+        assert fn(*args).status == "UEBERSPRUNGEN", "%s läuft auf einer englischen Analyse" % fn.__name__
+
     # 1) fehlerfrei
     r = lauf(_TEST_CHART, _TEST_ANALYSE)
     st = {nr: p["status"] for nr, p in r["proben"].items()}
     berichte.append("Lauf 1 (fehlerfrei): " + ", ".join("%s=%s" % kv for kv in st.items()))
-    assert all(s == "OK" for s in st.values()), "Lauf 1 nicht sauber: %s\n%s" % (
-        st, "\n".join(f for p in r["proben"].values() for f in p["fehler"] + p["pruefen"]))
-    assert r["fehler"] == 0 and r["pruefen"] == 0 and not r["uebersprungen"]
+    assert all(s == "OK" for s in st.values()), "Lauf 1 nicht sauber: %s\n%s" % (st, befunde(r))
+    assert r["fehler"] == 0 and r["pruefen"] == 0
+    # W44: der Getriebe-Beleg ist teilweise uebersprungen und zaehlt mit — sonst nichts
+    assert [(nr, art) for nr, art, _g in r["uebersprungen"]] == [("P1", "teilweise übersprungen")], (
+        "Lauf 1: Zusammenfassung „übersprungen“ unerwartet: %s" % r["uebersprungen"])
+    for nr in ("P11", "P12", "P13", "P14", "P15"):
+        assert r["proben"][nr]["geprueft"] > 0, "Lauf 1: %s hat nichts geprüft" % nr
 
-    # 2) je ein Fehler je Probe P1–P6 (P7 haengt an P3), je ein Treffer P8 und P9
+    # 2) je ein Fehler je Probe P1–P6 und P11–P15 (P7 haengt an P3), je ein Treffer P8–P10
     a, c = _TEST_ANALYSE, _TEST_CHART
     a = ersetze(a, "Sonne ☉ Konjunktion ☌ Merkur ☿ 11°10′ Widder ♈, 1. Haus, Orb 1°10′",
                    "Sonne ☉ Konjunktion ☌ Merkur ☿ 11°10′ Widder ♈, 1. Haus, Orb 2°10′")      # P1 Orb
     a = ersetze(a, "**Beleg:** Mond ☽ 20°00′ Stier ♉, 2. Haus ·",
                    "**Beleg:** Mond ☽ 20°00′ Stier ♉, 3. Haus ·")                              # P2 Haus
     c = ersetze(c, "  | fuehrt=Mond, Stier, Haus 2", "  | fuehrt=Merkur, Widder, Haus 1")     # P3/P7 Fuehrer
-    a = ersetze(a, "### Der Teil von dir, der das nicht aufgeben will\n\nDer Teil, der zuerst losgeht, hat oft recht gehabt. Er rechnet mit alten Zahlen, aber er rechnet.\n\n", "")  # P4 Bewegung fehlt
+    a = ersetze(a, "### Der Teil von dir, der das nicht aufgeben will\n\nDer Teil, der zuerst losgeht, "
+                   "hat ein gutes Argument: Wer zuerst geht, muss auf niemanden warten. Er rechnet mit "
+                   "alten Zahlen, aber er rechnet.\n\n", "")                                    # P4 Bewegung fehlt
     a = ersetze(a, "\n3. Saturn, Jungfrau, sechstes Haus — die Ordnung im Alltag. Klingt mit in Kapitel 3.",
                    "")                                                                          # P5 Zeile fehlt
     c = ersetze(c, "LEITSATZ: Du fängst an, bevor jemand dich darum bittet — und das ist kein Fehler.",
@@ -1921,22 +4324,40 @@ def _selbsttest(still=False):
     a = ersetze(a, "Du bleibst, wo dein Partner längst gegangen ist.",
                    "Du bleibst, wo dein Partner längst gegangen ist. Das wirkt wie eine "
                    "Störung, und du solltest daran arbeiten. Eine Störung ist es nicht.")         # P10 klinisch + Optimierung
+    # 2026-09-19: die neuen Proben
+    c = ersetze(c, "### Untergrund-Aspekte\n\n_keine_",
+                   "### Untergrund-Aspekte\n\n| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |\n"
+                   "|---|---|---|---|---|---|\n| Merkur | ∡ Anderthalbquadrat | Saturn | 1°05′ | grau |  |")  # F2
+    a = ersetze(a, "Saturn kehrt um die dreißig an seinen Ort zurück",
+                   "Saturn kehrt mit zwölf Jahren an seinen Ort zurück")                        # P11 Alter
+    a = ersetze(a, "die engste Verbindung zwischen zwei Planeten in deinem Bild",
+                   "die engste Verbindung deines ganzen Bildes")                                # P12 Rang
+    a = ersetze(a, "Genutzt: Du hältst, was gehalten werden muss.",
+                   "Genutzt: Du hältst, was gehalten werden muss. Dein Mars im Quadrat zu "
+                   "Saturn bremst dabei.")                                                       # P13 erfundener Aspekt
+    a = ersetze(a, "**Signatur:** Was aus den Kapiteln 2 und 3 als Richtung bleibt\n\n", "")    # P14 Signatur fehlt
+    a = ersetze(a, "**Signatur:** Die Gegensatzpaare der Kapitel 2 und 3\n",
+                   "**Signatur:** Die Gegensatzpaare der Kapitel 2 und 3\n\n"
+                   "**Beleg:** Sonne ☉ 10°00′ Widder ♈, 1. Haus\n")                             # P14 Buendel mit Beleg
+    a = ersetze(a, "Was Saturn dazugibt, ist Form: Das Gefühl bekommt einen Rahmen, in dem es "
+                   "bleiben kann. ", "")                                                         # P15 zu kurz
     r2 = lauf(c, a)
-    erwartet = {"P1": ("fehler", "Orb 2°10′"), "P2": ("fehler", "führendes Haus 3"),
-                "P3": ("fehler", "Themenliste sagt Merkur"), "P4": ("fehler", "fehlt: „Der Teil von dir"),
-                "P5": ("fehler", "Saturn führt kein Thema"), "P6": ("fehler", "Leitsatz nicht im Schlusswort"),
-                "P7": ("fehler", "Signatur nennt Merkur nicht"),
-                "P8": ("pruefen", "dein Partner"), "P9": ("pruefen", "Nichtwissens-Satz"),
-                "P10": ("pruefen", "Störung")}
-    fehlt = []
-    for nr, (feld, marke) in erwartet.items():
-        treffer = r2["proben"][nr][feld]
-        if not any(marke in t for t in treffer):
-            fehlt.append("%s: erwartet %s mit „%s“, gefunden: %s" % (nr, feld.upper(), marke, treffer or "nichts"))
-    if not any("Verwerfungs-Erlaubnis" in t for t in r2["proben"]["P9"]["pruefen"]):
-        fehlt.append("P9: erwartet PRUEFEN zur Verwerfungs-Erlaubnis")
-    # Negativkontrollen des Wortscans: die zwei Fehlalarm-Klassen, an denen die
+    erwarte(r2, (("P1", "fehler", "Orb 2°10′"), ("P1", "fehler", "unbekanntes Zeichen „∡“"),
+                 ("P2", "fehler", "führendes Haus 3"), ("P3", "fehler", "Themenliste sagt Merkur"),
+                 ("P4", "fehler", "fehlt: „Der Teil von dir"), ("P5", "fehler", "Saturn führt kein Thema"),
+                 ("P6", "fehler", "Leitsatz nicht im Schlusswort"),
+                 ("P7", "fehler", "Signatur nennt Merkur nicht"),
+                 ("P8", "pruefen", "dein Partner"), ("P9", "pruefen", "Nichtwissens-Satz"),
+                 ("P9", "pruefen", "Verwerfungs-Erlaubnis"), ("P10", "pruefen", "Störung"),
+                 ("P11", "pruefen", "Altersangabe „mit zwölf“"),
+                 ("P12", "pruefen", "steht auf Rang 3 der Rangzeile engste-aspekte"),
+                 ("P13", "pruefen", "Mars Quadrat Saturn steht in keinem Beleg"),
+                 ("P14", "fehler", "Lebensaufgaben · Woran du wächst: Signatur fehlt"),
+                 ("P14", "fehler", "Konfliktfelder · Wo es reibt: trägt einen Beleg"),
+                 ("P15", "pruefen", "Mond △ Saturn (voll) — am Deutungsort Thema 2")), "Lauf 2")
+    # Negativkontrollen des Wortscans: die Fehlalarm-Klassen, an denen die
     # Modulregel gewachsen ist, duerfen NICHT anschlagen.
+    fehlt = []
     for _t in ("Zerstörung", "solltest du lassen", "dichtesten verschaltet",
                "tiefste Punkt des Horoskops",
                # neu 2026-09-18: verneintes klinisches Wort. Die Innere Arbeit
@@ -1958,9 +4379,9 @@ def _selbsttest(still=False):
     r3 = lauf(_TEST_CHART, a3)
     st3 = {nr: p["status"] for nr, p in r3["proben"].items()}
     berichte.append("Lauf 3 (Zugang-Kapitel): " + ", ".join("%s=%s" % kv for kv in st3.items()))
-    assert r3["fehler"] == 0 and r3["pruefen"] == 0 and not r3["uebersprungen"], (
-        "Lauf 3 nicht sauber: %s\n%s" % (st3, "\n".join(
-            f for p in r3["proben"].values() for f in p["fehler"] + p["pruefen"])))
+    assert r3["fehler"] == 0 and r3["pruefen"] == 0 and \
+        [nr for nr, _art, _g in r3["uebersprungen"]] == ["P1"], (
+            "Lauf 3 nicht sauber: %s\n%s" % (st3, befunde(r3)))
     assert r3["proben"]["P1"]["geprueft"] == r["proben"]["P1"]["geprueft"] + 2, (
         "P1 hat die zwei verwiesenen Aspekte des Zugangs nicht geprueft")
     assert r3["proben"]["P4"]["geprueft"] == r["proben"]["P4"]["geprueft"] + 1, (
@@ -1969,10 +4390,153 @@ def _selbsttest(still=False):
     r3f = lauf(_TEST_CHART, a3f)
     assert any("Zugang Beruf" in t and "Orb 3°05′" in t for t in r3f["proben"]["P1"]["fehler"]), (
         "P1 findet den falschen Orb im Zugang-Beleg nicht: %s" % r3f["proben"]["P1"]["fehler"])
+
+    # 4) Transit mit events.json, fehlerfrei (2026-09-19: W10, W23, W24, W43, U1)
+    tc, ta, tev, w = _transit_fall()
+    r4 = lauf(tc, ta, tev)
+    st4 = {nr: p["status"] for nr, p in r4["proben"].items()}
+    berichte.append("Lauf 4 (Transit mit events.json): " + ", ".join("%s=%s" % kv for kv in st4.items()))
+    assert r4["typ"] == "transit" and r4["fehler"] == 0 and r4["pruefen"] == 0 and \
+        not r4["uebersprungen"], "Lauf 4 nicht sauber: %s\n%s\n%s" % (st4, befunde(r4),
+                                                                     r4["uebersprungen"])
+    assert r4["proben"]["P1"]["geprueft"] == 5 and r4["proben"]["P5"]["geprueft"] == 3 and \
+        r4["proben"]["P14"]["geprueft"] == 6, "Lauf 4: Zählung P1/P5/P14 %s" % (
+            [r4["proben"][n]["geprueft"] for n in ("P1", "P5", "P14")])
+
+    # 5) Transit mit eingebauten Fehlern
+    a5 = ta
+    a5 = ersetze(a5, "## Zur Lesart · Wie du", "## Vorwort · Wie du")                   # W23 (Gegenprobe)
+    a5 = ersetze(a5, "Orb 0,57°", "Orb 0,75°")                                              # W10 Stichtag-Orb
+    a5 = ersetze(a5, "am Stichtag Orb 2,40°, zulaufend; exakt %s" % w["e150"],
+                 "am Stichtag Orb 2,40°, zulaufend; exakt %s · T-Mondknoten ☊ Konjunktion ☌ "
+                 "R-Merkur ☿ — am Stichtag Orb 1,20°; exakt %s" % (w["e150"], w["e250"]))  # W24 Annaeherung als exakt
+    a5 = ersetze(a5, "R-Sonne ☉ — exakt %s, %s, %s · T-Saturn" % (w["e60"], w["e200"], w["e330"]),
+                 "R-Sonne ☉ — exakt %s, %s, %s · T-Saturn" % (w["e60"], w["e201"], w["e330"]))  # W24 Datum
+    a5 = ersetze(a5, "R-Mond ☽ — exakt %s\n\n### Woran" % w["e150"],
+                 "R-Mond ☽ — exakt %s · T-Uranus ♅ Quadrat □ R-Mond ☽ — exakt %s\n\n### Woran"
+                 % (w["e150"], w["e100"]))                                                   # W24 Kontakt fehlt
+    a5 = ersetze(a5, "hat ein gutes Argument: Wer schnell ist, muss nicht warten.",
+                 "hat dich oft geschützt.")                                                  # W4 Zeitform
+    a5 = ersetze(a5, "und macht das Denken vorsichtiger.",
+                 "und macht das Denken vorsichtiger. Dazu kommt Pluto im Quadrat zu deiner Sonne.")  # P13
+    a5 = ersetze(a5, "Das Fenster schließt nichts.",
+                 "Das Fenster schließt nichts. Eine ähnliche Frage stand im %s an, als du neun warst."
+                 % w["mM2500"])                                                               # P11 Monat, Alter
+    a5 = ersetze(a5, " Jupiter weitet, was der Mond braucht, und das Gefühl von Sicherheit wird "
+                     "größer. Das zeigt sich im Alltag daran, dass du weniger festhältst. Ein solcher "
+                     "Transit verspricht nichts; er macht etwas leichter erreichbar.", "")        # P15 zu kurz
+    a5 = ersetze(a5, "\n\n2. Neptun im Sextil zu deinem Mars, im %s: die Kraft wird weicher." % w["m400"],
+                 "")                                                                          # W43 Zeile fehlt
+    a5 = ersetze(a5, "\n\n3. Der Mondknoten", "\n\n2. Der Mondknoten")
+    a5 = ersetze(a5, " Klingt mit in Kapitel 1.", "")                                         # W43 Kapitel fehlt
+    r5 = lauf(tc, a5, tev)
+    erwarte(r5, (("P1", "fehler", "Orb am Stichtag 0,75° weicht ab"),
+                 ("P1", "fehler", "ist eine Annäherung ohne Nulldurchgang"),
+                 ("P1", "fehler", "exakt %s ist kein Nulldurchgang" % w["e201"]),
+                 ("P1", "fehler", "Kontakt T-Uranus Quadrat R-Mond steht nicht in events.json"),
+                 ("P5", "fehler", "T-Neptun Sextil R-Mars — primärer Wirkorb-Kontakt"),
+                 ("P5", "pruefen", "nennt das Kapitel 1 nicht"),
+                 ("P9", "pruefen", "Verwerfungs-Erlaubnis außerhalb des ersten Themenkapitels · Vorwort"),
+                 ("P10", "pruefen", "Superlative: 4 Treffer"),
+                 ("P10", "pruefen", "Zeitform (Widerstand)"),
+                 ("P11", "pruefen", "Monat „%s“" % w["mM2500"]),
+                 ("P11", "pruefen", "Altersangabe „als du neun warst“"),
+                 ("P13", "pruefen", "Pluto Quadrat Sonne steht in keinem Beleg"),
+                 ("P15", "pruefen", "Jupiter △ Mond (Transit) — am Deutungsort Thema 2")), "Lauf 5")
+    st5 = {nr: p["status"] for nr, p in r5["proben"].items()}
+    berichte.append("Lauf 5 (Transit, eingebaute Fehler): " + ", ".join("%s=%s" % kv for kv in st5.items()))
+    # 5b) Lagebild ohne Kopfblock (W10) — ein Fehler, den bisher erst Schritt 3 fand
+    a5b = ta.split("**Signatur:** Saturn im Quadrat zu deiner Sonne, im Anmarsch", 1)
+    a5b = a5b[0] + "Am Stichtag" + a5b[1].split("\n\nAm Stichtag", 1)[1]
+    r5b = lauf(tc, a5b, tev)
+    erwarte(r5b, (("P14", "fehler", "Der Stand heute · Was gerade anliegt: Signatur und Beleg fehlen"),),
+            "Lauf 5b")
+
+    # 6) Transit ohne events.json: Form geprueft, Abgleich teilweise uebersprungen (W24, W44)
+    r6 = lauf(tc, ta)
+    st6 = {nr: p["status"] for nr, p in r6["proben"].items()}
+    berichte.append("Lauf 6 (Transit ohne events.json): " + ", ".join("%s=%s" % kv for kv in st6.items()))
+    assert r6["fehler"] == 0 and r6["pruefen"] == 0, "Lauf 6 nicht sauber: %s\n%s" % (st6, befunde(r6))
+    assert [(nr, art) for nr, art, _g in r6["uebersprungen"]] == [("P1", "teilweise übersprungen")] and \
+        "events.json" in r6["uebersprungen"][0][2], "Lauf 6: %s" % r6["uebersprungen"]
+    # eine events.json, die es nicht gibt, bricht laut ab (Rueckgabewert 2 der CLI)
+    d6 = tempfile.mkdtemp(prefix="inhaltsprobe_")
+    pa6, pc6 = os.path.join(d6, "prueffall_analyse.md"), os.path.join(d6, "prueffall_chart_data.md")
+    open(pa6, "w", encoding="utf-8").write(ta)
+    open(pc6, "w", encoding="utf-8").write(tc)
+    try:
+        pruefe(pa6, pc6, None, os.path.join(d6, "fehlt_events.json"))
+        raise AssertionError("fehlende events.json wurde nicht gemeldet")
+    except InhaltsprobeFehler as e:
+        assert "events.json nicht lesbar" in str(e), str(e)
+
+    # 7) L7: die beiden Formen des Getriebe-Kapitels. Die Laeufe 1-3 pruefen die
+    #    ALTE Form (Kicker `Kapitel 1` fuers Getriebe, Themen ab `Kapitel 2`);
+    #    hier dieselbe Analyse in der NEUEN (Wort-Kicker `Getriebe`, `Kapitel n`
+    #    = `THEMA n`, Typmodul seit 2026-09-19). Beide muessen sauber laufen.
+    _alt = [{"kicker": "Kapitel 1", "title": "Was unter allem liegt"},
+            {"kicker": "Kapitel 2", "title": "Ein Thema"}]
+    _neu = [{"kicker": "Getriebe", "title": "Was unter allem liegt"},
+            {"kicker": "Kapitel 1", "title": "Ein Thema"}]
+    assert (_zaehlung_ab(_alt, "geburt"), _zaehlung_ab(_neu, "geburt"),
+            _zaehlung_ab(_alt, "transit"), _zaehlung_ab(None, "geburt")) == (2, 1, 1, 2), \
+        "L7: _zaehlung_ab erkennt die Form nicht"
+    for _chs, _wo in ((_alt, "alte Form"), (_neu, "neue Form")):
+        assert _kapitelart(_chs[0], "geburt", _chs) == "Getriebe-Kapitel" and \
+            _kapitelart(_chs[1], "geburt", _chs) == "Themenkapitel", \
+            "L7 (%s): _kapitelart verwechselt Getriebe- und Themenkapitel" % _wo
+        assert _beleg_form(dict(_chs[0], beleg="Elemente Feuer 3 · Erde 1 · Luft 0 · "
+                                "Wasser 1 · Herrscherkreis Sonne → Mars → Mond"),
+                           "geburt", _chs) == "struktur", \
+            "L7 (%s): Getriebe-Beleg nicht im Struktur-Format" % _wo
+        assert _beleg_form(dict(_chs[1], beleg="Sonne ☉ 10°00′ Widder ♈, 1. Haus"),
+                           "geburt", _chs) == "normal", \
+            "L7 (%s): Beleg des ersten Themenkapitels nicht im Normalformat" % _wo
+    a7 = ersetze(_TEST_ANALYSE, "## Kapitel 1 · Was unter allem liegt",
+                 "## Getriebe · Was unter allem liegt")
+    a7 = ersetze(a7, "## Kapitel 2 · Der Anfang", "## Kapitel 1 · Der Anfang")
+    a7 = ersetze(a7, "## Kapitel 3 · Was hält", "## Kapitel 2 · Was hält")
+    a7 = ersetze(a7, "steht in Kapitel 2.", "steht in Kapitel 1.")
+    a7 = ersetze(a7, "Vorderseite von Kapitel 3.", "Vorderseite von Kapitel 2.")
+    a7 = ersetze(a7, "Rückseite von Kapitel 2.", "Rückseite von Kapitel 1.")
+    a7 = ersetze(a7, "Klingt mit in Kapitel 2.", "Klingt mit in Kapitel 1.")
+    a7 = ersetze(a7, "Klingt mit in Kapitel 3.", "Klingt mit in Kapitel 2.")
+    a7 = ersetze(a7, "Zusammenführung der Kapitel 2 und 3", "Zusammenführung der Kapitel 1 und 2")
+    a7 = ersetze(a7, "Die Gegensatzpaare der Kapitel 2 und 3", "Die Gegensatzpaare der Kapitel 1 und 2")
+    a7 = ersetze(a7, "Was aus den Kapiteln 2 und 3 als Richtung bleibt",
+                 "Was aus den Kapiteln 1 und 2 als Richtung bleibt")
+    z7 = ersetze(_TEST_ZUGANG, "(Kapitel 3)", "(Kapitel 2)")
+    z7 = ersetze(z7, "sind in Kapitel 3 gedeutet", "sind in Kapitel 2 gedeutet")
+    a7 = ersetze(a7, "## Rechenschaft · Was sonst in deinem Bild steht",
+                 z7 + "## Rechenschaft · Was sonst in deinem Bild steht")
+    c7 = ersetze(_TEST_CHART, "klingt mit in Kapitel 2.", "klingt mit in Kapitel 1.")
+    c7 = ersetze(c7, "klingt mit in Kapitel 3.", "klingt mit in Kapitel 2.")
+    r7 = lauf(c7, a7)
+    st7 = {nr: p["status"] for nr, p in r7["proben"].items()}
+    berichte.append("Lauf 7 (Getriebe-Kicker, neue Zählung): "
+                    + ", ".join("%s=%s" % kv for kv in st7.items()))
+    assert r7["fehler"] == 0 and r7["pruefen"] == 0 and \
+        [nr for nr, _art, _g in r7["uebersprungen"]] == ["P1"], (
+            "Lauf 7 nicht sauber: %s\n%s" % (st7, befunde(r7)))
+    for nr in ("P1", "P3", "P4", "P14", "P15"):
+        assert r7["proben"][nr]["geprueft"] == r3["proben"][nr]["geprueft"], (
+            "Lauf 7: %s prüft %d Einheiten, in der alten Form (Lauf 3) %d"
+            % (nr, r7["proben"][nr]["geprueft"], r3["proben"][nr]["geprueft"]))
+    assert not r7["proben"]["P14"]["hinweise"], (
+        "Lauf 7: P14 kennt einen Kicker nicht: %s" % r7["proben"]["P14"]["hinweise"])
+    # 7b) neue Form, aber der Wort-Kicker fehlt: P3 meldet die Zahl UND nennt den
+    #     Grund — sonst sucht der Lauf den Fehler in der Themenliste.
+    r7b = lauf(c7, ersetze(a7, "## Getriebe · Was unter allem liegt",
+                           "## Gesamtbild · Was unter allem liegt"))
+    erwarte(r7b, (("P3", "fehler", "trägt das Getriebe-Kapitel den Wort-Kicker"),), "Lauf 7b")
+
     if not still:
         print("\n".join(berichte))
-        print("[Selbsttest bestanden: Lauf 1 ohne Befund, Lauf 2 findet je Probe den eingebauten "
-              "Fehler, Lauf 3 liest das Zugang-Kapitel und prüft seine Aspekte]")
+        print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
+              "Getriebe-Beleg teilweise übersprungen), Lauf 2 findet je Probe den eingebauten Fehler, "
+              "Lauf 3 liest das Zugang-Kapitel; Transit: Lauf 4 sauber mit events.json, Lauf 5 und 5b "
+              "finden die eingebauten Fehler, Lauf 6 ohne events.json nur teilweise übersprungen; "
+              "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn]")
     return True
 
 def _main(argv):
@@ -1985,12 +4549,22 @@ def _main(argv):
         i = argv.index("--typ")
         typ = argv[i + 1] if i + 1 < len(argv) else None
         args = [x for x in args if x != typ]
+    events_pfad = None
+    if "--events" in argv:          # 2026-09-19 (W24)
+        i = argv.index("--events")
+        events_pfad = argv[i + 1] if i + 1 < len(argv) else None
+        if not events_pfad or events_pfad.startswith("--"):
+            print("--events braucht einen Pfad: --events <klient>_Transit_events.json",
+                  file=sys.stderr)
+            return 2
+        args = [x for x in args if x != events_pfad]
     if len(args) != 2:
-        print("Aufruf: python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|ea|transit|ultimativ]\n"
+        print("Aufruf: python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|ea|transit|ultimativ]"
+              " [--events <events.json>]\n"
               "        python3 inhaltsprobe.py --selbsttest", file=sys.stderr)
         return 2
     try:
-        r = pruefe(args[0], args[1], typ)
+        r = pruefe(args[0], args[1], typ, events_pfad)
     except InhaltsprobeFehler as e:
         print("INHALTSPROBE: nicht lesbar — %s" % e, file=sys.stderr)
         return 2
