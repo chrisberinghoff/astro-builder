@@ -62,6 +62,7 @@ QUELLE = None
 
 
 def setze_quelle(pfad):
+    """Die chart_data festlegen, aus der parse() ohne Argument liest (QUELLE)."""
     global QUELLE
     QUELLE = pfad
     return pfad
@@ -100,6 +101,8 @@ def _d(s):
 
 
 def ziel_label(n):
+    """Anzeigename eines Ziels mit Umlaut (ZIELNAME: Glueckspunkt -> Glückspunkt,
+    Suedknoten -> Südknoten, Knoten -> Mondknoten); Unbekanntes unveraendert."""
     return ZIELNAME.get(n, n)
 
 
@@ -190,6 +193,13 @@ def _report_text(raw):
 
 
 def parse(pfad=None):
+    """Den transit.py-Report aus der chart_data (oder der rohen Report-Datei)
+    strukturiert lesen. pfad=None nimmt QUELLE (setze_quelle()).
+    Rueckgabe: dict mit den Schluesseln fenster, quartale, stand, im_orb,
+    nachhall, anmarsch, stationen, langlaeufer, zeichen, haeuser, hotspots,
+    fortsetzung, fruehere, zusatz — Feld fuer Feld im Modul-Docstring
+    beschrieben: hilfe('modul'). Wirft ValueError ohne Quelle und mit einer
+    lesbaren Meldung, wenn ein Report-Abschnitt fehlt (W11)."""
     pfad = pfad or QUELLE
     if not pfad:
         raise ValueError('transitdata: keine Quelle gesetzt — '
@@ -662,8 +672,114 @@ def _selbsttest(still=False):
     return not fehler
 
 
+# ---------------------------------------------------------------------------
+# hilfe() — Schnittstellen-Auskunft ohne Quelltext-Lektuere.
+# Neu 2026-09-20 (Aufraeumlauf D, Block D3; K5/W61: Schnittstellen wurden je Lauf
+# aus dem Quelltext nachgelesen, 50-110 KB je Lauf). Derselbe Block steht
+# wortgleich in jedem Builder. Er liest Signaturen und Docstrings zur LAUFZEIT —
+# er kann also nicht veralten. Was hilfe() nicht sagt, fehlt im Docstring der
+# Funktion und wird DORT ergaenzt, nie hier.
+# ---------------------------------------------------------------------------
+
+def hilfe(name=None, datei=None):
+    """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
+
+    hilfe()               Uebersicht: jede oeffentliche Funktion mit Signatur und
+                          erstem Docstring-Absatz, dazu Fehlerklassen und die
+                          Konstanten (GROSSBUCHSTABEN) mit gekuerztem Wert.
+    hilfe('<name>')       der VOLLE Docstring EINER Funktion oder Klasse —
+                          Argumente, Rueckgabeschluessel, Fehlerfaelle; bei einer
+                          Konstante ihr voller Wert; 'modul' = der Docstring der
+                          Datei selbst.
+    hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
+    Kommandozeile:        python3 <builder>.py --hilfe [<name>]
+    Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
+    """
+    import inspect as _insp
+    import sys as _sys
+    _m = _sys.modules[__name__]
+    _mn = (_m.__name__ if _m.__name__ != '__main__'
+           else __file__.rsplit('/', 1)[-1].rsplit('.', 1)[0])
+
+    def _erste(doc):
+        return (doc.strip().split('\n\n')[0].replace('\n', ' ').strip()
+                if doc else '(kein Docstring — Signatur gilt)')
+
+    def _sig(o):
+        try:
+            return str(_insp.signature(o))
+        except (TypeError, ValueError):
+            return '(…)'
+
+    L = []
+    if name in ('modul', '__doc__'):
+        L.append('%s.py' % _mn)
+        L.append(_m.__doc__ or '(kein Modul-Docstring)')
+    elif name:
+        o = getattr(_m, name, None)
+        if o is None:
+            L.append("%s.py: kein Eintrag '%s'. Uebersicht: %s.hilfe()"
+                     % (_mn, name, _mn))
+        elif _insp.isfunction(o) or _insp.isclass(o):
+            L.append('%s.%s%s' % (_mn, name, _sig(o)))
+            L.append(_insp.getdoc(o) or '(kein Docstring — Signatur gilt)')
+        else:
+            L.append('%s.%s = %r' % (_mn, name, o))
+    else:
+        L.append('%s.py — Schnittstellen (Einzelheiten: %s.hilfe(\'<name>\'), '
+                 'Datei-Docstring: hilfe(\'modul\'))' % (_mn, _mn))
+        L.append(_erste(_m.__doc__))
+        L.append('')
+        L.append('FUNKTIONEN')
+        for n, o in sorted(vars(_m).items()):
+            if (n.startswith('_') or not _insp.isfunction(o)
+                    or o.__module__ != _m.__name__):
+                continue
+            L.append('  %s%s' % (n, _sig(o)))
+            L.append('      %s' % _erste(_insp.getdoc(o)))
+        klassen = [(n, o) for n, o in sorted(vars(_m).items())
+                   if _insp.isclass(o) and o.__module__ == _m.__name__
+                   and not n.startswith('_')]
+        if klassen:
+            L.append('')
+            L.append('KLASSEN / FEHLERKLASSEN')
+            for n, o in klassen:
+                L.append('  %s: %s' % (n, _erste(_insp.getdoc(o))))
+        konst = [(n, o) for n, o in sorted(vars(_m).items())
+                 if n.isupper() and not n.startswith('_')
+                 and not callable(o) and not _insp.ismodule(o)]
+        if konst:
+            L.append('')
+            L.append("KONSTANTEN (voller Wert: hilfe('<NAME>'))")
+            for n, o in konst:
+                r = repr(o).replace('\n', ' ')
+                L.append('  %s = %s%s' % (n, r[:88], '…' if len(r) > 88 else ''))
+    text = '\n'.join(L)
+    if datei:
+        with open(datei, 'w', encoding='utf-8') as f:
+            f.write(text + '\n')
+        return datei
+    print(text)
+    return None
+
+
+def _hilfe_cli(argv=None):
+    """`--hilfe [<name>]` auf der Kommandozeile: druckt hilfe() und gibt True."""
+    import sys as _sys
+    argv = list(_sys.argv[1:] if argv is None else argv)
+    if '--hilfe' not in argv:
+        return False
+    i = argv.index('--hilfe')
+    name = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith('-') \
+        else None
+    hilfe(name)
+    return True
+
+
 if __name__ == '__main__':
     import sys as _s
+    if _hilfe_cli():          # python3 transitdata.py --hilfe [<name>]
+        _s.exit(0)
     if '--selbsttest' in _s.argv[1:]:
         _s.exit(0 if _selbsttest() else 1)
     d = parse(_s.argv[1] if len(_s.argv) > 1 else None)

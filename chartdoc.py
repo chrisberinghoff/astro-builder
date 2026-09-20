@@ -163,10 +163,14 @@ C = _Farben()
 
 
 def gr(x):
+    """Gradangabe im Zeichen als N°NN′ — die per konfiguriere(gr=cd.gr) gesetzte
+    Funktion der chart-eigenen chartdata.py."""
     return _CFG['gr'](x)
 
 
 def name_of(n):
+    """Ausgeschriebener Faktorname fuer Tabellen — die per konfiguriere(name_of=
+    cd.name_of) gesetzte Funktion der chart-eigenen chartdata.py."""
     return _CFG['name_of'](n)
 
 
@@ -2031,7 +2035,13 @@ def _ist_jetzt(titel, teil3_a):
 
 
 def toc_gruppen(items, teil3_a=None):
-    """Gliederung aus den geparsten Kapiteln ableiten (nicht hart verdrahtet)."""
+    """Gliederung aus den geparsten Kapiteln ableiten (nicht hart verdrahtet).
+
+    Rueckgabe: Liste von Gruppen [{'kicker', 'titel', 'idx', 'eintraege':
+    [(kapitelindex, kicker, titel), …]}, …] — eine Gruppe je Teiler-Kicker
+    (PART_KICKER) sowie fuer Auftakt und Schlusswort; ohne Auftakt eroeffnet
+    das erste Kapitel die Gruppe selbst. inhalt_page() ruft es selbst.
+    """
     grp, cur = [], None
     for i, it in enumerate(items):
         k = it.get('kicker') or ''
@@ -2202,7 +2212,17 @@ def seiten_aus_doc(doc):
 def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
                       required_fields=None, doctype=None, extra_must=(),
                       max_pass=3, verbose=True):
-    """Zwei-Pass-Render mit ECHTEN Seitenzahlen im Inhaltsverzeichnis."""
+    """Zwei-Pass-Render mit ECHTEN Seitenzahlen im Inhaltsverzeichnis.
+
+    build_html(breaks) -> vollstaendiges Dokument-HTML; seiten_dict ist das
+    SEITEN-dict des Builders und wird hier gefuellt. Vorher laufen die drei
+    harten Gegenproben pruefe_kapitelkopf(), pruefe_kapitelfuss() und
+    pruefe_orbis_zeile(). Rueckgabe: (doc, seiten) — das WeasyPrint-Document
+    des letzten Passes und {anker: seitenzahl} fuer alle PG_*- und
+    CH_*-Anker (seiten_aus_doc()). Das PDF liegt unter out_pfad. Wirft
+    RuntimeError, wenn die Seitenzahlen nach max_pass Durchlaeufen nicht
+    stabil sind. (Rueckgabe dokumentiert 2026-09-20, D3.)
+    """
     must = [(b['text'], f"{it['kicker']} Block {j}")
             for it in items for j, b in enumerate(it['blocks'])
             if b['type'] in ('p', 'li')]
@@ -2341,5 +2361,111 @@ def _selbsttest():
           'Orb der Aspektseite (W2)]')
 
 
+# ---------------------------------------------------------------------------
+# hilfe() — Schnittstellen-Auskunft ohne Quelltext-Lektuere.
+# Neu 2026-09-20 (Aufraeumlauf D, Block D3; K5/W61: Schnittstellen wurden je Lauf
+# aus dem Quelltext nachgelesen, 50-110 KB je Lauf). Derselbe Block steht
+# wortgleich in jedem Builder. Er liest Signaturen und Docstrings zur LAUFZEIT —
+# er kann also nicht veralten. Was hilfe() nicht sagt, fehlt im Docstring der
+# Funktion und wird DORT ergaenzt, nie hier.
+# ---------------------------------------------------------------------------
+
+def hilfe(name=None, datei=None):
+    """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
+
+    hilfe()               Uebersicht: jede oeffentliche Funktion mit Signatur und
+                          erstem Docstring-Absatz, dazu Fehlerklassen und die
+                          Konstanten (GROSSBUCHSTABEN) mit gekuerztem Wert.
+    hilfe('<name>')       der VOLLE Docstring EINER Funktion oder Klasse —
+                          Argumente, Rueckgabeschluessel, Fehlerfaelle; bei einer
+                          Konstante ihr voller Wert; 'modul' = der Docstring der
+                          Datei selbst.
+    hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
+    Kommandozeile:        python3 <builder>.py --hilfe [<name>]
+    Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
+    """
+    import inspect as _insp
+    import sys as _sys
+    _m = _sys.modules[__name__]
+    _mn = (_m.__name__ if _m.__name__ != '__main__'
+           else __file__.rsplit('/', 1)[-1].rsplit('.', 1)[0])
+
+    def _erste(doc):
+        return (doc.strip().split('\n\n')[0].replace('\n', ' ').strip()
+                if doc else '(kein Docstring — Signatur gilt)')
+
+    def _sig(o):
+        try:
+            return str(_insp.signature(o))
+        except (TypeError, ValueError):
+            return '(…)'
+
+    L = []
+    if name in ('modul', '__doc__'):
+        L.append('%s.py' % _mn)
+        L.append(_m.__doc__ or '(kein Modul-Docstring)')
+    elif name:
+        o = getattr(_m, name, None)
+        if o is None:
+            L.append("%s.py: kein Eintrag '%s'. Uebersicht: %s.hilfe()"
+                     % (_mn, name, _mn))
+        elif _insp.isfunction(o) or _insp.isclass(o):
+            L.append('%s.%s%s' % (_mn, name, _sig(o)))
+            L.append(_insp.getdoc(o) or '(kein Docstring — Signatur gilt)')
+        else:
+            L.append('%s.%s = %r' % (_mn, name, o))
+    else:
+        L.append('%s.py — Schnittstellen (Einzelheiten: %s.hilfe(\'<name>\'), '
+                 'Datei-Docstring: hilfe(\'modul\'))' % (_mn, _mn))
+        L.append(_erste(_m.__doc__))
+        L.append('')
+        L.append('FUNKTIONEN')
+        for n, o in sorted(vars(_m).items()):
+            if (n.startswith('_') or not _insp.isfunction(o)
+                    or o.__module__ != _m.__name__):
+                continue
+            L.append('  %s%s' % (n, _sig(o)))
+            L.append('      %s' % _erste(_insp.getdoc(o)))
+        klassen = [(n, o) for n, o in sorted(vars(_m).items())
+                   if _insp.isclass(o) and o.__module__ == _m.__name__
+                   and not n.startswith('_')]
+        if klassen:
+            L.append('')
+            L.append('KLASSEN / FEHLERKLASSEN')
+            for n, o in klassen:
+                L.append('  %s: %s' % (n, _erste(_insp.getdoc(o))))
+        konst = [(n, o) for n, o in sorted(vars(_m).items())
+                 if n.isupper() and not n.startswith('_')
+                 and not callable(o) and not _insp.ismodule(o)]
+        if konst:
+            L.append('')
+            L.append("KONSTANTEN (voller Wert: hilfe('<NAME>'))")
+            for n, o in konst:
+                r = repr(o).replace('\n', ' ')
+                L.append('  %s = %s%s' % (n, r[:88], '…' if len(r) > 88 else ''))
+    text = '\n'.join(L)
+    if datei:
+        with open(datei, 'w', encoding='utf-8') as f:
+            f.write(text + '\n')
+        return datei
+    print(text)
+    return None
+
+
+def _hilfe_cli(argv=None):
+    """`--hilfe [<name>]` auf der Kommandozeile: druckt hilfe() und gibt True."""
+    import sys as _sys
+    argv = list(_sys.argv[1:] if argv is None else argv)
+    if '--hilfe' not in argv:
+        return False
+    i = argv.index('--hilfe')
+    name = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith('-') \
+        else None
+    hilfe(name)
+    return True
+
+
 if __name__ == '__main__':
+    if _hilfe_cli():          # python3 chartdoc.py --hilfe [<name>]
+        raise SystemExit(0)
     _selbsttest()

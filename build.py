@@ -1224,7 +1224,11 @@ def chapter_markers(parsed: dict, nur_titel: bool = False) -> list:
 def prepare_chapters(parsed: dict) -> list:
     """Dekoriert parse_analyse()-Kapitel für den satzsicheren Builder:
     p-Blöcke bekommen 'sent' (split_sentences), 'colon_end' und 'next_p' —
-    exakt die Struktur, die der Referenz-Builder erwartet."""
+    exakt die Struktur, die der Referenz-Builder erwartet.
+    Rueckgabe: NEUE Liste von Kapitel-dicts {'kicker', 'title', 'signatur',
+    'beleg', 'blocks': [{'type', 'text', …, bei 'p' zusaetzlich 'sent',
+    'colon_end', 'next_p'}]} — das `items` der Chart-Builder; `parsed` bleibt
+    unveraendert."""
     items = []
     for ch in parsed["chapters"]:
         it = {"kicker": ch["kicker"], "title": ch["title"],
@@ -1663,6 +1667,8 @@ def _pdf_pages_text(pdf_path: str) -> list:
 
 
 def pdf_info(pdf_path: str) -> dict:
+    """`pdfinfo` als dict — Schluessel wie pdfinfo sie druckt ('Pages', 'Page size',
+    'File size' …), Werte als Strings; die Seitenzahl also int(info['Pages'])."""
     out = subprocess.run(["pdfinfo", pdf_path], capture_output=True, check=True)
     info = {}
     for line in out.stdout.decode("utf-8", "replace").splitlines():
@@ -2120,7 +2126,8 @@ def verify_visual(pdf_path: str, pages=None, dpi: int = 80,
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "setup":
         setup_fonts(force="--force" in sys.argv)
-    elif "--selbsttest" not in sys.argv[1:]:   # 2026-09-19: Aufruf am Dateiende
+    elif "--selbsttest" not in sys.argv[1:] and "--hilfe" not in sys.argv[1:]:
+        # --selbsttest und --hilfe werden am Dateiende bedient (2026-09-19 / 2026-09-20)
         print(__doc__)
 
 
@@ -3710,5 +3717,113 @@ def _selbsttest_verify(tmp, pruefe):
         pruefe("REIHENFOLGE" in str(e), "W47: Reihenfolge-Meldung: %s" % e)
 
 
+# ---------------------------------------------------------------------------
+# hilfe() — Schnittstellen-Auskunft ohne Quelltext-Lektuere.
+# Neu 2026-09-20 (Aufraeumlauf D, Block D3; K5/W61: Schnittstellen wurden je Lauf
+# aus dem Quelltext nachgelesen, 50-110 KB je Lauf). Derselbe Block steht
+# wortgleich in jedem Builder. Er liest Signaturen und Docstrings zur LAUFZEIT —
+# er kann also nicht veralten. Was hilfe() nicht sagt, fehlt im Docstring der
+# Funktion und wird DORT ergaenzt, nie hier.
+# ---------------------------------------------------------------------------
+
+def hilfe(name=None, datei=None):
+    """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
+
+    hilfe()               Uebersicht: jede oeffentliche Funktion mit Signatur und
+                          erstem Docstring-Absatz, dazu Fehlerklassen und die
+                          Konstanten (GROSSBUCHSTABEN) mit gekuerztem Wert.
+    hilfe('<name>')       der VOLLE Docstring EINER Funktion oder Klasse —
+                          Argumente, Rueckgabeschluessel, Fehlerfaelle; bei einer
+                          Konstante ihr voller Wert; 'modul' = der Docstring der
+                          Datei selbst.
+    hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
+    Kommandozeile:        python3 <builder>.py --hilfe [<name>]
+    Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
+    """
+    import inspect as _insp
+    import sys as _sys
+    _m = _sys.modules[__name__]
+    _mn = (_m.__name__ if _m.__name__ != '__main__'
+           else __file__.rsplit('/', 1)[-1].rsplit('.', 1)[0])
+
+    def _erste(doc):
+        return (doc.strip().split('\n\n')[0].replace('\n', ' ').strip()
+                if doc else '(kein Docstring — Signatur gilt)')
+
+    def _sig(o):
+        try:
+            return str(_insp.signature(o))
+        except (TypeError, ValueError):
+            return '(…)'
+
+    L = []
+    if name in ('modul', '__doc__'):
+        L.append('%s.py' % _mn)
+        L.append(_m.__doc__ or '(kein Modul-Docstring)')
+    elif name:
+        o = getattr(_m, name, None)
+        if o is None:
+            L.append("%s.py: kein Eintrag '%s'. Uebersicht: %s.hilfe()"
+                     % (_mn, name, _mn))
+        elif _insp.isfunction(o) or _insp.isclass(o):
+            L.append('%s.%s%s' % (_mn, name, _sig(o)))
+            L.append(_insp.getdoc(o) or '(kein Docstring — Signatur gilt)')
+        else:
+            L.append('%s.%s = %r' % (_mn, name, o))
+    else:
+        L.append('%s.py — Schnittstellen (Einzelheiten: %s.hilfe(\'<name>\'), '
+                 'Datei-Docstring: hilfe(\'modul\'))' % (_mn, _mn))
+        L.append(_erste(_m.__doc__))
+        L.append('')
+        L.append('FUNKTIONEN')
+        for n, o in sorted(vars(_m).items()):
+            if (n.startswith('_') or not _insp.isfunction(o)
+                    or o.__module__ != _m.__name__):
+                continue
+            L.append('  %s%s' % (n, _sig(o)))
+            L.append('      %s' % _erste(_insp.getdoc(o)))
+        klassen = [(n, o) for n, o in sorted(vars(_m).items())
+                   if _insp.isclass(o) and o.__module__ == _m.__name__
+                   and not n.startswith('_')]
+        if klassen:
+            L.append('')
+            L.append('KLASSEN / FEHLERKLASSEN')
+            for n, o in klassen:
+                L.append('  %s: %s' % (n, _erste(_insp.getdoc(o))))
+        konst = [(n, o) for n, o in sorted(vars(_m).items())
+                 if n.isupper() and not n.startswith('_')
+                 and not callable(o) and not _insp.ismodule(o)]
+        if konst:
+            L.append('')
+            L.append("KONSTANTEN (voller Wert: hilfe('<NAME>'))")
+            for n, o in konst:
+                r = repr(o).replace('\n', ' ')
+                L.append('  %s = %s%s' % (n, r[:88], '…' if len(r) > 88 else ''))
+    text = '\n'.join(L)
+    if datei:
+        with open(datei, 'w', encoding='utf-8') as f:
+            f.write(text + '\n')
+        return datei
+    print(text)
+    return None
+
+
+def _hilfe_cli(argv=None):
+    """`--hilfe [<name>]` auf der Kommandozeile: druckt hilfe() und gibt True."""
+    import sys as _sys
+    argv = list(_sys.argv[1:] if argv is None else argv)
+    if '--hilfe' not in argv:
+        return False
+    i = argv.index('--hilfe')
+    name = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith('-') \
+        else None
+    hilfe(name)
+    return True
+
+
 if __name__ == "__main__" and "--selbsttest" in sys.argv[1:]:
     _selbsttest()
+
+
+if __name__ == "__main__" and _hilfe_cli():   # python3 build.py --hilfe [<name>]
+    sys.exit(0)

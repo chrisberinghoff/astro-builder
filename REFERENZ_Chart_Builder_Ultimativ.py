@@ -4,7 +4,12 @@
 
 Stand nach dem Hausstil-Beschluss vom 2026-07-27, ergaenzt am 2026-07-30 um
 die gelesene Deckblatt-Bestellung; 2026-09-16: der Suedknoten-Lauf in
-konst_zeilen() wird aus dem Mondknoten abgeleitet statt fest gesetzt. Die chart-unabhaengige Mechanik UND die
+konst_zeilen() wird aus dem Mondknoten abgeleitet statt fest gesetzt;
+2026-09-20 (Aufraeumlauf D, Block D3): Zeitleisten-Seite, Einmessung am
+Frontmatter, Breitenleiter ab 15,6 cm, Palette und Sternfeld als markierte
+Platzhalter, Gruppentitel „Das Chartbild". FUER GEBURTSHOROSKOP UND EA GILT
+SEIT DEMSELBEN TAG DIE SCHLANKE VORLAGE `REFERENZ_Chart_Builder_Geburtshoroskop.py`
+— diese hier ist die Vorlage fuer Transit und Ultimativ. Die chart-unabhaengige Mechanik UND die
 Chartbild-Seiten stecken in `claude/chartdoc.py`; hier steht nur noch, was sich
 je Chart wirklich aendert:
 
@@ -14,8 +19,9 @@ je Chart wirklich aendert:
                          das individuelle Titelmotiv aus DECKBLATT['TITELMOTIV']
     3. KONST / ACHSEN    die Chartdaten (kommen aus chartdata.py)
     4. ANALYSE / CHARTDATA / OUT / RADPNG / UHRPNG
-    5. beim Ultimativ zusaetzlich: tdat.setze_quelle(...) auf die chart_data
-                         und die beiden Anhangtabellen
+    5. beim Ultimativ zusaetzlich: tdat.setze_quelle(...) auf die chart_data,
+                         die Zeitleisten-Seite (vor dem Schlusswort) und die
+                         beiden Anhangtabellen
 
 Alles andere — Struktur-CSS, Inhaltsverzeichnis, Radseite, Konstellationsseite,
 Aspektseite, Transit-Uhr-Seite, Kapitelkopf und Kapitelfuss mit Signatur/Beleg,
@@ -34,7 +40,17 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
     uhr_zeichnen). Ein PNG, das vom letzten Direktaufruf herumliegt, rendert
     still einen alten Datenstand — genau das ist am 2026-07-27 passiert.
   * Radbreite, Uhrbreite, Aspektskala UND die Skala der Konstellationsseite
-    werden EINGEMESSEN, nicht gesetzt (die letzte seit 2026-09-09).
+    werden EINGEMESSEN, nicht gesetzt (die letzte seit 2026-09-09) — seit dem
+    2026-09-20 am FRONTMATTER allein (build_html(nur_frontmatter=True): Cover,
+    Inhalt, Chartbild-Strecke, dazu die Zeitleiste). Die gemessenen Seiten
+    liegen vor den Kapiteln, ihr Umbruch haengt nicht an ihnen; ein
+    Messrender ist damit fuenf Seiten statt fuenfzig (K8/W62). Die
+    Breitenleiter beginnt bei 15,6 cm statt 17,2 cm — getroffen wurde in
+    7 von 10 Laeufen 15,2 cm.
+  * Palette, Cover-Verlauf und Sternfeld sind PLATZHALTER mit sichtbarer Marke
+    (PALETTE_GESETZT, STERNE): Solange die Marke steht, laeuft der Builder
+    nicht — so schleppt niemand die Farben eines anderen Charts mit
+    (Befund G34-17c Nr. 8).
   * Die Seitenfolge hinter dem Cover ist fest: Inhalt, Radix, Konstellationen,
     Aspekte, Transit-Uhr.
   * Die Kapitel-Schleife baut den Koerper NICHT mehr selbst: seit dem
@@ -94,12 +110,16 @@ PART_KICKER = {'Teil I', 'Teil II', 'Teil III', 'Vertiefung'}
 # mit: der erzwungene Umbruch liess im Erstlauf eine Seite mit vier Zeilen.
 OPEN_PAGE = {'Auftakt'}
 
-# Breitenleiter fuer die Einmessung von Radseite und Transit-Uhr.
-BREITEN = ['%.1fcm' % (x / 10) for x in range(172, 118, -2)]
+# Breitenleiter fuer die Einmessung von Radseite und Transit-Uhr: 15,6 cm
+# abwaerts in 0,2-cm-Schritten (K8/W62, 2026-09-20; vorher ab 17,2 cm).
+BREITEN = ['%.1fcm' % (x / 10) for x in range(156, 118, -2)]
 
 # --- Palette ---------------------------------------------------------------
 # Die Werte kommen aus PALETTE_VORGABE (Grundstimmung aus den dominanten
 # Elementen). Hier stehen Platzhalter — je Chart neu setzen, nicht uebernehmen.
+# Sind Palette UND die Verlaufsstopps in COVER_CSS gesetzt, PALETTE_GESETZT
+# auf True stellen; vorher bricht der Builder im __main__ mit einer Meldung ab.
+PALETTE_GESETZT = False   # <<auf True setzen, sobald NIGHT … BELEG_BD und .cv-sky aus PALETTE_VORGABE abgeleitet sind>>
 NIGHT = '#0a1a26'
 PETROL = '#1d4a53'
 PETROL_L = '#3d6b72'
@@ -135,7 +155,7 @@ COVER_CSS = f"""
 section.cover {{ page: cover; position:relative; width:21cm; height:29.7cm;
                  overflow:hidden; }}
 .cv-sky {{ position:absolute; top:0; left:0; width:21cm; height:29.7cm;
-  background: linear-gradient(to bottom, /* Verlauf aus PALETTE_VORGABE */
+  background: linear-gradient(to bottom, /* PLATZHALTER — Verlauf aus PALETTE_VORGABE, je Chart neu */
      #06121c 0%, #123340 33%, #35605c 62%, #f0d9a6 100%); }}
 .cv-art {{ position:absolute; top:0; left:0; width:21cm; height:29.7cm; }}
 .cv-star {{ position:absolute; border-radius:50%; background:#eaf1f5; }}
@@ -225,10 +245,15 @@ def cover_svg():
     return '\n'.join(p) + '</svg>'
 
 
+# Sternfeld: (x, y, radius, deckung) im 595x842-Raster — je Chart aus dem
+# TITELMOTIV gesetzt, leer = kein Sternfeld. Bis zum 2026-09-20 standen hier
+# die drei Punkte eines frueheren Charts ohne Marke (Befund G34-17c Nr. 8).
+STERNE = []
+
+
 def cover_stars():
-    """Sternfeld — nie in den Textbereich des Covers legen."""
-    pts = [(38, 62, 1.5, .85), (142, 44, 1.8, .9), (556, 112, 1.7, .85)]
-    pts = [q for q in pts if not (120 <= q[0] <= 475 and 74 <= q[1] <= 240)]
+    """Sternfeld aus STERNE — nie in den Textbereich des Covers (x 120–475, y 74–240)."""
+    pts = [q for q in STERNE if not (120 <= q[0] <= 475 and 74 <= q[1] <= 240)]
     out = []
     for x, y, r, o in pts:
         out.append(f'<div class="cv-star" style="left:{x/595*21:.3f}cm;'
@@ -284,9 +309,9 @@ def cover_html():
 ASPEKTE = cd.aspektliste()   # -> radix.aspektliste(...), s. chartdata.py
 TD = tdat.parse()
 
-# Zielnamen mit Umlaut brauchen einen Glyphen-Eintrag (der §11-Report schreibt
-# „Glückspunkt"/„Mondknoten", transitdata.GLYPH kennt nur ASCII).
-tdat.GLYPH.update({'Glückspunkt': '⊗', 'Mondknoten': '☊'})
+# (Die Umgehung `tdat.GLYPH.update(...)` fuer Umlautnamen ist seit dem
+# 2026-09-19 ueberfluessig — transitdata.GLYPH kennt Mondknoten, Glückspunkt
+# und Südknoten selbst (F22); gestrichen 2026-09-20.)
 
 # Die Themennamen der Uhr sind die KAPITELTITEL AUS TEIL III B des laufenden
 # Charts — erfundene Namen sind ein Fehler. tuhr.THEMEN ist im Repo mit den
@@ -394,7 +419,7 @@ UHR_LEAD = [
     'Die Linien stehen nicht einzeln nebeneinander, sondern in Themenblöcken — '
     'jeder Block trägt oben den Namen, unter dem der Text ihn später behandelt, '
     'und darunter einen dicken Bogen über die gesamte Laufzeit des Themas. So '
-    'liest man erst die fünf, sechs großen Zeiten und geht dann ins Einzelne.',
+    'liest man erst die großen Zeiten und geht dann ins Einzelne.',
 
     'Die Beschriftung am Zeilenanfang nennt beide Seiten in dieser Reihenfolge '
     '— zuerst den laufenden Planeten, dann den Winkel, den er bildet, dann die '
@@ -402,8 +427,8 @@ UHR_LEAD = [
     'zeigt, wann das geschieht: blass die volle Berührungszeit, kräftig die '
     'Strecke, in der die Linie wirklich arbeitet, und die kleinen weißen '
     'Punkte die einzelnen Tage, an denen der Winkel exakt steht. Blass '
-    'gesetzte Zeilen sind Nebenlinien, die im Text nicht eigens behandelt '
-    'werden.',
+    'gesetzte Zeilen — wo es sie gibt — sind Nebenlinien, die im Text nicht '
+    'eigens behandelt werden.',
 
     f'Die acht Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
     f'dieses Horoskop entstanden ist. Was links der senkrechten Marke liegt, '
@@ -580,7 +605,7 @@ zurückkehren.</p>
 <col style="width:9.4cm"></colgroup>
 <tbody>{stat}</tbody></table>
 <div class="anh-note">Snapshot-Orb 3,0°; was im Wirk-Orb von 1,5° steht, wird
-in Teil III eigens gedeutet.</div>
+in den Themenkapiteln eigens gedeutet.</div>
 </section>"""
 
 
@@ -593,12 +618,33 @@ items = build.prepare_chapters(parsed)
 colon_pairs = build.make_colon_pairs(items)
 ANHANG = anhang_langlaeufer() + anhang_jetzt()
 
-TOC_VORNE = [('Das Chart im Bild', [
+# Zeitleisten-Seite (Design-Zeitebene-Modul; neu in der Vorlage 2026-09-20,
+# T34-18c): der @@ZEITLEISTE-Block der chart_data, gelesen mit
+# chartdoc.lies_zeitleiste(titel=...) — Titel sind WORTGLEICH die Kapiteltitel.
+TITEL = {int(it['kicker'].split()[1]): it['title'] for it in items
+         if it.get('kicker', '').startswith('Kapitel ')
+         and it['kicker'].split()[1].isdigit()}
+ZL = chartdoc.lies_zeitleiste(CHARTDATA, titel=TITEL)
+ZL_ZEILEN = []
+for _q, (_qq, _a, _b, _spanne) in zip(ZL['quartale'], TD['quartale']):
+    assert _q['quartal'] == _qq, (_q['quartal'], _qq)
+    ZL_ZEILEN.append((_qq, _spanne, _q['dicht_titel'], _q['ruht_titel'],
+                      tdat.dichte_je_monat(TD, _a, _b), _q['marke']))
+
+
+def zeitleiste(skala=1.0):
+    return chartdoc.zeitleiste_page(ZL_ZEILEN, lead=ZL['lead'], skala=skala)
+
+
+# Gruppentitel wie der Standardaufruf des Design-Moduls („Das Chartbild";
+# G34-18 Nr. 7 — bis zum 2026-09-20 stand hier „Das Chart im Bild").
+TOC_VORNE = [('Das Chartbild', [
     ('Die Radix', 'PG_rad'),
     ('Die Konstellationen', 'PG_konst'),
     (chartdoc.ASPEKT_TITEL, 'PG_asp'),
     ('Die Transit-Uhr', 'PG_uhr')])]
-TOC_HINTEN = [('Anhang', [
+TOC_HINTEN = [('Zeit im Überblick', [(chartdoc.ZEITLEISTE_TITEL, 'PG_zeit')]),
+              ('Anhang', [
     ('Die langen Linien im Überblick', 'PG_anh1'),
     ('Der Stichtag im Überblick', 'PG_anh2')])]
 
@@ -608,7 +654,10 @@ SEITEN = {}
 
 
 def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
-               konst_skala=1.0):
+               konst_skala=1.0, zl_skala=1.0, nur_frontmatter=False):
+    """Das ganze Dokument — oder mit nur_frontmatter=True nur Cover, Inhalt,
+    Chartbild-Strecke und Zeitleiste (fuer die Einmessung; s. Docstring der
+    Datei)."""
     parts = ['<!doctype html><html lang="de"><head><meta charset="utf-8">'
              '<style>', BASE_CSS, chartdoc.struktur_css(), COVER_CSS,
              '</style></head><body>',
@@ -617,8 +666,16 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
                                   vorne=TOC_VORNE, hinten=TOC_HINTEN,
                                   ornament=ORNAMENT),
              chartbild(rad_breite, uhr_breite, skala, konst_skala)]
+    if nur_frontmatter:
+        parts.append(zeitleiste(zl_skala))
+        parts.append('</body></html>')
+        return '\n'.join(parts)
     first_chapter = True
     for i, it in enumerate(items):
+        if it.get('kicker') == 'Schlusswort':
+            # Die Zeitleiste steht hinten, vor Schlusswort und Anhang
+            # (Design-Zeitebene-Modul, „Wo sie steht").
+            parts.append(zeitleiste(zl_skala))
         is_part = it.get('kicker') in PART_KICKER
         allow_drop = not is_part
         cls = ['chapter']
@@ -650,36 +707,53 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
             inner = f'<div class="part-inner">{inner}</div>'
         parts.append(f'<section class="{" ".join(cls)}" id="CH_{i}">'
                      f'{inner}</section>')
+    if not any(it.get('kicker') == 'Schlusswort' for it in items):
+        parts.append(zeitleiste(zl_skala))     # Rueckfall: ohne Schlusswort vor den Anhang
     parts.append(ANHANG)
     parts.append('</body></html>')
     return '\n'.join(parts)
 
 
 if __name__ == '__main__':
+    if not PALETTE_GESETZT:
+        raise SystemExit('REFERENZ-Vorlage: Palette und Cover-Verlauf sind noch '
+                         'Platzhalter — aus DECKBLATT["PALETTE"] ableiten, dann '
+                         'PALETTE_GESETZT = True setzen (Design-Render-Modul, '
+                         '„Deckblatt": die Vorlage liefert Mechanik, nie Inhalt).')
+
     # 1. Grafiken IMMER selbst zeichnen — nie ein herumliegendes PNG benutzen.
     rad_zeichnen()
     uhr_zeichnen()
 
-    # 2. Einmessen statt schaetzen: groesste Breite/Schriftstufe, bei der die
-    #    jeweilige Seite einseitig bleibt.
-    rad = chartdoc.passe_ein(lambda w: build_html(rad_breite=w), 'PG_rad',
+    # 2. Einmessen statt schaetzen — am Frontmatter allein (s. Docstring der
+    #    Datei): groesste Breite/Schriftstufe, bei der die Seite einseitig bleibt.
+    def frontmatter(**kw):
+        return build_html(nur_frontmatter=True, **kw)
+
+    rad = chartdoc.passe_ein(lambda w: frontmatter(rad_breite=w), 'PG_rad',
                              BREITEN, was='Radseite')
-    uhr = chartdoc.passe_ein(lambda w: build_html(uhr_breite=w, rad_breite=rad),
+    uhr = chartdoc.passe_ein(lambda w: frontmatter(uhr_breite=w, rad_breite=rad),
                              'PG_uhr', BREITEN, was='Transit-Uhr')
     skala = chartdoc.passe_aspektseite_ein(
-        lambda s: build_html(skala=s, uhr_breite=uhr, rad_breite=rad), ASPEKTE)
+        lambda s: frontmatter(skala=s, uhr_breite=uhr, rad_breite=rad), ASPEKTE)
     # Die Konstellationsseite wird seit dem 2026-09-09 ebenfalls eingemessen —
     # sie ist die einzige Frontmatter-Seite, deren Inhalt je Chart waechst, und
     # lief bis dahin still auf zwei Seiten ueber (Pruefbericht Geburtshoroskop
     # Schritt 3+4, Rubrik 5.2).
     kskala = chartdoc.passe_ein(
-        lambda ks: build_html(skala=skala, uhr_breite=uhr, rad_breite=rad,
-                              konst_skala=ks),
+        lambda ks: frontmatter(skala=skala, uhr_breite=uhr, rad_breite=rad,
+                               konst_skala=ks),
         'PG_konst', chartdoc.KONST_STUFEN, was='Konstellationsseite')
+    # Die Zeitleiste passt beim Standardfenster (8 Quartale) bei 1.0; ab etwa
+    # elf Quartalen wird sie wie die Aspektseite eingemessen (chartdoc).
+    zl_skala = chartdoc.passe_ein(
+        lambda zs: frontmatter(skala=skala, uhr_breite=uhr, rad_breite=rad,
+                               konst_skala=kskala, zl_skala=zs),
+        'PG_zeit', [1.0, .96, .92, .88, .84, .80], was='Zeitleiste')
 
     # 3. Satzsicher rendern, Seitenzahlen im Inhalt aus dem echten Dokument.
     doc, seiten = chartdoc.render_mit_inhalt(
-        lambda breaks: build_html(breaks, skala, uhr, rad, kskala),
+        lambda breaks: build_html(breaks, skala, uhr, rad, kskala, zl_skala),
         OUT, items, colon_pairs, SEITEN,
         required_fields={'Leitsatz': LEITSATZ, 'Titelmotiv': TITELMOTIV},
         extra_must=[(LEITSATZ, 'Leitsatz aufs Cover')],
@@ -690,4 +764,5 @@ if __name__ == '__main__':
     print('Inhalt:', seiten.get('PG_inhalt'), '| Rad:', seiten.get('PG_rad'),
           '| Konstellationen:', seiten.get('PG_konst'),
           '| Aspekte:', seiten.get('PG_asp'), '| Uhr:', seiten.get('PG_uhr'),
+          '| Zeitleiste:', seiten.get('PG_zeit'),
           '| Anhang:', seiten.get('PG_anh1'), seiten.get('PG_anh2'))

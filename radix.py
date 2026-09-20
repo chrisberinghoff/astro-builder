@@ -274,6 +274,9 @@ def huber_aspects(factors, orbs=None):
 
     Rückgabe: Liste von dicts
         {'a','b','angle','name','color','strength','orb'}
+    Die ASPEKTART steht unter 'name' ('Konjunktion', 'Quadrat', …), NICHT
+    unter 'aspect' (Befund G12-17c Nr. 3); 'a'/'b' sind die Faktornamen,
+    'angle' der Sollwinkel, 'strength' 'voll'|'einseitig'|'neben'.
     'orb' ist die UNGERUNDETE Abweichung in Grad (seit 2026-09-19, W2);
     gerundet wird erst in der Ausgabe (`_gr()` hier, `gr()` der chartdata.py).
     """
@@ -383,6 +386,7 @@ _FUEHRT_QUADRAT = ('AC', 'MC')
 
 
 def ist_achse(name):
+    """True fuer AC, MC, DC, IC (ACHSEN_NAMEN)."""
     return name in ACHSEN_NAMEN
 
 
@@ -553,7 +557,20 @@ def _gr(deg):
 
 
 def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
-    """Haupthaus + Grenzlage eines Faktors nach der einheitlichen Haus-Orb-Regel."""
+    """Haupthaus + Grenzlage eines Faktors nach der einheitlichen Haus-Orb-Regel.
+
+    Rueckgabe: dict {'haus': int, 'nebenhaus': int|None, 'grenzlage': bool,
+    'abstand_spitze': float|None, 'label': str}.
+    `abstand_spitze` ist der Abstand zur NAECHSTEN Spitze in Dezimalgrad (zwei
+    Nachkommastellen) — derselbe Wert, der im `@@SELEKTOR`-Block der chart_data
+    als `abstand=` steht (Datenblatt-Modul); der ⚠-Block der referenz.md nennt
+    ihn in Bogenminuten. Bis 2° Schwellenlage (Nebenhaus fuehrt), 2–5°
+    Grenzlage (rechnerisches Haus fuehrt). `label` ist die Langform
+    („Haus 12 (Grenzlage → 1, 1°47′ vor Spitze 1)"); die Kurzform der
+    Konstellationstabelle liefert haus_spalte(). Liegt lon in keinem Haus
+    (nur bei fehlerhaften cusps): haus None, label 'Haus ?'.
+    (Rueckgabe dokumentiert 2026-09-20, D3 — Befund G12-17c Nr. 2.)
+    """
     lon = lon % 360
     for k in range(12):
         span = (cusps[(k + 1) % 12] - cusps[k]) % 360
@@ -1001,6 +1018,7 @@ def zeichen_index(lon):
 
 
 def zeichen_name(lon):
+    """Deutscher Zeichenname (mit Umlaut, z. B. 'Löwe') zur ekliptikalen Laenge."""
     return SIGN_NAMES[zeichen_index(lon)]
 
 
@@ -4461,7 +4479,114 @@ def rangzeilen_lesen(text):
 
 # --- Selbsttest (neutrales Demo-Chart, KEINE Klientendaten) -----------------
 
+
+# ---------------------------------------------------------------------------
+# hilfe() — Schnittstellen-Auskunft ohne Quelltext-Lektuere.
+# Neu 2026-09-20 (Aufraeumlauf D, Block D3; K5/W61: Schnittstellen wurden je Lauf
+# aus dem Quelltext nachgelesen, 50-110 KB je Lauf). Derselbe Block steht
+# wortgleich in jedem Builder. Er liest Signaturen und Docstrings zur LAUFZEIT —
+# er kann also nicht veralten. Was hilfe() nicht sagt, fehlt im Docstring der
+# Funktion und wird DORT ergaenzt, nie hier.
+# ---------------------------------------------------------------------------
+
+def hilfe(name=None, datei=None):
+    """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
+
+    hilfe()               Uebersicht: jede oeffentliche Funktion mit Signatur und
+                          erstem Docstring-Absatz, dazu Fehlerklassen und die
+                          Konstanten (GROSSBUCHSTABEN) mit gekuerztem Wert.
+    hilfe('<name>')       der VOLLE Docstring EINER Funktion oder Klasse —
+                          Argumente, Rueckgabeschluessel, Fehlerfaelle; bei einer
+                          Konstante ihr voller Wert; 'modul' = der Docstring der
+                          Datei selbst.
+    hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
+    Kommandozeile:        python3 <builder>.py --hilfe [<name>]
+    Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
+    """
+    import inspect as _insp
+    import sys as _sys
+    _m = _sys.modules[__name__]
+    _mn = (_m.__name__ if _m.__name__ != '__main__'
+           else __file__.rsplit('/', 1)[-1].rsplit('.', 1)[0])
+
+    def _erste(doc):
+        return (doc.strip().split('\n\n')[0].replace('\n', ' ').strip()
+                if doc else '(kein Docstring — Signatur gilt)')
+
+    def _sig(o):
+        try:
+            return str(_insp.signature(o))
+        except (TypeError, ValueError):
+            return '(…)'
+
+    L = []
+    if name in ('modul', '__doc__'):
+        L.append('%s.py' % _mn)
+        L.append(_m.__doc__ or '(kein Modul-Docstring)')
+    elif name:
+        o = getattr(_m, name, None)
+        if o is None:
+            L.append("%s.py: kein Eintrag '%s'. Uebersicht: %s.hilfe()"
+                     % (_mn, name, _mn))
+        elif _insp.isfunction(o) or _insp.isclass(o):
+            L.append('%s.%s%s' % (_mn, name, _sig(o)))
+            L.append(_insp.getdoc(o) or '(kein Docstring — Signatur gilt)')
+        else:
+            L.append('%s.%s = %r' % (_mn, name, o))
+    else:
+        L.append('%s.py — Schnittstellen (Einzelheiten: %s.hilfe(\'<name>\'), '
+                 'Datei-Docstring: hilfe(\'modul\'))' % (_mn, _mn))
+        L.append(_erste(_m.__doc__))
+        L.append('')
+        L.append('FUNKTIONEN')
+        for n, o in sorted(vars(_m).items()):
+            if (n.startswith('_') or not _insp.isfunction(o)
+                    or o.__module__ != _m.__name__):
+                continue
+            L.append('  %s%s' % (n, _sig(o)))
+            L.append('      %s' % _erste(_insp.getdoc(o)))
+        klassen = [(n, o) for n, o in sorted(vars(_m).items())
+                   if _insp.isclass(o) and o.__module__ == _m.__name__
+                   and not n.startswith('_')]
+        if klassen:
+            L.append('')
+            L.append('KLASSEN / FEHLERKLASSEN')
+            for n, o in klassen:
+                L.append('  %s: %s' % (n, _erste(_insp.getdoc(o))))
+        konst = [(n, o) for n, o in sorted(vars(_m).items())
+                 if n.isupper() and not n.startswith('_')
+                 and not callable(o) and not _insp.ismodule(o)]
+        if konst:
+            L.append('')
+            L.append("KONSTANTEN (voller Wert: hilfe('<NAME>'))")
+            for n, o in konst:
+                r = repr(o).replace('\n', ' ')
+                L.append('  %s = %s%s' % (n, r[:88], '…' if len(r) > 88 else ''))
+    text = '\n'.join(L)
+    if datei:
+        with open(datei, 'w', encoding='utf-8') as f:
+            f.write(text + '\n')
+        return datei
+    print(text)
+    return None
+
+
+def _hilfe_cli(argv=None):
+    """`--hilfe [<name>]` auf der Kommandozeile: druckt hilfe() und gibt True."""
+    import sys as _sys
+    argv = list(_sys.argv[1:] if argv is None else argv)
+    if '--hilfe' not in argv:
+        return False
+    i = argv.index('--hilfe')
+    name = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith('-') \
+        else None
+    hilfe(name)
+    return True
+
+
 if __name__ == '__main__':
+    if _hilfe_cli():          # python3 radix.py --hilfe [<name>]
+        raise SystemExit(0)
     _c = [i * 30.0 for i in range(12)]
     assert haus_und_grenzlage(28.0, _c)['grenzlage'] is True
     assert haus_und_grenzlage(28.0, _c)['nebenhaus'] == 2
