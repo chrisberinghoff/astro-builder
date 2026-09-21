@@ -487,6 +487,10 @@ def lade_schritt(schritt, **kw):
     Nimmt dieselben Zusatzargumente wie lade() (ziel, frisch, still).
     Vorzuziehen gegenueber lade("a", "b", ...) von Hand: die Liste steht dann
     an genau einer Stelle und kann nicht chatweise abweichen.
+
+    Rueckgabe: LISTE der Dateinamen, genau wie lade() sie liefert — KEIN dict.
+    Also `list(mods)` und nicht `mods.keys()`; der naheliegende zweite Aufruf
+    bricht mit `AttributeError: 'list' object has no attribute 'keys'` ab.
     """
     if schritt not in SCHRITTE:
         raise ValueError(

@@ -1013,8 +1013,11 @@ def parse_analyse(path, client: str = None) -> dict:
     client: erwarteter Klientenname; weicht die H1 ab, ist das ein Fehler
     (Identitäts-Guardrail gegen Datei-Verwechslung).
 
-    Rückgabe: {'h1','doctype','client','chapters':[{'kicker','title','line',
-    'blocks':[{'type':'p'|'li'|'subhead','text','line'},...]},...]}
+    Rückgabe: {'h1','doctype','client','untertitel','chapters':[{'kicker',
+    'title','line','blocks':[{'type':'p'|'li'|'subhead','text','line'},...]},...]}
+    'untertitel' ist die EINE Untertitelzeile unter der H1 (ANALYSE_SCHEMA) oder
+    None, wenn keine dasteht — seit 2026-09-21 hier genannt, vorher fehlte sie
+    in dieser Liste und stand nur im Werkzeuge- und im Design-Render-Modul.
     Wirft SchemaError mit ALLEN Funden (Zeilennummer + Erwartung)."""
     raw, quelle_name = _analyse_quelle(path)
     raw = raw.replace("\r\n", "\n").replace("\r", "\n")
