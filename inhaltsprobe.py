@@ -1843,6 +1843,14 @@ def _registerzeile(k, zeilen):
     for z in zeilen:
         if not (_name_in_text(t, z) and _name_in_text(r, z)):
             continue
+        # SEITE PRUEFEN, nicht nur Anwesenheit (2026-09-22, Klasse-2-Punkt 4).
+        # Traegt die Zeile die Praefixe T-/R-, muss der Transiter hinter T- und
+        # das Ziel hinter R- stehen. Ohne Praefixe bleibt es bei der alten
+        # Pruefung - eine Zeile in Prosa soll nicht durchfallen.
+        _t_seite = {kanon(m) for m in re.findall(r"\bT-\s?([A-Za-zÄÖÜäöüß]+)", z)}
+        _r_seite = {kanon(m) for m in re.findall(r"\bR-\s?([A-Za-zÄÖÜäöüß]+)", z)}
+        if _t_seite and _r_seite and not (t in _t_seite and r in _r_seite):
+            continue
         if t == r:
             n = sum(len(re.findall(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", z))
                     for s, kk in _FAKTOR_SCHREIBWEISEN if kk == t)
@@ -1951,21 +1959,28 @@ def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_p
         if not tr:
             p.hinweise.append("kein Block TRANSIT-RECHENSCHAFT in der chart_data "
                               "(build.transit_rechenschaft_block())")
+    _mitklingend_ohne_zeile = []
     for k in sorted(sicher | unsicher):
         if k in fuehrend:
             continue
         p.geprueft += 1
         z = _registerzeile(k, zeilen)
         if not z:
-            if k in sicher:
+            if k in sicher and k in mitklingend:
+                # SAMMELZEILE (2026-09-22, Klasse-2-Punkt 4): Der Kontakt klingt
+                # nachweislich in einem Kapitel mit - die Probe weiss also, wo er
+                # gedeutet ist, und nur die Registerzeile fehlt. Das ist EIN
+                # Befund ueber die Registerfuehrung, nicht n Befunde ueber n
+                # Kontakte; 29 Einzelzeilen in einem Lauf haben die echten
+                # Meldungen zugedeckt.
+                _mitklingend_ohne_zeile.append((k, mitklingend[k]))
+            elif k in sicher:
                 # englische Fassung: Namen und Aspektwoerter sind uebersetzt, eine
                 # nicht gefundene Zeile kann an der Schreibweise liegen — PRUEFEN.
                 (p.fehler if sprache_analyse == "de" else p.pruefen).append(
                     "%s — primärer Wirkorb-Kontakt im Fenster, führt kein Thema, "
                     "und keine Zeile im Kapitel „%s“ nennt ihn (Transiter und Ziel)"
-                    "%s" % (_kontakt_name(k), reg[0]["kicker"],
-                            "; er klingt mit in Kapitel %d" % mitklingend[k]
-                            if k in mitklingend else ""))
+                    % (_kontakt_name(k), reg[0]["kicker"]))
             else:
                 p.pruefen.append("%s — klingt mit in Kapitel %d, keine Registerzeile; ohne "
                                  "events.json nicht entscheidbar, ob das Ziel primär ist — "
@@ -1974,6 +1989,15 @@ def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_p
             p.pruefen.append("%s — die Registerzeile nennt das Kapitel %d nicht, in dem der "
                              "Kontakt mitklingt (Transit-Modul, Struktur 5): „%s“"
                              % (_kontakt_name(k), mitklingend[k], _kurz(z, 80)))
+    if _mitklingend_ohne_zeile:
+        _liste = ", ".join("%s (Kap. %d)" % (_kontakt_name(k), nr)
+                           for k, nr in sorted(_mitklingend_ohne_zeile,
+                                               key=lambda x: x[1]))
+        (p.fehler if sprache_analyse == "de" else p.pruefen).append(
+            "%d primäre Wirkorb-Kontakte klingen in einem Kapitel mit, haben aber "
+            "keine Zeile im Kapitel „%s“ (Transit-Modul, Struktur 5: die Zeile "
+            "nennt zusätzlich das Kapitel) — %s"
+            % (len(_mitklingend_ohne_zeile), reg[0]["kicker"], _kurz(_liste, 400)))
     for k, nr in sorted(fuehrend.items(), key=lambda x: x[1]):
         z = _registerzeile(k, zeilen)
         if z:
