@@ -287,7 +287,10 @@ WORTLAUTE = {
                 ("Wohin das gehört", "Where this belongs")),
     "ea":      (_B1, _B2, "Woher so etwas kommt", _B4, _B5, _B6,
                 ("Wo das im Ganzen steht", "Der Rahmen dieses Themas")),
-    "transit": (_B1, _B2, "Warum das alt ist", _B4, _B5, _B6, "Zeit"),
+    "transit": ((_B1, _E1), (_B2, _E2), ("Warum das alt ist", "Why this is old"),
+                (_B4, _E4), (_B5, _E5), (_B6, _E6), ("Zeit", "Time")),
+    # 2026-09-22 (Prüflauf Transit 1+2 englisch): englische Spalte der Transit-Wortlaute
+    # (W57, Transit erledigt); EA und Ultimativ Teil II weiter ohne englische Spalte.
 }
 # Das Ultimativ traegt alle drei Saetze in einem Dokument; welcher Teil ein Kapitel
 # ist, sagt das Kapitel selbst ueber seine dritte und siebte Bewegung.
@@ -865,21 +868,22 @@ _KONTAKT_SEG_RE = re.compile(
 _DATUM_DE_RE = re.compile(r"(?<![\d.])(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?![\d])")
 _DATUM_ISO_RE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
 _TAIL_RE = re.compile(
-    r"(?P<nichtexakt>(?:im\s+Fenster\s+)?(?:nicht\s+(?:mehr\s+)?exakt|kein\w*\s+Exakt\w*|nie\s+exakt))"
-    r"|(?P<exakt>exakt\w*)"
-    r"|(?P<annae>Ann(?:ä|ae)herung\w*)"
-    r"|(?P<wirkorb>Wirkorb\w*)"
+    r"(?P<nichtexakt>(?:im\s+Fenster\s+)?(?:nicht\s+(?:mehr\s+)?exakt|kein\w*\s+Exakt\w*|nie\s+exakt)"
+    r"|(?:not|no|never)\s+exact\w*)"
+    r"|(?P<exakt>exakt\w*|exact\w*)"
+    r"|(?P<annae>Ann(?:ä|ae)herung\w*|approach\w*)"
+    r"|(?P<wirkorb>Wirkorb\w*|effective\s+orb)"
     r"|(?P<station>Stillst(?:a|ä)nd\w*|Station\w*)"
-    r"|(?P<stichtag>Stichtag\w*)"
+    r"|(?P<stichtag>Stichtag\w*|reference\s+date)"
     r"|(?P<datum>(?<![\d.])\d{1,2}\.\d{1,2}\.(?:\d{4}|\d{2})(?![\d])|(?<!\d)\d{4}-\d{2}-\d{2}(?!\d))"
     r"|(?P<bogen>\d+(?:[.,]\d+)?\s*[′'](?!\d))", re.I)
 # Orb am Stichtag in Dezimalgrad: „am Stichtag Orb 0,57°", „Orb am Stichtag 0.57°",
 # „Stichtag-Orb 0,57°" — nie in Gradminuten (dann folgt eine Ziffer auf °).
 _STICHTAG_ORB_RE = re.compile(
-    r"(?:(?:am\s+)?Stichtag\w*[\s\-–]*Orb|Orb\s+am\s+Stichtag)\s*:?\s*"
+    r"(?:(?:am\s+)?Stichtag\w*[\s\-–]*Orb|Orb\s+am\s+Stichtag|(?:at\s+the\s+)?reference\s+date\s*orb|orb\s+at\s+the\s+reference\s+date)\s*:?\s*"
     r"(\d{1,2}(?:[.,](\d{1,4}))?)\s*°(?!\s*\d)", re.I)
 # Zusatz-Zeitmasse im Beleg (W46; das Beleg-Format dafuer setzt der Textlauf).
-_ZUSATZ_SEG_RE = re.compile(r"Sonnenbogen|progressiv\w*|Finsternis", re.I)
+_ZUSATZ_SEG_RE = re.compile(r"Sonnenbogen|solar[\s-]*arc|progressiv\w*|progressed|Finsternis|eclipse", re.I)  # 2026-09-22: englische Zusatz-Segmente (solar arc, progressed, eclipse)
 
 def _datum_iso(s):
     """'TT.MM.JJJJ' / 'TT.MM.JJ' / 'JJJJ-MM-TT' -> 'JJJJ-MM-TT' (None, wenn keines)."""
@@ -1323,10 +1327,10 @@ def _p1_beleg_aspekte(chapters, typ, tabelle, events=None, unlesbar=None):
                               "Datum nicht prüfbar" % stelle)
             return
         s = seg.casefold()
-        if "sonnenbogen" in s:
+        if "sonnenbogen" in s or "solar arc" in s or "solar-arc" in s:
             soll = {x.get("exakt") for x in z.get("sonnenbogen", [])}
             welche = "zusatz.sonnenbogen[].exakt"
-        elif "finsternis" in s:
+        elif "finsternis" in s or "eclipse" in s:
             soll = {x.get("datum") for x in z.get("finsternisse", [])}
             welche = "zusatz.finsternisse[].datum"
         else:
@@ -1953,7 +1957,7 @@ def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_p
                 p.pruefen.append("%s — klingt mit in Kapitel %d, keine Registerzeile; ohne "
                                  "events.json nicht entscheidbar, ob das Ziel primär ist — "
                                  "wenn ja, fehlt die Zeile" % (_kontakt_name(k), mitklingend[k]))
-        elif k in mitklingend and not re.search(r"Kapitel\s+%d(?!\d)" % mitklingend[k], z):
+        elif k in mitklingend and not re.search(r"(?:Kapitel|Chapter)\s+%d(?!\d)" % mitklingend[k], z):  # 2026-09-22: englisches „Chapter" (W57)
             p.pruefen.append("%s — die Registerzeile nennt das Kapitel %d nicht, in dem der "
                              "Kontakt mitklingt (Transit-Modul, Struktur 5): „%s“"
                              % (_kontakt_name(k), mitklingend[k], _kurz(z, 80)))
@@ -2106,7 +2110,7 @@ def _p8_wortlisten(chapters):
 
 # Ein Transit-Kontakt im Beleg: T-<Faktor> <Aspekt> R-<Faktor> — exakt <Daten>.
 _TRANSIT_KONTAKT_RE = re.compile(r"(?<![\w\u00e4\u00f6\u00fc\u00df])[TR]-\s*[A-Z\u00c4\u00d6\u00dc]")
-_TRANSIT_EXAKT_RE = re.compile(r"exakt\w*\s*:?\s*\d{1,2}\.\d{1,2}\.\d{4}", re.I)
+_TRANSIT_EXAKT_RE = re.compile(r"(?:exakt|exact)\w*\s*:?\s*\d{1,2}\.\d{1,2}\.\d{4}", re.I)
 
 NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem Horoskop|in keinem Horoskop"
                             r"|I do not know|I don't know|no chart contains|in no chart"
