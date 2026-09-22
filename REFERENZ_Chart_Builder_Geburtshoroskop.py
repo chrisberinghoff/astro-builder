@@ -94,6 +94,11 @@ BREITEN = ['%.1fcm' % (x / 10) for x in range(156, 118, -2)]
 # Vorlage uebersetzbar bleibt — nicht uebernehmen. Sind Palette UND die
 # Verlaufsstopps in COVER_CSS gesetzt, PALETTE_GESETZT auf True stellen;
 # vorher bricht der Builder unten mit einer Meldung ab.
+# Schon eingemessene Werte hier eintragen, dann misst __main__ nicht noch
+# einmal (None = messen).
+RAD_BREITE = None         # cm, Radseite
+ASPEKT_SKALA = None       # Schriftstufe der Aspektseite
+KONST_SKALA = None        # Skala der Konstellationsseite
 PALETTE_GESETZT = False   # <<auf True setzen, sobald NIGHT … BELEG_BD und .cv-sky aus PALETTE_VORGABE abgeleitet sind>>
 NIGHT = '#0a1a26'
 PETROL = '#1d4a53'
@@ -326,7 +331,14 @@ def konst_zeilen():
         # Glyphenregel wie in chartdoc._fac(): ueber die ZEICHENLAENGE — ein
         # Feld von mehr als einem Zeichen ist ein Name, kein Symbol.
         glyph = '' if len(f['glyph']) > 1 else f['glyph']
-        out.append((glyph, cd.name_of(n), cd.sign_name(f['lon']),
+        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der ASCII-Name der
+        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt.
+        # Die Namenstoleranz oben deckt nur `_BY` ab; `Glueckspunkt` stand
+        # deshalb zweimal in einer gerenderten Konstellationstabelle
+        # (Prueflaeufe Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.,
+        # beide Male Klasse 1, beide Male nur chart-lokal geflickt).
+        # verify(), die Pflicht-Bausteine und der Preflight sehen das nicht.
+        out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out
 
@@ -337,7 +349,7 @@ def achsen_zeilen():
 
 
 ELEMENTE, MODI = chartdoc.verteilung(
-    [(cd.name_of(n), _BY[n]['lon']) for n in KLASSISCH])
+    [(cd.name_of(_BY[n]['name']), _BY[n]['lon']) for n in KLASSISCH])
 
 
 def chartbild(rad_breite, skala, konst_skala=1.0):
@@ -398,6 +410,17 @@ if __name__ == '__main__':
                          'PALETTE_GESETZT = True setzen (Design-Render-Modul, '
                          '„Deckblatt": die Vorlage liefert Mechanik, nie Inhalt).')
 
+    # 2026-09-22 (Prueflauf Geburtshoroskop Schritt 3+4 vom 2026-09-22):
+    # GEBURTSZEILE und RAD_NOTE sind Platzhalter wie PALETTE_GESETZT, hatten
+    # aber keine Abbruchmarke — ihre spitzen Klammern waeren still ins PDF
+    # gegangen. Geprueft wird der Platzhalter selbst, damit keine zweite
+    # Marke zu pflegen ist.
+    for _n, _v in (('GEBURTSZEILE', GEBURTSZEILE), ('RAD_NOTE', RAD_NOTE)):
+        if '<' in _v and '>' in _v:
+            raise SystemExit('REFERENZ-Vorlage: %s traegt noch den Platzhalter '
+                             '— Datum, Zeit und Ort aus der chart_data '
+                             'eintragen.' % _n)
+
     # 1. Rad IMMER selbst zeichnen — nie ein herumliegendes PNG benutzen.
     rad_zeichnen()
 
@@ -406,11 +429,17 @@ if __name__ == '__main__':
     def frontmatter(**kw):
         return build_html(nur_frontmatter=True, **kw)
 
-    rad = chartdoc.passe_ein(lambda w: frontmatter(rad_breite=w), 'PG_rad',
-                             BREITEN, was='Radseite')
-    skala = chartdoc.passe_aspektseite_ein(
-        lambda s: frontmatter(skala=s, rad_breite=rad), ASPEKTE)
-    kskala = chartdoc.passe_ein(
+    #    Hat der Lauf schon eingemessen, werden die Werte oben gesetzt und
+    #    hier NICHT neu gemessen: Bis zum 2026-09-22 lief die Einmessung
+    #    zweimal, wenn ein Lauf sie zur Vorbereitung ausfuehrte und das
+    #    __main__ sie danach wiederholte — acht Messrender doppelt, ohne
+    #    dass es auffiel.
+    rad = RAD_BREITE if RAD_BREITE is not None else chartdoc.passe_ein(
+        lambda w: frontmatter(rad_breite=w), 'PG_rad', BREITEN, was='Radseite')
+    skala = ASPEKT_SKALA if ASPEKT_SKALA is not None else \
+        chartdoc.passe_aspektseite_ein(
+            lambda s: frontmatter(skala=s, rad_breite=rad), ASPEKTE)
+    kskala = KONST_SKALA if KONST_SKALA is not None else chartdoc.passe_ein(
         lambda ks: frontmatter(skala=skala, rad_breite=rad, konst_skala=ks),
         'PG_konst', chartdoc.KONST_STUFEN, was='Konstellationsseite')
 

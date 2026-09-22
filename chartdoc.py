@@ -2253,6 +2253,20 @@ def _ist_jetzt(titel, teil3_a):
     return any(titel.startswith(p) for p in teil3_a)
 
 
+# 2026-09-22 (Prueflauf Transit Schritt 3+4 vom 2026-09-22, 1.1): Beide
+# Erkennungen hingen am deutschen Wort. In einem englischen Band heisst der
+# Nummernkicker `Chapter n` — er fiel durch die Nummernpruefung, galt als
+# WORT-Kicker, wanderte vor den Titel und liess die 0,72 cm schmale
+# Nummernspalte leer; Auftakt und Schlusswort heissen `Prelude` und
+# `Closing Word` und eroeffneten keine Gruppe mehr, das Schlusswort rutschte
+# unter die erste. Beide Schreibweisen gelten jetzt unabhaengig von SPRACHE:
+# ein deutscher Band traegt nie einen Kicker `Chapter`, ein englischer nie
+# einen Kicker `Kapitel` — eine Fallunterscheidung waere nur eine weitere
+# Stelle, an der eine Sprachumschaltung vergessen werden kann.
+_GRUPPEN_KICKER = ('Auftakt', 'Schlusswort', 'Prelude', 'Closing Word')
+_NUMMERN_KICKER_RE = re.compile(r'(?i)^(?:kapitel|chapter)\b\.?')
+
+
 def toc_gruppen(items, teil3_a=None):
     """Gliederung aus den geparsten Kapiteln ableiten (nicht hart verdrahtet).
 
@@ -2264,7 +2278,7 @@ def toc_gruppen(items, teil3_a=None):
     grp, cur = [], None
     for i, it in enumerate(items):
         k = it.get('kicker') or ''
-        if k in PART_KICKER or k in ('Auftakt', 'Schlusswort'):
+        if k in PART_KICKER or k in _GRUPPEN_KICKER:
             cur = {'kicker': k, 'titel': it['title'], 'idx': i, 'eintraege': []}
             grp.append(cur)
         elif cur is None:
@@ -2282,7 +2296,7 @@ def toc_gruppen(items, teil3_a=None):
             # Kicker-Schreibweise ist im Klartext-Standard „KAPITEL 7"
             # (Versalien) — case-sensitiv gestrippt blieb frueher der ganze
             # Kicker in der 0,72 cm schmalen Nummernspalte stehen.
-            nr = re.sub(r'(?i)^kapitel\b\.?', '', k).strip()
+            nr = _NUMMERN_KICKER_RE.sub('', k).strip()
             titel = it['title']
             if nr and not re.fullmatch(r'[\dIVXivx]+\.?', nr):
                 # Ein WORT-Kicker (Rechenschaft, Hauptthemen, Konfliktfelder,

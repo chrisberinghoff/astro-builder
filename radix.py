@@ -633,9 +633,16 @@ def glyphen_ergaenzen(factors, melden=True):
                     'ein Kuerzel wie \'Pho\') oder den Namen auf den '
                     'Vertragsnamen korrigieren.' % g.get('name'))
             if melden:
-                print("  ! GLYPHE: %r hatte ein leeres 'glyph'-Feld — gesetzt "
-                      "auf %r (Vertrag, Datenblatt-Modul). Im factors-Block "
-                      "der chart_data nachziehen." % (g.get('name'), ersatz))
+                # 2026-09-22 (Prueflauf Geburtshoroskop Schritt 3+4 vom
+                # 2026-09-22): „gesetzt auf" behauptete einen Vollzug, den
+                # erst die Zuweisung der RUECKGABE herstellt — die Funktion
+                # laesst `factors` unveraendert. Wer sie ohne Zuweisung rief,
+                # las eine Erfolgsmeldung und rendert mit leerem Feld weiter.
+                print("  ! GLYPHE: %r hat ein leeres 'glyph'-Feld — in der "
+                      "RUECKGABE auf %r gesetzt (Vertrag, Datenblatt-Modul). "
+                      "Wirkt nur mit Zuweisung: factors = "
+                      "radix.glyphen_ergaenzen(factors). Im factors-Block der "
+                      "chart_data nachziehen." % (g.get('name'), ersatz))
             g['glyph'] = ersatz
         out.append(g)
     return out

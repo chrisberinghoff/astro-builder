@@ -1741,6 +1741,15 @@ _FUSS_ZEILE_RE = re.compile(
     r'^\s*[–—]\s|\d{1,3}\s*°\s*\d{1,2}\s*[′\']|\bOrb\b|·|'
     r'Konjunktion|Opposition|Quadrat|Trigon|Sextil|Quincunx|Halbsextil|'
     r'[☉☽☿♀♂♃♄♅♆♇☊☋⚷⚸⊗♈♉♊♋♌♍♎♏♐♑♒♓]')
+# Eine Zeile, die NUR eine Zahl traegt, ist die Seitenzahl — nie Prosa.
+_NUR_ZIFFERN_RE = re.compile(r'\s*\d{1,3}\s*')
+
+
+def _fuss_typ(zeile, einzug) -> bool:
+    """Traegt die Zeile ein Fuss-Merkmal, oder haengt sie als eingerueckte
+    Fortsetzung an der Zeile darueber?"""
+    return bool(_FUSS_ZEILE_RE.search(zeile)) \
+        or (len(zeile) - len(zeile.lstrip())) > einzug
 
 
 def source_text_chars(parsed) -> int:
@@ -1875,9 +1884,31 @@ def _fuss_zeilen(plines, sig_set) -> int:
         rest = plines[i + 1:]
         if ist_label and rest:
             rest = rest[1:]
-        if not all(_FUSS_ZEILE_RE.search(x)
-                   or (len(x) - len(x.lstrip())) > einzug
-                   for x in rest):
+        # Eine reine Ziffernzeile ist die Seitenzahl. verify() streift sie
+        # nur, wenn sie die LETZTE Zeile der Seite ist; steht darunter noch
+        # etwas, blieb sie bis zum 2026-09-22 in `rest` und fiel durch die
+        # Typprobe.
+        while rest and _NUR_ZIFFERN_RE.fullmatch(rest[-1]):
+            rest = rest[:-1]
+        # Korrektur 2026-09-22 (Prueflauf Geburtshoroskop Schritt 3+4 vom
+        # 2026-09-20, 1.1): Der Beleg ist EIN Absatz aus „ · "-Segmenten, der
+        # im schmalen Streifen umbricht. Seine LETZTE Zeile ist der Auslauf
+        # des letzten Segments und traegt deshalb regelmaessig gar kein
+        # Merkmal mehr — im Struktur-Beleg des Getriebe-Kapitels etwa
+        # „Aspektdichte gewichtet dicht Merkur 7, Pluto 6 — duenn Mars 0,5":
+        # kein fuehrender Gedankenstrich, keine Gradminute, kein „Orb", kein
+        # Aspektname, kein „·", keine Glyphe. verify() meldete die Seite
+        # daraufhin als Satzabbruch, obwohl sie regelkonform mit dem Streifen
+        # endet.
+        # Durchgelassen wird deshalb GENAU EINE solche Zeile, und nur die
+        # letzte: Ein Prosa-BLOCK hinter dem Fuss faellt weiter durch die
+        # Probe, und eine einzelne Prosazeile hinter einem vollstaendigen
+        # Kapitelfuss kann das Dokument nicht erzeugen — build_fuss() setzt
+        # den Streifen als letztes Element des Kapitels, das naechste Kapitel
+        # beginnt mit seinem Kopf auf einer neuen Seite.
+        if rest and not _fuss_typ(rest[-1], einzug):
+            rest = rest[:-1]
+        if not all(_fuss_typ(x, einzug) for x in rest):
             continue
         start = i if ist_label else sig_start
         if ist_label and sigs:
@@ -2829,6 +2860,23 @@ def _kontakt_zeit_text(z, start, end):
     return " · ".join(teile)
 
 
+# Die events.json fuehrt den laufenden Mondknoten als „Knoten", der
+# chartdata.py-Vertrag und inhaltsprobe P3 kennen nur „Mondknoten". Bis zum
+# 2026-09-22 schrieben transit_rechenschaft_block() und ressourcen_block()
+# deshalb `T-Knoten Quadrat R-Mondknoten`: build.kontakt_heimat() las die Zeile ueber
+# ihre ALIAS-Tabelle gruen, inhaltsprobe P3 verwarf dieselbe Zeile als
+# „traegt keinen lesbaren Kontakt" (Prueflauf Transit Schritt 1+2 vom
+# 2026-09-22, 1.3). Geschrieben wird jetzt der Vertragsname; gelesen wird
+# unveraendert beides.
+_VERTRAGSNAME = {"Knoten": "Mondknoten", "Nordknoten": "Mondknoten",
+                 "Suedknoten": "Südknoten", "Glueckspunkt": "Glückspunkt"}
+
+
+def _vertragsname(n: str) -> str:
+    """Faktorname der events.json -> Name des chartdata.py-Vertrags."""
+    return _VERTRAGSNAME.get(n, n)
+
+
 def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
                          stichtag: str = None, orb_wirk: float = 1.5,
                          typ: str = None) -> dict:
@@ -2935,7 +2983,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
         else:
             grund = (_kontakt_zeit_text(z, start, end)
                      + " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
-        zeile = "- T-%s %s R-%s — %s" % (k[0], ASPEKT_ZU_GLYPH.get(k[1], k[1]),
+        zeile = "- T-%s %s R-%s — %s" % (_vertragsname(k[0]),
+                                            ASPEKT_ZU_GLYPH.get(k[1], k[1]),
                                          k[2], grund)
         erstes = (z["alle_ex"] or [a[0] for a in z["ann"]] or ["9999"])[0]
         sortier.append((erstes, zeile))
@@ -3193,7 +3242,8 @@ def _transit_ressourcen(events_json_pfad, orb_wirk=None):
     eintraege, nicht = [], []
     for (t, a, z), sel in passagen.items():
         zeit = _passagen_zeitangaben(sel, start, end)
-        label = "T-%s %s R-%s" % (t, ASPEKT_ZU_GLYPH.get(a, a), z)
+        label = "T-%s %s R-%s" % (_vertragsname(t),
+                                  ASPEKT_ZU_GLYPH.get(a, a), _vertragsname(z))
         eintrag = {"transit": t, "aspekt": a, "ziel": z, "label": label,
                    "orb_f": zeit["orb_f"], "zeit": zeit,
                    "text": _kontakt_zeit_text(zeit, start, end)}
@@ -3612,7 +3662,7 @@ def _selbsttest():
                and not rr["eintraege"] and not rr["radix"],
                "W22: Zaehlmenge: %r" % [e["label"] for e in rr["transit"]])
         pruefe([e["label"] for e in rr["nicht_gezaehlt"]]
-               == ["T-Knoten ☌ R-Mondknoten"], "L16: Knotenrueckkehr")
+               == ["T-Mondknoten ☌ R-Mondknoten"], "L16: Knotenrueckkehr")
         pruefe(rr["konjunktionen"] == ["T-Chiron ☌ R-Venus"], "W22: Konjunktionen")
         rb = ressourcen_block(t1, events_json_pfad=evj)
         pruefe("Zählmenge (Transit)" in rb and "Nicht in der Zählmenge" in rb

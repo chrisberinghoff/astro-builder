@@ -391,7 +391,14 @@ def konst_zeilen():
         # 2026-09-08; hier nachgezogen 2026-09-16). Ein Feld von mehr als
         # einem Zeichen ist ein Name, kein Symbol.
         glyph = '' if len(f['glyph']) > 1 else f['glyph']
-        out.append((glyph, cd.name_of(n), cd.sign_name(f['lon']),
+        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der ASCII-Name der
+        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt.
+        # Die Namenstoleranz oben deckt nur `_BY` ab; `Glueckspunkt` stand
+        # deshalb zweimal in einer gerenderten Konstellationstabelle
+        # (Prueflaeufe Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.,
+        # beide Male Klasse 1, beide Male nur chart-lokal geflickt).
+        # verify(), die Pflicht-Bausteine und der Preflight sehen das nicht.
+        out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out
 
@@ -402,7 +409,7 @@ def achsen_zeilen():
 
 
 ELEMENTE, MODI = chartdoc.verteilung(
-    [(cd.name_of(n), _BY[n]['lon']) for n in KLASSISCH])
+    [(cd.name_of(_BY[n]['name']), _BY[n]['lon']) for n in KLASSISCH])
 
 UHR_STICHTAG = TD['fenster']['stichtag'].strftime('%d.%m.%Y')
 UHR_NOTE = (f"Fenster {TD['fenster']['start'].strftime('%d.%m.%Y')} bis "

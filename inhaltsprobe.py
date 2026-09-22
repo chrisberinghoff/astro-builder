@@ -2953,6 +2953,10 @@ _ANZAHLWORT = r"(?:beiden|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn
 _CHART_NOMEN = (r"(?:Verbindung|Aspekt|Kontakt|Planet|Faktor|Punkt|Träger|Verkehr|Winkel"
                 r"|Konjunktion|Opposition|Quadrat|Trigon|Sextil)")
 _CHART_VERB = r"(?:verbunden|verschaltet|vernetzt|angebunden|besetzt|aspektiert|beteiligt)"
+# Woran eine Einzigkeitsaussage erkennbar ist: Sie zaehlt etwas aus dem Chart.
+_EINZIG_NOMEN = (r"(?:Planet|Punkt|Aspekt|Verbindung|Kontakt|Faktor|Zeichen|Element"
+                 r"|Haus|Häuser|Figur|Träger|Winkel|Konjunktion|Opposition|Quadrat"
+                 r"|Trigon|Sextil|Quincunx|Halbsextil|Stellium|Hauptkraft|Hauptkräfte)\w*")
 _RANG_MUSTER = (
     ("engste", re.compile(
         r"(?<![\wäöüß])(?:(?P<eine>(?:eine[rnms]?|einer)\s+der\s+(?:(?P<n>%s)\s+)?engst\w*)"
@@ -2970,10 +2974,16 @@ _RANG_MUSTER = (
         r"|(?<![\wäöüß])am\s+wenigsten(?=\s+(?:[\wäöüß]+\s+)?%s)"
         r"|(?<![\wäöüß])am\s+(?:schwächsten|dünnsten|losesten)\s+"
         r"(?:verschaltet|verbunden|vernetzt|angebunden)\w*" % (_CHART_NOMEN, _CHART_VERB), re.I)),
+    # 2026-09-22 (Prueflauf Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 8): Der
+    # erste Zweig traf „einzig" OHNE jede Bedingung und meldete damit reine
+    # Bilder als Einzigkeitsaussage — „einen einzigen Strom", „die einzige
+    # Bewegung, die traegt": 20 von 40 PRUEFEN-Zeilen eines Laufs ohne jeden
+    # Zahlengehalt. Verlangt wird jetzt dasselbe Chart-Nomen wie im zweiten
+    # Zweig, hoechstens zwei Woerter dahinter.
     ("einzig", re.compile(r"(?<![\wäöüß])einzig(?:e|en|er|es|em)?(?![\wäöüß])"
+                          r"(?=\s+(?:[\wäöüß]+\s+){0,2}%s)"
                           r"|(?<![\wäöüß])nur\s+(?:ein|eine|einen|einem|einer)\s+"
-                          r"(?=(?:einzig\w*\s+)?(?:Planet|Punkt|Aspekt|Verbindung|Kontakt|Faktor|"
-                          r"Zeichen|Element|Haus|Figur))", re.I)),
+                          r"(?=(?:einzig\w*\s+)?%s)" % (_EINZIG_NOMEN, _EINZIG_NOMEN), re.I)),
     ("kein_anderer", re.compile(r"(?<![\wäöüß])(?:kein(?:e|en|em|er)?\s+(?:andere[rnms]?|weitere[rnms]?)"
                                 r"|sonst\s+kein\w*)(?![\wäöüß])", re.I)),
     ("x_von_y", re.compile(r"(?<![\wäöüß])(?P<x>%s|eine[rns]?|ein)\s+von\s+(?P<y>%s)(?![\wäöüß])"
@@ -3087,6 +3097,19 @@ def _paare_von(fak):
     return {frozenset((_achs_norm(a), _achs_norm(b))) for i, a in enumerate(fak)
             for b in fak[i + 1:] if _achs_norm(a) != _achs_norm(b)}
 
+# Wie ein Satz die Zaehlmenge „nur Planetenpaare" benennen kann — technisch
+# („Planetenpaar") und im Klartext („deiner zehn Hauptkraefte"). Chris-
+# Entscheidung 2026-09-22: Ein Rang- oder Superlativsatz NENNT seine Zaehlmenge;
+# diese Probe muss sie deshalb lesen koennen.
+_P12_PLANETENMENGE_RE = re.compile(
+    r"Planetenpaar"
+    r"|zwischen\s+(?:zwei\s+)?(?:deiner\s+)?(?:zehn\s+)?Planeten"
+    r"|unter\s+(?:den|deinen)\s+(?:zehn\s+)?Planeten"
+    r"|Planeten\s+untereinander"
+    r"|(?:deiner|den|die|zwei)\s+zehn\s+Hauptkräfte(?:n)?"
+    r"|zwischen\s+zwei\s+(?:deiner\s+)?(?:zehn\s+)?Hauptkräfte(?:n)?", re.I)
+
+
 def _rang_befund(art, m, satz, rz, typ, vorher=""):
     """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
     vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …")."""
@@ -3131,8 +3154,13 @@ def _rang_befund(art, m, satz, rz, typ, vorher=""):
         grenze = (2 if n.lower() == "beiden" else _zahl_wert(n)) if n else None
         eine = bool(g.get("eine")) or bool(g.get("n2"))
         k = {"zweit": 2, "dritt": 3, "viert": 4}.get((g.get("ord") or "").lower(), 1)
-        schl = ("engste-aspekte-planeten" if re.search(r"zwischen\s+(?:zwei\s+)?Planeten|unter\s+den\s+"
-                                                       r"Planeten|Planeten\s+untereinander", satz)
+        # 2026-09-22: Bis dahin traf das Muster nur drei Formulierungen. Ein
+        # Satz „das engste Planetenpaar" und die Klartext-Form „zwischen zwei
+        # deiner zehn Hauptkraefte" wurden gegen `engste-aspekte` gehalten —
+        # also gegen die falsche Menge — und korrekte Saetze mussten
+        # umgeschrieben werden (Prueflaeufe Geburtshoroskop 1+2 vom 2026-09-22,
+        # Nr. 9, und 2026-09-22b, Nr. 6).
+        schl = ("engste-aspekte-planeten" if _P12_PLANETENMENGE_RE.search(satz)
                 else "engste-aspekte")
         # Einschraenkungen aus den drei Woertern hinter dem Rangwort
         # („die engste harmonische Verbindung", „die zweitengste volle Reibung",
@@ -3322,7 +3350,19 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
             if "roh" in e:
                 p.pruefen.append("Rangzeile %s: Eintrag nicht lesbar „%s“ — von Hand verändert?"
                                  % (schl, _kurz(e["roh"], 80)))
+    # 2026-09-22 (Prueflauf Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 7): Im
+    # GETRIEBE-Kapitel sind Verhaeltniszahlen ausdruecklich erlaubt (Typmodul,
+    # „Das Strukturkapitel"), und Hemisphaeren-, Quadranten- und
+    # Herrscherketten-Zahlen stehen in Strukturbild §3 und §8 — die Meldung
+    # sagte das selbst und meldete trotzdem. Das waren planbar rund ein Dutzend
+    # PRUEFEN je Lauf, die jedes Mal von Hand weggelesen wurden. Sie werden
+    # jetzt gezaehlt und in EINER Hinweiszeile genannt; geprueft sind sie
+    # weiterhin, und jede ANDERE Art von Befund meldet das Getriebe-Kapitel
+    # unveraendert.
+    getriebe_zahlen = 0
     for ch, bewegung, text in _fliesstext(chapters):
+        ist_getriebe = (_ist_kicker(ch, "Getriebe")
+                        or _kapitelart(ch, typ, chapters) == "Getriebe-Kapitel")
         saetze = _saetze_pos(text)
         for i, (_a, _e, satz) in enumerate(saetze):
             if not _hat_referent(satz):
@@ -3337,9 +3377,16 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                 p.geprueft += 1
                 befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "")
                 if befund:
+                    if ist_getriebe and befund.startswith(("Zählaussage", "Count statement")):
+                        getriebe_zahlen += 1
+                        continue
                     p.pruefen.append("%s · %s: „%s“ — „%s“: %s"
                                      % (_bezeichnung(ch), bewegung, _kurz(satz, 140),
                                         _ws(m.group(0)), befund))
+    if getriebe_zahlen:
+        p.hinweise.append("Getriebe-Kapitel: %d Verhältniszahl(en) nicht als PRÜFEN gemeldet — "
+                          "dort ausdrücklich erlaubt (Typmodul), Hemisphären, Quadranten und "
+                          "Herrscherketten stehen in Strukturbild §3 und §8" % getriebe_zahlen)
     if p.geprueft == 0:
         p.hinweise.append("keine Rang-, Zähl- oder Einzigkeitsaussage im Fließtext")
     return p.abschluss()
@@ -3389,6 +3436,12 @@ def _bild_arten(wort):
         return ("Trigon", "Sextil")
     return None
 
+# Wo ein Satz in zwei eigenstaendige Aussagen zerfaellt. Bewusst nur die
+# beiordnenden Faelle — ein Relativsatz oder ein Gedankenstrich verbindet
+# haeufig genau die Faktoren, um die es geht.
+_SATZGLIED_RE = re.compile(r",\s+(?:und|aber|doch|oder|sondern)\s|;\s")
+
+
 def _konstellationen(satz, vorher=""):
     """Konstellationen eines Fliesstext-Satzes (s. Kommentar oben) ->
     [(Faktoren davor, Art, Faktoren danach, Treffer)]; Art ist bei einem Aspektwort
@@ -3401,11 +3454,44 @@ def _konstellationen(satz, vorher=""):
         if not any(m.start() < x.end() and x.start() < m.end() for x, _ in marker):
             marker.append((m, _bild_arten(m.group(0)) or ()))
     out = []
-    for m, art in marker:
+    # 2026-09-22 (Prueflauf Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 10): Traegt
+    # ein Satz ZWEI Aspektangaben, holte sich jeder Marker alle Faktoren im
+    # Fenster — auch die, die zum anderen Marker gehoeren. Daraus entstand ein
+    # drittes Paar, das im Satz nicht steht; drei korrekte Saetze mussten
+    # umgeschrieben werden. Das Fenster endet jetzt am Nachbarmarker. Ein
+    # Faktor ZWISCHEN zwei Markern gehoert weiter zu beiden — dort steht er
+    # wirklich in beiden Konstellationen.
+    marker.sort(key=lambda t: t[0].start())
+    for _i, (m, art) in enumerate(marker):
         if _VERNEINUNG_RE.search(satz[max(0, m.start() - 25):m.start()]):
             continue
-        davor = [f for a, e, f in fak if e <= m.start() and m.start() - e <= _FENSTER]
-        danach = [f for a, e, f in fak if a >= m.end() and a - m.end() <= _FENSTER]
+        # Zwei Grenzen statt nur des Fensters (2026-09-22, Prueflauf
+        # Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 10): Traegt ein Satz ZWEI
+        # Aspektangaben, holte sich jeder Marker alle Faktoren im Fenster —
+        # auch die des anderen Markers. Aus „Uranus steht im Quadrat zur
+        # Sonne, und Pluto traegt das Trigon zum Mond" entstanden vier Paare
+        # statt zwei; drei korrekte Saetze mussten deshalb umgeschrieben
+        # werden.
+        #   1. der HAUPTSATZ-Schnitt („, und", „, aber", „;"): Was hinter ihm
+        #      steht, ist eine eigene Aussage. Relativsaetze („…, der
+        #      seinerseits Saturn quadriert") werden NICHT geschnitten — dort
+        #      traegt der Faktor davor die zweite Konstellation wirklich mit.
+        #   2. der Nachbarmarker: ueber ihn hinaus reicht kein Fenster.
+        vor_grenze, nach_grenze = 0, len(satz)
+        for ms in _SATZGLIED_RE.finditer(satz):
+            if ms.end() <= m.start():
+                vor_grenze = max(vor_grenze, ms.end())
+            elif ms.start() >= m.end():
+                nach_grenze = min(nach_grenze, ms.start())
+                break
+        if _i:
+            vor_grenze = max(vor_grenze, marker[_i - 1][0].end())
+        if _i + 1 < len(marker):
+            nach_grenze = min(nach_grenze, marker[_i + 1][0].start())
+        davor = [f for a, e, f in fak if a >= vor_grenze and e <= m.start()
+                 and m.start() - e <= _FENSTER]
+        danach = [f for a, e, f in fak if a >= m.end() and e <= nach_grenze
+                  and a - m.end() <= _FENSTER]
         if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
                                                or m.group(0).casefold().endswith("zwischen")):
             davor, danach = [danach[0]], danach[1:]
