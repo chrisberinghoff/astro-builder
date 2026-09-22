@@ -1641,8 +1641,27 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
                 v = abs(x0[3]) / 1440.0
         except Exception as ex:
             _dt = re.search(r"file '([^']+)' not found", str(ex))
+            # 2026-09-22 (Diagnoselauf zum Prueflauf Geburtshoroskop 1+2 vom
+            # 2026-09-22b): Die alte Meldung nannte die Datei und den Aufruf,
+            # aber nicht die Falle dahinter — und die hat den Bericht in die
+            # Irre gefuehrt („obwohl der Pfad gesetzt ist und beide Faktoren im
+            # selben Lauf korrekt gerechnet werden"). OHNE gesetzten Pfad
+            # rechnen die zehn klassischen Planeten STILL weiter: pyswisseph
+            # faellt auf Moshier zurueck und meldet nichts. Nur Chiron, Pholus
+            # und die uebrigen Asteroiden brauchen eine DATEI (seas_*.se1) und
+            # werfen. Dass die Planeten dastehen, ist also kein Beleg dafuer,
+            # dass der Pfad gesetzt war — im Gegenteil, dieser Fehler hier ist
+            # der einzige Hinweis darauf, dass er fehlt. Nachgestellt im
+            # Container: mit Pfad rechnen alle vierzehn Faktoren durch, ohne
+            # Pfad werfen genau Chiron und Pholus mit dieser Meldung, waehrend
+            # die Sonne eine Laenge liefert.
             e['fehler'] = (('Ephemeridendatei %s nicht gefunden — vorher '
-                            'swe.set_ephe_path(lade.ephemeriden()) setzen'
+                            'swe.set_ephe_path(lade.ephemeriden()) setzen. '
+                            'ACHTUNG: Dass die Planeten gerechnet sind, heisst '
+                            'NICHT, dass der Pfad steht — sie fallen ohne ihn '
+                            'still auf Moshier zurueck; nur die Asteroiden '
+                            'brauchen die Datei. Auch swe.close() setzt den '
+                            'Pfad zurueck.'
                             % _dt.group(1)) if _dt else
                            'die Ephemeride meldet einen Fehler: %s' % ex)
             continue

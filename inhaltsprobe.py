@@ -2189,7 +2189,26 @@ VERWERF_RE = re.compile(r"(?:darfst|kannst|darf|kann)\s+(?:du\s+)?"
 # Treffer bleibt "tiefst… Punkt" mit einem ANDEREN Bezug ("der tiefste Punkt
 # deines Lebens"): Ausgenommen ist "tiefst… Punkt" ohne Genitiv-/im-Anschluss oder
 # mit Horoskop/Bild/Chart/Radix.
+# 2026-09-22 (Chris-Entscheidung): Der Deckel SKALIERT mit der Kapitelzahl —
+# drei je Dokument war fuer ein Geburtshoroskop mit elf gedeuteten Kapiteln
+# unerreichbar, und dreimal stand genau das als Befund (17.09.b Nr. 5,
+# 18.09.c Nr. 15, 22.09.b Nr. 11): dreizehn sachlich RICHTIGE Rangsaetze gegen
+# einen Deckel von drei. Gezaehlt werden die gedeuteten Kapitel — die mit
+# Signatur; Auftakt, Teiler, Rechenschafts- und Sammelkapitel und Schlusswort
+# tragen keine und zaehlen deshalb weiter nicht mit. DREI bleibt die
+# Untergrenze, damit ein kurzes Dokument nicht schaerfer geprueft wird als
+# frueher.
 SUPERLATIV_DECKEL = 3
+
+
+def _superlativ_deckel(chapters) -> int:
+    """Wie viele Superlative dieses Dokument tragen darf: einer je gedeutetem
+    Kapitel, mindestens SUPERLATIV_DECKEL."""
+    gedeutet = sum(1 for ch in chapters
+                   if (ch.get("signatur") or "").strip())
+    return max(SUPERLATIV_DECKEL, gedeutet)
+
+
 SUPERLATIV_RE = re.compile(
     r"tiefst\w*\b(?!\s+Punkt\b(?!\s+(?:des|der|deines|deiner|im|in)\s)"
     r"|\s+Punkt\s+(?:des|im|deines|in\s+deinem)\s+(?:Horoskop|Bild|Chart|Radix))"
@@ -2351,10 +2370,12 @@ def _p10_wortscan(chapters, sprache_analyse="de"):
                     p.pruefen.append("%s · %s · %s: „%s“ — Treffer „%s“"
                                      % (name, _bezeichnung(ch), bewegung,
                                         _kurz(satz, 140), m.group(0)))
-    if len(supertreffer) > SUPERLATIV_DECKEL:
+    deckel = _superlativ_deckel(chapters)
+    if len(supertreffer) > deckel:
         p.pruefen.append(
-            "Superlative: %d Treffer, Deckel %d (Auftakt zählt nicht mit) — %s"
-            % (len(supertreffer), SUPERLATIV_DECKEL,
+            "Superlative: %d Treffer, Deckel %d (einer je gedeutetem Kapitel, "
+            "mindestens %d; Auftakt zählt nicht mit) — %s"
+            % (len(supertreffer), deckel, SUPERLATIV_DECKEL,
                "; ".join("%s: „%s“" % (_bezeichnung(c), w)
                          for c, _bw, w, _sz in supertreffer)))
     if p.geprueft == 0:
