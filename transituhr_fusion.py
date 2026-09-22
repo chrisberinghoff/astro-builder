@@ -62,6 +62,49 @@ THEMEN = [
 LABELS = {'rueckblick': 'Rückblick', 'stichtag': 'Stichtag',
           'stationen': 'Stationen', 'sekundaer': 'sekundär',
           'monat': '1 Monat', 'monate': '{n} Monate'}
+# 2026-09-22 (W57-Nachzug): Die englische Tafel steht jetzt hier, statt dass
+# jeder englische Lauf sie selbst zusammensetzt — und mit ihr das DATUMSFORMAT.
+# Bis heute war `%d.%m.%Y` fest verdrahtet: in einem englischen PDF las sich
+# der Stichtag als Monat-vor-Tag, also als ein anderer Tag. Deshalb schreibt
+# die englische Fassung den Monat als Wort ab (nicht `%b` — das haengt an der
+# Locale des Rechners und kann deutsch zurueckkommen).
+LABELS_EN = {'rueckblick': 'Look-back', 'stichtag': 'As of',
+             'stationen': 'Stations', 'sekundaer': 'secondary',
+             'monat': '1 month', 'monate': '{n} months'}
+_LABELS_DE = dict(LABELS)
+_MONAT_KURZ_EN = ('', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
+SPRACHE = 'de'
+
+
+def datum_text(d):
+    """Stichtagsdatum in der gesetzten Sprache: „01.03.2030" / „1 Mar 2030"."""
+    if SPRACHE == 'en':
+        return '%d %s %d' % (d.day, _MONAT_KURZ_EN[d.month], d.year)
+    return d.strftime('%d.%m.%Y')
+
+
+def achse_text(d):
+    """Monatsmarke der Zeitachse: „03/30" / „Mar 30"."""
+    if SPRACHE == 'en':
+        return '%s %02d' % (_MONAT_KURZ_EN[d.month], d.year % 100)
+    return d.strftime('%m/%y')
+
+
+def setze_sprache(code='de'):
+    """Sprache der Uhr-Beschriftungen und des Datumsformats setzen.
+
+    Vor `bauen()` aufrufen. Die Themennamen kommen vom Aufrufer und werden
+    hier NICHT uebersetzt — sie stehen so, wie der Lauf sie uebergibt.
+    """
+    global SPRACHE
+    code = (code or 'de').strip().lower()[:2]
+    if code not in ('de', 'en'):
+        raise ValueError("sprache: 'de' oder 'en', nicht %r" % code)
+    LABELS.clear()
+    LABELS.update(LABELS_EN if code == 'en' else _LABELS_DE)
+    SPRACHE = code
+    return code
 
 # Geometrie in Zeileneinheiten
 H_KOPF = 1.15      # Themenkopf (Name + Untertitel)
@@ -254,14 +297,14 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
             X = mdates.date2num(d)
             ax.plot([X, X], [y_ach, y_ach - 0.16], color='#c9bda4', lw=0.9,
                     zorder=4)
-            ax.text(X, y_ach - 0.42, d.strftime('%m/%y'), ha='center',
+            ax.text(X, y_ach - 0.42, achse_text(d), ha='center',
                     va='center', fontsize=7.4 * sk, color=STONE, zorder=4)
         d = (d.replace(day=28) + timedelta(days=8)).replace(day=1)
     ax.text(X0 + spanne * 0.004, y_ach + 0.30, LABELS['rueckblick'],
             ha='left', va='bottom', fontsize=7.6 * sk, color='#9a8f77',
             zorder=6)
     ax.text(st + spanne * 0.004, y_ach + 0.30,
-            LABELS['stichtag'] + ' ' + f['stichtag'].strftime('%d.%m.%Y'),
+            LABELS['stichtag'] + ' ' + datum_text(f['stichtag']),
             ha='left', va='bottom', fontsize=8.2 * sk, color=GOLD, zorder=6)
 
     # --- Stationsleiste (aus der Themen-Uhr) --------------------------------

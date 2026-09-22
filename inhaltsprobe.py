@@ -452,15 +452,28 @@ def _kicker_nr(kicker):
 
 # Wort-Kicker der englischen Fassung (Sprachfassung, 2026-09-16d); jeder deutsche
 # Name gilt weiter, die englischen Namen zaehlen als derselbe Kicker.
-_KICKER_ALIAS = {"auftakt": ("prelude", "zur lesart"), "schlusswort": ("closing word", "closing words"),
+_KICKER_ALIAS = {"auftakt": ("prelude", "zur lesart", "on reading this"),
+                 "schlusswort": ("closing word", "closing words"),
                  "rechenschaft": ("account",), "instrument": ("instrument",),
                  "hauptthemen": ("core themes", "main themes"),
                  "konfliktfelder": ("fields of conflict",), "lebensaufgaben": ("life tasks",),
                  "zugang": ("access",),
                  # 2026-09-19 (W43, W10): Register und Lagebild des Transits; die
                  # englischen Namen aus T12-18 (Werkzeuge A3 traegt sie noch nicht).
-                 "mitlaufendes": ("running alongside",),
-                 "der stand heute": ("where things stand",)}
+                 "mitlaufendes": ("running alongside", "also running"),
+                 "der stand heute": ("where things stand", "as things stand"),
+                 # 2026-09-22 (W57-Nachzug): `Getriebe` hatte keinen englischen Namen —
+                 # eine englische Analyse verlor damit THEMA 1 (P3), und P14 prueste den
+                 # Kopfblock des Getriebe-Kapitels nicht. `gearing` ist der Name fuer eine
+                 # NEUE englische Fassung (einwortig wie Auftakt/Rechenschaft/Instrument),
+                 # die drei uebrigen stehen fuer schon geschriebene Faelle.
+                 "getriebe": ("gearing", "the gearing", "the mechanism", "mechanism")}
+# 2026-09-22: `on reading this` (Auftakt), `also running` (Register) und `as things
+# stand` (Lagebild) sind die Wortlaute des ersten englischen Transits; die schon
+# hinterlegten `prelude` / `running alongside` / `where things stand` gelten weiter.
+# Mehrere englische Namen je Kicker sind hier die Regel, nicht die Ausnahme (s. o.
+# `closing word`/`closing words`, `core themes`/`main themes`): Der Kicker steht im
+# PDF, und welcher Wortlaut besser passt, entscheidet der Typ, nicht die Probe.
 # 2026-09-19 (W23): Der Transit-Auftakt heisst `Zur Lesart` (Transit-Modul, Ablauf 2,
 # Kapitelueberschriften). P8, P9 und P10 erkannten den Auftakt nur am Kicker
 # `Auftakt` — der Fehlalarm zur Verwerfungs-Erlaubnis erzwang in T34-18c eine
@@ -2114,7 +2127,17 @@ _TRANSIT_EXAKT_RE = re.compile(r"(?:exakt|exact)\w*\s*:?\s*\d{1,2}\.\d{1,2}\.\d{
 
 NICHTWISSEN_RE = re.compile(r"wei(?:ß|ss) ich nicht|(?:steht|stehen) in keinem Horoskop|in keinem Horoskop"
                             r"|I do not know|I don't know|no chart contains|in no chart"
-                            r"|no horoscope contains|in no horoscope", re.I)
+                            r"|no horoscope contains|in no horoscope"
+                            # 2026-09-22 (W57-Nachzug, erster englischer Transit): Der
+                            # Nichtwissens-Satz wird englisch auch als Grenze des Charts
+                            # gesagt („a chart cannot", „is yours to say") und nicht nur
+                            # als Wissenslücke des Sprechers. P9 meldet nur das FEHLEN
+                            # des Satzes — eine zu enge Liste erzeugt hier Fehlalarm,
+                            # keine uebersehene Aussage.
+                            r"|(?:a|the|no) (?:chart|horoscope) (?:can|cannot|can't|does not|doesn't|won't)"
+                            r"|(?:can|could)not be read (?:from|out of) (?:a|the) (?:chart|horoscope)"
+                            r"|is yours to say|yours to answer|not for (?:a|the) (?:chart|horoscope) to"
+                            r"|(?:a|the) (?:chart|horoscope) has no", re.I)
 # englisch eng gefasst (Kapitel-Bezug), damit "gets discarded" in normaler Verwendung
 # nicht mitzaehlt — dieselbe Fehlalarm-Klasse wie "verwerf" (Klasse-2-Liste 16.09.c, Nr. 6)
 # DEUTSCH EBENSO ENG GEFASST (geaendert 2026-09-17, Klasse-2-Entscheidungslauf,
@@ -2129,7 +2152,15 @@ VERWERF_RE = re.compile(r"(?:darfst|kannst|darf|kann)\s+(?:du\s+)?"
                         r"|(?:Kapitel|Band|Abschnitt)[^.]{0,40}verwerfen"
                         r"|discard (?:the|this|it)|free to discard|may discard"
                         r"|put (?:the|this) chapter aside|set (?:the|this) chapter aside"
-                        r"|skip (?:the|this) chapter", re.I)
+                        r"|skip (?:the|this) chapter"
+                        # 2026-09-22 (W57-Nachzug): die vier Wortlaute, die die
+                        # Innere Arbeit, Pruefung 2, fuer die englische Fassung
+                        # nennt — vorher las die Probe nur die ersten sieben.
+                        r"|do(?:es)? not (?:recognise|recognize) yourself"
+                        r"|do not apply to (?:everyone|every|all)"
+                        r"|does not apply to (?:everyone|every|all)"
+                        r"|leave it where it is"
+                        r"|if this does ?n(?:o|')t fit", re.I)
 
 # ---------------------------------------------------------------------------
 # P10 — Wortscan der Inneren Arbeit (Probe 9 des Moduls), seit 2026-09-17 hier
@@ -2458,17 +2489,50 @@ _TEEN_WERT = {"zehn": 10, "elf": 11, "zwölf": 12, "zwoelf": 12, "dreizehn": 13,
               "fünfzehn": 15, "fuenfzehn": 15, "sechzehn": 16, "siebzehn": 17, "achtzehn": 18,
               "neunzehn": 19, "hundert": 100}
 
+# ---------------------------------------------------------------------------
+# Englische Sprachfassung, Zahl- und Zeitwoerter (2026-09-22, W57-Nachzug).
+# P11 und P12 uebersprangen eine englische Analyse ganz; damit lief in der
+# englischen Fassung KEINE Zahlenprobe. Die Tafeln unten spiegeln die deutschen
+# Zeile fuer Zeile — gleiche Gruppennamen, gleiche Musterarten, gleiche
+# Reihenfolge —, damit der Rumpf beider Proben unveraendert bleibt und nur die
+# Tafel gewechselt wird. EA und Ultimativ bleiben aussen vor (Chris-Ansage
+# 2026-09-22: werden vorerst nicht mehr gefahren).
+_EINER_WERT_EN = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                  "six": 6, "seven": 7, "eight": 8, "nine": 9}
+_ZEHNER_WERT_EN = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+                   "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+_TEEN_WERT_EN = {"ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+                 "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+                 "nineteen": 19, "hundred": 100}
+_ORD_WERT_EN = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6,
+                "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
+                "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
+                "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+                "twentieth": 20}
+_EINER_W_EN = r"(?:one|two|three|four|five|six|seven|eight|nine)"
+_ZEHNER_W_EN = r"(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+# laengere Formen zuerst, damit "twenty-one" nicht als "twenty" endet
+_ZAHLWORT_EN = (r"(?:%s[-\s]%s|%s|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|"
+                r"seventeen|eighteen|nineteen|%s|hundred)"
+                % (_ZEHNER_W_EN, _EINER_W_EN, _ZEHNER_W_EN, _EINER_W_EN))
+_ZAHL_EN = r"(?:\d{1,3}|%s)" % _ZAHLWORT_EN
+
 def _zahl_wert(w):
     """Grundzahl (Ziffern oder Wort bis 100) -> int oder None."""
     w = (w or "").casefold().strip()
     if w.isdigit():
         return int(w)
-    for tafel in (_EINER_WERT, _TEEN_WERT, _ZEHNER_WERT):
+    for tafel in (_EINER_WERT, _TEEN_WERT, _ZEHNER_WERT,
+                  _EINER_WERT_EN, _TEEN_WERT_EN, _ZEHNER_WERT_EN):
         if w in tafel:
             return tafel[w]
     m = re.fullmatch(r"(ein|zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun)und(\w+)", w)
     if m and m.group(2) in _ZEHNER_WERT:
         return _EINER_WERT[m.group(1)] + _ZEHNER_WERT[m.group(2)]
+    # englisch: „twenty-one", „forty five" (2026-09-22)
+    m = re.fullmatch(r"(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s](\w+)", w)
+    if m and m.group(2) in _EINER_WERT_EN:
+        return _ZEHNER_WERT_EN[m.group(1)] + _EINER_WERT_EN[m.group(2)]
     return None
 
 def _ordinal_wert(w):
@@ -2496,6 +2560,75 @@ _JAHRESZEIT_MONATE = {"frühjahr": (3, 4, 5), "frühling": (3, 4, 5), "sommer": 
 _JAHRESZEIT_RE = (r"(?:(?:Früh|Spät|Hoch)(?:sommer|herbst|winter)|Frühjahr|Frühling|Sommer|"
                   r"Herbst|Winter|Jahresanfang|Jahresbeginn|Jahresmitte|Jahresende|"
                   r"Jahreswechsel|Anfang|Beginn|Mitte|Ende)")
+# Englische Monats-, Jahreszeit- und Zeitraumwoerter (2026-09-22, W57-Nachzug).
+# Nur die vollen Monatsnamen: "Mar", "Jan" und "Sept" als Abkuerzung treffen in
+# englischer Prosa auch Eigennamen, und die Analysen schreiben den Monat aus.
+_MONATE_EN = {"january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+              "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
+              "december": 12}
+_MONAT_EN_RE = (r"(?:January|February|March|April|May|June|July|August|September|"
+                r"October|November|December)")
+_JAHRESZEIT_MONATE_EN = {"spring": (3, 4, 5), "summer": (6, 7, 8), "autumn": (9, 10, 11),
+                         "fall": (9, 10, 11), "winter": (12, 1, 2),
+                         "early": (1, 2, 3, 4), "mid": (5, 6, 7, 8), "late": (9, 10, 11, 12),
+                         "the start of": (1, 2, 3), "the beginning of": (1, 2, 3),
+                         "the middle of": (5, 6, 7, 8), "the end of": (10, 11, 12),
+                         "the turn of the year": (12, 1)}
+# "early summer 2027", "mid-2027", "the end of 2026", "the turn of the year"
+_JAHRESZEIT_EN_RE = (r"(?:(?:early|mid|late|high)[-\s]?(?:spring|summer|autumn|fall|winter)"
+                     r"|the\s+turn\s+of\s+the\s+year"
+                     r"|the\s+(?:start|beginning|middle|end)\s+of"
+                     r"|spring|summer|autumn|fall|winter|early|mid|late)")
+
+def _jz_kandidaten(jz_roh, j, tafel):
+    """(Jahr, Monat)-Kandidaten einer Zeitangabe wie „Frühsommer 2027" / „early
+    summer 2027". Normalisiert die Verstaerker beider Sprachen weg und legt fuer
+    Winter und Jahreswechsel die Nachbarjahre dazu."""
+    jz = re.sub(r"\s+", " ", (jz_roh or "").casefold().strip())
+    for vor in ("früh", "spät", "hoch"):
+        if jz.startswith(vor) and jz[len(vor):] in ("sommer", "herbst", "winter"):
+            jz = jz[len(vor):]
+    m = re.fullmatch(r"(?:early|mid|late|high)[-\s]?(spring|summer|autumn|fall|winter)", jz)
+    if m:
+        jz = m.group(1)
+    monate = tafel.get(jz, tuple(range(1, 13)))
+    kand = {(j, mo) for mo in monate}
+    if jz in ("winter", "jahreswechsel", "the turn of the year"):
+        kand |= {(j + 1, mo) for mo in (1, 2)} | {(j - 1, 12)}
+    return kand
+
+_P11_MUSTER_EN = (
+    ("iso", re.compile(r"(?<!\d)(?P<j>\d{4})-(?P<m>\d{2})-(?P<t>\d{2})(?!\d)")),
+    # die Belegzeile bleibt auch englisch TT.MM.JJJJ (W57, Nachtrag 2026-09-22)
+    ("numerisch", re.compile(r"(?<![\d.])(?P<t>\d{1,2})\.(?P<m>\d{1,2})\.(?P<j>\d{4}|\d{2})(?![\d])")),
+    ("monatsspanne", re.compile(
+        r"(?<!\w)(?:(?P<t1>\d{1,2})\s+)?(?P<m1>%s)\s*(?:to|and|or|through|until|–|-|/)\s*"
+        r"(?:(?P<t2>\d{1,2})\s+)?(?P<m2>%s)\s+(?P<j>%s)(?!\d)" % (_MONAT_EN_RE, _MONAT_EN_RE, _JAHR_RE))),
+    # "5 June 2026", "June 5, 2026", "June 2026"
+    ("monat", re.compile(r"(?<!\w)(?:(?P<t>\d{1,2})\s+)?(?P<m>%s)\s+(?P<j>%s)(?!\d)"
+                         % (_MONAT_EN_RE, _JAHR_RE))),
+    ("monat_us", re.compile(r"(?<!\w)(?P<m>%s)\s+(?P<t>\d{1,2})(?:st|nd|rd|th)?\s*,\s*(?P<j>%s)(?!\d)"
+                            % (_MONAT_EN_RE, _JAHR_RE))),
+    ("jahreszeit", re.compile(r"(?<!\w)(?P<jz>%s)[-\s]+(?:of\s+)?(?P<j>%s)"
+                              r"(?:\s*/\s*(?P<j2>\d{2}|%s))?(?!\d)"
+                              % (_JAHRESZEIT_EN_RE, _JAHR_RE, _JAHR_RE))),
+    ("tag_ohne_jahr", re.compile(r"(?<!\w)(?P<t>\d{1,2})\s+(?P<m>%s)(?!\w)" % _MONAT_EN_RE)),
+    ("jahr", re.compile(r"(?<![\d.,/-])(?P<j>%s)(?:\s*/\s*(?P<j2>%s|\d{2}))?(?![\d]|s\b)" % (_JAHR_RE, _JAHR_RE))),
+    ("monat_ohne_jahr", re.compile(r"(?<!\w)(?P<m>%s)(?!\w)" % _MONAT_EN_RE)),
+)
+_P11_ALTER_EN = (
+    re.compile(r"(?<!\w)at\s+the\s+age\s+of\s+(?:about\s+|around\s+|roughly\s+|just\s+)?"
+               r"(?P<n>%s)(?!\w)" % _ZAHL_EN, re.I),
+    re.compile(r"(?<!\w)when\s+you\s+(?:were|are|turn|turned)\s+(?:about\s+|around\s+|just\s+)?"
+               r"(?P<n>%s)(?:\s+years?\s+old)?(?!\w)" % _ZAHL_EN, re.I),
+    re.compile(r"(?<!\w)(?P<n>%s)\s+years?\s+old(?!\w)" % _ZAHL_EN, re.I),
+    re.compile(r"(?<!\w)(?:you\s+(?:are|were)|are\s+you)\s+(?:now\s+|today\s+|just\s+)?"
+               r"(?P<n>%s)(?=\s*(?:[.,;:!?–—)]|$)|\s+years?\b|\s+and\b)" % _ZAHL_EN, re.I),
+    # "at 43", "at forty-three" — eng gefasst, weil "at" sonst jede Zahl im Satz zieht
+    re.compile(r"(?<!\w)at\s+(?:about\s+|around\s+|roughly\s+|just\s+)?(?P<n>%s)"
+               r"(?=\s*(?:[.,;:!?–—)]|$)|\s+years?\b|\s+(?:and|or|to|again|then)\b)" % _ZAHL_EN, re.I),
+)
+
 _P11_MUSTER = (
     ("iso", re.compile(r"(?<!\d)(?P<j>\d{4})-(?P<m>\d{2})-(?P<t>\d{2})(?!\d)")),
     ("numerisch", re.compile(r"(?<![\d.])(?P<t>\d{1,2})\.(?P<m>\d{1,2})\.(?P<j>\d{4}|\d{2})(?![\d])")),
@@ -2636,10 +2769,17 @@ def _alter_gedeckt(n, faktoren, idx, spanne=1.5):
 def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
     p = _Probe("P11", "Zahlen-Deckung (Daten und Lebensalter)")
     p.einheit = "Angaben"
-    if sprache_analyse != "de":
-        return p.uebersprungen("englisch — Monats-, Jahreszeiten- und Zahlwörter der Probe sind "
-                               "deutsch verdrahtet (W57, Frage 20: erst beim nächsten englischen "
-                               "Auftrag)")
+    # 2026-09-22 (W57-Nachzug): englische Tafeln statt Uebersprung. Die Muster
+    # tragen dieselben Gruppennamen wie die deutschen, deshalb bleibt der Rumpf
+    # unveraendert; gewechselt werden nur Musterliste, Monats- und Zeitraumtafel.
+    englisch = (sprache_analyse != "de")
+    MUSTER = _P11_MUSTER_EN if englisch else _P11_MUSTER
+    ALTER = _P11_ALTER_EN if englisch else _P11_ALTER
+    MON = _MONATE_EN if englisch else _MONATE
+    JZM = _JAHRESZEIT_MONATE_EN if englisch else _JAHRESZEIT_MONATE
+    if englisch:
+        p.hinweise.append("englische Fassung — geprüft mit den englischen Monats-, Zeitraum- "
+                          "und Zahlwörtern; „Lebensjahr“-Formen der deutschen Fassung entfallen")
     idx = _zahlen_index(txt, events)
     quelle = "chart_data und events.json" if events is not None else "chart_data"
     for ch, bewegung, text in _fliesstext(chapters):
@@ -2653,7 +2793,7 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
             p.pruefen.append("%s · %s: „%s“ — %s „%s“ ohne Fundstelle in %s"
                              % (_bezeichnung(ch), bewegung, _kurz(_satz_an(saetze, pos), 140),
                                 was, stelle_txt, quelle))
-        for art, rx in _P11_MUSTER:
+        for art, rx in MUSTER:
             for m in rx.finditer(text):
                 if not frei(m.start(), m.end()):
                     continue
@@ -2668,29 +2808,22 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
                     j = int(g["j"])
                     ok = True
                     for mm, tt in ((g["m1"], g["t1"]), (g["m2"], g["t2"])):
-                        mo = _MONATE[mm.casefold()]
+                        mo = MON[mm.casefold()]
                         ok = ok and (((j, mo, int(tt)) in idx["tage"]) if tt else
                                      ((j, mo) in idx["monate"] or (j - 1, mo) in idx["monate"]))
                     was = "Zeitraum"
-                elif art == "monat":
-                    mo = _MONATE[g["m"].casefold()]
+                elif art in ("monat", "monat_us"):
+                    mo = MON[g["m"].casefold()]
                     ok = ((int(g["j"]), mo, int(g["t"])) in idx["tage"]) if g["t"] else \
                         (int(g["j"]), mo) in idx["monate"]
                     was = "Datum" if g["t"] else "Monat"
                 elif art == "jahreszeit":
                     j = int(g["j"])
-                    jz = g["jz"].casefold()
-                    for vor in ("früh", "spät", "hoch"):
-                        if jz.startswith(vor) and jz[len(vor):] in ("sommer", "herbst", "winter"):
-                            jz = jz[len(vor):]
-                    monate = _JAHRESZEIT_MONATE.get(jz, tuple(range(1, 13)))
-                    kandidaten = {(j, mo) for mo in monate}
-                    if jz in ("winter", "jahreswechsel"):
-                        kandidaten |= {(j + 1, mo) for mo in (1, 2)} | {(j - 1, 12)}
+                    kandidaten = _jz_kandidaten(g["jz"], j, JZM)
                     ok = bool(kandidaten & idx["monate"])
                     was = "Zeitangabe"
                 elif art == "tag_ohne_jahr":
-                    mo, tt = _MONATE[g["m"].casefold()], int(g["t"])
+                    mo, tt = MON[g["m"].casefold()], int(g["t"])
                     ok = any((x[1], x[2]) == (mo, tt) for x in idx["tage"])
                     was = "Datum"
                 elif art == "jahr":
@@ -2700,7 +2833,7 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
                     ok = all(j in idx["jahre"] for j in jahre)
                     was = "Jahreszahl"
                 else:                    # monat_ohne_jahr
-                    mo = _MONATE[g["m"].casefold()]
+                    mo = MON[g["m"].casefold()]
                     ok = any(x[1] == mo for x in idx["monate"])
                     was = "Monat"
                 if not ok:
@@ -2709,7 +2842,7 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
             fak = [f for _, _, f in _faktoren_im_satz(satz)] or \
                 ([f for _, _, f in _faktoren_im_satz(saetze[i_s - 1][2])] if i_s else [])
             funde = []
-            for rx in _P11_ALTER:
+            for rx in ALTER:
                 for m in rx.finditer(satz):
                     n = _zahl_wert(m.group("n"))
                     if n is not None and (n >= 5 or m.group("n").isdigit()):
@@ -2858,11 +2991,66 @@ _RANG_MUSTER = (
     ("alle_n", re.compile(r"(?<![\wäöüß])alle\s+(?:%s)(?![\wäöüß])" % _ZAHLWORT, re.I)),
 )
 
+# Englische Rang-, Zaehl- und Einzigkeitswoerter (2026-09-22, W57-Nachzug).
+# Gesucht ist wie im Deutschen die AUSSAGE ueber das Chart, nicht das Wort: ohne
+# Referenten im Satz (Faktor, Zeichen, Element, Aspektwort oder ein Nomen aus
+# _REFERENT_EN_RE) zaehlt kein Treffer. Die Musterarten heissen wie die deutschen,
+# damit `_rang_befund()` unveraendert bleibt.
+_REFERENT_EN_RE = re.compile(
+    r"(?<!\w)(?:planets?|points?|aspects?|connections?|contacts?|factors?|signs?|"
+    r"elements?|houses?|house|figures?|stelliums?|stellia|axes|axis|angles?|"
+    r"constellations?|transits?|quadrants?|hemispheres?|chart)(?!\w)", re.I)
+_ANZAHLWORT_EN = r"(?:both|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})"
+_CHART_NOMEN_EN = (r"(?:connection|aspect|contact|planet|factor|point|carrier|angle"
+                   r"|conjunction|opposition|square|trine|sextile)s?")
+_CHART_VERB_EN = r"(?:connected|wired|linked|networked|tied|occupied|aspected|involved)"
+_ORDWORT_EN = (r"(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth"
+               r"|\d{1,2}(?:st|nd|rd|th))")
+_RANG_MUSTER_EN = (
+    # "one of the closest", "the two tightest", "the second closest", "closest of all"
+    ("engste", re.compile(
+        r"(?<!\w)(?:(?P<eine>one\s+of\s+the\s+(?:(?P<n>%s)\s+)?(?:closest|tightest|narrowest))"
+        r"|the\s+(?P<n2>%s)\s+(?:closest|tightest|narrowest)"
+        r"|the\s+(?P<ord>%s)\s+(?:closest|tightest|narrowest)"
+        r"|(?:closest|tightest|narrowest)(?:\s+of\s+(?:all|them\s+all))?)(?!\w)"
+        % (_ANZAHLWORT_EN, _ANZAHLWORT_EN, _ORDWORT_EN), re.I)),
+    ("meiste", re.compile(
+        r"(?<!\w)(?:with\s+)?the\s+most(?=\s+(?:\w+\s+){0,2}?%s)"
+        r"|(?<!\w)most\s+(?:%s)\b"
+        r"|(?<!\w)the\s+most\s+(?:densely|tightly|heavily)\s+(?:%s)\b"
+        % (_CHART_NOMEN_EN, _CHART_VERB_EN, _CHART_VERB_EN), re.I)),
+    ("wenigste", re.compile(
+        r"(?<!\w)the\s+(?:fewest|least)(?=\s+(?:\w+\s+){0,2}?%s)"
+        r"|(?<!\w)least\s+(?:%s)\b"
+        r"|(?<!\w)the\s+(?:least|most\s+loosely|most\s+weakly|most\s+thinly)\s+(?:%s)\b"
+        % (_CHART_NOMEN_EN, _CHART_VERB_EN, _CHART_VERB_EN), re.I)),
+    ("einzig", re.compile(
+        r"(?<!\w)the\s+(?:only|single|sole)(?!\w)"
+        r"|(?<!\w)only\s+one\s+(?=(?:other\s+)?(?:%s|sign|element|house))"
+        % _CHART_NOMEN_EN, re.I)),
+    ("kein_anderer", re.compile(
+        r"(?<!\w)(?:no\s+other(?:\s+\w+)?|nothing\s+else\s+in\s+(?:your|the)\s+chart"
+        r"|none\s+of\s+the\s+others?)(?!\w)", re.I)),
+    ("x_von_y", re.compile(r"(?<!\w)(?P<x>%s)\s+of\s+(?:the\s+|your\s+)?(?P<y>%s)(?!\w)"
+                           % (_ZAHL_EN, _ZAHL_EN), re.I)),
+    ("haelfte", re.compile(
+        r"(?<!\w)(?:(?P<vgl>more|less|fewer)\s+than\s+)?(?:a\s+|one\s+|the\s+)?half(?!\w)"
+        r"(?!\s+(?:a\s+)?degree)"
+        r"|(?<!\w)(?P<drittel>a|one|two)\s+thirds?(?!\w)(?!\s+(?:of\s+a\s+)?degree)"
+        r"|(?<!\w)(?P<proz>\d{1,3})\s*(?:%|per\s?cent)(?!\w)", re.I)),
+    ("n_verbindungen", re.compile(
+        r"(?<!\w)(?:(?P<n>two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})"
+        r"|(?:only|just|exactly|no\s+more\s+than)\s+(?P<ein>one))"
+        r"\s+(?:\w+\s+)?connections?(?!\w)", re.I)),
+    ("alle_n", re.compile(r"(?<!\w)all\s+(?:of\s+)?(?:the\s+|your\s+)?(?:%s)(?!\w)" % _ZAHLWORT_EN, re.I)),
+)
+
 def _hat_referent(satz):
     """Spricht der Satz ueber das Chart? Nur dann ist ein Rangwort eine Aussage,
     die eine Zahl braucht („die engste Verbindung deines Bildes" — nicht „deine
     engsten Freunde")."""
-    return bool(_REFERENT_RE.search(satz) or _faktoren_im_satz(satz) or _ELEMENT_RE.search(satz)
+    return bool(_REFERENT_RE.search(satz) or _REFERENT_EN_RE.search(satz)
+                or _faktoren_im_satz(satz) or _ELEMENT_RE.search(satz)
                 or _MODUS_RE.search(satz) or ASPEKT_RE.search(satz)
                 or re.search(r"(?<![\wäöüß])%s(?![\wäöüß])" % ZEICHEN_RE, satz))
 
@@ -3119,9 +3307,12 @@ def _rang_befund(art, m, satz, rz, typ, vorher=""):
 def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
     p = _Probe("P12", "Rang- und Einzigkeitswörter")
     p.einheit = "Aussagen"
-    if sprache_analyse != "de":
-        return p.uebersprungen("englisch — die Rang- und Zahlwörter der Probe sind deutsch "
-                               "verdrahtet (W57, Frage 20: erst beim nächsten englischen Auftrag)")
+    # 2026-09-22 (W57-Nachzug): englische Musterliste statt Uebersprung. Die Arten
+    # heissen wie im Deutschen, deshalb bleibt `_rang_befund()` unveraendert.
+    englisch = (sprache_analyse != "de")
+    MUSTER = _RANG_MUSTER_EN if englisch else _RANG_MUSTER
+    if englisch:
+        p.hinweise.append("englische Fassung — geprüft mit den englischen Rang- und Zählwörtern")
     rz = _rangzeilen_lesen(txt)
     if not rz:
         p.hinweise.append("Datenblatt ohne Rangzeilen (Strukturbild §10, seit 2026-09-19) — jede "
@@ -3136,7 +3327,7 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
         for i, (_a, _e, satz) in enumerate(saetze):
             if not _hat_referent(satz):
                 continue
-            treffer = sorted(((m.start(), m.end(), art, m) for art, rx in _RANG_MUSTER
+            treffer = sorted(((m.start(), m.end(), art, m) for art, rx in MUSTER
                               for m in rx.finditer(satz)), key=lambda t: (t[0], -t[1]))
             belegt = []
             for a, e, art, m in treffer:
@@ -3463,6 +3654,18 @@ def _abschnitte(ch):
         out.append(akt)
     return out
 
+# 2026-09-22 (W57-Nachzug, erster englischer Transit): Der Pflichtteil hiess dort
+# „What Will Carry You Through"; die Probe suchte nur „What carries" und meldete
+# darum alle zwoelf Ressourcen mit Deutungsort „Was traegt" als PRUEFEN. Gesucht ist
+# der TITEL des Pflichtteils, nicht eine feste Formel — deshalb beide Verbformen und
+# die uebliche Einschubstelle („you", „us") dazwischen.
+_WAS_TRAEGT_KOPF_RE = re.compile(
+    r"Was dich durch diese Zeit trägt"
+    r"|What\s+(?:carries|will\s+carry)\b(?:\s+\w+){0,3}\s*(?:through|you|us)?", re.I)
+_WAS_TRAEGT_INLINE_RE = re.compile(
+    r"Was trägt\s*:"
+    r"|What\s+(?:carries|will\s+carry)\b(?:\s+\w+){0,3}\s*:", re.I)
+
 def _was_traegt_bloecke(chapters):
     """Absaetze des Pflichtteils: „Was trägt:" im Hauptthemen-Kapitel bis zum
     Kapitelende, im Transit `### Was dich durch diese Zeit trägt` bis zum
@@ -3471,14 +3674,14 @@ def _was_traegt_bloecke(chapters):
         bl = ch["blocks"]
         for i, b in enumerate(bl):
             t = _ws(b["text"]).lstrip("„\"»")
-            if b.get("type") == "subhead" and re.match(r"Was dich durch diese Zeit trägt|What carries", t):
+            if b.get("type") == "subhead" and _WAS_TRAEGT_KOPF_RE.match(t):
                 out = []
                 for b2 in bl[i + 1:]:
                     if b2.get("type") == "subhead":
                         break
                     out.append(b2["text"])
                 return out
-            if b.get("type") != "subhead" and re.match(r"Was trägt\s*:|What carries", t):
+            if b.get("type") != "subhead" and _WAS_TRAEGT_INLINE_RE.match(t):
                 return [b2["text"] for b2 in bl[i:] if b2.get("type") != "subhead"]
     return None
 
@@ -4290,8 +4493,20 @@ def _selbsttest(still=False):
     assert _p14_kopfblock([{"kicker": "Kapitel 2", "title": "Probe", "signatur": "", "beleg": "",
                             "blocks": []}], "geburt").status == "UEBERSPRUNGEN", \
         "P14 meldet im Fachmodus (kein Kopfblock im ganzen Dokument) Fehler"
+    # 2026-09-22 (W57-Nachzug): P11 und P12 LAUFEN jetzt auf einer englischen Analyse
+    # (eigene Muster- und Zahlwortafeln). Die Zusicherung von vorher — beide
+    # uebersprungen — ist damit umgedreht: Sie duerfen NICHT mehr uebersprungen
+    # melden, und auf leerer Eingabe bleibt es aussagelos statt uebersprungen.
     for fn, args in ((_p11_zahlen, ([], "", None, "en")), (_p12_rang, ([], "", None, "en"))):
-        assert fn(*args).status == "UEBERSPRUNGEN", "%s läuft auf einer englischen Analyse" % fn.__name__
+        assert fn(*args).status != "UEBERSPRUNGEN", \
+            "%s überspringt eine englische Analyse noch" % fn.__name__
+    assert _zahl_wert("forty-three") == 43 and _zahl_wert("twelve") == 12, \
+        "englische Zahlwörter werden nicht gelesen"
+    assert _MONATE_EN["june"] == 6 and (2027, 4) in _jz_kandidaten("spring", 2027, _JAHRESZEIT_MONATE_EN), \
+        "englische Monats- oder Zeitraumtafel greift nicht"
+    assert (2027, 4) in _jz_kandidaten("Frühjahr", 2027, _JAHRESZEIT_MONATE), \
+        "deutsche Zeitraumtafel nach dem Umbau nicht mehr gleich"
+    berichte.append("englische Tafeln P11/P12 aktiv")
 
     # 1) fehlerfrei
     r = lauf(_TEST_CHART, _TEST_ANALYSE)

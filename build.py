@@ -900,14 +900,27 @@ _ORD_REF_WORDS = (r'Kapiteln?|Haus|H(?:ae|ä)user[n]?|Teile?[nrs]?|'
                   r'Regeln?|Segmente?[ns]?|Anhang|Tabellen?|Zeilen?|'
                   r'Abs(?:atz|aetze|ätze)|S(?:atz|aetze|ätze)|Fragen?|'
                   r'(?:Ue|Ü)bung(?:en)?|Aufgaben?|Fu(?:ss|ß)noten?|'
-                  r'B(?:and|aende|ände)')
+                  r'B(?:and|aende|ände)|'
+                  # 2026-09-22 (W57-Nachzug): die englischen Bezugswoerter. Bis
+                  # heute war ein Absatzende „… in Chapter 2." ein SchemaError,
+                  # und die englische Fassung musste den Verweis umschreiben
+                  # („named in Chapter 2 as a co-carrier." statt „Sounds in
+                  # Chapter 2.") — eine Regel verletzt, um eine andere zu
+                  # erfuellen, genau der Fall, den dieser Block verhindern soll.
+                  r'Chapters?|Houses?|Parts?|Sections?|Points?|Principles?|'
+                  r'Movements?|Steps?|Ranks?|Pages?|No\.?|Number|Themes?|'
+                  r'Quarters?|Stages?|Rules?|Segments?|Appendix|Tables?|'
+                  r'Lines?|Paragraphs?|Sentences?|Questions?|Exercises?|'
+                  r'Tasks?|Footnotes?|Volumes?|Chart')
 # a) Bezugswort unmittelbar vor der Zahl: „… in Kapitel 10."
 _ORD_REF_DIREKT_RE = re.compile(
     r'(?:^|[\s(„"»])(?:' + _ORD_REF_WORDS + r')\s+\d{1,2}\.$')
 # b) Bezugswort vor einer Zahlenkette: „… in den Kapiteln 2, 7 und 10."
+# 2026-09-22: die englischen Bindewoerter dazu („Chapters 2 and 6."), sonst
+# faellt die Kette durch, waehrend der Einzelverweis laeuft.
 _ORD_REF_KETTE_RE = re.compile(
     r'(?:^|[\s(„"»])(?:' + _ORD_REF_WORDS + r')\s+'
-    r'(?:\d{1,2}\s*(?:,|und|oder|bis|/|–|-)\s*)+\d{1,2}\.$')
+    r'(?:\d{1,2}\s*(?:,|und|oder|bis|and|or|to|through|/|–|-)\s*)+\d{1,2}\.$')
 
 
 def _ist_kapitelverweis(tail: str) -> bool:
@@ -1398,6 +1411,33 @@ PFLICHT_BAUSTEINE = {
 }
 
 
+# Gleichwertige Titel der beiden Sprachfassungen. Gepflegt wird die Zuordnung
+# in chartdoc (_LABELS und _PFLICHT_PAARE) — hier steht nur, was verify() ohne
+# chartdoc kennen muss, damit ein englisches PDF nicht an einer deutschen
+# Erwartung scheitert und umgekehrt.
+PFLICHT_GLEICHWERTIG = (
+    ('Inhalt', 'Contents'),
+    ('Die Aspekte im Wortlaut', 'The Aspects in Detail'),
+    ('Die Aspekte im Einzelnen', 'The Aspects in Detail'),
+    ('Die Aspekte und was sie bedeuten', 'The Aspects and What They Mean'),
+    ('Die Transit-Uhr', 'The Transit Clock'),
+    ('Die Zeitleiste', 'The Timeline'),
+    ('Die langen Linien im Überblick', 'The Long Lines at a Glance'),
+    ('Der Stichtag im Überblick', 'The Reference Date at a Glance'),
+    ('Die tragenden Konstellationen', 'The Constellations That Carry Them'),
+    ('Die Zeitfenster im Überblick', 'The Time Windows at a Glance'),
+)
+
+
+def _pflicht_kandidaten(needle):
+    """Der Titel selbst und sein gleichwertiger Titel der anderen Sprache."""
+    out = [needle]
+    for paar in PFLICHT_GLEICHWERTIG:
+        if needle in paar:
+            out.extend(x for x in paar if x != needle)
+    return tuple(dict.fromkeys(out))
+
+
 def pflicht_bausteine(doctype=None) -> dict:
     """Pflichtliste fuer einen Dokumenttyp.
 
@@ -1552,7 +1592,15 @@ def assert_render_ready(html_str: str, base_dir: str = None, must_contain=None,
 
     pflicht = pflicht_bausteine(doctype)
     for needle, label in pflicht["text"]:
-        if re.sub(r'\s+', ' ', needle).strip() not in hay:
+        # 2026-09-22 (W57-Nachzug): chartdoc.setze_sprache() zieht die Titel hier
+        # nach, bevor verify() laeuft. Der Fall, den diese Zeile trotzdem
+        # abfaengt: ein Lauf, der die Sprache erst NACH dem Seitenaufbau
+        # umstellt oder ein Titel aus einer Liste, die die Angleichung nicht
+        # kennt. Dann gilt auch der gleichwertige Titel der anderen Sprache —
+        # ein fehlender Baustein bleibt ein Befund, nur eine gemischte
+        # Sprachfassung faellt nicht mehr durch.
+        if not any(re.sub(r'\s+', ' ', kand).strip() in hay
+                   for kand in _pflicht_kandidaten(needle)):
             problems.append(f"PFLICHT-BAUSTEIN fehlt: {label} "
                             f"(erwartet im sichtbaren Text: {needle!r}). "
                             "Siehe build.PFLICHT_BAUSTEINE und den Abschnitt "
@@ -1681,7 +1729,11 @@ def pdf_info(pdf_path: str) -> dict:
     return info
 
 
-_FUSS_LABEL_RE = re.compile(r'^\s*B\s?E\s?L\s?E\s?G\s?:')
+# 2026-09-22 (W57-Nachzug): Das gesperrte Gold-Label des Kapitelfusses heisst
+# in einem englischen PDF „EVIDENCE:". Die ANALYSE traegt weiter `**Beleg:**`
+# (Werkzeuge-Modul A3, weil parse_analyse genau dieses Wort erkennt) — hier geht
+# es um die gerenderte Fusszeile, die der Anker-Suche als Kopfzeile dient.
+_FUSS_LABEL_RE = re.compile(r'^\s*(?:B\s?E\s?L\s?E\s?G|E\s?V\s?I\s?D\s?E\s?N\s?C\s?E)\s?:')
 _FUSS_ASPEKT_RE = re.compile(r'^\s*[–—]\s')
 # Woran eine Zeile des Kapitelfusses erkennbar ist — auch als Fortsetzung
 # einer umgebrochenen Beleg- oder Stand-Zeile (s. _fuss_zeilen).
@@ -3644,12 +3696,34 @@ def _selbsttest():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # --- W57-Nachzug 2026-09-22: englische Sprachfassung -------------------
+    for s in ('Sounds in Chapter 2.', 'Klingt mit in Kapitel 2.'):
+        if not _ORD_REF_DIREKT_RE.search(s):
+            fehler.append("W57: Einzelverweis nicht erkannt: %r" % s)
+    for s in ('Sounds in Chapters 2 and 6.', 'Klingt mit in den Kapiteln 2, 7 und 10.'):
+        if not _ORD_REF_KETTE_RE.search(s):
+            fehler.append("W57: Verweiskette nicht erkannt: %r" % s)
+    if _ORD_REF_DIREKT_RE.search('und dann 2.'):
+        fehler.append("W57: Verweis ohne Bezugswort wird durchgelassen")
+    for lab in ('B E L E G:', 'E V I D E N C E:', 'BELEG:', 'EVIDENCE:'):
+        if not _FUSS_LABEL_RE.match(lab):
+            fehler.append("W57: Fusslabel nicht erkannt: %r" % lab)
+    if _FUSS_LABEL_RE.match('Belege:'):
+        fehler.append("W57: Fusslabel greift zu weit (Belege:)")
+    if _pflicht_kandidaten('Inhalt') != ('Inhalt', 'Contents'):
+        fehler.append("W57: Pflicht-Kandidaten deutsch->englisch falsch")
+    if _pflicht_kandidaten('Contents') != ('Contents', 'Inhalt'):
+        fehler.append("W57: Pflicht-Kandidaten englisch->deutsch falsch")
+    if _pflicht_kandidaten('Bodygraph') != ('Bodygraph',):
+        fehler.append("W57: Titel ohne Paar bekommt Kandidaten dazu")
+
     if fehler:
         print("Selbsttest build.py: %d Fehler" % len(fehler))
         for f_ in fehler:
             print("  - " + f_)
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
+          "W57, "
           "L16, F18, F2, W47, W61)")
 
 

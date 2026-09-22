@@ -124,6 +124,16 @@ ASPEKT_KLASSE = {'Konjunktion': 'konj', 'Opposition': 'rot', 'Quadrat': 'rot',
 ASPEKT_GLYPH = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□',
                 'Trigon': '△', 'Sextil': '⚹', 'Quincunx': '⚻',
                 'Halbsextil': '⚺'}
+# 2026-09-22 (W57-Nachzug): die englischen Aspektnamen als zusaetzliche
+# Schluessel — die Aspekt-Legende zieht ihren Namen aus LEGEND_ROWS, und mit der
+# englischen Tafel fiel die Farbzuordnung sonst mit KeyError aus. Es sind
+# dieselben Woerter, die das Klartext-Modul als Anker der englischen Fassung
+# festlegt (square, trine, opposition, conjunction, sextile, quincunx,
+# semisextile) — hier in der Schreibweise der gedruckten Legende.
+ASPEKT_KLASSE.update({'Conjunction': 'konj', 'Square': 'rot', 'Trine': 'blau',
+                      'Sextile': 'blau', 'Semisextile': 'gruen'})
+ASPEKT_GLYPH.update({'Conjunction': '☌', 'Square': '□', 'Trine': '△',
+                     'Sextile': '⚹', 'Semisextile': '⚺'})
 
 # Farbe der gerechneten Punkte im Rad. Steht seit dem 2026-09-14 als Konstante
 # statt zweimal als verdrahteter Hexwert (einmal im CSS, einmal in
@@ -195,7 +205,8 @@ _CFG = {'gr': _orb_text, 'name_of': lambda n: n}
 
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  name_of=None, kopfzeile=None, aspektfarben=None,
-                 balken=None, part_ornament=None, beleg_platz=None):
+                 balken=None, part_ornament=None, beleg_platz=None,
+                 sprache=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
     pal           Palette (Schluessel s. PAL oben)
@@ -215,7 +226,15 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                   Glyphen des Charts aus dem @@DECKBLATT-Block
     beleg_platz   'fuss' (Standard) oder 'kopf'. 'kopf' NUR fuer Laeufe ohne
                   die therapeutische Wirkform — s. BELEG_PLATZ.
+    sprache       'de' (Standard) oder 'en' — Sprache ALLER sichtbaren Labels
+                  (Seitentitel, Kolumnen, Aspekt-Legende, Orbis-Zeile,
+                  Zeitleisten-Texte). Zieht build.PFLICHT_BAUSTEINE mit nach,
+                  s. setze_sprache(). Die Kopfzeilen `**Signatur:**` und
+                  `**Beleg:**` der Analyse bleiben in JEDER Sprache deutsch
+                  (Werkzeuge-Modul A3).
     """
+    if sprache is not None:
+        setze_sprache(sprache)
     global PART_KICKER, GLYPH_OF, KOPFZEILE, PART_ORNAMENT, BELEG_PLATZ
     if part_ornament is not None:
         PART_ORNAMENT = part_ornament
@@ -722,6 +741,25 @@ LEGEND_ROWS = [
 ]
 
 LEGEND_TITEL = 'Die Aspekte und was sie bedeuten'
+# 2026-09-22 (W57-Nachzug): Seitentitel, die bis heute an ihrer Fundstelle
+# standen und deshalb in einer englischen Fassung deutsch blieben. Sie sind
+# jetzt Globals wie die uebrigen Labels und werden von setze_sprache()
+# mitgetauscht.
+INHALT_TITEL = 'Inhalt'
+RADIX_TITEL = 'Die Radix'
+RADIX_KICKER = 'Das Chart im Bild'
+KONST_TITEL = 'Die Konstellationen'
+KONST_KICKER = 'Stände & Verteilung'
+# Spaltenkoepfe und Blockueberschriften der Konstellationsseite. Standen bis zum
+# 2026-09-22 fest im f-String — die einzige Seite ohne Parameter dafuer, und
+# damit die Stelle, an der eine englische Fassung deutsch blieb (Klasse-2
+# Transit 3+4 vom 22.09., Nr. 9).
+KONST_KOPF = {'faktor': 'Faktor', 'zeichen': 'Zeichen', 'grad': 'Grad',
+              'haus': 'Haus', 'lauf': 'Lauf', 'achse': 'Achse',
+              'achsenkreuze': 'Die Achsenkreuze',
+              'modi': 'Modus-Verteilung (ungewichtet)',
+              'elemente': 'Element-Verteilung (zehn klassische Planeten, '
+                          'ungewichtet)'}
 
 # Die Orbis-Staffelung als eine Zeile unter der Aspekttabelle. Ohne sie sagt
 # das Dokument „Huber-Orbis, individuell gestaffelt nach Faktor", nennt aber
@@ -789,7 +827,7 @@ def setze_zusatzaspekte(aspekte):
     return AKTIVE_ZUSATZ
 
 
-def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False,
+def aspekt_legende(spalten=1, titel=None, stil='', zusatz=False,
                    orbis=False):
     """Legendenkasten „Die Aspekte und was sie bedeuten".
 
@@ -817,6 +855,7 @@ def aspekt_legende(spalten=1, titel=LEGEND_TITEL, stil='', zusatz=False,
     weil nichts es zaehlt. Dagegen steht seit demselben Tag die Gegenprobe in
     render_mit_inhalt() (s. pruefe_orbis_zeile).
     """
+    titel = LEGEND_TITEL if titel is None else titel
     rows = []
     for n, w, t in LEGEND_ROWS:
         k = ASPEKT_KLASSE[n]
@@ -883,7 +922,7 @@ grauen Striche darin sind die 5°-Teilung.</p></div>"""
 
 # --- Seite: das Rad ---------------------------------------------------------
 
-def radix_page(bild, unterzeile, kicker='Das Chart im Bild', titel='Die Radix',
+def radix_page(bild, unterzeile, kicker=None, titel=None,
                anker='PG_rad', bild_breite=None, gerechnet=None):
     """Radseite im Hausstil: grosses Rad, darunter die beiden Legendenkaesten.
 
@@ -904,6 +943,8 @@ def radix_page(bild, unterzeile, kicker='Das Chart im Bild', titel='Die Radix',
                 Funktion hatte aber keinen Weg, sie zu setzen — jeder Lauf mit
                 gerechnetem Punkt musste den Kasten von Hand austauschen.
     """
+    kicker = RADIX_KICKER if kicker is None else kicker
+    titel = RADIX_TITEL if titel is None else titel
     stil = f' style="width:{bild_breite}"' if bild_breite else ''
     return f"""<section class="front" id="{anker}">
 <div class="fm-kicker">{esc(kicker)}</div>
@@ -1412,8 +1453,8 @@ def _konst_skala_css(anker, s):
 
 
 def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
-                         kicker='Stände & Verteilung',
-                         titel='Die Konstellationen', anker='PG_konst',
+                         kicker=None,
+                         titel=None, anker='PG_konst',
                          lead=None, fussnoten=(), skala=1.0):
     """Konstellationsseite im Hausstil.
 
@@ -1447,6 +1488,8 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
     elemente  [(Label, Anzahl, [Planeten]), ...]  — s. verteilung()
     modi      dito
     """
+    titel = KONST_TITEL if titel is None else titel
+    kicker = KONST_KICKER if kicker is None else kicker
     rows = []
     for gl, nm, zn, gd, hs, lf in zeilen:
         if gl == 'SEP':
@@ -1472,20 +1515,22 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
 <div class="fm-rule"></div>
 {ld}
 <table class="konst">
-<tr><th>&nbsp;</th><th>Faktor</th><th>Zeichen</th><th>Grad</th><th>Haus</th>
-<th>Lauf</th></tr>
+<tr><th>&nbsp;</th><th>{esc(KONST_KOPF['faktor'])}</th><th>{esc(KONST_KOPF['zeichen'])}</th>
+<th>{esc(KONST_KOPF['grad'])}</th><th>{esc(KONST_KOPF['haus'])}</th>
+<th>{esc(KONST_KOPF['lauf'])}</th></tr>
 {''.join(rows)}
 </table>
 {nt}
 <div class="dist"><div class="row"><div class="cell links">
-<h4 class="blockkopf">Die Achsenkreuze</h4>
-<table class="achsen"><tr><th>Achse</th><th>&nbsp;</th><th>Zeichen</th>
-<th>Grad</th></tr>{ach}</table>
+<h4 class="blockkopf">{esc(KONST_KOPF['achsenkreuze'])}</h4>
+<table class="achsen"><tr><th>{esc(KONST_KOPF['achse'])}</th><th>&nbsp;</th>
+<th>{esc(KONST_KOPF['zeichen'])}</th>
+<th>{esc(KONST_KOPF['grad'])}</th></tr>{ach}</table>
 </div><div class="cell">
-<h4 class="blockkopf">Modus-Verteilung (ungewichtet)</h4>
+<h4 class="blockkopf">{esc(KONST_KOPF['modi'])}</h4>
 {_balken(modi)}
 </div></div></div>
-<h4 class="blockkopf">Element-Verteilung (zehn klassische Planeten, ungewichtet)</h4>
+<h4 class="blockkopf">{esc(KONST_KOPF['elemente'])}</h4>
 {_balken(elemente)}
 </section>"""
 
@@ -1504,6 +1549,164 @@ ASP_LEAD = ('Jede Winkelbeziehung deines Charts, voll ausgeschrieben. „e." '
 # Seitentitel der Aspektseite. Steht hier als Konstante, weil er zugleich der
 # Pflicht-Baustein ist, den build.assert_render_ready sucht — s. unten.
 ASPEKT_TITEL = 'Die Aspekte im Einzelnen'
+
+
+# ---------------------------------------------------------------------------
+# Sprachfassung der sichtbaren Labels (2026-09-22, W57-Nachzug).
+#
+# Bis heute hatte `chartdoc` keinen Sprachschalter: Seitentitel, Kolumnen,
+# Legendenzeilen und die Zeitleisten-Texte standen deutsch im Modul, und eine
+# englische Fassung musste sie im Lauf von Hand ueberschreiben — jeder Lauf
+# neu, jeder Lauf anders. Die Namen unten sind dieselben Globals wie vorher;
+# `setze_sprache()` tauscht ihre Werte und zieht im gleichen Zug die
+# Pflicht-Bausteine von `build` nach (s. _pflicht_baustein_angleichen).
+#
+# WICHTIG fuer neue Labels: Ein Label, das als STANDARDWERT eines Parameters
+# steht (`def f(titel=LEGEND_TITEL)`), wird beim Import gebunden und aendert
+# sich durch einen Sprachwechsel NICHT mehr. Deshalb heissen diese Parameter
+# `None` und holen den Wert im Rumpf. Wer ein Label ergaenzt, haelt sich daran.
+SPRACHE = 'de'
+_LABEL_NAMEN = ('LEGEND_ROWS', 'LEGEND_TITEL', 'ORBIS_ZEILE', 'ZEITLEISTE_TITEL',
+                'ZL_SPALTE', 'ZL_LEAD', 'ZL_NOTE', 'ASPEKT_TITEL',
+                'INHALT_TITEL', 'RADIX_TITEL', 'RADIX_KICKER', 'KONST_TITEL',
+                'KONST_KICKER', 'KONST_KOPF', 'ASP_GRUPPEN', 'ASP_LEAD')
+
+_LEGEND_ROWS_EN = [
+    ("Conjunction", "0°", "two forces at the same point — they merge, amplify "
+     "and colour one another."),
+    ("Opposition", "180°", "a facing pair, usually met through other people — "
+     "the work is balancing, not choosing."),
+    ("Square", "90°", "inner friction that pushes — uncomfortable, and the "
+     "strongest engine of development."),
+    ("Trine", "120°", "effortless flow, an inborn talent — which is exactly why "
+     "it is easily left lying idle."),
+    ("Sextile", "60°", "stimulus and opportunity — easier to reach than the "
+     "trine, but it has to be taken up."),
+    ("Quincunx", "150°", "two forces that do not fit together and cannot be "
+     "ignored — a constant readjusting."),
+    ("Semisextile", "30°", "a quiet irritation between neighbouring forces — a "
+     "searching movement."),
+]
+_ORBIS_ZEILE_EN = ('Orb by factor: Sun, Moon 8° · Mercury, Venus, Jupiter 6° '
+                   '· Mars, Saturn 5° · Uranus, Neptune, Pluto 4° · axes and '
+                   'Chiron 5° · Lilith, Part of Fortune 3° · Pholus 2°. The '
+                   'lunar node takes the orb of the aspecting factor. Minor '
+                   'aspects are tighter, capped at both factors\' orbs.')
+_ZL_SPALTE_EN = ('The far right column gives the number of contacts the '
+                 'calculation counted for each month; the figure in brackets '
+                 'is the number of days on which an angle stands exact.')
+_ZL_LEAD_EN = ('This page is for looking things up, not for reading. Each line '
+               'is one quarter of the window: beside it stands which themes run '
+               'densely in those three months and which are quiet in the same '
+               'stretch. ' + _ZL_SPALTE_EN
+               + ' A high figure does not mean that much happens — it means '
+               'that much is touched at once.')
+_ZL_NOTE_EN = ('The quarters are calendar quarters; Q1 is the quarter in which '
+               'this horoscope was drawn up. Spans and figures are taken from '
+               'the calculation unchanged.')
+
+_LABELS = {
+    'en': {
+        'LEGEND_ROWS': _LEGEND_ROWS_EN,
+        'LEGEND_TITEL': 'The Aspects and What They Mean',
+        'ORBIS_ZEILE': _ORBIS_ZEILE_EN,
+        'ZEITLEISTE_TITEL': 'The Timeline',
+        'ZL_SPALTE': _ZL_SPALTE_EN,
+        'ZL_LEAD': _ZL_LEAD_EN,
+        'ZL_NOTE': _ZL_NOTE_EN,
+        'ASPEKT_TITEL': 'The Aspects in Detail',
+        'INHALT_TITEL': 'Contents',
+        'RADIX_TITEL': 'The Chart',
+        'RADIX_KICKER': 'The Chart as a Picture',
+        'KONST_TITEL': 'The Constellations',
+        'KONST_KICKER': 'Positions & Distribution',
+        'KONST_KOPF': {'faktor': 'Factor', 'zeichen': 'Sign', 'grad': 'Degree',
+                       'haus': 'House', 'lauf': 'Motion', 'achse': 'Axis',
+                       'achsenkreuze': 'The Axis Crosses',
+                       'modi': 'Mode distribution (unweighted)',
+                       'elemente': 'Element distribution (ten classical '
+                                   'planets, unweighted)'},
+        'ASP_GRUPPEN': [('voll', 'Major aspects'),
+                        ('einseitig', 'Further (one-sided) aspects'),
+                        ('neben', 'Minor aspects')],
+        'ASP_LEAD': ('Every angular relationship in your chart, written out in '
+                     'full. "o." marks a one-sided aspect (only one of the two '
+                     'factors holds the orb). Except for lines marked '
+                     'otherwise, the wheel draws the same list.'),
+    },
+}
+# die deutsche Fassung ist der Stand beim Import — nicht abgeschrieben, sondern
+# eingesammelt, damit sie nicht an zwei Orten gepflegt werden muss
+_LABELS['de'] = {n: globals()[n] for n in _LABEL_NAMEN}
+assert set(_LABELS['en']) == set(_LABEL_NAMEN), \
+    'Labeltafel und _LABEL_NAMEN laufen auseinander'
+
+# Pflicht-Titel, die NICHT chartdoc druckt, sondern der Schritt-3-Lauf selbst
+# setzt (Transit-Uhr-Seite und die beiden Anhangtabellen, s. Design-Modul
+# Zeitebene; die Themen-Analyse ihre zwei eigenen). build.verify() verlangt den
+# woertlichen Titel im sichtbaren Text — ohne diese Paare wuerde ein englisches
+# PDF an einer deutschen Erwartung scheitern. Erstes Element deutsch, zweites
+# englisch; die Angleichung tauscht in beide Richtungen.
+_PFLICHT_PAARE = (
+    ('Die Transit-Uhr', 'The Transit Clock'),
+    ('Die langen Linien im Überblick', 'The Long Lines at a Glance'),
+    ('Der Stichtag im Überblick', 'The Reference Date at a Glance'),
+    ('Die tragenden Konstellationen', 'The Constellations That Carry Them'),
+    ('Die Zeitfenster im Überblick', 'The Time Windows at a Glance'),
+)
+
+
+def setze_sprache(code='de'):
+    """Sprache aller sichtbaren Labels setzen ('de' oder 'en').
+
+    Wirkt auf Seitentitel, Kolumnenzeilen, Aspekt-Legende, Orbis-Zeile und die
+    Texte der Zeitleisten-Seite — und zieht `build.PFLICHT_BAUSTEINE` nach,
+    damit `build.verify()` den Titel erwartet, der wirklich gedruckt wird.
+    Einmal vor dem ersten Seitenaufbau aufrufen, am einfachsten ueber
+    `konfiguriere(sprache='en')`.
+
+    NICHT betroffen (und mit Absicht): die Kopfzeilen `**Signatur:**` und
+    `**Beleg:**` der Analyse — `build.parse_analyse()` erkennt genau diese
+    beiden Woerter (Werkzeuge-Modul A3).
+    """
+    global SPRACHE
+    code = (code or 'de').strip().lower()[:2]
+    if code not in _LABELS:
+        raise ValueError("sprache: 'de' oder 'en', nicht %r" % code)
+    globals().update(_LABELS[code])
+    SPRACHE = code
+    _pflicht_baustein_angleichen()
+    # Die Transit-Uhr ist eine eigene Datei mit eigener Labeltafel; ohne diesen
+    # Zug blieb die Grafik im englischen PDF deutsch beschriftet (W57). Fehlt
+    # das Modul (Geburtshoroskop-Lauf), ist das kein Fehler.
+    try:
+        import transituhr_fusion as _tuf
+        _tuf.setze_sprache(code)
+    except Exception:
+        pass
+    return code
+
+
+def _paare_tauschen():
+    """Die Pflicht-Titel aus _PFLICHT_PAARE auf SPRACHE stellen — in jeder
+    Liste von build.PFLICHT_BAUSTEINE, in beide Richtungen und mehrfach
+    aufrufbar."""
+    ziel = {}
+    for de, en in _PFLICHT_PAARE:
+        gewuenscht = en if SPRACHE == 'en' else de
+        ziel[de] = gewuenscht
+        ziel[en] = gewuenscht
+    try:
+        typen = build.PFLICHT_BAUSTEINE
+    except AttributeError:
+        return
+    for eintrag_typ in typen.values():
+        liste = eintrag_typ.get('text') if isinstance(eintrag_typ, dict) else None
+        if not liste:
+            continue
+        for i, e in enumerate(liste):
+            if e and e[0] in ziel:
+                liste[i] = (ziel[e[0]], e[1])
 
 
 def _pflicht_baustein_angleichen():
@@ -1525,11 +1728,27 @@ def _pflicht_baustein_angleichen():
     except (AttributeError, KeyError, TypeError):
         return
     for i, eintrag in enumerate(eintraege):
-        if eintrag and eintrag[0].startswith('Die Aspekte im '):
+        if eintrag and eintrag[0].startswith(('Die Aspekte im ', 'The Aspects in ')):
             eintraege[i] = (ASPEKT_TITEL, eintrag[1])
             break
     else:
         eintraege.append((ASPEKT_TITEL, 'voll ausgeschriebene Aspekttabelle'))
+    # 2026-09-22: dieselbe Konstruktion fuer die zwei weiteren Titel, die
+    # chartdoc selbst druckt — erkannt an der BESCHREIBUNG, nicht am Titel, und
+    # in JEDER Typ-Liste: die Themen-Analyse setzt `basis: False` und bringt
+    # ihre eigene Inhalts-Zeile mit, die sonst deutsch stehen blieb.
+    for liste in [v.get('text') for v in build.PFLICHT_BAUSTEINE.values()
+                  if isinstance(v, dict)]:
+        if not liste:
+            continue
+        for kennung, wert in (('Inhaltsverzeichnis', INHALT_TITEL),
+                              ('Aspekt-Legende', LEGEND_TITEL)):
+            for i, eintrag in enumerate(liste):
+                if eintrag and kennung in eintrag[1]:
+                    liste[i] = (wert, eintrag[1])
+                    break
+    # und die Titel, die der Lauf selbst setzt: nach Sprache tauschen
+    _paare_tauschen()
     # Zeitleiste: dieselbe Konstruktion, aber in den Typ-Listen. Erkannt wird
     # der Eintrag an seiner BESCHREIBUNG, nicht am Titel — sonst faende die
     # Angleichung ihren eigenen Eintrag nicht mehr, sobald der Titel abweicht.
@@ -2187,7 +2406,7 @@ def inhalt_page(items, seiten, kopf, vorne=(), hinten=(), ornament='',
     orn = f'<div class="toc-orn">{esc(ornament)}</div>' if ornament else ''
     return f"""<section class="inhalt" id="PG_inhalt">
 <div class="fm-kicker">{esc(kopf)}</div>
-<h2 class="fm-title">Inhalt</h2>
+<h2 class="fm-title">{esc(INHALT_TITEL)}</h2>
 <div class="fm-rule"></div>
 <div class="{cls}">{''.join(b)}</div>
 {orn}
