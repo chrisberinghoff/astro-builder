@@ -14,8 +14,8 @@ Was von welcher Seite kommt:
                         erst die vier, fuenf grossen Zeiten und geht dann ins
                         Detail, statt 42 gleichrangige Zeilen abzusuchen
 
-Die Themennamen sind NICHT erfunden: es sind die Kapiteltitel aus Teil III B
-des Ultimativ-Laufs — dieselben Woerter, die der Text spaeter benutzt.
+Die Themennamen sind NICHT erfunden: es sind die Titel der Themenkapitel des
+Transit-Laufs — dieselben Woerter, die der Text spaeter benutzt.
 """
 import sys
 from datetime import timedelta
@@ -35,7 +35,7 @@ FARBE = {'Pluto': '#7d3b46', 'Neptun': '#2f6070', 'Uranus': '#4a7a63',
 
 # (Themenname, Untertitel, [Transiter], Farbe) oder
 # (Themenname, Untertitel, [Transiter], Farbe, [Ziele]) — Reihenfolge und
-# Wortlaut wie die Themenkapitel in Teil III B. Ein Eintrag der Zielliste ist
+# Wortlaut wie die Themenkapitel des Transits. Ein Eintrag der Zielliste ist
 # entweder ein reiner Zielname ('Mond') oder ein Paar aus Aspekt und Ziel
 # ('Quadrat Sonne'); s. _passt().
 THEMEN = [

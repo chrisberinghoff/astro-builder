@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""REFERENZ: vollstaendiger Chart-Builder (Beispiel Ultimativ-Modus).
+"""REFERENZ: Chart-Builder fuer das Transit-Horoskop (Transit-Uhr, Zeitleiste,
+Anhang). Der Dateiname stammt aus der Zeit des Ultimativ-Horoskops, das am
+2026-09-23 ausgemustert wurde; die Vorlage dient seither nur dem Transit.
 
 Stand nach dem Hausstil-Beschluss vom 2026-07-27, ergaenzt am 2026-07-30 um
 die gelesene Deckblatt-Bestellung; 2026-09-16: der Suedknoten-Lauf in
 konst_zeilen() wird aus dem Mondknoten abgeleitet statt fest gesetzt;
 2026-09-20 (Aufraeumlauf D, Block D3): Zeitleisten-Seite, Einmessung am
 Frontmatter, Breitenleiter ab 15,6 cm, Palette und Sternfeld als markierte
-Platzhalter, Gruppentitel „Das Chartbild". FUER GEBURTSHOROSKOP UND EA GILT
+Platzhalter, Gruppentitel „Das Chartbild". FUER DAS GEBURTSHOROSKOP GILT
 SEIT DEMSELBEN TAG DIE SCHLANKE VORLAGE `REFERENZ_Chart_Builder_Geburtshoroskop.py`
-— diese hier ist die Vorlage fuer Transit und Ultimativ. Die chart-unabhaengige Mechanik UND die
+— diese hier ist die Vorlage fuer das Transit-Horoskop. Die chart-unabhaengige Mechanik UND die
 Chartbild-Seiten stecken in `claude/chartdoc.py`; hier steht nur noch, was sich
 je Chart wirklich aendert:
 
@@ -19,7 +21,7 @@ je Chart wirklich aendert:
                          das individuelle Titelmotiv aus DECKBLATT['TITELMOTIV']
     3. KONST / ACHSEN    die Chartdaten (kommen aus chartdata.py)
     4. ANALYSE / CHARTDATA / OUT / RADPNG / UHRPNG
-    5. beim Ultimativ zusaetzlich: tdat.setze_quelle(...) auf die chart_data,
+    5. tdat.setze_quelle(...) auf die chart_data,
                          die Zeitleisten-Seite (vor dem Schlusswort) und die
                          beiden Anhangtabellen
 
@@ -64,7 +66,7 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
 
 Aufruf:  python3 <klient>_builder.py
 Geprueft wird beim Rendern automatisch: build.PFLICHT_BAUSTEINE fuer den
-uebergebenen doctype (hier 'ultimativ').
+uebergebenen doctype (hier 'transit'; 'ultimativ' bricht seit dem 2026-09-23 ab).
 """
 import html
 import re
@@ -80,11 +82,11 @@ import transituhr_fusion as tuhr               # noqa: E402
 
 KLIENT = '<Vollstaendiger Name aus der H1 der analyse.md>'
 VORNAME = '<Vorname>'
-CHARTDATA = '/home/claude/<klient>_Ultimativ_chart_data.md'
-ANALYSE = '/home/claude/<klient>_Ultimativ_analyse.md'
+CHARTDATA = '/home/claude/<klient>_Transit_chart_data.md'
+ANALYSE = '/home/claude/<klient>_Transit_analyse.md'
 RADPNG = '<klient>_radix.png'
 UHRPNG = '<klient>_transituhr.png'
-OUT = '/home/claude/<klient>_Ultimativ_Horoskop.pdf'
+OUT = '/home/claude/<klient>_Transit_Horoskop.pdf'
 
 tdat.setze_quelle(CHARTDATA)
 from build import BASE_CSS                     # noqa: E402
@@ -105,7 +107,7 @@ TITELMOTIV = DECKBLATT['TITELMOTIV']
 PALETTE_VORGABE = DECKBLATT['PALETTE']      # steuert die Farbwahl unten
 ORNAMENT = DECKBLATT['GLYPHEN']             # Teiler-Seiten + Inhaltsverzeichnis
 
-PART_KICKER = {'Teil I', 'Teil II', 'Teil III', 'Vertiefung'}
+PART_KICKER = set()       # Transit: keine Teiler-Kapitel (Teil I–III gehoerten zum Ultimativ)
 # Eigene Seite (kein Teiler-Layout). Das Schlusswort laeuft bewusst NICHT hier
 # mit: der erzwungene Umbruch liess im Erstlauf eine Seite mit vier Zeilen.
 OPEN_PAGE = {'Auftakt'}
@@ -313,15 +315,15 @@ TD = tdat.parse()
 # 2026-09-19 ueberfluessig — transitdata.GLYPH kennt Mondknoten, Glückspunkt
 # und Südknoten selbst (F22); gestrichen 2026-09-20.)
 
-# Die Themennamen der Uhr sind die KAPITELTITEL AUS TEIL III B des laufenden
+# Die Themennamen der Uhr sind die TITEL DER THEMENKAPITEL des laufenden
 # Charts — erfundene Namen sind ein Fehler. tuhr.THEMEN ist im Repo mit den
 # Namen eines einzelnen Laufs vorbelegt und MUSS hier ueberschrieben werden.
 # Traegt EIN Transiter zwei Themenkapitel, bekommt der erste Eintrag eine
 # Zielliste als fuenftes Feld; jede Zeile geht in das ERSTE passende Thema.
 tuhr.THEMEN = [
-    ('<Kapiteltitel Teil III B>', '<Untertitel>', ['<Transiter>'], '#7d3b46',
+    ('<Titel Themenkapitel>', '<Untertitel>', ['<Transiter>'], '#7d3b46',
      ['<Ziel>', '<Ziel>']),
-    ('<Kapiteltitel Teil III B>', '<Untertitel>', ['<Transiter>'], '#6b5c48'),
+    ('<Titel Themenkapitel>', '<Untertitel>', ['<Transiter>'], '#6b5c48'),
 ]
 
 REIHENFOLGE = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
@@ -462,7 +464,7 @@ def chartbild(rad_breite, uhr_breite, skala, konst_skala=1.0):
 
 
 # ===========================================================================
-# Anhang — die beiden Ultimativ-Pflichttabellen (chart-eigen)
+# Anhang — die beiden Pflichttabellen des Transits (chart-eigen)
 # ===========================================================================
 
 def dt(d, kurz=False):
@@ -774,7 +776,7 @@ if __name__ == '__main__':
         # wie Design-Render, „Durchsetzung" — mehrzeilig gesetzt steht der ganze
         # Leitsatz im HTML nirgends am Stueck.
         extra_must=[(LEITSATZ.split(" — ")[0].split("\n")[0], 'Leitsatz aufs Cover')],
-        doctype='ultimativ')
+        doctype='transit')
     print('Aspektzeilen:', len(ASPEKTE), '| Kapitel:', len(items),
           '| Langlaeufer:', len(TD['langlaeufer']),
           '| Jetzt-Kontakte:', len(TD['im_orb']))

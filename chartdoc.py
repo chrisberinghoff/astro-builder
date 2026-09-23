@@ -38,7 +38,7 @@ aendert den Hausstil aller kuenftigen Horoskope. Kurzfassung der Beschluesse:
 
 Chart-spezifisch bleibt im jeweiligen `<klient>_builder.py`: Palette, Cover
 (Motiv + Leitsatz), die Chartdaten selbst und die typ-eigenen Sonderseiten —
-im Ultimativ-Modus die Transit-Uhr und der Anhang.
+im Transit die Transit-Uhr und der Anhang.
 
 Ablauf im Chart-Builder:
     import sys; sys.path.insert(0, '/home/claude')
@@ -51,7 +51,7 @@ Ablauf im Chart-Builder:
     doc, seiten = chartdoc.render_mit_inhalt(
         build_html, OUT, items, colon_pairs, SEITEN,
         required_fields={'Leitsatz': ..., 'Titelmotiv': ...},
-        doctype='ultimativ')
+        doctype='transit')      # Geburtshoroskop: doctype=None
 """
 import html
 import os
@@ -587,7 +587,7 @@ tr.sec td {{ color:#8d8371; }}
 .anh-note {{ font-size:7.4pt; color:{STONE}; margin:0.22cm 0 0 0;
    line-height:1.3; }}
 
-/* ---------- Zeitleisten-Seite (nur Transit und Ultimativ) ---------- */
+/* ---------- Zeitleisten-Seite (nur Transit) ---------- */
 /* Eine Seite, keine Prosa: je Kalenderquartal eine Zeile. Sie ersetzt seit
    dem 2026-09-03 die acht Quartalskapitel und bewahrt deren einzige echte
    Leistung — die Navigation. Alle Werte sind UEBERNOMMEN, nicht gerechnet:
@@ -1004,7 +1004,7 @@ _JAHRWORT = {2: 'zwei', 3: 'drei', 4: 'vier', 5: 'fünf', 6: 'sechs'}
 def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
                     titel=None, anker='PG_uhr', lead=None, bild_breite=None,
                     jahre=2):
-    """Transit-Uhr-Seite (Ultimativ-, Transit- und Themen-Modus).
+    """Transit-Uhr-Seite (Transit- und Themen-Modus).
 
     lead          str ODER Liste von Absaetzen. Die Themenfassung der Uhr
                   braucht mehr Erklaerung als die alte Zeilenfassung — darum
@@ -1014,7 +1014,7 @@ def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
                   mehr Text ueber der Uhr steht, desto schmaler muss sie sein,
                   um auf der Seite zu bleiben.
     jahre         Laenge des Fensters in Jahren; baut den Seitentitel. Der
-                  Vorgabewert 2 entspricht dem Ultimativ-Standard (acht
+                  Vorgabewert 2 entspricht dem Transit-Standard (acht
                   Kalenderquartale). Bis zum 2026-08-01 stand „zwei Jahre" fest
                   im Titel — ein Dreijahresfenster bekam damit stillschweigend
                   eine falsche Ueberschrift. `titel=` setzt den Text weiterhin
@@ -1089,7 +1089,7 @@ class ZeitleisteError(ValueError):
 
 ZL_FELDER = ('LEAD',)                    # Kopffelder des Blocks
 ZL_QUARTAL_FELDER = ('dicht', 'marke')   # Felder einer Quartalszeile
-ZL_MARKEN_MAX = 3                        # Transit-/Ultimativ-Modul
+ZL_MARKEN_MAX = 3                        # Transit-Modul
 _ZL_START_RE = re.compile(r'^@@ZEITLEISTE\s*$')
 _ZL_ENDE_RE = re.compile(r'^@@ENDE\s*$')
 _ZL_FELD_RE = re.compile(r'^([A-ZÄÖÜ][A-ZÄÖÜ_]{1,24})\s*:\s*(.*)$')
@@ -1097,7 +1097,7 @@ _ZL_QUARTAL_RE = re.compile(r'^Q(\d{1,2})\s*\|(.*)$')
 
 
 def lies_zeitleiste(pfad_oder_text, titel=None):
-    """@@ZEITLEISTE-Block aus der chart_data lesen (Transit und Ultimativ).
+    """@@ZEITLEISTE-Block aus der chart_data lesen (Transit).
 
     Neu 2026-09-19 (W12). Vorher baute jeder Schritt-3-Lauf seinen eigenen
     Parser; in T34-18b nahm einer mit txt.split('@@ZEITLEISTE') die erste
@@ -1106,7 +1106,7 @@ def lies_zeitleiste(pfad_oder_text, titel=None):
     Blockanfang ist eine Zeile, die NUR `@@ZEITLEISTE` traegt (die letzte, falls
     es mehrere gibt), Blockende die naechste Zeile `@@ENDE`.
 
-    Blockformat (Transit-Modul, Struktur Punkt 6; Ultimativ-Modul):
+    Blockformat (Transit-Modul, Struktur Punkt 6):
         @@ZEITLEISTE
         LEAD: <ein Absatz Vorspann; Folgezeilen direkt darunter gehoeren dazu>
         Q1 | dicht=1,2,3,6 | marke=
@@ -1167,8 +1167,8 @@ def lies_zeitleiste(pfad_oder_text, titel=None):
     if start is None:
         raise ZeitleisteError(
             f'@@ZEITLEISTE-Block fehlt in {name}. Er gehoert ans ENDE der '
-            'chart_data.md, hinter den @@DECKBLATT-Block (Transit- bzw. '
-            'Ultimativ-Modul): eine Zeile "@@ZEITLEISTE", darunter "LEAD: …", '
+            'chart_data.md, hinter den @@DECKBLATT-Block (Transit-Modul): '
+            'eine Zeile "@@ZEITLEISTE", darunter "LEAD: …", '
             'je Quartal "Q<n> | dicht=<Kapitelnummern> | marke=<optional>", zum '
             'Schluss "@@ENDE". Gesucht wird eine Zeile, die NUR "@@ZEITLEISTE" '
             'traegt — das Wort im Fliesstext zaehlt nicht. Die Zuordnung trifft '
@@ -1287,7 +1287,7 @@ def lies_zeitleiste(pfad_oder_text, titel=None):
 
 def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
                     anker='PG_zeit', lead=None, note=None, skala=1.0):
-    """Zeitleisten-Seite (Transit und Ultimativ) — EINE Seite, kein Fließtext.
+    """Zeitleisten-Seite (Transit) — EINE Seite, kein Fließtext.
 
     Sie ersetzt die acht Quartalskapitel (Umbau 2026-09-03) und ist danach die
     einzige Stelle, an der das Kalenderraster noch auftaucht.
@@ -1727,7 +1727,7 @@ def _pflicht_baustein_angleichen():
     """Die Pflicht-Bausteine auf die hier gesetzten Seitentitel ziehen.
 
     Betrifft zwei Titel: die Aspektseite (Chart-Basis) und die Zeitleiste
-    (Transit und Ultimativ).
+    (Transit).
 
     build.PFLICHT_BAUSTEINE verlangt seit jeher den WOERTLICHEN Seitentitel im
     sichtbaren Text; bis zum 2026-07-27 hiess die Seite „Die Aspekte im
@@ -1766,7 +1766,7 @@ def _pflicht_baustein_angleichen():
     # Zeitleiste: dieselbe Konstruktion, aber in den Typ-Listen. Erkannt wird
     # der Eintrag an seiner BESCHREIBUNG, nicht am Titel — sonst faende die
     # Angleichung ihren eigenen Eintrag nicht mehr, sobald der Titel abweicht.
-    for typ in ('transit', 'ultimativ'):
+    for typ in ('transit',):          # Ultimativ ausgemustert 2026-09-23
         liste = build.PFLICHT_BAUSTEINE.get(typ, {}).get('text')
         if not liste:
             continue
@@ -2297,7 +2297,7 @@ def toc_gruppen(items, teil3_a=None):
             grp.append(cur)
         elif cur is None:
             # Kein Kapitel traegt 'Auftakt', und PART_KICKER ist leer (Transit,
-            # EA, Themen-Analyse: dort heisst das erste Kapitel z. B.
+            # Themen-Analyse: dort heisst das erste Kapitel z. B.
             # 'Zur Lesart'). Ohne diesen Zweig blieb `cur` bis zum Schlusswort
             # None und JEDES Kapitel davor fiel lautlos aus dem Verzeichnis —
             # das Inhaltsverzeichnis zeigte dann nur das Schlusswort

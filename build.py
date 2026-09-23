@@ -586,7 +586,7 @@ def render_sentence_safe(build_html, pdf_path, colon_pairs=None,
       dessen letzter Satz auf : oder ; endet, das id seines letzten Satzes und
       das id des ersten Satzes des unmittelbar folgenden Absatzes (nur wenn der
       auch ein Textabsatz ist).
-    doctype: 'ultimativ' | 'hdgk' | None — schaltet die typ-eigenen
+    doctype: 'transit' | 'hdgk' | 'themen' | None — schaltet die typ-eigenen
       Pflicht-Bausteine im Preflight scharf (s. PFLICHT_BAUSTEINE).
 
     Greedy von oben: pro Runde wird nur der oberste noch offene Umbruch gesetzt,
@@ -723,7 +723,7 @@ def lies_deckblatt(pfad: str, pflicht: bool = True) -> dict:
         raise DeckblattError(
             f'@@DECKBLATT-Block fehlt in {os.path.basename(pfad)}.\n'
             '  Der Block gehoert ans ENDE der chart_data.md, direkt hinter\n'
-            '  den @@SELEKTOR-Block (s. Ultimativ-/Typ-Modul, Schritt 2) —\n'
+            '  den @@SELEKTOR-Block (s. Kern, Arbeitsablauf Schritt 2) —\n'
             '  NICHT in die analyse.md.\n'
             '  Bevor die Fallback-Regel des Design-Moduls gezogen wird: in\n'
             '  BEIDEN Dateien nach "@@DECKBLATT" greppen und das Ergebnis\n'
@@ -1343,6 +1343,16 @@ def _coverage_charset() -> set:
 # „Pflicht-Bausteine" in Projektanweisung_Modul_Design_Render.md nach.
 # ---------------------------------------------------------------------------
 
+# Ausgemusterte Dokumenttypen (2026-09-23; Chris-Ansage „Ultimativ und EA mache
+# ich gar nicht mehr"; Wartungslauf zu den Pruefberichten vom 23.09.): Ihre
+# Pflichtlisten sind entfallen. Ein Aufruf mit einem dieser doctypes bricht ab,
+# statt still nur die Chart-Basis zu pruefen — am 23.09. renderte die
+# Transit-Vorlage noch mit 'ultimativ' und pruefte damit die falsche Liste.
+AUSGEMUSTERTE_DOCTYPES = {
+    "ultimativ": "Transit-Horoskop: doctype='transit'",
+    "ea": "Geburtshoroskop: doctype=None",
+}
+
 PFLICHT_BAUSTEINE = {
     # Die '*'-Basis ist die Chart-Basis: sie gilt fuer jedes Dokument, das ein
     # Geburtsbild ABBILDET. Begleitdokumente, die auf ein bereits geliefertes
@@ -1353,13 +1363,6 @@ PFLICHT_BAUSTEINE = {
                  ("Die Aspekte im Wortlaut", "voll ausgeschriebene Aspekttabelle"),
                  ("Die Aspekte und was sie bedeuten", "Aspekt-Legende")],
         "html": [("_radix.png", "Radix-Rad auf Seite 1 (radix.py)")],
-    },
-    "ultimativ": {
-        "text": [("Die Transit-Uhr", "Transit-Uhr auf der Chartbild-Strecke"),
-                 ("Die Zeitleiste", "Zeitleisten-Seite am Ende von Teil III"),
-                 ("Die langen Linien im Überblick", "Anhang: volle Transit-Tabelle"),
-                 ("Der Stichtag im Überblick", "Anhang: Jetzt-Tabelle")],
-        "html": [("_transituhr.png", "Transit-Uhr-Grafik (transituhr.py)")],
     },
     # Eigenstaendiges Transit-Horoskop. Bis zum 2026-09-05 GAR NICHT
     # hinterlegt: `doctype='transit'` fiel als unbekannter Typ auf die
@@ -1380,14 +1383,8 @@ PFLICHT_BAUSTEINE = {
         "html": [("_transituhr.png",
                   "Transit-Uhr-Grafik (transituhr_fusion.py)")],
     },
-    # EA und das Standard-Geburtshoroskop (doctype=None) haben KEINE
-    # Zeitleiste — sie tragen kein Quartalsraster. Der EA-Eintrag steht
-    # trotzdem hier, damit die Pruefung typabhaengig LESBAR ist und ein
-    # EA-Lauf nicht als „unbekannter Typ" gewarnt wird.
-    "ea": {
-        "text": [],
-        "html": [],
-    },
+    # Das Standard-Geburtshoroskop (doctype=None) hat KEINE Zeitleiste — es
+    # traegt kein Quartalsraster; fuer es gilt die Chart-Basis allein.
     "hdgk": {
         "text": [("Bodygraph", "Bodygraph-Grafik im HD/GK-Teil")],
         "html": [],
@@ -1450,10 +1447,15 @@ def pflicht_bausteine(doctype=None) -> dict:
     Der Rueckfall ist aber NICHT harmlos, wenn der Typ echt ist und nur nicht
     hinterlegt: `doctype='transit'` lief bis zum 2026-09-05 genau so — still,
     ohne Transit-Uhr- und Anhang-Pflicht. Ein nicht hinterlegter, nicht leerer
-    doctype wird darum jetzt laut gemeldet.
+    doctype wird darum jetzt laut gemeldet. Ausgemusterte Typen
+    (`AUSGEMUSTERTE_DOCTYPES`: 'ultimativ', 'ea') brechen mit ValueError ab.
     """
     basis = PFLICHT_BAUSTEINE["*"]
     key = (doctype or "").strip().lower()
+    if key in AUSGEMUSTERTE_DOCTYPES:
+        raise ValueError(
+            f"doctype={doctype!r} ist seit dem 2026-09-23 ausgemustert — "
+            f"{AUSGEMUSTERTE_DOCTYPES[key]}.")
     extra = PFLICHT_BAUSTEINE.get(key)
     if extra is None:
         if key:
@@ -1490,7 +1492,7 @@ def assert_render_ready(html_str: str, base_dir: str = None, must_contain=None,
       FELDER     required_fields={'Name': wert, ...} alle nicht-leer
       VOLLTEXT   must_contain=[(text,label)|text, ...]: jeder Block ist
                  wirklich im HTML gelandet (gegen still verlorene Absätze)
-      PFLICHT    doctype='ultimativ'|'hdgk'|None: die Pflicht-Bausteine aus
+      PFLICHT    doctype='transit'|'hdgk'|'themen'|None: die Pflicht-Bausteine aus
                  PFLICHT_BAUSTEINE sind im Dokument vorhanden (Inhalts-
                  verzeichnis, Radix, Aspekttabelle, Legende + typ-eigene)
       REST       keine Platzhalter ({{...}}, TODO, FIXME, ???)"""
@@ -2540,7 +2542,7 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
 
 def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
                    orb_wirk: float = 1.5) -> dict:
-    """Kontakt-Heimat-Probe für Folgeprodukte (Transit, EA) — neu 2026-09-06.
+    """Kontakt-Heimat-Probe für das Transit-Horoskop — neu 2026-09-06.
 
     Das Gegenstück zu `aspekt_heimat()` für Dokumente, deren Deutung aus
     TRANSIT-Kontakten besteht und die deshalb keine Radix-Aspekttabellen
@@ -2728,7 +2730,7 @@ def kontakt_heimat_bericht(chart_data_pfad: str, events_json_pfad: str,
         # 2026-09-19 (W9, L19): sagen, wo die Probe liest.
         L.append("  Gelesen wird: Heimat in fuehrt= und aspekte= der Themenliste "
                  "(klingt= ist keine Heimat), Rechenschaft nur im Block "
-                 "TRANSIT-RECHENSCHAFT: bzw. im Ultimativ SAMMELKAPITEL:, je "
+                 "TRANSIT-RECHENSCHAFT:, je "
                  "Kontakt mit Transiter, Aspektzeichen oder -wort und Radixpunkt. "
                  "Den Block liefert build.transit_rechenschaft_block(chart_data, "
                  "events_json).")
@@ -2887,9 +2889,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     sie am selben Tag bestellt.
 
     Warum es sie gibt: `kontakt_heimat()` zählt ALLE primären Wirkorb-Kontakte
-    des Rechenfensters — bei `--months 24` also über zwei Jahre. Ein EA deutet
-    davon nur die Momentaufnahme zum Stichtag, ein Transit-Horoskop nur seine
-    Kapitel. Damit die Probe grün läuft, ohne dass etwas stillschweigend
+    des Rechenfensters — bei `--months 24` also über zwei Jahre. Ein
+    Transit-Horoskop deutet davon nur seine Kapitel. Damit die Probe grün läuft, ohne dass etwas stillschweigend
     verschwindet, trägt das Datenblatt hinter `GESTRICHEN:` je eine Zeile für
     jeden Fensterkontakt OHNE Kapitel. Diese Liste ist eine reine Subtraktion
     aus Daten, die der Builder ohnehin hat, und wurde trotzdem je Lauf von Hand
@@ -2916,11 +2917,9 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
       * Der engste Orb ist der IM FENSTER (`min_orb_im_fenster`), nicht der der
         Passage, der im Rückblick liegen kann; die Wirkorb-Perioden stehen mit
         Datum, ein Beginn vor dem Fenster und ein Ende danach ausdrücklich.
-      * typ='transit' (Transit-Horoskop, Ultimativ): Grund „ohne eigenes
-        Kapitel, Zeile in ‚Mitlaufendes'". typ='ea': der Wortlaut der
-        Momentaufnahme wie bisher. typ=None: EA, wenn die Themenliste `teil=`
-        mit `jetzt`/`zeitlos` trägt oder der Dateiname `_EA_` enthält, sonst
-        Transit — `r['typ']` sagt, welcher Wortlaut gewählt wurde.
+      * Grund jeder Zeile: „ohne eigenes Kapitel, Zeile in ‚Mitlaufendes'".
+        typ: 'transit' oder None (gleichbedeutend); 'ea' und 'ultimativ'
+        sind seit dem 2026-09-23 ausgemustert und brechen ab.
 
     Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'stichtag', 'typ',
                'fenster'}
@@ -2958,31 +2957,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
         z = _passagen_zeitangaben(sel, start, end)
         alt_format = alt_format or not z["neu_format"]
         orb_f = ("%s°" % z["orb_f"]) if z["orb_f"] is not None else "?"
-        if typ == "ea":
-            if z["alle_ex"]:
-                datum = ", ".join(_datum_de(d) for d in z["alle_ex"])
-                if all(d < (stichtag or "") for d in z["alle_ex"]):
-                    grund = ("exakt %s — lag vor der Momentaufnahme, Orb am "
-                             "Stichtag %s" % (datum, _orb_am_stichtag(
-                                 daten, k, stichtag)))
-                else:
-                    grund = ("exakt %s — liegt außerhalb der Momentaufnahme "
-                             "vom %s" % (datum, _datum_de(stichtag)))
-            elif z["ann"]:
-                d, o = min(z["ann"], key=lambda a: a[1])
-                grund = ("nicht exakt, Annäherung bis %s am %s — liegt außerhalb "
-                         "der Momentaufnahme vom %s"
-                         % (_bogenminuten(o), _datum_de(d), _datum_de(stichtag)))
-            elif z["neu_format"]:
-                grund = ("nie exakt (engster Orb im Fenster %s) — streift das "
-                         "Fenster nur" % orb_f)
-            else:
-                grund = ("im Rechenzeitraum nicht exakt (engster Orb %s) — "
-                         "Fortsetzung unbekannt, transit.py neu laufen lassen"
-                         % orb_f)
-        else:
-            grund = (_kontakt_zeit_text(z, start, end)
-                     + " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
+        grund = (_kontakt_zeit_text(z, start, end)
+                 + " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
         zeile = "- T-%s %s R-%s — %s" % (_vertragsname(k[0]),
                                             ASPEKT_ZU_GLYPH.get(k[1], k[1]),
                                          k[2], grund)
@@ -3000,40 +2976,21 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
             "stichtag": stichtag, "typ": typ, "fenster": (start, end)}
 
 
-def _orb_am_stichtag(daten, k, stichtag):
-    """Stichtags-Orb eines Kontakts fuer den EA-Wortlaut (W7, 2026-09-19):
-    genau die Zahl der JETZT-Liste (`jetzt.im_orb[].orb_grad`, zwei Stellen,
-    wie Report und Anhang sie zeigen) — nicht `orb_stichtag` ein zweites Mal
-    gerundet, sonst stuende dieselbe Groesse an zwei Stellen verschieden da.
-    Fehlt der Kontakt in der Liste, lag er am Stichtag ausserhalb des
-    Erfassungsorbs; ohne Liste oder bei einem anderen Stichtag: „offen"."""
-    jetzt = daten.get("jetzt") or {}
-    if "im_orb" not in jetzt or (jetzt.get("stichtag") or stichtag) != stichtag:
-        return "offen"
-    for x in jetzt["im_orb"]:
-        if (x.get("transit"), x.get("aspekt"), x.get("ziel")) == tuple(k):
-            return "%.2f°" % x["orb_grad"]
-    weit = jetzt.get("orb_weit") or daten.get("orb_weit")
-    return ("über %s° (außerhalb des Erfassungsorbs)" % weit) if weit else "offen"
-
-
 def _rechenschaft_typ(chart_data_pfad, typ):
-    """'transit' oder 'ea' fuer den Wortlaut der Rechenschaftszeilen (W7)."""
+    """'transit' — seit dem 2026-09-23 der einzige Wortlaut der
+    Rechenschaftszeilen (EA und Ultimativ ausgemustert, der Wortlaut der
+    Momentaufnahme ist mit dem EA entfallen)."""
     if typ is not None:
         t = str(typ).strip().casefold()
-        if t in ("transit", "ultimativ"):
-            return "transit"
-        if t == "ea":
-            return "ea"
-        raise ValueError(
-            "transit_rechenschaft(): typ=%r ist unbekannt — erlaubt sind "
-            "'transit' (Transit-Horoskop, Ultimativ: Grund „ohne eigenes "
-            "Kapitel“), 'ea' (Wortlaut der Momentaufnahme) oder None "
-            "(aus der chart_data erkannt)." % (typ,))
-    txt = open(chart_data_pfad, encoding="utf-8").read()
-    if (re.search(r"\bteil\s*=\s*(?:jetzt|zeitlos)\b", txt)
-            or "_EA_" in os.path.basename(chart_data_pfad)):
-        return "ea"
+        if t in ("ea", "ultimativ"):
+            raise ValueError(
+                "transit_rechenschaft(): typ=%r ist seit dem 2026-09-23 "
+                "ausgemustert — fuer das Transit-Horoskop typ weglassen oder "
+                "'transit' setzen." % (typ,))
+        if t != "transit":
+            raise ValueError(
+                "transit_rechenschaft(): typ=%r ist unbekannt — erlaubt sind "
+                "'transit' oder None." % (typ,))
     return "transit"
 
 
@@ -3076,7 +3033,7 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
     if r.get("aussagelos"):
         return ("Aspekt-Heimat: KEINE PRUEFUNG MOEGLICH — im chart_data steht "
                 "keine Aspekttabelle (weder Volle/Einseitige/Nebenaspekte noch "
-                "Hauptaspekte). Bei einem Folgeprodukt (Transit, EA) ist das "
+                "Hauptaspekte). Beim Transit-Horoskop ist das "
                 "normal: dort gilt kontakt_heimat_bericht(chart_data, events_json). "
                 "Bei einem Geburtshoroskop ist es ein Fehler im Datenblatt.")
     if r["ok"]:
@@ -3300,8 +3257,8 @@ def ressourcen_liste(chart_data_pfad: str, faktoren=None,
     Gabe; sie steht unter 'nicht_gezaehlt').
     radix: Radix-Aspekte zaehlen? Vorgabe: ja ohne events_json_pfad, nein mit
     — das Transit-Horoskop fuehrt im Block NUR Kontakte (ein uebernommener
-    Radix-Block wird ersetzt, Transit-Modul). Das Ultimativ zaehlt beide
-    Mengen und gibt radix=True mit.
+    Radix-Block wird ersetzt, Transit-Modul). Beide Mengen zusammen zaehlt
+    radix=True.
     orb_wirk: Wirk-Orb; Vorgabe der des transit.py-Laufs (events.json).
 
     Achsen-Spiegel (F18, 2026-09-19): Trifft ein Faktor beide Enden einer
@@ -3373,8 +3330,7 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
     von Hand gesetzt; ohne ihn ist der Block unfertig (Datenblatt-Modul).
     Parameter wie ressourcen_liste(): im Transit-Horoskop
     `ressourcen_block(chart_data, events_json_pfad=<events.json>)` — dann
-    traegt der Block nur die Transit-Zaehlmenge (W22, 2026-09-19); im
-    Ultimativ zusaetzlich radix=True.
+    traegt der Block nur die Transit-Zaehlmenge (W22, 2026-09-19).
     """
     r = ressourcen_liste(chart_data_pfad, faktoren, events_json_pfad, radix,
                          orb_wirk)
@@ -3656,28 +3612,25 @@ def _selbsttest():
         pruefe([x.split()[1] for x in tr["zeilen"]]
                == ["T-Pluto", "T-Mars", "T-Uranus", "T-Neptun", "T-Chiron"],
                "W7: Sortierung: %r" % [x.split()[1] for x in tr["zeilen"]])
-        tr_ea, _ = still(transit_rechenschaft, t1, evj, typ="ea")
-        pruefe(all("Momentaufnahme" in x or "streift" in x
-                   for x in tr_ea["zeilen"]), "W7: EA-Wortlaut")
-        # EA: Stichtags-Orb = die Zahl der JETZT-Liste (zwei Stellen), sonst
-        # „über orb_weit" (nicht in der Liste) bzw. „offen" (keine Liste).
-        pl = [x for x in tr_ea["zeilen"] if x.startswith("- T-Pluto")][0]
-        pruefe("Orb am Stichtag offen" in pl, "W7: EA ohne Jetzt-Liste: %s" % pl)
-        d_ev = json.load(open(evj, encoding="utf-8"))
-        for liste, soll in (([{"transit": "Pluto", "aspekt": "Sextil",
-                               "ziel": "Sonne", "orb_grad": 0.62}],
-                             "Orb am Stichtag 0.62°"),
-                            ([], "Orb am Stichtag über 3.0°")):
-            d_ev["jetzt"] = {"stichtag": "2031-02-14", "orb_weit": 3.0,
-                             "im_orb": liste}
-            evj2 = datei("t_events_jetzt.json", json.dumps(d_ev))
-            pl = [x for x in still(transit_rechenschaft, t1, evj2,
-                                   typ="ea")[0]["zeilen"]
-                  if x.startswith("- T-Pluto")][0]
-            pruefe(soll in pl, "W7: EA-Stichtagsorb: %s" % pl)
+        # 2026-09-23b: EA ausgemustert — typ='ea' bricht ab, statt einen
+        # zweiten Wortlaut zu liefern; die Themenliste mit teil= liefert
+        # den Transit-Wortlaut.
+        try:
+            still(transit_rechenschaft, t1, evj, typ="ea")
+            pruefe(False, "W7: typ='ea' muss abbrechen")
+        except ValueError:
+            pass
         pruefe(_rechenschaft_typ(datei("t_ea.md", themen.replace(
-            "| rang=1", "| teil=jetzt | rang=1")), None) == "ea",
-            "W7: EA nicht erkannt")
+            "| rang=1", "| teil=jetzt | rang=1")), None) == "transit",
+            "W7: teil= schaltet keinen EA-Wortlaut mehr")
+        for _dt in ("ultimativ", "ea"):
+            try:
+                pflicht_bausteine(_dt)
+                pruefe(False, "PFLICHT: doctype=%r muss abbrechen" % _dt)
+            except ValueError:
+                pass
+        pruefe("Die Transit-Uhr" in [t for t, _b in pflicht_bausteine("transit")["text"]],
+               "PFLICHT: Transit-Liste")
         block, _ = still(transit_rechenschaft_block, t1, evj)
         pruefe(block.startswith("TRANSIT-RECHENSCHAFT: 8 primaere Wirkorb-Kontakte "
                                 "im Fenster 01.01.2031–31.12.2032, 3 tragen"),
@@ -3782,7 +3735,7 @@ def _selbsttest():
                 "F18/Gegenende: %r" % rl2["zeilen"])
             beide = ressourcen_liste(rg, events_json_pfad=evj, radix=True)
             pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 5
-                   and len(beide["zeilen"]) == 7, "W22: Ultimativ (radix=True)")
+                   and len(beide["zeilen"]) == 7, "W22: radix=True mit events.json")
         except BuildError as e:
             print("  (F18: radix nicht ladbar — uebersprungen: %s)" % e)
 

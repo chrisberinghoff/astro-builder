@@ -49,7 +49,7 @@ nirgends sonst:
     lade_schritt("1")         # Datenblatt
     lade_schritt("2")         # Referenzschnitt
     lade_schritt("3+4")       # Design/Render
-    lade_schritt("transit")   # zusaetzlich beim Transit-/Ultimativ-Lauf
+    lade_schritt("transit")   # zusaetzlich beim Transit-Lauf
 
 `lade("build", "chartdoc")` von Hand geht weiter und ist fuer Einzelproben
 richtig; fuer einen normalen Lauf ist `lade_schritt()` vorzuziehen, weil die
@@ -69,8 +69,8 @@ project_read, weil sie Klientendaten trugen — die sind an dem Tag anonymisiert
 worden). NICHT ueber diesen Weg: blocks_bundle.txt (die Bibliothek selbst,
 Werkzeuge-Modul Punkt 1) und alle .md-Module, die nur im Projektwissen liegen.
 
-Wer wirklich rechnet — Pholus in Schritt 1, transit.py im Transit- und
-Ultimativ-Lauf — braucht die Swiss-Ephemeris-Dateien. EINE Zeile beschafft sie
+Wer wirklich rechnet — Pholus in Schritt 1, transit.py im Transit-Lauf —
+braucht die Swiss-Ephemeris-Dateien. EINE Zeile beschafft sie
 und liefert gleich ihr Verzeichnis:
 
     from lade import ephemeriden
@@ -111,7 +111,7 @@ BEKANNT = {
     "build", "chartdoc", "radix", "transit", "transitdata",
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
     "hd", "REFERENZ_Chart_Builder_Ultimativ",
-    "REFERENZ_Chart_Builder_Geburtshoroskop",   # seit 2026-09-20 (D3, K7): schlanke Vorlage fuer Geburtshoroskop und EA
+    "REFERENZ_Chart_Builder_Geburtshoroskop",   # seit 2026-09-20 (D3, K7): schlanke Vorlage fuer das Geburtshoroskop
     "inhaltsprobe",          # seit 2026-09-16: Analyse gegen chart_data (Schritt 2 und 3+4)
     "lade",
 }
@@ -162,7 +162,7 @@ _SCHRITT_TEXT = {
     "1":        "Datenblatt (Heimat-Probe braucht build, Referenzdatei-Liste selektor)",
     "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
     "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render)",
-    "transit":  "zusaetzlich bei Transit- und Ultimativ-Lauf",
+    "transit":  "zusaetzlich beim Transit-Lauf",
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
     "hdgk":     "Human Design / Gene Keys",
     "bibliothek": "Bibliotheks-Umbau und Selektor-Pflege",
@@ -482,7 +482,7 @@ def lade_schritt(schritt, **kw):
 
         lade_schritt("1")        # Datenblatt
         lade_schritt("3+4")      # Design/Render
-        lade_schritt("transit")  # zusaetzlich beim Transit-/Ultimativ-Lauf
+        lade_schritt("transit")  # zusaetzlich beim Transit-Lauf
 
     Nimmt dieselben Zusatzargumente wie lade() (ziel, frisch, still).
     Vorzuziehen gegenueber lade("a", "b", ...) von Hand: die Liste steht dann

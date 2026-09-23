@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Parser für §11 (Transit-Datenblock) aus <klient>_Ultimativ_chart_data.md.
+"""Parser für §11 (Transit-Datenblock) aus <klient>_Transit_chart_data.md.
 
 Liest den unveränderten transit.py-v2-Report aus dem Codeblock in §11 und gibt
 ihn strukturiert zurück. Seit 2026-09-19 (W11) aus ALLEN Report-Codeblöcken ab
@@ -55,7 +55,7 @@ HAUSSTIL-AENDERUNGEN 2026-07-27 (gemeinsam festgelegt):
 import re
 from datetime import date
 
-# Wird vom Chart-Builder gesetzt: setze_quelle('<klient>_Ultimativ_chart_data.md').
+# Wird vom Chart-Builder gesetzt: setze_quelle('<klient>_Transit_chart_data.md').
 # Kein Default auf einen Klientennamen — sonst parst ein Folgechart still die
 # Datei des vorigen.
 QUELLE = None
@@ -203,7 +203,7 @@ def parse(pfad=None):
     pfad = pfad or QUELLE
     if not pfad:
         raise ValueError('transitdata: keine Quelle gesetzt — '
-                         'setze_quelle(<klient>_Ultimativ_chart_data.md) '
+                         'setze_quelle(<klient>_Transit_chart_data.md) '
                          'oder parse(pfad=...) aufrufen.')
     raw = open(pfad, encoding='utf-8').read()
     # §11 liegt in einem eingezäunten Codeblock. Der Anker muss auf die

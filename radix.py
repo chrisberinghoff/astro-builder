@@ -2560,7 +2560,8 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     -> {'figuren': [{'achse','apex','spiegel_apex','leere_spitze','meldungen'}],
         'kandidaten': [[i, j, ...]],   # Indizes in 'figuren'
         'meldungen': n, 'anzahl': m,
-        'jod_figuren': [{'basis','apex','meldungen'}],
+        'jod_figuren': [{'basis','apex','meldungen','basen','konj_basis',
+                         'konj_spitze'}],
         'jod_kandidaten': [[i, j, ...]], 'jod_meldungen': n, 'jod_anzahl': m,
         'grosstrigon_figuren': [{'ecken','meldungen'}],
         'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m,
@@ -2688,10 +2689,30 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                                  or (gleich(b[0], b2[1]) and gleich(b[1], b2[0]))))
             if basis_gleich and gleich(j['apex'], f['apex']):
                 f['meldungen'].append(j['apex'])
+                f['basen'].append(b)
                 break
         else:
             jod_figuren.append({'basis': b, 'apex': j['apex'],
-                                'meldungen': [j['apex']]})
+                                'meldungen': [j['apex']], 'basen': [b]})
+    # 2026-09-23b (Wartungslauf zu den Pruefberichten vom 23.09., Transit 1+2
+    # K1-4): Zwei Jod-Meldungen, deren Basen sich nur ueber eine Konjunktion
+    # ZWEIER PLANETEN unterscheiden, sind EINE Figur mit Doppelbasis. Die
+    # Textzeile nannte nur die erste Basis und schrieb die Doppelung einem Winkel
+    # zu, der an der Figur nicht beteiligt war. Jede Figur traegt jetzt alle
+    # Basen ('basen') und die Konjunktionen, ueber die zusammengefasst wurde
+    # ('konj_basis', 'konj_spitze': Paare (gefuehrt, zweite Meldung)).
+    for f in jod_figuren:
+        kb = []
+        for b2 in f['basen'][1:]:
+            for x in b2:
+                if x in f['basis']:
+                    continue
+                y = next((y for y in f['basis'] if gleich(x, y)), None)
+                if y is not None and (y, x) not in kb:
+                    kb.append((y, x))
+        f['konj_basis'] = kb
+        f['konj_spitze'] = [(f['apex'], x) for x in dict.fromkeys(f['meldungen'])
+                            if x != f['apex']]
     jod_kandidaten = []
     for i, f in enumerate(jod_figuren):
         for k in range(i + 1, len(jod_figuren)):
@@ -3569,226 +3590,13 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     return sb
 
 
-# --- Die evolutionaere Achse (EA-Modul, Modus TIEF) --------------------------
-# Neu am 2026-09-06 (Pruefbericht EA 5.1/5.2/5.3). Bis dahin wurden die sechs
-# Punkte, die Knoten-Hausherrscher und die Skipped Steps in jedem EA-Lauf von
-# Hand zusammengesucht; drei Ebenen fielen dabei regelmaessig aus: die Herrscher
-# der beiden Knoten-HAEUSER, die Laufrichtung des Skipped Step und die
-# Ruecklaeufigkeit des Radix-Pluto.
-
-def ea_achse(factors, cusps, deckel=3.0, aspects=None):
-    """Die sechs Punkte der evolutionaeren Achse plus Sekundaermaterial.
-
-    Rueckgabe: dict mit
-      punkte            Liste der sechs Punkte, je {nr,label,name,lon,zeichen,
-                        haus_label,herrscher,retro}
-      haus_herrscher    {'nordknoten': …, 'suedknoten': …} — wer das HAUS des
-                        jeweiligen Knotens regiert und wo er steht
-      skipped           Liste {name,lon,orb,richtung,ueber_deckel} — Quadrate zur
-                        Knotenachse; `richtung` sagt, ob der Planet auf den
-                        Nord- oder auf den Suedknoten zulaeuft (applikativ), was
-                        ueber Wiederholung vs. Vermeidung entscheidet
-      knoten_konj       Faktoren in Konjunktion zu einem Knoten (Orb <= 8°)
-      pluto_aspekte     alle Kontakte zum Radix-Pluto
-    """
-    by = {f['name']: f for f in factors}
-    def sep(a, b): return abs(((a - b + 180) % 360) - 180)
-    nk = by['Mondknoten']['lon']
-    sk = (nk + 180) % 360
-    pl = by['Pluto']['lon']
-    ppp = (pl + 180) % 360
-
-    def herrscher_von(lon, klassisch=False):
-        tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
-        return tab[zeichen_name(lon)]
-
-    def punkt(nr, label, name, lon, retro=None):
-        hg = haus_und_grenzlage(lon, cusps)
-        return {'nr': nr, 'label': label, 'name': name, 'lon': lon,
-                'zeichen': zeichen_name(lon), 'haus_label': hg['label'],
-                'haus': hg['haus'], 'nebenhaus': hg.get('nebenhaus'),
-                'herrscher': herrscher_von(lon),
-                'herrscher_klassisch': herrscher_von(lon, True),
-                'retro': retro}
-
-    sk_h = herrscher_von(sk)
-    nk_h = herrscher_von(nk)
-    punkte = [
-        punkt(1, 'Pluto', 'Pluto', pl, by['Pluto'].get('retro')),
-        punkt(2, 'Südknoten', 'Südknoten', sk, by['Mondknoten'].get('retro')),
-        punkt(3, 'Südknoten-Herrscher', sk_h, by[sk_h]['lon'],
-              by[sk_h].get('retro')),
-        punkt(4, 'Pluto-Polaritätspunkt', 'Pluto-Polaritätspunkt', ppp, None),
-        punkt(5, 'Nordknoten', 'Mondknoten', nk, by['Mondknoten'].get('retro')),
-        punkt(6, 'Nordknoten-Herrscher', nk_h, by[nk_h]['lon'],
-              by[nk_h].get('retro')),
-    ]
-
-    # Haus-Herrscher der beiden Knotenhaeuser (Green liest sie mit)
-    hh = hausherrscher(factors, cusps)
-    def hh_fuer(lon):
-        h = haus_und_grenzlage(lon, cusps)['haus']
-        for e in hh:
-            if e.get('haus') == h:
-                return e
-        return None
-    haus_h = {'nordknoten': hh_fuer(nk), 'suedknoten': hh_fuer(sk)}
-
-    # Skipped Steps mit Laufrichtung
-    skipped = []
-    for f in factors:
-        nm = f['name']
-        if nm in ('Mondknoten', 'AC', 'MC', 'DC', 'IC'):
-            continue
-        d = min(sep(f['lon'], (nk + 90) % 360), sep(f['lon'], (nk + 270) % 360))
-        if d <= deckel + 2.0:
-            # applikativ wohin? Kuerzerer Weg im Tierkreis entscheidet.
-            zu_nk, zu_sk = sep(f['lon'], nk), sep(f['lon'], sk)
-            richtung = ('Nordknoten' if zu_nk < zu_sk else 'Südknoten')
-            skipped.append({'name': nm, 'lon': f['lon'], 'orb': d,
-                            'richtung': richtung,
-                            'ueber_deckel': d > deckel})
-    skipped.sort(key=lambda x: x['orb'])
-
-    knoten_konj = []
-    for f in factors:
-        if f['name'] == 'Mondknoten':
-            continue
-        for knoten, knm in ((nk, 'Nordknoten'), (sk, 'Südknoten')):
-            d = sep(f['lon'], knoten)
-            if d <= 8.0:
-                knoten_konj.append({'name': f['name'], 'knoten': knm, 'orb': d})
-
-    # NEU 14.09.2026 (Chris-Entscheidung nach dem EA-Pruefbericht Schritt 1+2,
-    # Rubrik 6). Zwei Befunde, die bis dahin nur auffielen, wenn jemand hinsah:
-    #
-    # (1) BESETZTER POLARITAETSPUNKT. Steht ein Faktor auf dem Punkt, der die
-    #     Richtung markiert, hat die Richtung einen Koerper statt einer blossen
-    #     Koordinate — im Prueffall vom 14.09. stand Mars mit 0°14′ darauf, und
-    #     das war der tragende Befund des ganzen Dokuments. Orb wie bei den
-    #     sensitiven Punkten (3°). Achsen bleiben draussen: AC/MC/DC/IC sind
-    #     keine Besetzung, sie sind Geometrie.
-    #
-    # (2) FREIE ECKE AUF EINEM ACHSENPUNKT. Faellt die entlastende Ecke eines
-    #     Spannungsdreiecks auf Pluto, einen Knoten oder den Polaritaetspunkt,
-    #     zeigt die Entlastung der Figur genau dorthin, wohin die Entwicklungs-
-    #     achse ohnehin zeigt — zwei Kapitel, die sonst nebeneinander stehen,
-    #     gehoeren dann zusammen. Braucht die Aspektliste; ohne `aspects` bleibt
-    #     die Liste leer und alles verhaelt sich wie vorher (additiv).
-    ppp_besetzt = sorted(
-        [{'name': f['name'], 'lon': f['lon'], 'orb': sep(f['lon'], ppp)}
-         for f in factors
-         if f['name'] not in ('AC', 'MC', 'DC', 'IC')
-         and sep(f['lon'], ppp) <= 3.0],
-        key=lambda x: x['orb'])
-    _achsenpunkte = (('Pluto', by['Pluto']['lon']), ('Nordknoten', nk),
-                     ('Südknoten', sk), ('Polaritätspunkt', ppp))
-    # `aspects` ist optional, WIRD ABER SELBST GERECHNET, wenn es fehlt. Grund:
-    # Das Werkzeuge-Modul dokumentiert den Aufruf als `ea_achse(factors, cusps)`;
-    # haenge der Befund an einem zusaetzlichen Parameter, faende ihn nur, wer das
-    # EA-Modul im Kopf hat — und genau das ist die Fehlerklasse, wegen der er
-    # ueberhaupt eingebaut wurde. Der Aufruf kostet nichts und ist deterministisch.
-    if aspects is None:
-        aspects = huber_aspects(factors)
-    leere_spitze_auf_achse = []
-    if aspects is not None:
-        for _tq in konfigurationen(factors, aspects,
-                                   cusps=cusps).get('t_quadrat', []):
-            _ls = _tq.get('leere_spitze') or {}
-            if not _ls:
-                continue
-            for _nam, _lo in _achsenpunkte:
-                _d = sep(_ls['lon'], _lo)
-                if _d <= 5.0:
-                    leere_spitze_auf_achse.append(
-                        {'achse': _tq.get('achse'), 'apex': _tq.get('apex'),
-                         'punkt': _nam, 'orb': _d, 'lon': _ls['lon'],
-                         'zeichen': _ls.get('zeichen'),
-                         'haus': _ls.get('haus_spalte')})
-        leere_spitze_auf_achse.sort(key=lambda x: x['orb'])
-
-    return {'punkte': punkte, 'haus_herrscher': haus_h, 'skipped': skipped,
-            'knoten_konj': knoten_konj,
-            'pluto_retro': bool(by['Pluto'].get('retro')),
-            'ppp_besetzt': ppp_besetzt,
-            'leere_spitze_auf_achse': leere_spitze_auf_achse,
-            'nordknoten_lon': nk, 'suedknoten_lon': sk, 'ppp_lon': ppp}
-
-
-def ea_achse_text(ea):
-    """Der fertige Abschnitt `## Die evolutionäre Achse` fuers chart_data.md."""
-    def gr(lon):
-        # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA Schritt 1+2, Rubrik 2):
-        # Hier stand round() OHNE Uebertrag. Bei 14°59,6′ kam "14°60′" heraus
-        # statt "15°00′" — und zwar in dem Abschnitt, den das EA-Modul als
-        # fertig zum Uebernehmen bezeichnet. Jetzt wie _gr() mit Uebertrag.
-        g = lon % 30
-        d = int(g)
-        m = int(round((g - d) * 60))
-        if m == 60:
-            d, m = d + 1, 0
-        return '%d°%02d′ %s' % (d, m, zeichen_name(lon))
-    L = ['## Die evolutionäre Achse — das Rückgrat (Modus TIEF)', '',
-         'Gerechnet mit `radix.ea_achse()`. Alle sechs Punkte sind '
-         'Deckungsauftrag, nicht Gliederung.', '',
-         '| # | Punkt | Stand | Haus | Herrscher | R |',
-         '|---|---|---|---|---|---|']
-    for p in ea['punkte']:
-        L.append('| %d | **%s** | %s | %s | %s | %s |'
-                 % (p['nr'], p['label'], gr(p['lon']), p['haus_label'],
-                    p['herrscher'], 'R' if p['retro'] else '—'))
-    L.append('')
-    L.append('**Herrscher der Knoten-Häuser** (Green liest sie zusätzlich zu den '
-             'Zeichenherrschern):')
-    for k, e in ea['haus_herrscher'].items():
-        if e:
-            L.append('- %s-Haus %s (%s) → %s in %s, Haus %s'
-                     % ('Nordknoten' if k == 'nordknoten' else 'Südknoten',
-                        e.get('haus'), e.get('spitzenzeichen'),
-                        e.get('herrscher'), e.get('steht_in_zeichen'),
-                        e.get('haus_spalte')))
-    L.append('')
-    L.append('**Skipped Steps** (Quadrate zur Knotenachse, Deckel %s°):'
-             % '3')
-    if not ea['skipped']:
-        L.append('- keine.')
-    for sp in ea['skipped']:
-        L.append('- %s, %s, Orb %d°%02d′ — läuft auf den %s zu%s'
-                 % (sp['name'], gr(sp['lon']), int(sp['orb']),
-                    round((sp['orb'] - int(sp['orb'])) * 60), sp['richtung'],
-                    ' · ÜBER DEM DECKEL, Aufnahme begründen'
-                    if sp['ueber_deckel'] else ''))
-    L.append('')
-    # NEU 14.09.2026: besetzter Polaritaetspunkt (s. ea_achse).
-    if ea.get('ppp_besetzt'):
-        L.append('**Der Polaritätspunkt ist BESETZT** — die Richtung hat einen '
-                 'Körper, nicht nur eine Koordinate:')
-        for b in ea['ppp_besetzt']:
-            L.append('- %s, %s, Abstand %d°%02d′ zum Polaritätspunkt. Das Kapitel '
-                     'der Richtung führt diesen Faktor als Träger; seine Aspekte '
-                     'beschreiben, worüber die Richtung praktisch zugänglich ist.'
-                     % (b['name'], gr(b['lon']), int(b['orb']),
-                        round((b['orb'] - int(b['orb'])) * 60)))
-        L.append('')
-    # NEU 14.09.2026: freie Ecke eines Spannungsdreiecks auf einem Achsenpunkt.
-    if ea.get('leere_spitze_auf_achse'):
-        L.append('**Freie Ecke eines Spannungsdreiecks auf einem Achsenpunkt** — '
-                 'die Entlastung der Figur zeigt dorthin, wohin die Achse zeigt:')
-        for e in ea['leere_spitze_auf_achse']:
-            L.append('- Dreieck %s, Brennpunkt %s: freie Ecke %s, Haus %s — dort '
-                     'der %s, Abstand %d°%02d′. Die beiden Kapitel gehören '
-                     'verbunden (Querverweis Pflicht).'
-                     % (' ☍ '.join(e['achse'] or []), e['apex'], gr(e['lon']),
-                        e['haus'], e['punkt'], int(e['orb']),
-                        round((e['orb'] - int(e['orb'])) * 60)))
-        L.append('')
-    L.append('**Radix-Pluto ist %s.** %s'
-             % ('rückläufig' if ea['pluto_retro'] else 'direktläufig',
-                'Eigener Befund der evolutionären Lesart: das Wandlungsgeschehen '
-                'ist stark nach innen gerichtet und meldet sich seltener über '
-                'äußere Anlässe.' if ea['pluto_retro'] else ''))
-    L.append('')
-    return '\n'.join(L) + '\n'
+# --- Die evolutionaere Achse (EA) — ausgemustert am 2026-09-23 ------------------
+# `ea_achse()` und `ea_achse_text()` sind mit dem EA-Produkt entfallen
+# (Chris-Ansage 2026-09-23: EA und Ultimativ „mache ich gar nicht mehr";
+# Wartungslauf zu den Pruefberichten vom 23.09., Z-23.09. Nr. 3: beide standen
+# weiter in hilfe() und damit in jedem Lauf, der die Uebersicht las). Die
+# letzte Fassung mit beiden Funktionen liegt in der Builder-Sicherung vom
+# 2026-09-23 unter _Sicherungen\Builder\radix_vor_2026-09-23c.py.bak.
 
 
 def _vert_zeile(v):
@@ -3797,7 +3605,7 @@ def _vert_zeile(v):
     return el, mo
 
 
-STRUKTURBILD_TYPEN = ('geburtshoroskop', 'ea', 'ultimativ', 'transit')
+STRUKTURBILD_TYPEN = ('geburtshoroskop', 'transit')   # EA/Ultimativ ausgemustert 2026-09-23
 
 # Wohin eine ⚠-Zeile der Gegenprobe g geht (Zeichengrenze wie Hauswechsel) —
 # Chris-Entscheidung 2026-09-23, fuer alle Typen; die Regel steht im
@@ -3819,9 +3627,9 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     ueber die Person und nicht ueber die Zahl treffen.
 
     typ  (neu 2026-09-19, F19) Dokumenttyp, fuer den das Datenblatt entsteht:
-         'geburtshoroskop' (Vorgabe, Wortlaut unveraendert), 'ea', 'ultimativ'
-         (beide mit Getriebe- und Instrument-Kapitel, Wortlaut wie
-         Geburtshoroskop) oder 'transit'. Im Transit gibt es weder Getriebe-
+         'geburtshoroskop' (Vorgabe, Wortlaut unveraendert) oder 'transit';
+         'ea' und 'ultimativ' sind seit dem 2026-09-23 ausgemustert und
+         brechen ab wie jeder unbekannte Typ. Im Transit gibt es weder Getriebe-
          noch Instrument-Kapitel, und das Typmodul Geburtshoroskop ist nicht
          geladen — die Verweise darauf entfallen dort; alle Befunde bleiben.
     """
@@ -4301,12 +4109,49 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     # Achsen-Doppelung. Die Zeilen erscheinen nur, wenn tatsaechlich doppelt
     # gemeldet wurde — sonst schweigen sie, wie die T-Quadrat-Zeile auch.
     if fg and fg.get('jod_meldungen', 0) > fg.get('jod_anzahl', 0):
+        # 2026-09-23b (Transit 1+2 vom 23.09., K1-4): „Winkel-Konjunktion“ nur,
+        # wenn an einer zusammengefassten Figur wirklich ein Winkel beteiligt ist.
+        def _jod_winkel(f):
+            # Winkel an der DOPPELUNG — der Konjunktion, ueber die zusammengefasst
+            # wurde. Ein Winkel, der nur als Ecke in allen Meldungen steht, zaehlt
+            # hier nicht (Zweitleser 2026-09-23b: „Spitze AC, Doppelbasis ueber
+            # Merkur ☌ Venus" hiess sonst „Winkel-Konjunktion").
+            return any(n in WINKEL for p in f.get('konj_basis', [])
+                       + f.get('konj_spitze', []) for n in p)
+        _mit_winkel = any(_jod_winkel(f) for f in fg['jod_figuren']
+                          if len(f['meldungen']) > 1)
         L.append('- Achsen-Doppelung: %d Jod-Meldungen entsprechen %d Figuren '
                  '(die übrigen sind dieselbe Figur über eine '
-                 'Winkel-Konjunktion an der Spitze oder an der Basis).'
-                 % (fg['jod_meldungen'], fg['jod_anzahl']))
+                 '%s an der Spitze oder an der Basis).'
+                 % (fg['jod_meldungen'], fg['jod_anzahl'],
+                    'Winkel-Konjunktion' if _mit_winkel else 'Konjunktion'))
         for f in fg['jod_figuren']:
-            if len(f['meldungen']) > 1:
+            if len(f['meldungen']) > 1 and (f.get('konj_basis')
+                                            or f.get('konj_spitze')):
+                basen = ' bzw. '.join(dict.fromkeys(
+                    ' ⚹ '.join(b) for b in f.get('basen') or [f['basis']]))
+                spitzen = ' bzw. '.join(dict.fromkeys(f['meldungen']))
+                zeile = ('  · Basis %s — Spitze %s, %d Meldungen, EIN Befund.'
+                         % (basen, spitzen, len(f['meldungen'])))
+                if f.get('konj_spitze'):
+                    zeile += (' Die Spitze ist doppelt besetzt (%s).' % ', '.join(
+                        '%s ☌ %s' % tuple(p) for p in f['konj_spitze']))
+                if f.get('konj_basis'):
+                    zeile += (' Die Basis ist doppelt besetzt (%s).' % ', '.join(
+                        '%s ☌ %s' % tuple(p) for p in f['konj_basis']))
+                w_sp = any(n in WINKEL for p in f.get('konj_spitze', []) for n in p)
+                w_ba = any(n in WINKEL for p in f.get('konj_basis', []) for n in p)
+                w_fig = f['apex'] in WINKEL or any(
+                    n in WINKEL for b in (f.get('basen') or [f['basis']]) for n in b)
+                if w_sp:
+                    zeile += (' Gedeutet wird mit der Spitze, die kein Winkel ist; '
+                              'der Winkel gibt der Figur ihren Ort.')
+                elif w_ba:
+                    zeile += ' Der Winkel an der Basis gibt der Figur ihren Ort.'
+                elif not w_fig:
+                    zeile += ' Kein Winkel beteiligt.'
+                L.append(zeile)
+            elif len(f['meldungen']) > 1:
                 # Korrigiert 2026-09-15 (Pruefbericht EA Schritt 1+2,
                 # Rubrik 2): 'meldungen' traegt je Doppelmeldung den APEX,
                 # nie einen zweiten Namen — der Filter m != apex lieferte
@@ -5478,6 +5323,27 @@ if __name__ == '__main__':
             'AC/Jupiter ☍ DC/Mars und Chiron ☍ Uranus, 3 Meldungen, EIN '
             'Befund.') in _tgx, _tgx[:900]
 
+    # 2026-09-23b (Transit 1+2 vom 23.09., K1-4): zwei Jods, deren Basen sich nur
+    # ueber eine Planeten-Konjunktion unterscheiden -> EINE Figur, beide Basen
+    # genannt, kein Winkel behauptet.
+    _fjd = [{'name': 'Merkur', 'lon': 0.0}, {'name': 'Sonne', 'lon': 1.0},
+            {'name': 'Venus', 'lon': 60.5}, {'name': 'Pluto', 'lon': 210.5}]
+    _ajd = huber_aspects(_fjd)
+    _kjd = konfigurationen(_fjd, _ajd)
+    _gjd = gruppiere_figuren(_kjd, _ajd)
+    if len(_kjd.get('jod', [])) == 2:
+        assert _gjd['jod_anzahl'] == 1 and _gjd['jod_meldungen'] == 2, _gjd
+        assert _gjd['jod_figuren'][0]['konj_basis'] in (
+            [('Merkur', 'Sonne')], [('Sonne', 'Merkur')]), _gjd['jod_figuren']
+        _tjd = strukturbild_text(strukturbild(_fjd + _ax(160.0, 75.0), _c))
+        _tjd = _tjd.split('### 6')[1].split('### 7')[0]
+        assert 'über eine Konjunktion an der Spitze oder an der Basis' in _tjd \
+            and 'Winkel-Konjunktion' not in _tjd and 'Kein Winkel beteiligt.' in _tjd \
+            and 'Die Basis ist doppelt besetzt (' in _tjd and ' bzw. ' in _tjd, _tjd[:1200]
+    else:
+        raise AssertionError('Jod-Testfall liefert %d Jods statt 2: %r'
+                             % (len(_kjd.get('jod', [])), _kjd.get('jod')))
+
     # L9: zwei Grosstrigone mit zwei gemeinsamen Ecken, dritte Ecken 6°30′
     # auseinander (nicht konjunkt) -> EIN Befund, die engere Figur fuehrt.
     _fl9 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
@@ -5513,8 +5379,15 @@ if __name__ == '__main__':
         _tt = strukturbild_text(_sbx, typ='transit')
         for _w in ('Getriebe', 'Instrument', 'Typmodul'):
             assert _w not in _tt, (_w, [z for z in _tt.splitlines() if _w in z])
-        assert strukturbild_text(_sbx) == strukturbild_text(_sbx, typ='ea') \
-            == strukturbild_text(_sbx, typ='Geburtshoroskop')
+        assert strukturbild_text(_sbx) == strukturbild_text(_sbx, typ='Geburtshoroskop')
+    for _alt in ('ea', 'ultimativ'):          # ausgemustert 2026-09-23
+        try:
+            strukturbild_text(_sb, typ=_alt)
+            raise AssertionError('typ=%r muss abbrechen' % _alt)
+        except ValueError:
+            pass
+    assert not hasattr(sys.modules[__name__], 'ea_achse') and \
+        not hasattr(sys.modules[__name__], 'ea_achse_text'), 'EA-Funktionen noch da'
     try:
         strukturbild_text(_sb, typ='synastrie')
         raise AssertionError('unbekannter typ muss abbrechen')

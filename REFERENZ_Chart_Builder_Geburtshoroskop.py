@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""REFERENZ: schlanker Chart-Builder fuer das Geburtshoroskop (und das EA).
+"""REFERENZ: schlanker Chart-Builder fuer das Geburtshoroskop.
 
 Neu 2026-09-20 (Aufraeumlauf D, Block D3; K7/W58). Bis dahin war
 `REFERENZ_Chart_Builder_Ultimativ.py` die einzige Vorlage — zur Haelfte
@@ -14,8 +14,9 @@ falsch sind. Diese Vorlage traegt NUR, was ein Typ ohne Zeitebene braucht:
     3. KONST / ACHSEN      die Chartdaten (kommen aus chartdata.py)
     4. ANALYSE / CHARTDATA / OUT / RADPNG / DOCTYPE
 
-Transit und Ultimativ nehmen weiter `REFERENZ_Chart_Builder_Ultimativ.py`
-(Transit-Uhr, Zeitleisten-Seite, Anhangtabellen).
+Der Transit nimmt weiter `REFERENZ_Chart_Builder_Ultimativ.py` (Transit-Uhr,
+Zeitleisten-Seite, Anhangtabellen; der Dateiname stammt aus der Zeit des
+Ultimativ-Horoskops, das am 2026-09-23 ausgemustert wurde).
 
 Alles andere — Struktur-CSS, Inhaltsverzeichnis, Radseite, Konstellationsseite,
 Aspektseite, Kapitel-Sektionen (`chartdoc.build_section()`: Kopf, Koerper,
@@ -65,7 +66,7 @@ CHARTDATA = '/home/claude/<klient>_chart_data.md'
 ANALYSE = '/home/claude/<klient>_analyse.md'
 RADPNG = '<klient>_radix.png'
 OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
-DOCTYPE = None            # Geburtshoroskop: None · EA: 'ea' (build.PFLICHT_BAUSTEINE)
+DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
 GEBURTSZEILE = '<TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Cover, letzte Zeile
 
 from build import BASE_CSS                     # noqa: E402
@@ -81,7 +82,7 @@ TITELMOTIV = DECKBLATT['TITELMOTIV']
 PALETTE_VORGABE = DECKBLATT['PALETTE']      # steuert die Farbwahl unten
 ORNAMENT = DECKBLATT['GLYPHEN']             # Inhaltsverzeichnis
 
-PART_KICKER = set()       # Geburtshoroskop und EA: keine Teiler-Kapitel
+PART_KICKER = set()       # Geburtshoroskop: keine Teiler-Kapitel
 OPEN_PAGE = {'Auftakt'}   # eigene Seite; das Schlusswort bewusst NICHT
 
 # Breitenleiter fuer die Einmessung der Radseite: 15,6 cm abwaerts in

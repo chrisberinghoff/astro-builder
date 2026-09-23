@@ -827,7 +827,7 @@ def select(chart_text, blocks_ref, typ=None):
 # geschieht, haengt vom Typ ab. Im Transit gibt es kein Rechenschaftskapitel —
 # das Register „Mitlaufendes" fuehrt Kontakte, nicht Faktoren (T12-18c Nr. 10);
 # die Anweisung „Zeile im Rechenschaftskapitel" lief dort ins Leere.
-# Schluessel: typ_aus_pfad(); None = Geburtshoroskop, EA, Ultimativ.
+# Schluessel: typ_aus_pfad(); None = Geburtshoroskop.
 # Je Typ: (Marke der Faktorzeile, Absatz im Kopf des ⚠-Blocks, Etikett der
 # fertigen Hausangabe).
 NICHT_FUEHREND = {
@@ -857,7 +857,7 @@ NICHT_FUEHREND = {
 
 
 def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
-    """typ: None (Geburtshoroskop, EA, Ultimativ) oder 'transit' — s.
+    """typ: None (Geburtshoroskop) oder 'transit' — s.
     typ_aus_pfad() und NICHT_FUEHREND (neu 2026-09-19, F19)."""
     marke_nf, kopf_nf, etikett_nf = NICHT_FUEHREND.get(typ, NICHT_FUEHREND[None])
     ohne = chart.get('ohne_block', [])

@@ -26,7 +26,7 @@ Closing Word / Core Themes / Fields of Conflict / Life Tasks, den Typ aus einer
 englischen H1 ("Birth Chart"), die englischen Bewegungs-Wortlaute des
 Geburtshoroskops und uebersetzte Wortlisten fuer P8/P9. Die chart_data bleibt
 deutsch; deshalb entfaellt bei einer englischen Analyse allein der Titelvergleich
-in P3 (Hinweiszeile). EA und Transit haben noch keine englischen Wortlaute.
+in P3 (Hinweiszeile).
 
 Zugang-Kicker (2026-09-16, Reparatur nach dem Pruefbericht Geburtshoroskop
 Schritt 1+2 vom selben Tag, Klasse 1 Nr. 1.2 und 1.3): Ein Zugang-Kapitel traegt
@@ -42,7 +42,7 @@ Schnittstelle
 -------------
     inhaltsprobe.pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None) -> dict
     inhaltsprobe.bericht(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None) -> str
-    python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|ea|transit|ultimativ]
+    python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|transit]
                             [--events <klient>_Transit_events.json]
     python3 inhaltsprobe.py --selbsttest
 
@@ -256,13 +256,9 @@ except Exception:                  # pragma: no cover — Fallback: Stand restyl
 # Die verbindlichen ###-Wortlaute der Bewegungsfolge, abgeschrieben aus den
 # Typmodulen am 2026-09-16:
 #   geburt    claude/Projektanweisung_Modul_Geburtshoroskop.md, "Die Bewegungsfolge"
-#   ea        claude/Projektanweisung_Erweiterung_EA.md, "Die Bewegungsfolge im
-#             EA-Kapitel" — Bewegung 7 heisst im zeitlosen Teil "Wo das im Ganzen
-#             steht", im Jetzt-Teil "Der Rahmen dieses Themas"; beide sind gueltig
 #   transit   claude/Projektanweisung_Erweiterung_Transit.md, "Die Bewegungsfolge"
-#   ultimativ claude/Projektanweisung_Erweiterung_Ultimativ.md, Tabelle "Die
-#             Bewegungsfolgen": Teil I und Vertiefung = geburt, Teil II = ea
-#             (mit "Wo das im Ganzen steht"), Teil III = transit
+# EA und Ultimativ sind seit dem 2026-09-23 ausgemustert (Chris-Ansage; ihre
+# Wortlaute sind entfallen, `AUSGEMUSTERTE_TYPEN` bricht mit Meldung ab).
 # Bewegung 1, 2, 4, 5 und 6 sind ueber alle Typen gleich; 3 und 7 typspezifisch
 # (Chris-Entscheidung 2026-09-04, Variante B2). Ein Eintrag darf ein Tupel sein:
 # dann ist jeder seiner Wortlaute an dieser Stelle gueltig.
@@ -272,9 +268,8 @@ _B4 = "Der Teil von dir, der das nicht aufgeben will"
 _B5 = "Die zwei Formen und das Dazwischen"
 _B6 = "Womit du arbeiten kannst"
 # Englische Sprachfassung (Werkzeuge-Modul A3; Klartext-Modul, Aktivierung): die
-# Wortlaute der englischen Analyse des Pruefflaufs vom 2026-09-16d. Nur fuer das
-# Geburtshoroskop hinterlegt — EA und Transit haben noch keine englische Fassung
-# gehabt; ihre Wortlaute bleiben deutsch, bis ein Lauf sie liefert.
+# Wortlaute der englischen Analyse des Pruefflaufs vom 2026-09-16d; fuer den
+# Transit seit dem 2026-09-22 (W57).
 _E1 = "How you notice it"
 _E2 = "What is at work"
 _E4 = "The part of you that does not want to give this up"
@@ -285,21 +280,16 @@ WORTLAUTE = {
                 ("Wie so etwas zur Regel wird", "How something like this becomes a rule"),
                 (_B4, _E4), (_B5, _E5), (_B6, _E6),
                 ("Wohin das gehört", "Where this belongs")),
-    "ea":      (_B1, _B2, "Woher so etwas kommt", _B4, _B5, _B6,
-                ("Wo das im Ganzen steht", "Der Rahmen dieses Themas")),
     "transit": ((_B1, _E1), (_B2, _E2), ("Warum das alt ist", "Why this is old"),
                 (_B4, _E4), (_B5, _E5), (_B6, _E6), ("Zeit", "Time")),
     # 2026-09-22 (Prüflauf Transit 1+2 englisch): englische Spalte der Transit-Wortlaute
-    # (W57, Transit erledigt); EA und Ultimativ Teil II weiter ohne englische Spalte.
+    # (W57).
 }
-# Das Ultimativ traegt alle drei Saetze in einem Dokument; welcher Teil ein Kapitel
-# ist, sagt das Kapitel selbst ueber seine dritte und siebte Bewegung.
-WORTLAUTE["ultimativ"] = {
-    "Teil I":   tuple(w[0] for w in WORTLAUTE["geburt"]),
-    "Teil II":  (_B1, _B2, "Woher so etwas kommt", _B4, _B5, _B6, "Wo das im Ganzen steht"),
-    "Teil III": WORTLAUTE["transit"],
-}
-TYPEN = ("geburt", "ea", "transit", "ultimativ")
+TYPEN = ("geburt", "transit")
+# 2026-09-23b (Wartungslauf zu den Pruefberichten vom 23.09., Z-23.09. Nr. 3):
+# EA und Ultimativ sind ausgemustert. Ein Aufruf mit diesem Typ — per --typ oder
+# aus der H1 — bricht mit Meldung ab, statt still mit halben Proben zu laufen.
+AUSGEMUSTERTE_TYPEN = ("ea", "ultimativ")
 
 # Jeder Wortlaut, den irgendein Typ kennt — zum Erkennen, OB ein Kapitel eine
 # Bewegungsfolge traegt (erstes Themenkapitel, P9), unabhaengig vom Typ.
@@ -512,9 +502,8 @@ def _ist_zugang(ch):
 # `Kapitel n` ist das Kapitel zu `THEMA n`. BEIDE Formen muessen laufen — aeltere
 # Analysen werden weiter geprueft —, deshalb erkennt die Probe die Form am
 # DOKUMENT und nicht am Typ: steht irgendwo der Kicker `Getriebe`, gilt die neue
-# Zaehlung. Das gilt damit auch fuer EA und Ultimativ, sobald ihre Module
-# nachziehen, ohne dass hier etwas zu aendern ist.
-_TYPEN_MIT_GETRIEBE = ("geburt", "ea", "ultimativ")
+# Zaehlung.
+_TYPEN_MIT_GETRIEBE = ("geburt",)
 
 def _zaehlung_ab(chapters, typ):
     """Nummer des ersten nummerierten Kapitels, das ein THEMA deutet (1 oder 2)."""
@@ -848,7 +837,7 @@ def _beleg_form(ch, typ, chapters=None):
     if _ist_kicker(ch, "Getriebe"):
         return "struktur"
     segs = _segmente(ch["beleg"])
-    if typ in ("geburt", "ultimativ") and _getriebe_kapitel(ch, typ, chapters):
+    if typ == "geburt" and _getriebe_kapitel(ch, typ, chapters):
         return "struktur"
     if segs and _staende_segment(segs[0]) is None:
         # Segment 1 sind keine Staende: Struktur-Format, wenn kein Aspekt darin
@@ -897,6 +886,13 @@ _STICHTAG_ORB_RE = re.compile(
     r"(\d{1,2}(?:[.,](\d{1,4}))?)\s*°(?!\s*\d)", re.I)
 # Zusatz-Zeitmasse im Beleg (W46; das Beleg-Format dafuer setzt der Textlauf).
 _ZUSATZ_SEG_RE = re.compile(r"Sonnenbogen|solar[\s-]*arc|progressiv\w*|progressed|Finsternis|eclipse", re.I)  # 2026-09-22: englische Zusatz-Segmente (solar arc, progressed, eclipse)
+# 2026-09-23b (Wartungslauf zu den Pruefberichten vom 23.09.; Transit 1+2 K1-5,
+# Transit 3+4 Inhalt P1): Die Zusatz-Segmente tragen selbst ein R-Ziel
+# („Finsternis auf R-Mond — TT.MM.JJJJ", „Sonnenbogen-Merkur … R-Neptun — exakt …",
+# LESEFORMATE). `_TRANSIT_KONTAKT_RE` sah darin einen Transitkontakt, das Segment
+# lief als Normalsegment und meldete „kein Aspekt im Segment" (2 PRUEFEN, 0
+# zutreffend). Ein Segment, das mit dem Zeitmass BEGINNT, ist ein Zusatz-Segment.
+_ZUSATZ_SEG_ANFANG_RE = re.compile(r"^\W*(?:Sonnenbogen|solar[\s-]*arc|progressiv\w*|progressed|Finsternis|eclipse)", re.I)
 
 def _datum_iso(s):
     """'TT.MM.JJJJ' / 'TT.MM.JJ' / 'JJJJ-MM-TT' -> 'JJJJ-MM-TT' (None, wenn keines)."""
@@ -1368,8 +1364,8 @@ def _p1_beleg_aspekte(chapters, typ, tabelle, events=None, unlesbar=None):
             continue
         if form == "normal":
             for i, seg in enumerate(segs[1:], start=2):
-                if typ == "transit" and _ZUSATZ_SEG_RE.search(seg) \
-                        and not _TRANSIT_KONTAKT_RE.search(seg):
+                if typ == "transit" and (_ZUSATZ_SEG_ANFANG_RE.match(seg) or (
+                        _ZUSATZ_SEG_RE.search(seg) and not _TRANSIT_KONTAKT_RE.search(seg))):
                     pruefe_zusatz_segment("%s, Segment %d" % (bez, i), seg)
                     continue
                 eintr = _aspekt_eintraege(seg)
@@ -1778,7 +1774,7 @@ def _register_eintraege(ch):
 
 def _p5_rechenschaft(chapters, chart, themen, typ=None, txt=None, events=None,
                      chart_data_pfad=None, events_pfad=None, sprache_analyse="de"):
-    """Geburtshoroskop, EA, Ultimativ: Faktor-Register im Kapitel `Rechenschaft`.
+    """Geburtshoroskop: Faktor-Register im Kapitel `Rechenschaft`.
     Transit (2026-09-19, W43): Kontakt-Register im Kapitel `Mitlaufendes` —
     s. `_p5_mitlaufendes()`; die Zusatzparameter braucht nur dieser Zweig."""
     p = _Probe("P5", "Rechenschafts-Register")
@@ -3480,7 +3476,57 @@ _BILD_RE = re.compile(
     r"|(?:Verbindung|Kontakt)\s+(?:zu|mit|zwischen)|verbunden\s+mit)(?![\wäöüß])", re.I)
 # nur Personalpronomen: „Dasselbe Quadrat trifft deinen Merkur" meint den Aspekt,
 # nicht den letzten Faktor des Vorsatzes
-_PRONOMEN_ANFANG_RE = re.compile(r"^\W*(?:Er|Sie|Es|It|He|She)(?![\wäöüß])")
+_PRONOMEN_ANFANG_RE = re.compile(r"^\W*(Er|Sie|Es|It|He|She)(?![\wäöüß])")
+# 2026-09-23b (Wartungslauf zu den Pruefberichten vom 23.09.; Geburtshoroskop 1+2
+# Nr. 8, Transit 1+2 K1-3): Das Pronomen bekam seinen Bezug ohne Genus und nur am
+# Satzanfang. „Sie verschmilzt mit Merkur" hinter einem Vorsatz, der auf Jupiter
+# endete, wurde Jupiter–Merkur; „Er läuft über deinen Aszendenten und steht im
+# Quadrat zu deinem Uranus" wurde AC–Uranus, und die Aufzaehlung erbte den AC.
+# (a) Ein deutsches Pronomen sucht seinen Bezug nach dem Genus (er maskulin, sie
+#     feminin, es neutrum; MC und IC passen zu jedem: „das MC", „die Himmelsmitte",
+#     „der tiefste Punkt"). Kandidaten: das Subjekt des vorigen Glieds, sonst der
+#     erste und der letzte passende Faktor davor (am Satzanfang im Vorsatz). Passt
+#     keiner, bleibt es beim bisherigen Kandidaten. It/He/She: wie bisher.
+# (b) Steht „er"/„sie" im Glied VOR Faktoren, die nur als Objekt dastehen („über
+#     deinen Aszendenten", „zu deinem Uranus"), ist es das Subjekt des Markers:
+#     Sein Bezug kommt als Kandidat dazu. Das Paar mit dem Objekt bleibt stehen —
+#     eine gedeckte Paarung genuegt, die Probe wird nur leiser, nie strenger.
+#     (a) und (b) greifen deshalb NUR, wenn hinter dem Marker ein Faktor steht
+#     (`danach` nicht leer), und sie ERGAENZEN die bisherigen Kandidaten, statt
+#     sie zu ersetzen. Sonst machte die Nachstell-Regel („X trifft Y im
+#     Quadrat.") aus zwei Bezugs-Kandidaten ein neues, falsches Paar (Befund des
+#     Zweitlesers im Wartungslauf 2026-09-23b: „Er bildet dabei mit deinem Mond
+#     ein Quadrat.“ hinter einem Vorsatz mit Saturn und AC wurde Saturn–AC).
+_GENUS = {"SONNE": "f", "VENUS": "f", "LILITH": "f",
+          "MOND": "m", "MERKUR": "m", "MARS": "m", "JUPITER": "m", "SATURN": "m",
+          "URANUS": "m", "NEPTUN": "m", "PLUTO": "m", "MONDKNOTEN": "m",
+          "SUEDKNOTEN": "m", "CHIRON": "m", "PHOLUS": "m", "GLUECKSPUNKT": "m",
+          "AC": "m", "DC": "m"}          # MC, IC fehlen absichtlich: jedes Genus
+_PRONOMEN_GENUS = {"er": "m", "sie": "f", "es": "n"}
+_SUBJEKT_PRONOMEN_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:er|sie|Er|Sie)(?![\wäöüÄÖÜß])")
+_OBJEKT_VOR_RE = re.compile(
+    r"(?<![\wäöüÄÖÜß])(?:deinen|deinem|deiner|deines|über|zu|zum|zur|an|am|auf|durch|"
+    r"mit|ins|im|in|gegen|vom|von|bei|beim|um)\s+(?:\w+\s+)?$", re.I)
+
+
+def _pronomen_bezug(pron, satz_vor, vorher, vorige_davor=None):
+    """Bezugsfaktoren eines Personalpronomens (s. Kommentar oben, a) -> Liste
+    kanonischer Faktoren; leer, wenn keiner passt."""
+    g = _PRONOMEN_GENUS.get(pron.casefold())
+    if g is None:                               # It/He/She: wie bisher
+        fv = _faktoren_im_satz(vorher)
+        return [fv[-1][2]] if fv else []
+
+    def passt(f):
+        return _GENUS.get(f, g) == g            # MC/IC: jedes Genus
+    if vorige_davor:
+        kand = [f for f in vorige_davor if passt(f)]
+        if kand:
+            return list(dict.fromkeys(kand))
+    fs = [f for _a, _e, f in _faktoren_im_satz(satz_vor)] or \
+        [f for _a, _e, f in _faktoren_im_satz(vorher)]
+    kand = [f for f in fs if passt(f)]
+    return list(dict.fromkeys(kand[:1] + kand[-1:]))
 _FENSTER = 90                # Zeichen: so weit darf ein Faktor vom Aspektwort/Bild stehen
 
 def _bild_arten(wort):
@@ -3511,6 +3557,30 @@ _AUFZAEHLUNG_RE = re.compile(
 #     zum Partner des Subjekts (Merkur–Saturn statt Merkur–Mond).
 _RELATIV_RE = re.compile(r",\s+(?:der|die|das|dessen|deren|welche[rsmn]?|which|who|whose)"
                          r"(?![\wäöüß])", re.I)
+# (5) NEUES GLIED (2026-09-23b, Transit 1+2 K1-3, vierter Fall) — „Saturn steht dabei
+#     im Quadrat, der Mondknoten im Trigon zu deiner Venus": Artikel + Faktor direkt
+#     hinter dem Komma eroeffnen ein Glied mit eigenem Subjekt, keinen Relativsatz.
+#     Das „danach" des Markers endet dort (nur wenn noch ein Marker folgt), sonst
+#     wird das Subjekt des naechsten Glieds zum Partner des vorigen (Saturn–Mondknoten).
+#     Enger gefasst nach dem Zweitleser (2026-09-23b): Der Artikel muss zum Genus
+#     des Faktors im NOMINATIV passen (der + maskulin, die + feminin, das + MC/IC —
+#     „der Sonne" ist Dativ, eine Apposition, kein neues Subjekt), vor dem Faktor
+#     darf hoechstens ein Partizip stehen („der transitierende Mondknoten"; nie
+#     „das deinen Mond trifft", „das der Mond spuert"), und bis zum naechsten
+#     Marker steht kein Komma.
+_GLIED_ANFANG_RE = re.compile(
+    r",\s+(der|die|das)\s+(?:\w+end(?:e|en|er)\s+)?(%s|Knoten)(?![\wäöüÄÖÜß])"
+    % _FAKTOR_RE)
+
+
+def _neues_glied(satz, pos, naechster_marker):
+    """(5): Beginnt am Komma bei `pos` ein Glied mit eigenem Subjekt?"""
+    mg = _GLIED_ANFANG_RE.match(satz, pos)
+    if not mg or "," in satz[mg.end():naechster_marker]:
+        return False
+    g = _GENUS.get(kanon(mg.group(2)))          # None: MC/IC, jedes Genus
+    return {"der": "m", "die": "f"}.get(mg.group(1), "n") == g or \
+        (g is None and mg.group(1) == "das")
 # (3) ACHSENPAAR — AC/DC und MC/IC stehen einander immer gegenüber; ein Satz, der
 #     beide Enden nennt („über deinen Deszendenten … deinem Aszendenten
 #     gegenüber"), behauptet damit keinen Aspekt. Solche Paarungen zaehlen nicht.
@@ -3574,10 +3644,25 @@ def _konstellationen(satz, vorher=""):
             if any(a >= m.end() and e <= mr.start() for a, e, _f in fak):
                 nach_grenze = mr.start()
                 break
-        davor = [f for a, e, f in fak if a >= vor_grenze and e <= m.start()
-                 and m.start() - e <= _FENSTER]
+            if _i + 1 < len(marker) and _neues_glied(satz, mr.start(),
+                                                     marker[_i + 1][0].start()):  # (5)
+                nach_grenze = mr.start()
+                break
+        davor_pos = [(a, e, f) for a, e, f in fak if a >= vor_grenze and e <= m.start()
+                     and m.start() - e <= _FENSTER]
+        davor = [f for _a, _e, f in davor_pos]
         danach = [f for a, e, f in fak if a >= m.end() and e <= nach_grenze
                   and a - m.end() <= _FENSTER]
+        if danach and davor_pos and all(_OBJEKT_VOR_RE.search(satz[max(0, a - 30):a])
+                                        for a, _e, _f in davor_pos):       # (b)
+            pm = None
+            for pm in _SUBJEKT_PRONOMEN_RE.finditer(satz, vor_grenze, davor_pos[0][0]):
+                pass
+            if pm is not None and not any(pm.end() <= r.start() < m.start()
+                                          for r in _RELATIV_RE.finditer(satz)):
+                bezug = _pronomen_bezug(pm.group(0), satz[:pm.start()], vorher,
+                                        vorige_davor if _i else None)
+                davor = davor + [f for f in bezug if f not in davor]
         if _i and vorige_davor:                                         # (1)
             v_ende = marker[_i - 1][0].end()
             if _AUFZAEHLUNG_RE.search(satz[v_ende:m.start()]) and any(
@@ -3586,9 +3671,12 @@ def _konstellationen(satz, vorher=""):
         if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
                                                or m.group(0).casefold().endswith("zwischen")):
             davor, danach = [danach[0]], danach[1:]
-        if not davor and vorher and _PRONOMEN_ANFANG_RE.match(satz):
+        if not davor and vorher and _PRONOMEN_ANFANG_RE.match(satz):      # (a)
             fv = _faktoren_im_satz(vorher)
             davor = [fv[-1][2]] if fv else []
+            if danach:
+                davor = list(dict.fromkeys(davor + _pronomen_bezug(
+                    _PRONOMEN_ANFANG_RE.match(satz).group(1), "", vorher)))
         if not danach and len(set(davor)) >= 2:
             danach = [davor[-1]]
             davor = [f for f in davor[:-1] if f != danach[0]]
@@ -3628,7 +3716,7 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
                 if e["a"] and e["b"] and e["art"]:
                     paare.add((frozenset((e["a"], e["b"])), e["art"]))
     # Kontakte der Rechnung (Themenliste, TRANSIT-RECHENSCHAFT, Report, events.json) —
-    # im Transit und in jedem Typ mit Jetzt-Teil (EA, Ultimativ Teil III).
+    # im Transit.
     kontakte.update(_kontakte_in(txt))
     for m in _REPORT_KONTAKT_RE.finditer(txt or ""):
         kontakte.add((kanon(m.group(1)), m.group(2), kanon(m.group(3))))
@@ -3717,7 +3805,7 @@ KOPFBLOCK = {
     "Themenkapitel": (True, True),       # auch Ressourcen-Kapitel
     "Zugang": (True, True),              # ein Segment je zugeordnetem Haus
     "Bündel-Kapitel": (True, False),     # Hauptthemen, Konfliktfelder, Lebensaufgaben
-    "Lagebild": (True, True),            # Der Stand heute (Transit; Ultimativ Teil III)
+    "Lagebild": (True, True),            # Der Stand heute (Transit)
 }
 _TEILER_KICKER = {"teil i", "teil ii", "teil iii", "vertiefung", "erster teil", "zweiter teil",
                   "dritter teil", "part i", "part ii", "part iii", "first part", "second part",
@@ -3986,7 +4074,8 @@ class InhaltsprobeFehler(Exception):
 def pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
     """Haelt die Analyse gegen die chart_data. -> dict (s. Docstring des Moduls).
 
-    typ: 'geburt' | 'ea' | 'transit' | 'ultimativ' | None (aus der H1 ableiten).
+    typ: 'geburt' | 'transit' | None (aus der H1 ableiten); 'ea' und
+    'ultimativ' sind seit dem 2026-09-23 ausgemustert und brechen ab.
     events_pfad: die events.json des Transit-Laufs (`transit.py … --json <pfad>`),
     optional (2026-09-19, W24). Mit ihr haelt P1 die Transit-Segmente gegen die
     Rechnung (Kontakt, Exaktdaten, Annaeherungen, Stichtag-Orb), P5 nimmt die
@@ -4005,12 +4094,15 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
 
     if typ:
         typ = {"geburtshoroskop": "geburt"}.get(typ.casefold(), typ.casefold())
-        if typ not in TYPEN:
+        if typ not in TYPEN and typ not in AUSGEMUSTERTE_TYPEN:
             raise InhaltsprobeFehler("Unbekannter --typ %r; bekannt: %s" % (typ, ", ".join(TYPEN)))
         typ_quelle = "Parameter"
     else:
         typ = typ_aus_h1(parsed.get("doctype"))
         typ_quelle = "H1 „%s“" % parsed.get("doctype") if typ else "H1 „%s“ nicht zuordenbar" % parsed.get("doctype")
+    if typ in AUSGEMUSTERTE_TYPEN:
+        raise InhaltsprobeFehler("Typ %r (%s) ist seit dem 2026-09-23 ausgemustert — "
+                                 "geprueft werden Geburtshoroskop und Transit." % (typ, typ_quelle))
 
     chart = selektor.parse_chart(txt)
     unlesbar = []
@@ -4669,6 +4761,50 @@ def _selbsttest(still=False):
         ist = _p13_paare(satz)
         assert ist == {frozenset(p) for p in soll}, "P13 Satzform: %r -> %r" % (satz, ist)
     assert frozenset(("DC", "AC")) in _ACHSENPAARE and frozenset(("MC", "IC")) in _ACHSENPAARE
+    # 2026-09-23b: Pronomen mit Genus (a), Subjekt-Pronomen vor Objekt-Faktoren (b),
+    # neues Glied hinter Komma (5)
+    def _p13_mit_vorsatz(satz, vorher):
+        return {frozenset((x, y)) for d, _a, n, _m in _konstellationen(satz, vorher)
+                for x in d for y in n if x != y}
+    _ist = _p13_mit_vorsatz("Sie verschmilzt mit Merkur, und so findet dein Lieben Worte.",
+                            "Deine Venus steht im Trigon zu Jupiter.")
+    assert frozenset(("VENUS", "MERKUR")) in _ist, "P13 Genus (a): %r" % _ist
+    _ist = _p13_mit_vorsatz("Es verschmilzt mit Merkur.", "Deine Venus steht im Trigon zu Jupiter.")
+    assert _ist == {frozenset(("JUPITER", "MERKUR"))}, "P13 (a), es ohne Genus-Treffer: %r" % _ist
+    _ist = _p13_mit_vorsatz("Er läuft über deinen Aszendenten und steht dabei im Quadrat zu "
+                            "deinem Uranus und im Trigon zu deiner Sonne.",
+                            "Saturn wandert ab dem Frühjahr durch dein erstes Haus.")
+    assert {frozenset(("SATURN", "URANUS")), frozenset(("SATURN", "SONNE"))} <= _ist, \
+        "P13 Subjekt-Pronomen (b): %r" % _ist
+    _ist = _p13_mit_vorsatz("Dein Merkur steht im Trigon zum Mond, der seinerseits Saturn "
+                            "quadriert.", "Er denkt schnell.")
+    assert _ist == {frozenset(("MERKUR", "MOND"))}, "P13 (b) greift ohne Pronomen: %r" % _ist
+    _ist = _p13_paare("Saturn steht dabei im Quadrat, der Mondknoten im Trigon zu deiner Venus.")
+    assert _ist == {frozenset(("MONDKNOTEN", "VENUS"))}, "P13 neues Glied (5): %r" % _ist
+    _ist = _p13_paare("Saturn trifft deinen Mars im Quadrat, der Mondknoten deine Venus im Trigon.")
+    assert _ist == {frozenset(("SATURN", "MARS")), frozenset(("MONDKNOTEN", "VENUS"))}, \
+        "P13 neues Glied (5), Partner davor: %r" % _ist
+    # Zweitleser 2026-09-23b: keine neuen Paare bei leerem danach, Relativsatz und
+    # Apposition bleiben, wie sie waren
+    for _s, _v in (("Er bildet dabei mit deinem Mond ein Quadrat.",
+                    "Saturn läuft ab März über deinen Aszendenten."),
+                   ("Er bildet dabei ein Quadrat.",
+                    "Saturn wandert durch dein viertes Haus, in dem auch Pluto steht."),
+                   ("Saturn wandert mit Pluto weiter, und er steht deinem Mond gegenüber.", "")):
+        assert _p13_mit_vorsatz(_s, _v) == set(), "P13 leeres danach: %r" % _s
+    for _s, _soll in (("Saturn bildet ein Quadrat, das deinen Mond trifft, und ein Trigon "
+                       "zu deiner Venus.", {("SATURN", "MOND"), ("SATURN", "VENUS")}),
+                      ("Uranus bildet ein Quadrat zu deinem Lebenslicht, der Sonne, und ein "
+                       "Trigon zum Mond.", {("URANUS", "SONNE"), ("URANUS", "MOND")})):
+        _ist = _p13_paare(_s)
+        assert {frozenset(p) for p in _soll} <= _ist, "P13 (5) zu weit: %r -> %r" % (_s, _ist)
+    _ist = _p13_mit_vorsatz("Sie bilden gemeinsam ein Quadrat zu deiner Sonne.",
+                            "Mars und Saturn stehen in deinem zehnten Haus.")
+    assert frozenset(("SATURN", "SONNE")) in _ist, "P13 Plural-Sie: %r" % _ist
+    assert _ZUSATZ_SEG_ANFANG_RE.match("Finsternis auf R-Mond ☽ — 12.08.2026") and \
+        _ZUSATZ_SEG_ANFANG_RE.match("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027") \
+        and not _ZUSATZ_SEG_ANFANG_RE.match("T-Saturn ♄ Quadrat □ R-Mond ☽ — exakt 01.03.2027"), \
+        "P1 Zusatz-Segment am Anfang"
     _z = _ZUSATZ_KONTAKT_RE.search("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027")
     assert _z and kanon(_z.group("t")) == "MERKUR" and kanon(_z.group("r")) == "NEPTUN", \
         "P13 Zusatz-Segment nicht gelesen"
@@ -4985,14 +5121,14 @@ def _main(argv):
             return 2
         args = [x for x in args if x != events_pfad]
     if len(args) != 2:
-        print("Aufruf: python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|ea|transit|ultimativ]"
+        print("Aufruf: python3 inhaltsprobe.py <analyse.md> <chart_data.md> [--typ geburt|transit]"
               " [--events <events.json>]\n"
               "        python3 inhaltsprobe.py --selbsttest", file=sys.stderr)
         return 2
     try:
         r = pruefe(args[0], args[1], typ, events_pfad)
     except InhaltsprobeFehler as e:
-        print("INHALTSPROBE: nicht lesbar — %s" % e, file=sys.stderr)
+        print("INHALTSPROBE: abgebrochen — %s" % e, file=sys.stderr)
         return 2
     print(bericht_aus(r))
     return 1 if r["fehler"] else 0
@@ -5054,8 +5190,13 @@ KONSTELLATION IM TEXT — P13.
   Hauptsatz („, und", „, aber", „;"), am Nachbarmarker und am Relativsatz
   („…, der …"). Eine Aufzählung („ein Trigon zu A und ein Quadrat zu B") teilt das
   Subjekt. Die beiden Enden EINER Achse (AC/DC, MC/IC) bilden kein Paar. Verneintes
-  zählt nicht. Eine gedeckte Paarung genügt; Pronomen am Satzanfang („Er …") nimmt
-  den letzten Faktor des Vorsatzes.
+  zählt nicht. Eine gedeckte Paarung genügt. Ein Pronomen am Satzanfang („Er …",
+  „Sie …") nimmt den letzten Faktor des Vorsatzes, dazu den ersten und letzten mit
+  passendem Genus (MC und IC passen immer); steht „er"/„sie" im Glied vor
+  Faktoren, die nur als Objekt dastehen („über deinen Aszendenten"), kommt sein
+  Bezug als Subjekt dazu — beides nur, wenn hinter dem Aspektwort ein Faktor steht.
+  Komma + Artikel + Faktor im Nominativ vor dem nächsten Aspektwort („…, der
+  Mondknoten im Trigon …") beginnt ein neues Glied.
 """
 
 
