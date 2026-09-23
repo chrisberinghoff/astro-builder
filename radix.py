@@ -65,6 +65,17 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         (Mond, Sonne … Pholus): Minuten früherer/späterer Geburt bis zum
         Zeichenwechsel, Warnung unter KIPP_SCHWELLE; läuft in strukturbild()
         mit (jd_geburt genügt) und in zeichengrenze_fussnote(kipp, faktoren=fk).
+        Seit 2026-09-23 ungerundet (`*_genau`); die Schwelle (2 Minuten) prüft
+        den ungerundeten Wert.
+
+    haus_kippminuten(jd, factors, cusps, lat, lon) -> list | None
+    haus_kipp_warnungen(hk) -> list | None
+    hauswechsel_fussnote(hk) -> str | None
+        Seit 2026-09-23: je Faktor die Minuten SPÄTERER Geburt bis zum Wechsel
+        ins vorige Haus (die frühere Geburt deckt die 5°-Grenzlage), Warnung
+        unter KIPP_SCHWELLE; läuft in strukturbild() mit (jd_geburt, lat, lon)
+        und steht in §3; der Fußnotensatz steht als eigene Fußnote neben dem
+        von zeichengrenze_fussnote().
 
     glyphen_ergaenzen(factors) -> list          (FAKTOR_GLYPHE, 2026-09-19)
         Füllt leere 'glyph'-Felder mit dem Vertrags-Kürzel ('AC' … 'IC',
@@ -72,7 +83,8 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
 
     konfigurationen(factors, aspects, cusps=None) -> dict
     gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung: T-Quadrat
-                                                  2026-09-09, Jod und Großtrigon 2026-09-14)
+                                                  2026-09-09, Jod und Großtrigon 2026-09-14,
+                                                  Großkreuz 2026-09-23)
         T-Quadrat (mit leerer Spitze), Großkreuz, Großtrigon, Jod, Stellium —
         und seit 2026-09-08 Drachen (Kite) und Mystisches Rechteck. Ein Drachen
         führt sein Großtrigon selbst (EIN Befund).
@@ -184,7 +196,8 @@ DEFAULT_PALETTE = {
 #                   Planet ausser den Lichtern, ohne jeden Beleg; 9 Grad am AC
 #                   entsprechen in Berliner Breite 14 bis 52 Minuten
 #                   Geburtszeit, waehrend Gegenprobe (g) schon bei 10 Minuten
-#                   Kippminute warnt. Die vier Achsen erzeugten damit 45 % aller
+#                   Kippminute warnte (Stand 2026-09-15; seit 2026-09-23
+#                   warnt sie bei 2). Die vier Achsen erzeugten damit 45 % aller
 #                   Aspektzeilen.
 #   Chiron 5      - Melanie Reinhart, Hauptautorin zu Chiron, auf die
 #                   Orbisfrage: "the same orbs ... as you would use for
@@ -1183,9 +1196,16 @@ SPITZEN_ORB = 3.0               # Herrscher <-> eigene Spitze: Orb der sensitive
 _SPITZEN_ASPEKTE = (0, 60, 90, 120, 180)   # Konjunktion, Sextil, Quadrat,
                                             #   Trigon, Opposition
 _HART = (90, 180)
-KIPP_SCHWELLE = 10              # Minuten: eine Spitze, die frueher als das ihr
-                                #   Zeichen wechselt, gehoert in den ⚠-Block und
-                                #   den Datenblatt-Kopf (Gegenprobe g)
+KIPP_SCHWELLE = 2               # Minuten: eine Spitze oder ein Faktor, die
+                                #   frueher als das ihr Zeichen wechseln, und ein
+                                #   Faktor, der frueher als das bei SPAETERER
+                                #   Geburt das Haus wechselt, gehoeren in den
+                                #   ⚠-Block, den Datenblatt-Kopf und den
+                                #   Handlungsblock (Gegenprobe g). Verglichen wird
+                                #   der UNGERUNDETE Wert (`*_genau`). Bis
+                                #   2026-09-22 waren es 10 Minuten; sie schlugen
+                                #   in einer Stichprobe in rund zwei Dritteln der
+                                #   Horoskope an (Chris-Entscheidung 2026-09-23).
 KIPP_MAX = 180                  # Minuten: weiter wird nicht gesucht
 
 
@@ -1348,6 +1368,75 @@ def herrscher_spitzen_kontakt(factors, cusps, orb=SPITZEN_ORB, klassisch=False):
     return out
 
 
+def _genau(geaendert, lo, hi, schritte=16):
+    """Bisektion auf der Zeitachse (Minuten): der UNGERUNDETE Zeitpunkt, an dem
+    `geaendert(t)` von False auf True springt — `geaendert(lo)` ist False,
+    `geaendert(hi)` True. 16 Schritte teilen eine Minute auf unter 0,001
+    Minuten. Rueckgabe ungerundet (der Wert erfuellt `geaendert`); gespeichert
+    wird er auf drei Nachkommastellen.
+
+    Neu 2026-09-23 (Pruefbericht Geburtshoroskop 1+2 vom 23.09., Nr. 2): Die
+    Kippminute war die erste GANZE Minute mit anderem Zeichen, also
+    aufgerundet. Im Text wurde daraus „gut fünf Minuten" fuer einen Wechsel
+    knapp UNTER fünf Minuten — die Musterformel setzte eine Schwelle ueber der
+    Zahl voraus und drehte damit die Richtung. Und eine Schwelle „unter 2"
+    haette einen Wechsel bei gut einer Minute (aufgerundet 2) nicht gemeldet.
+    """
+    for _ in range(schritte):
+        m = (lo + hi) / 2.0
+        if geaendert(m):
+            hi = m
+        else:
+            lo = m
+    return hi
+
+
+_ZAHLWORT = ('null', 'eine', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben',
+             'acht', 'neun', 'zehn', 'elf', 'zwölf')
+
+
+def _min_dez(x):
+    """Ungerundete Minutenzahl fuers Datenblatt: zwei Nachkommastellen,
+    deutsches Komma (3,80)."""
+    return f"{x:.2f}".replace('.', ',')
+
+
+def _min_wort(x, ziffer=False, dativ=False):
+    """Die Kippminute als Zeit-Einschraenkung in Worten (neu 2026-09-23).
+
+    Gerundet wird auf die naechste ganze Minute; liegt der ungerundete Wert
+    darunter, heisst es „knapp", darueber „gut": 3,80 -> „knapp vier Minuten",
+    1,30 -> „gut eine Minute", 2,00 -> „zwei Minuten". Unter einer halben
+    Minute: „weniger als eine Minute". ziffer=True schreibt die Zahl als Ziffer
+    (Fussnote: „knapp 4 Minuten"), dativ=True „einer Minute" statt „eine
+    Minute". Die ⚠-Zeilen in §3 geben den Wortlaut fuer den Text damit fertig
+    vor; wer ihn von Hand aus der Zahl bildet, rundet falsch.
+    """
+    n = int(x + 0.5)
+    if n < 1:
+        return 'weniger als ' + ('1 Minute' if ziffer else
+                                 ('einer Minute' if dativ else 'eine Minute'))
+    if ziffer:
+        zahl = str(n)
+    elif n == 1:
+        zahl = 'einer' if dativ else 'eine'
+    else:
+        zahl = _ZAHLWORT[n] if n < len(_ZAHLWORT) else str(n)
+    wort = f"{zahl} {'Minute' if n == 1 else 'Minuten'}"
+    if abs(x - n) < 0.005:
+        return wort
+    return ('knapp ' if x < n else 'gut ') + wort
+
+
+def _kipp_wert(e, key):
+    """Fuer die §3-Zeilen: 'nie (>180)', der ungerundete Wert (3,80) oder —
+    bei einem Eintrag ohne `*_genau` (aelteres Ergebnis) — die ganze Minute."""
+    if e.get(key) is None:
+        return 'nie (>%d)' % KIPP_MAX
+    g = e.get(key + '_genau')
+    return _min_dez(g) if g is not None else str(e[key])
+
+
 def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
     """Je Spitze: wie viele Minuten fruehere und spaetere Geburt das Zeichen
     der Spitze wechseln (neu 2026-09-12). Braucht pyswisseph; ohne es None.
@@ -1360,9 +1449,13 @@ def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
 
     -> Liste von zwoelf dicts, Haus 1..12:
        {'haus', 'lon', 'zeichen', 'frueher', 'spaeter', 'min', 'richtung',
+        'frueher_genau', 'spaeter_genau', 'min_genau',
         'zeichen_frueher', 'zeichen_spaeter', 'grad_je_minute'}
-       'frueher'/'spaeter' in Minuten oder None (kein Wechsel bis max_min);
-       'min' das kleinere von beiden, 'richtung' die zugehoerige Seite;
+       'frueher'/'spaeter' die erste GANZE Minute mit anderem Zeichen oder None
+       (kein Wechsel bis max_min); seit 2026-09-23 daneben '*_genau', der
+       ungerundete Wert (Bisektion, drei Nachkommastellen) — die Schwelle und
+       die §3-Zeilen lesen ihn. 'min'/'min_genau' die kleinere Seite,
+       'richtung' die zugehoerige (nach dem ungerundeten Wert);
        'grad_je_minute' die Laufgeschwindigkeit der Spitze an der Geburtsminute.
     """
     try:
@@ -1391,15 +1484,30 @@ def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
             if spaeter[i] is None and zeichen_index(cs[i]) != basis[i]:
                 spaeter[i] = k
                 z_s[i] = SIGN_NAMES[zeichen_index(cs[i])]
+    # Ungerundet (2026-09-23): zwischen der letzten Minute im Zeichen und der
+    # ersten ausserhalb per Bisektion.
+    def _anders(i, t):
+        return zeichen_index(swe.houses_ex(jd + t * schritt, lat, lon,
+                                          hsys)[0][i]) != basis[i]
+    f_g, s_g = [None] * 12, [None] * 12
+    for i in range(12):
+        if frueher[i] is not None:
+            f_g[i] = round(_genau(lambda t, _i=i: _anders(_i, -t),
+                                  frueher[i] - 1, frueher[i]), 3)
+        if spaeter[i] is not None:
+            s_g[i] = round(_genau(lambda t, _i=i: _anders(_i, t),
+                                  spaeter[i] - 1, spaeter[i]), 3)
     out = []
     for i in range(12):
-        kand = [(frueher[i], 'früher'), (spaeter[i], 'später')]
+        kand = [(f_g[i], frueher[i], 'früher'), (s_g[i], spaeter[i], 'später')]
         kand = [k for k in kand if k[0] is not None]
-        mn, ri = min(kand) if kand else (None, None)
+        gn, mn, ri = min(kand) if kand else (None, None, None)
         out.append({'haus': i + 1, 'lon': round(c0[i] % 360.0, 4),
                     'zeichen': SIGN_NAMES[basis[i]],
                     'frueher': frueher[i], 'spaeter': spaeter[i],
                     'min': mn, 'richtung': ri,
+                    'frueher_genau': f_g[i], 'spaeter_genau': s_g[i],
+                    'min_genau': gn,
                     'zeichen_frueher': z_f[i], 'zeichen_spaeter': z_s[i],
                     'grad_je_minute': round(speed[i], 4)})
     return out
@@ -1407,26 +1515,29 @@ def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
 
 def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
     """Die Spitzen unter der Schwelle (Gegenprobe g), als Paare 1/7 .. 6/12.
+    Seit 2026-09-23 zaehlt der UNGERUNDETE Wert ('min_genau'; fehlt er, die
+    ganze Minute).
 
-    -> [{'paar': (n, n+6), 'minuten', 'richtung', 'von': (zeichen_n, zeichen_n6),
-         'nach': (…, …)}], die knappste zuerst. Leer, wenn nichts unter der
-        Schwelle liegt; None, wenn kipp None ist.
+    -> [{'paar': (n, n+6), 'minuten', 'minuten_genau', 'richtung',
+         'von': (zeichen_n, zeichen_n6), 'nach': (…, …)}], die knappste zuerst.
+        Leer, wenn nichts unter der Schwelle liegt; None, wenn kipp None ist.
     """
     if kipp is None:
         return None
     out = []
     for i in range(6):
         a, b = kipp[i], kipp[i + 6]
-        if a['min'] is None or a['min'] >= schwelle:
+        g = a.get('min_genau', a['min'])
+        if g is None or g >= schwelle:
             continue
         nach_a = a['zeichen_frueher'] if a['richtung'] == 'früher' else a['zeichen_spaeter']
         nach_b = b['zeichen_frueher'] if a['richtung'] == 'früher' else b['zeichen_spaeter']
         out.append({'paar': (a['haus'], b['haus']), 'minuten': a['min'],
-                    'richtung': a['richtung'],
+                    'minuten_genau': g, 'richtung': a['richtung'],
                     'von': (a['zeichen'], b['zeichen']),
                     'nach': (nach_a, nach_b),
                     'grad_je_minute': a['grad_je_minute']})
-    out.sort(key=lambda w: w['minuten'])
+    out.sort(key=lambda w: w['minuten_genau'])
     return out
 
 
@@ -1449,7 +1560,8 @@ _FAKTOR_ANZEIGE = {'Knoten': 'Mondknoten', 'Nordknoten': 'Mondknoten',
                    'Suedknoten': 'Südknoten'}
 _FAKTOR_ARTIKEL = {'Sonne': ('Die Sonne', 'sie'), 'Mond': ('Der Mond', 'er'),
                    'Venus': ('Venus', 'sie'), 'Lilith': ('Lilith', 'sie'),
-                   'Mondknoten': ('Der Mondknoten', 'er')}
+                   'Mondknoten': ('Der Mondknoten', 'er'),
+                   'Südknoten': ('Der Südknoten', 'er')}
 
 
 def _gr_s(deg):
@@ -1486,10 +1598,12 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
        {'name', 'lon', 'zeichen', 'abstand_grenze' (Grad bis zur naechsten
         Zeichengrenze), 'grenze' (z. B. 'Stier/Zwillinge'), 'lage' ('hinter' =
         kurz nach dem Zeichenbeginn, 'vor' = kurz vor dem Zeichenende),
-        'frueher', 'spaeter', 'min', 'richtung', 'zeichen_frueher',
-        'zeichen_spaeter', 'grad_je_minute', 'fehler' (None oder der Grund)}
+        'frueher', 'spaeter', 'min', 'richtung', 'frueher_genau',
+        'spaeter_genau', 'min_genau', 'zeichen_frueher', 'zeichen_spaeter',
+        'grad_je_minute', 'fehler' (None oder der Grund)}
        'frueher'/'spaeter' wie bei kippminuten(): die erste Minute mit anderem
-       Zeichen, None = kein Wechsel bis max_min.
+       Zeichen, None = kein Wechsel bis max_min; '*_genau' seit 2026-09-23 der
+       ungerundete Wert, den Schwelle und §3 lesen.
     """
     try:
         import swisseph as swe
@@ -1518,6 +1632,7 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
         e = {'name': nm, 'lon': l0, 'zeichen': SIGN_NAMES[z],
              'abstand_grenze': abst, 'grenze': grenze, 'lage': lage,
              'frueher': None, 'spaeter': None, 'min': None, 'richtung': None,
+             'frueher_genau': None, 'spaeter_genau': None, 'min_genau': None,
              'zeichen_frueher': None, 'zeichen_spaeter': None,
              'grad_je_minute': None, 'fehler': None}
         out.append(e)
@@ -1571,11 +1686,16 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
                 if zeichen_index(lk) != z:
                     e[key] = k
                     e['zeichen_' + key] = SIGN_NAMES[zeichen_index(lk)]
+                    e[key + '_genau'] = round(_genau(
+                        lambda t, _vz=vz, _lb=lage_bei: zeichen_index(
+                            _lb(_vz * t * schritt) % 360.0) != z,
+                        k - 1, k), 3)
                     break
-        kand = [(e['frueher'], 'früher'), (e['spaeter'], 'später')]
+        kand = [(e['frueher_genau'], e['frueher'], 'früher'),
+                (e['spaeter_genau'], e['spaeter'], 'später')]
         kand = [x for x in kand if x[0] is not None]
         if kand:
-            e['min'], e['richtung'] = min(kand)
+            e['min_genau'], e['min'], e['richtung'] = min(kand)
     return out
 
 
@@ -1583,24 +1703,29 @@ def faktor_kipp_warnungen(fk, schwelle=KIPP_SCHWELLE):
     """Die Faktoren unter der Schwelle (Gegenprobe g, seit 2026-09-19 auch
     fuer Planeten und Punkte), die knappste zuerst.
 
-    -> [{'name', 'minuten', 'richtung', 'von', 'nach', 'grad_je_minute',
-         'abstand_grenze', 'grenze', 'lage'}]; leer, wenn keiner
-        unter der Schwelle liegt; None, wenn fk None ist.
+    Seit 2026-09-23 zaehlt der UNGERUNDETE Wert ('min_genau'; fehlt er, die
+    ganze Minute).
+
+    -> [{'name', 'minuten', 'minuten_genau', 'richtung', 'von', 'nach',
+         'grad_je_minute', 'abstand_grenze', 'grenze', 'lage'}]; leer, wenn
+        keiner unter der Schwelle liegt; None, wenn fk None ist.
     """
     if fk is None:
         return None
     out = []
     for e in fk:
-        if e.get('min') is None or e['min'] >= schwelle:
+        g = e.get('min_genau', e.get('min'))
+        if g is None or g >= schwelle:
             continue
         out.append({'name': e['name'], 'minuten': e['min'],
+                    'minuten_genau': g,
                     'richtung': e['richtung'], 'von': e['zeichen'],
                     'nach': (e['zeichen_frueher'] if e['richtung'] == 'früher'
                              else e['zeichen_spaeter']),
                     'grad_je_minute': e['grad_je_minute'],
                     'abstand_grenze': e['abstand_grenze'],
                     'grenze': e['grenze'], 'lage': e['lage']})
-    out.sort(key=lambda w: w['minuten'])
+    out.sort(key=lambda w: w['minuten_genau'])
     return out
 
 
@@ -1645,21 +1770,21 @@ def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE, faktoren=None):
         wie, steht, wechselt = (
             (f"Die Achse {name}", 'steht', 'wechselt sie') if name
             else (f"Die Spitzen {paar[0]} und {paar[1]}", 'stehen', 'wechseln sie'))
-        m = x['minuten']
-        min_w = 'Minute' if m == 1 else 'Minuten'
+        # Seit 2026-09-23 der ungerundete Wert mit „knapp"/„gut" (s. _min_wort):
+        # „steht 5 Minuten vor einer Zeichengrenze" war bei knapp fünf falsch.
+        m = _min_wort(x.get('minuten_genau', x['minuten']), ziffer=True)
         teile.append(
-            f"{wie} {steht} {m} {min_w} vor einer Zeichengrenze: bei {m} "
-            f"{min_w} {x['richtung']}er Geburt {wechselt} von {x['von'][0]}/"
+            f"{wie} {steht} {m} vor einer Zeichengrenze: bei {m} "
+            f"{x['richtung']}er Geburt {wechselt} von {x['von'][0]}/"
             f"{x['von'][1]} auf {x['nach'][0]}/{x['nach'][1]}")
     n_spitzen = len(teile)
     for x in (fw or []):                       # 2026-09-19 (W34)
         anz = _faktor_anzeige(x['name'])
         wer, pron = _FAKTOR_ARTIKEL.get(anz, (anz, 'er'))
-        m = x['minuten']
-        min_w = 'Minute' if m == 1 else 'Minuten'
+        m = _min_wort(x.get('minuten_genau', x['minuten']), ziffer=True)
         teile.append(
-            f"{wer} steht {m} {min_w} vor einer Zeichengrenze: bei {m} "
-            f"{min_w} {x['richtung']}er Geburt wechselt {pron} von {x['von']} "
+            f"{wer} steht {m} vor einer Zeichengrenze: bei {m} "
+            f"{x['richtung']}er Geburt wechselt {pron} von {x['von']} "
             f"auf {x['nach']}")
     mehr = len(teile) > 1
     teile = [teile[0]] + [(t[0].lower() + t[1:])
@@ -1678,6 +1803,155 @@ def zeichengrenze_fussnote(kipp, schwelle=KIPP_SCHWELLE, faktoren=None):
     return ('; '.join(teile)
             + '. Die Zeichen- und Hausdeutung der Spitzen und die '
               'Zeichendeutung der Faktoren hängen damit an der Geburtszeit.')
+
+
+# --- Hauswechsel bei spaeterer Geburt (neu 2026-09-23) -----------------------
+# kippminuten() und faktor_kippminuten() messen nur ZEICHENwechsel. Beim Haus
+# deckt die 5°-Grenzlage nur die fruehere Geburt ab: Ein Faktor knapp VOR der
+# naechsten Spitze wird ohnehin in beiden Haeusern gelesen. Ein Faktor knapp
+# HINTER der Spitze seines Hauses faellt dagegen bei spaeterer Geburt ins
+# vorige Haus, weil die Spitzen mit der Zeit vorlaufen — und das meldete nichts
+# (Pruefbericht Geburtshoroskop 1+2 vom 22.09.c, Nr. 6: ein Thema fuehrender
+# Planet wechselte bei gut einer Minute spaeterer Geburt das Haus, und das
+# Datenblatt sagte „kein Faktor unter der Schwelle"). Chris-Entscheidung
+# 2026-09-23: pruefen, nur die spaetere Geburt, Schwelle KIPP_SCHWELLE auf den
+# ungerundeten Wert; gemeldet in §3, ⚠-Block, Kopf, Handlungsblock, Text und
+# als Fussnote.
+
+
+def haus_kippminuten(jd, factors, cusps, lat, lon, hsys=b"K", max_min=KIPP_MAX):
+    """Je Faktor: nach wie vielen Minuten SPAETERER Geburt er ins vorige Haus
+    faellt (neu 2026-09-23). Braucht pyswisseph; ohne es None.
+
+    Die fruehere Geburt deckt die 5°-Grenzlage (haus_und_grenzlage()), die
+    spaetere nicht: Die Spitzen laufen mit der Zeit vor, und ein Faktor knapp
+    hinter der Spitze seines Hauses rutscht ins vorige. Gerechnet wird die
+    BEWEGUNG der Spitzen aus der Ephemeride (houses_ex, Minutenschritt bis
+    max_min, dann Bisektion) und an die uebergebenen `cusps` angelegt — der
+    Befund haengt an denselben Spitzen wie das Datenblatt. Die Eigenbewegung
+    des Faktors geht aus der Ephemeride mit ein (merklich nur beim Mond: gut
+    eine Bogenminute in zwei Minuten); ohne Ephemeride gilt er als fest. Die
+    Winkel stehen nicht in der Liste — sie SIND Spitzen —, ausgemusterte
+    Faktoren (AUSGEMUSTERT) auch nicht.
+
+    jd, lat, lon  wie bei kippminuten(); cusps die zwoelf Koch-Spitzen des
+                  Datenblatts (Dezimalgrad).
+    -> Liste von dicts in der Reihenfolge von `factors`:
+       {'name', 'lon', 'haus', 'hinter_spitze' (Grad hinter der Spitze seines
+        Hauses), 'spaeter' (erste ganze Minute im vorigen Haus, None = kein
+        Wechsel bis max_min), 'spaeter_genau' (ungerundet, drei
+        Nachkommastellen), 'haus_spaeter' (das Haus danach)}
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    schritt = 1.0 / 1440.0
+
+    def _delta(neu, alt):
+        return ((neu - alt + 180.0) % 360.0) - 180.0
+
+    c0 = swe.houses_ex(jd, lat, lon, hsys)[0][:12]
+
+    def spitzen_bei(t):
+        ct = swe.houses_ex(jd + t * schritt, lat, lon, hsys)[0][:12]
+        return [(cusps[i] + _delta(ct[i], c0[i])) % 360.0 for i in range(12)]
+
+    tempo = {}
+    for f in factors:
+        nm = f['name']
+        body = 'TRUE_NODE' if nm in ('Suedknoten', 'Südknoten') \
+            else _KIPP_KOERPER.get(nm)
+        if body is None:
+            continue
+        try:
+            tempo[nm] = swe.calc_ut(jd, getattr(swe, body),
+                                    swe.FLG_SWIEPH | swe.FLG_SPEED)[0][3] / 1440.0
+        except Exception:
+            tempo[nm] = 0.0
+
+    out = []
+    for f in factors:
+        nm = f['name']
+        if nm in WINKEL or nm in AUSGEMUSTERT or f.get('lon') is None:
+            continue
+        l0 = f['lon'] % 360.0
+        h = haus_und_grenzlage(l0, cusps)['haus']
+        if h is None:
+            continue
+        out.append({'name': nm, 'lon': l0, 'haus': h,
+                    'hinter_spitze': round((l0 - cusps[h - 1]) % 360.0, 4),
+                    'spaeter': None, 'spaeter_genau': None,
+                    'haus_spaeter': None})
+
+    def haus_bei(e, t, ct):
+        return haus_und_grenzlage(e['lon'] + tempo.get(e['name'], 0.0) * t,
+                                  ct)['haus']
+
+    offen = list(out)
+    for k in range(1, max_min + 1):
+        if not offen:
+            break
+        ck = spitzen_bei(k)
+        for e in list(offen):
+            if haus_bei(e, k, ck) == e['haus']:
+                continue
+            g = _genau(lambda t, _e=e: haus_bei(_e, t, spitzen_bei(t))
+                       != _e['haus'], k - 1, k)
+            e['spaeter'] = k
+            e['spaeter_genau'] = round(g, 3)
+            e['haus_spaeter'] = haus_bei(e, g, spitzen_bei(g))
+            offen.remove(e)
+    return out
+
+
+def haus_kipp_warnungen(hk, schwelle=KIPP_SCHWELLE):
+    """Die Faktoren, die bei spaeterer Geburt unter der Schwelle (ungerundet)
+    das Haus wechseln — die knappste zuerst (Gegenprobe g, seit 2026-09-23).
+
+    -> [{'name', 'minuten', 'minuten_genau', 'haus', 'haus_neu',
+         'hinter_spitze'}]; leer, wenn keiner unter der Schwelle liegt; None,
+        wenn hk None ist.
+    """
+    if hk is None:
+        return None
+    out = [{'name': e['name'], 'minuten': e['spaeter'],
+            'minuten_genau': e['spaeter_genau'], 'haus': e['haus'],
+            'haus_neu': e['haus_spaeter'],
+            'hinter_spitze': e['hinter_spitze']}
+           for e in hk if e.get('spaeter_genau') is not None
+           and e['spaeter_genau'] < schwelle]
+    out.sort(key=lambda w: w['minuten_genau'])
+    return out
+
+
+def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE):
+    """Fertiger FUSSNOTENSATZ zum Hauswechsel fuer die Konstellationsseite —
+    oder None (neu 2026-09-23). Steht als EIGENE Fussnote neben der von
+    zeichengrenze_fussnote(); Schritt 3 setzt ihn, ohne ihn zu formulieren und
+    ohne etwas nachzurechnen.
+
+    hk  Rueckgabe von haus_kippminuten() (oder strukturbild()['haus_kippminuten']).
+    -> str oder None (None = kein Faktor unter der Schwelle).
+    """
+    w = haus_kipp_warnungen(hk, schwelle=schwelle) if hk is not None else None
+    if not w:
+        return None
+    teile = []
+    for x in w:
+        anz = _faktor_anzeige(x['name'])
+        wer, pron = _FAKTOR_ARTIKEL.get(anz, (anz, 'er'))
+        m = _min_wort(x['minuten_genau'], ziffer=True)
+        teile.append(f"{wer} steht {m} hinter der Spitze des {x['haus']}. "
+                     f"Hauses: bei {m} späterer Geburt stünde {pron} im "
+                     f"{x['haus_neu']}. Haus")
+    teile = [teile[0]] + [(t[0].lower() + t[1:])
+                          if t.startswith(('Die ', 'Der ')) else t
+                          for t in teile[1:]]
+    return ('; '.join(teile)
+            + ('. Die Hausdeutung dieser Faktoren hängt damit an der '
+               'Geburtszeit.' if len(teile) > 1 else
+               '. Die Hausdeutung hängt damit an der Geburtszeit.'))
 
 
 def hausherrscher(factors, cusps, aspects=None, klassisch=False,
@@ -2269,6 +2543,12 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     konjunkt. Jod, weich (Kandidat): gleiche Basis, Spitzen weder identisch noch
     konjunkt — das sind zwei Figuren mit benachbarten Spitzen oder eine mit
     zwei Enden, und das ist eine Deutungsentscheidung.
+    GROSSKREUZ, seit 23.09.2026 (Pruefbericht Geburtshoroskop Schritt 1+2
+    vom 23.09., Nr. 1): dieselbe Regel wie beim Rechteck — zwei Grosskreuze
+    sind dieselbe Figur, wenn ihre beiden Gegenpaare paarweise identisch oder
+    konjunkt sind. Jede Figur traegt ihre vier 'ecken' rund ums Kreuz, je Ecke
+    alle Faktoren, die in einer der Meldungen dort stehen (Winkel zuerst).
+
     Grosstrigon, hart: alle drei Ecken paarweise identisch oder konjunkt.
     Kandidaten gibt es dort nicht. Zwei Grosstrigone mit zwei gemeinsamen
     (identischen oder konjunkten) Ecken, deren dritte Ecken NICHT konjunkt
@@ -2287,7 +2567,9 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'grosstrigon_nebenlesarten': [{'fuehrt': i, 'neben': [j, ...],
                                        'orbsummen': [s_i, s_j, ...]}],
         'rechteck_figuren': [{'achsen','trigone','sextile','meldungen'}],
-        'rechteck_meldungen': n, 'rechteck_anzahl': m}
+        'rechteck_meldungen': n, 'rechteck_anzahl': m,
+        'grosskreuz_figuren': [{'achsen','ecken','meldungen'}],
+        'grosskreuz_meldungen': n, 'grosskreuz_anzahl': m}
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -2491,6 +2773,42 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                                  'sextile': r.get('sextile'),
                                  'meldungen': [achsen]})
 
+    # GROSSKREUZ, neu am 2026-09-23 (Pruefbericht Geburtshoroskop Schritt 1+2
+    # vom 23.09., Nr. 1 — Wiederholung). konfigurationen() meldet ein
+    # Grosskreuz einmal je Kombination seiner Ecken; sitzen an zwei Ecken je
+    # zwei konjunkte Faktoren (ein Planet am AC, einer am DC), erscheint
+    # dieselbe Figur mehrfach — im Prueffall DREI Meldungen fuer EINE Figur,
+    # und §6 fasste sie nicht zusammen. Dieselbe Regel wie beim Rechteck.
+    gk = konf.get('grosskreuz', [])
+    gk_ach = konf.get('grosskreuz_achsen', [])
+    gk_figuren = []
+    for i, g in enumerate(gk):
+        achsen = [list(x) for x in (gk_ach[i] if i < len(gk_ach) else ())]
+        for f in gk_figuren:
+            if achsen and achsenpaar_gleich(achsen, f['achsen']):
+                f['meldungen'].append(list(g))
+                break
+        else:
+            gk_figuren.append({'achsen': achsen, 'meldungen': [list(g)]})
+    for f in gk_figuren:
+        # Die Ecken rund ums Kreuz — A, C, B, D fuer A ☍ B und C ☍ D —, je
+        # Ecke alle Faktoren der Meldungen, die dort identisch oder konjunkt
+        # stehen; Winkel zuerst, dann in der Reihenfolge der Meldungen.
+        namen = []
+        for m in f['meldungen']:
+            for x in m:
+                if x not in namen:
+                    namen.append(x)
+        ecken = []
+        if len(f['achsen']) == 2:
+            for ende in (f['achsen'][0][0], f['achsen'][1][0],
+                         f['achsen'][0][1], f['achsen'][1][1]):
+                ecke = [x for x in namen if gleich(x, ende)]
+                ecke.sort(key=lambda x: (WINKEL.index(x) if x in WINKEL
+                                         else len(WINKEL), namen.index(x)))
+                ecken.append(ecke)
+        f['ecken'] = ecken
+
     return {'figuren': figuren, 'kandidaten': kandidaten,
             'meldungen': len(tq), 'anzahl': len(figuren),
             'rechteck_figuren': rect_figuren,
@@ -2501,7 +2819,10 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
             'grosstrigon_figuren': gt_figuren,
             'grosstrigon_meldungen': len(gt),
             'grosstrigon_anzahl': len(gt_figuren),
-            'grosstrigon_nebenlesarten': gt_neben}
+            'grosstrigon_nebenlesarten': gt_neben,
+            'grosskreuz_figuren': gk_figuren,
+            'grosskreuz_meldungen': len(gk),
+            'grosskreuz_anzahl': len(gk_figuren)}
 
 
 def verteilungsmuster(factors, cusps=None):
@@ -3147,7 +3468,9 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     spitzen_kontakte, kippminuten, kipp_warnungen, kippminuten_abweichung —
     und seit dem 2026-09-19 faktor_kippminuten und faktor_kipp_warnungen (W34:
     Zeichengrenze der Planeten und Punkte, nur mit jd_geburt) sowie rang (U2:
-    die Daten der Rangzeilen §10).
+    die Daten der Rangzeilen §10) — und seit dem 2026-09-23
+    haus_kippminuten und haus_kipp_warnungen (Hauswechsel bei spaeterer
+    Geburt, mit jd_geburt, lat UND lon).
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -3170,6 +3493,8 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'kippminuten_abweichung': None,
         'faktor_kippminuten': None,
         'faktor_kipp_warnungen': None,
+        'haus_kippminuten': None,
+        'haus_kipp_warnungen': None,
         'rezeptionen': rezeptionen(factors),
         'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
@@ -3192,6 +3517,12 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             sb['kipp_warnungen'] = kipp_warnungen(kipp)
             sb['kippminuten_abweichung'] = round(max(
                 _winkelabstand(k['lon'], cusps[i]) for i, k in enumerate(kipp)), 3)
+        # Hauswechsel bei spaeterer Geburt (neu 2026-09-23): dieselben
+        # Voraussetzungen wie die Kippminute der Spitzen.
+        _hk = haus_kippminuten(jd_geburt, factors, cusps, lat, lon)
+        if _hk is not None:
+            sb['haus_kippminuten'] = _hk
+            sb['haus_kipp_warnungen'] = haus_kipp_warnungen(_hk)
     # Zeichengrenze der Faktoren (neu 2026-09-19, W34): braucht jd_geburt und
     # pyswisseph.
     if jd_geburt is not None:
@@ -3468,6 +3799,16 @@ def _vert_zeile(v):
 
 STRUKTURBILD_TYPEN = ('geburtshoroskop', 'ea', 'ultimativ', 'transit')
 
+# Wohin eine ⚠-Zeile der Gegenprobe g geht (Zeichengrenze wie Hauswechsel) —
+# Chris-Entscheidung 2026-09-23, fuer alle Typen; die Regel steht im
+# Datenblatt-Modul, Gegenprobe g.
+_KIPP_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
+               'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
+               'in den Handlungsblock am Ende von Schritt 1+2; im Text ein '
+               'Hinweissatz im Kapitel, das die Stelle trägt (klingt sie nur '
+               'mit, genügt diese Zeile), und eine Nennung im Auftakt '
+               '(Gegenprobe g).')
+
 
 def strukturbild_text(sb, typ='geburtshoroskop'):
     """Der fertige `## Strukturbild`-Abschnitt fuers chart_data.md.
@@ -3727,15 +4068,15 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     if kipp:
         def _kipp_paar(i):
             a, b = kipp[i], kipp[i + 6]
-            f = 'nie (>%d)' % KIPP_MAX if a['frueher'] is None else str(a['frueher'])
-            s = 'nie (>%d)' % KIPP_MAX if a['spaeter'] is None else str(a['spaeter'])
+            f = _kipp_wert(a, 'frueher')
+            s = _kipp_wert(a, 'spaeter')
             return (f"{a['haus']}/{b['haus']} ({a['zeichen']}/{b['zeichen']}): "
                     f"früher {f}, später {s}")
         paare_bet = sorted({((h - 1) % 6) for h in beteiligt})
         if paare_bet and len(paare_bet) < 6:
             L.append('- Kippminuten der Spitzen, die an einem Sonderfall, Kreis oder '
                      'Spitzen-Kontakt hängen (Minuten früherer/späterer Geburt bis '
-                     'zum Zeichenwechsel): '
+                     'zum Zeichenwechsel, ungerundet): '
                      + ' · '.join(_kipp_paar(i) for i in paare_bet) + '.')
         L.append('- Kippminuten aller Spitzen: '
                  + ' · '.join(_kipp_paar(i) for i in range(6)) + '.')
@@ -3750,16 +4091,16 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"nicht zu den Spitzen des Datenblatts; Kippminuten prüfen, "
                      f"bevor sie verwendet werden.")
         for w in (sb.get('kipp_warnungen') or []):
+            _g = w.get('minuten_genau', w['minuten'])
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: Spitzen "
-                     f"{w['paar'][0]}/{w['paar'][1]} wechseln bei {w['minuten']} "
-                     f"{'Minute' if w['minuten'] == 1 else 'Minuten'} "
-                     f"{w['richtung']}er Geburt das Zeichen "
-                     f"({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} → "
-                     f"{w['nach'][1]}; {_gr(w['grad_je_minute'])} je Minute). "
-                     f"Gehört in den ⚠-Block und den Datenblatt-Kopf (Gegenprobe "
-                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe"
-                     + ('.' if transit else
-                        "; ein Sonderfall an dieser Spitze führt ein Thema nur "
+                     f"{w['paar'][0]}/{w['paar'][1]} wechseln bei "
+                     f"{_min_dez(_g)} Minuten {w['richtung']}er Geburt das "
+                     f"Zeichen ({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} "
+                     f"→ {w['nach'][1]}; {_gr(w['grad_je_minute'])} je "
+                     f"Minute); im Text „{_min_wort(_g)} {w['richtung']}\". "
+                     + _KIPP_WOHIN
+                     + ('' if transit else
+                        " Ein Sonderfall an dieser Spitze führt ein Thema nur "
                         "mit Begründung (Typmodul, Gewichtungsrang 2)."))
         if not sb.get('kipp_warnungen'):
             L.append(f'- Keine Spitze unter {KIPP_SCHWELLE} Kippminuten.')
@@ -3776,8 +4117,6 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                  'braucht dafür jd_geburt und pyswisseph (Gegenprobe g, seit '
                  '2026-09-19).')
     else:
-        def _mn(x):
-            return 'nie (>%d)' % KIPP_MAX if x is None else str(x)
         nah = [e for e in fk if e['fehler'] is None
                and e['abstand_grenze'] < KIPP_FAKTOR_GRENZE]
         if nah:
@@ -3786,26 +4125,28 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"Grenze stehen " + ' · '.join(
                          f"{_faktor_anzeige(e['name'])} "
                          f"{_gr_s(e['abstand_grenze'])} {e['lage']} der Grenze "
-                         f"{e['grenze']} (früher {_mn(e['frueher'])}, später "
-                         f"{_mn(e['spaeter'])}; {_gr_s(e['grad_je_minute'])} je "
+                         f"{e['grenze']} (früher {_kipp_wert(e, 'frueher')}, "
+                         f"später {_kipp_wert(e, 'spaeter')}; "
+                         f"{_gr_s(e['grad_je_minute'])} je "
                          f"Minute)" for e in nah) + '.')
         else:
             L.append(f"- Zeichengrenze der Faktoren (Gegenprobe g, seit "
                      f"2026-09-19): keiner steht unter {KIPP_FAKTOR_GRENZE:g}° "
                      f"an einer Zeichengrenze.")
         for w in (sb.get('faktor_kipp_warnungen') or []):
+            _g = w.get('minuten_genau', w['minuten'])
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: "
                      f"{_faktor_anzeige(w['name'])}"
-                     f" wechselt bei {w['minuten']} "
-                     f"{'Minute' if w['minuten'] == 1 else 'Minuten'} "
+                     f" wechselt bei {_min_dez(_g)} Minuten "
                      f"{w['richtung']}er Geburt das Zeichen ({w['von']} → "
-                     f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute). "
-                     f"Gehört in den ⚠-Block und den Datenblatt-Kopf (Gegenprobe "
-                     f"g), neben der Zeitunsicherheit aus der Mond-Zeitprobe; "
-                     f"für die Fußnote radix.zeichengrenze_fussnote(kipp, "
-                     f"faktoren=…).")
+                     f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute); "
+                     f"im Text „{_min_wort(_g)} {w['richtung']}\". "
+                     + _KIPP_WOHIN
+                     + " Fußnote: radix.zeichengrenze_fussnote(kipp, "
+                       "faktoren=…).")
         if not sb.get('faktor_kipp_warnungen'):
-            L.append(f'- Kein Faktor unter {KIPP_SCHWELLE} Kippminuten.')
+            L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
+                     f'das Zeichen.')
         _fehl = [e for e in fk if e['fehler']]
         if _fehl:
             L.append('- ⚠ Ohne Kippminute (Zeichengrenze der Faktoren): '
@@ -3813,11 +4154,41 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                                  f"(Abstand zur Grenze "
                                  f"{_gr_s(e['abstand_grenze'])})"
                                  for e in _fehl) + '.')
+    # --- Hauswechsel bei spaeterer Geburt (neu 2026-09-23) -----------------------
+    _hkm = sb.get('haus_kippminuten')
+    if _hkm is None:
+        L.append('- Hauswechsel bei späterer Geburt: nicht gerechnet — '
+                 'strukturbild() braucht dafür jd_geburt, lat und lon (und '
+                 'pyswisseph) (Gegenprobe g, seit 2026-09-23).')
+    else:
+        _hkn = sorted((e for e in _hkm if e['spaeter_genau'] is not None),
+                      key=lambda e: e['spaeter_genau'])
+        if _hkn:
+            _e = _hkn[0]
+            L.append(f"- Hauswechsel bei späterer Geburt (Gegenprobe g, seit "
+                     f"2026-09-23; die frühere Geburt deckt die 5°-Grenzlage): "
+                     f"am knappsten {_faktor_anzeige(_e['name'])}, "
+                     f"{_gr_s(_e['hinter_spitze'])} hinter der Spitze "
+                     f"{_e['haus']} — bei {_min_dez(_e['spaeter_genau'])} "
+                     f"Minuten späterer Geburt in Haus {_e['haus_spaeter']}.")
+        for w in (sb.get('haus_kipp_warnungen') or []):
+            L.append(f"- ⚠ Hauswechsel unter {KIPP_SCHWELLE}: "
+                     f"{_faktor_anzeige(w['name'])} "
+                     f"({_gr_s(w['hinter_spitze'])} hinter der Spitze "
+                     f"{w['haus']}) fällt bei {_min_dez(w['minuten_genau'])} "
+                     f"Minuten späterer Geburt in Haus {w['haus_neu']}; im Text "
+                     f"„{_min_wort(w['minuten_genau'])} später\". "
+                     + _KIPP_WOHIN
+                     + " Fußnote: radix.hauswechsel_fussnote("
+                       "radix.haus_kippminuten(…)).")
+        if not sb.get('haus_kipp_warnungen'):
+            L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
+                     f'späterer Geburt das Haus.')
     L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
              'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
              'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
-             'Zeit-Einschränkung, wo eine beteiligte Spitze unter zehn '
-             'Kippminuten liegt>')
+             'Zeit-Einschränkung, wo eine beteiligte Spitze eine ⚠-Zeile '
+             'trägt>')
     L.append('')
 
     L.append('### 4 · Aspektdichte je Faktor')
@@ -3970,6 +4341,22 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                 L.append('  · Achsen %s und %s, %d Meldungen, EIN Befund.'
                          % (' ☍ '.join(f['achsen'][0]),
                             ' ☍ '.join(f['achsen'][1]),
+                            len(f['meldungen'])))
+    # GROSSKREUZ, neu am 2026-09-23 (Pruefbericht Geburtshoroskop 1+2 vom
+    # 23.09., Nr. 1): dieselbe Achsen-Doppelung wie beim Rechteck.
+    if fg and fg.get('grosskreuz_meldungen', 0) > fg.get('grosskreuz_anzahl', 0):
+        _gn = fg['grosskreuz_anzahl']
+        L.append('- Achsen-Doppelung: %d Großkreuz-Meldungen entsprechen %d %s '
+                 '(die übrigen unterscheiden sich nur darin, welcher von '
+                 'mehreren konjunkten Faktoren als Ecke gezählt wird).'
+                 % (fg['grosskreuz_meldungen'], _gn,
+                    'Figur' if _gn == 1 else 'Figuren'))
+        for f in fg['grosskreuz_figuren']:
+            if len(f['meldungen']) > 1 and len(f.get('ecken') or []) == 4:
+                _ek = ['/'.join(x) for x in f['ecken']]
+                L.append('  · Ecken %s — Gegenpaare %s ☍ %s und %s ☍ %s, %d '
+                         'Meldungen, EIN Befund.'
+                         % (', '.join(_ek), _ek[0], _ek[2], _ek[1], _ek[3],
                             len(f['meldungen'])))
     for t in kf['t_quadrat']:
         zeile = (f"- T-Quadrat: {' ☍ '.join(t['achse'])}, Brennpunkt "
@@ -4915,6 +5302,23 @@ if __name__ == '__main__':
                 _c_davor = _swe.houses_ex(_JD + vz * (_k[key] - 1) / 1440.0, _LAT, _LON, b"K")[0]
                 assert zeichen_name(_c_kipp[i]) != _k['zeichen'], (i, key, _k)
                 assert zeichen_name(_c_davor[i]) == _k['zeichen'], (i, key, _k)
+        # Seit 2026-09-23 ungerundet: der Wechsel liegt zwischen k-1 und k, eine
+        # Sekunde davor steht die Spitze noch im Zeichen, eine danach nicht mehr;
+        # die Warnung prueft den ungerundeten Wert.
+        for i, _k in enumerate(_kp):
+            for key, vz in (('frueher', -1), ('spaeter', +1)):
+                if _k[key] is None:
+                    continue
+                _g = _k[key + '_genau']
+                assert _k[key] - 1 <= _g <= _k[key], (i, key, _k)
+                _c_vor = _swe.houses_ex(
+                    _JD + vz * max(_g - 1 / 60, 0.0) / 1440.0, _LAT, _LON, b"K")[0]
+                _c_nach = _swe.houses_ex(
+                    _JD + vz * (_g + 1 / 60) / 1440.0, _LAT, _LON, b"K")[0]
+                assert zeichen_name(_c_vor[i]) == _k['zeichen'], (i, key, _k)
+                assert zeichen_name(_c_nach[i]) != _k['zeichen'], (i, key, _k)
+        assert all(w['minuten_genau'] < KIPP_SCHWELLE
+                   for w in kipp_warnungen(_kp))
         _kw = kipp_warnungen(_kp, schwelle=KIPP_MAX + 1)
         assert len(_kw) == 6 and _kw == sorted(_kw, key=lambda w: w['minuten'])
         assert kipp_warnungen(_kp, schwelle=0) == []
@@ -5053,6 +5457,26 @@ if __name__ == '__main__':
     _tgk = strukturbild_text(strukturbild(_fgk + _ax(45.0, 315.0), _c))
     assert 'Gegenpaare Jupiter ☍ Mars und Mond ☍ Sonne; keine leere Spitze' \
         in _tgk, _tgk.split('### 6')[1][:600]
+    assert 'Großkreuz-Meldungen' not in _tgk
+    # 2026-09-23: Grosskreuz mit je einem Planeten am AC und am DC -> drei
+    # Meldungen, EINE Figur (Pruefbericht Geburtshoroskop 1+2 vom 23.09., Nr. 1).
+    _fgx = [{'name': 'Chiron', 'lon': 90.0}, {'name': 'Uranus', 'lon': 270.0},
+            {'name': 'Jupiter', 'lon': 3.0}, {'name': 'Mars', 'lon': 183.0}] + \
+        _ax(0.0, 300.0)
+    _agx = huber_aspects(_fgx)
+    _kgx = konfigurationen(_fgx, _agx)
+    assert len(_kgx['grosskreuz']) == 3, _kgx['grosskreuz']
+    _ggx = gruppiere_figuren(_kgx, _agx)
+    assert _ggx['grosskreuz_meldungen'] == 3 and \
+        _ggx['grosskreuz_anzahl'] == 1, _ggx
+    assert _ggx['grosskreuz_figuren'][0]['ecken'] == [
+        ['AC', 'Jupiter'], ['Chiron'], ['DC', 'Mars'], ['Uranus']], _ggx
+    _tgx = strukturbild_text(strukturbild(_fgx, _c)).split('### 6')[1]
+    assert 'Achsen-Doppelung: 3 Großkreuz-Meldungen entsprechen 1 Figur (' \
+        in _tgx, _tgx[:900]
+    assert ('Ecken AC/Jupiter, Chiron, DC/Mars, Uranus — Gegenpaare '
+            'AC/Jupiter ☍ DC/Mars und Chiron ☍ Uranus, 3 Meldungen, EIN '
+            'Befund.') in _tgx, _tgx[:900]
 
     # L9: zwei Grosstrigone mit zwei gemeinsamen Ecken, dritte Ecken 6°30′
     # auseinander (nicht konjunkt) -> EIN Befund, die engere Figur fuehrt.
@@ -5216,34 +5640,39 @@ if __name__ == '__main__':
         assert not [e for e in faktor_kippminuten(
             _jd, _fw + [{'name': 'Glückspunkt', 'lon': 100.0}])
             if e['name'] == 'Glückspunkt']
-        _fkw = faktor_kipp_warnungen(_fkm)
+        _fkw = faktor_kipp_warnungen(_fkm, schwelle=10)
         assert _fkw[0]['minuten'] <= _fkw[-1]['minuten']
         assert any(w['name'] == 'Sonne' for w in _fkw), _fkw
         assert faktor_kipp_warnungen(None) is None
         _sbw = strukturbild(_fw, _cw, jd_geburt=_jd, lat=_LA, lon=_LO)
         _t3w = strukturbild_text(_sbw).split('### 3')[1].split('### 4')[0]
         assert 'Sonne 0°00′1' in _t3w and 'hinter der Grenze' in _t3w, _t3w
-        assert '⚠ Kippminute unter %d: Sonne wechselt' % KIPP_SCHWELLE in _t3w
-        _fn = zeichengrenze_fussnote(_sbw['kippminuten'],
+        # 17″ sind gut sechs Minuten — seit 2026-09-23 ueber der Schwelle
+        assert 'Kein Faktor wechselt unter %d Minuten das Zeichen' \
+            % KIPP_SCHWELLE in _t3w, _t3w
+        _fn = zeichengrenze_fussnote(_sbw['kippminuten'], schwelle=10,
                                      faktoren=_sbw['faktor_kippminuten'])
-        assert 'ie Sonne steht %d Minute' % _so['frueher'] in _fn, _fn
+        assert 'ie Sonne steht %s vor einer Zeichengrenze' % _min_wort(
+            _so['frueher_genau'], ziffer=True) in _fn, _fn
         # ohne faktoren: wortgleich wie vorher (nur Spitzen)
         assert zeichengrenze_fussnote(_sbw['kippminuten']) == \
             zeichengrenze_fussnote(_sbw['kippminuten'], faktoren=None)
-        _nur = zeichengrenze_fussnote(None, faktoren=[_so])
+        _nur = zeichengrenze_fussnote(None, schwelle=10, faktoren=[_so])
         assert _nur.startswith('Die Sonne steht') and _nur.endswith(
             'Die Zeichendeutung hängt damit an der Geburtszeit.'), _nur
         # Spitzen UND Faktoren in einem Satz; Planet ohne Artikel bleibt gross
         _kpf = [dict(haus=i + 1, zeichen='Widder', frueher=3, spaeter=None, min=3,
                      richtung='früher', zeichen_frueher='Fische',
                      zeichen_spaeter=None, grad_je_minute=0.25) for i in range(12)]
-        _mk = dict(_so, name='Merkur', min=4, frueher=4)
-        _bd = zeichengrenze_fussnote(_kpf, faktoren=[_so, _mk])
+        _mk = dict(_so, name='Merkur', min=4, frueher=4, min_genau=4.0,
+                   frueher_genau=4.0)
+        _bd = zeichengrenze_fussnote(_kpf, schwelle=10, faktoren=[_so, _mk])
         assert _bd.startswith('Die Achse AC/DC steht 3 Minuten') and \
             '; Merkur steht 4 Minuten' in _bd and '; die Sonne steht' in _bd and \
             _bd.endswith('die Zeichendeutung der Faktoren hängen damit an der '
                          'Geburtszeit.'), _bd
-        assert zeichengrenze_fussnote(None, faktoren=[_mk, _so]).endswith(
+        assert zeichengrenze_fussnote(None, schwelle=10,
+                                      faktoren=[_mk, _so]).endswith(
             'Die Zeichendeutung dieser Faktoren hängt damit an der Geburtszeit.')
         assert zeichengrenze_fussnote(None, faktoren=[]) is None
         # F19 mit Spitzen-Warnung: im Transit ohne Typmodul-Verweis
@@ -5259,5 +5688,72 @@ if __name__ == '__main__':
         # Falsche Laenge (anderes jd): kein Befund, aber ein lauter Grund
         _fx = faktor_kippminuten(_jdm, [{'name': 'Mond', 'lon': 1.0}])[0]
         assert _fx['fehler'] and _fx['min'] is None, _fx
+        # _min_wort (2026-09-23): „knapp" unter, „gut" ueber der ganzen Minute
+        assert _min_wort(3.8) == 'knapp vier Minuten'
+        assert _min_wort(1.3) == 'gut eine Minute'
+        assert _min_wort(1.3, dativ=True) == 'gut einer Minute'
+        assert _min_wort(2.0) == 'zwei Minuten'
+        assert _min_wort(0.3) == 'weniger als eine Minute'
+        assert _min_wort(3.8, ziffer=True) == 'knapp 4 Minuten'
+        # Unter der Schwelle: Sonne 3″ hinter der Grenze -> gut eine Minute;
+        # die erste ganze Minute (2) laege ueber der Schwelle, der ungerundete
+        # Wert darunter — genau der Fall, den die Aufrundung verschluckte.
+        _jd3 = _ts + (3.0 / 3600.0) / _swe.calc_ut(
+            _ts, _swe.SUN, _FL | _swe.FLG_SPEED)[0][3]
+        _cw3 = list(_swe.houses_ex(_jd3, _LA, _LO, b"K")[0][:12])
+        _fw3 = [{'name': n, 'lon': _l(_jd3, b)} for n, b in (
+            ('Sonne', _swe.SUN), ('Mond', _swe.MOON), ('Merkur', _swe.MERCURY),
+            ('Mars', _swe.MARS), ('Mondknoten', _swe.TRUE_NODE))] + \
+            _ax(_cw3[0], _cw3[9])
+        _sb3 = strukturbild(_fw3, _cw3, jd_geburt=_jd3, lat=_LA, lon=_LO)
+        _s3 = [e for e in _sb3['faktor_kippminuten'] if e['name'] == 'Sonne'][0]
+        assert _s3['frueher'] == 2 and 1.0 < _s3['frueher_genau'] < 1.5, _s3
+        _t33 = strukturbild_text(_sb3).split('### 3')[1].split('### 4')[0]
+        assert '⚠ Kippminute unter %d: Sonne wechselt bei 1,' \
+            % KIPP_SCHWELLE in _t33, _t33
+        assert 'im Text „gut eine Minute früher"' in _t33, _t33
+        assert zeichengrenze_fussnote(
+            _sb3['kippminuten'],
+            faktoren=_sb3['faktor_kippminuten']).count('gut 1 Minute') >= 2
+        # Hauswechsel bei spaeterer Geburt (2026-09-23): Saturn 0,05° hinter
+        # der Spitze 6 faellt ins Haus 5; Jupiter mitten in Haus 3 nicht.
+        _fh = [{'name': 'Saturn', 'lon': (_cw[5] + 0.05) % 360},
+               {'name': 'Jupiter',
+                'lon': (_cw[2] + ((_cw[3] - _cw[2]) % 360) / 2) % 360}] + \
+            _ax(_cw[0], _cw[9])
+        _hk = haus_kippminuten(_jd, _fh, _cw, _LA, _LO)
+        assert [e['name'] for e in _hk] == ['Saturn', 'Jupiter'], _hk
+        _sa = _hk[0]
+        assert _sa['haus'] == 6 and _sa['haus_spaeter'] == 5, _sa
+        assert 0 < _sa['spaeter_genau'] < KIPP_SCHWELLE, _sa
+        # gegen die Ephemeride: eine Sekunde davor Haus 6, eine danach Haus 5
+        for _dt, _soll in ((max(_sa['spaeter_genau'] - 1 / 60, 0.0), 6),
+                           (_sa['spaeter_genau'] + 1 / 60, 5)):
+            _cx = list(_swe.houses_ex(_jd + _dt / 1440.0, _LA, _LO, b"K")[0][:12])
+            assert haus_und_grenzlage(_fh[0]['lon'], _cx)['haus'] == _soll, \
+                (_dt, _soll)
+        assert _hk[1]['spaeter_genau'] is None or \
+            _hk[1]['spaeter_genau'] > KIPP_SCHWELLE, _hk[1]
+        assert [w['name'] for w in haus_kipp_warnungen(_hk)] == ['Saturn']
+        assert haus_kipp_warnungen(None) is None
+        _hf = hauswechsel_fussnote(_hk)
+        assert _hf.startswith('Saturn steht ') and \
+            'hinter der Spitze des 6. Hauses' in _hf and \
+            'stünde er im 5. Haus' in _hf and \
+            _hf.endswith('Die Hausdeutung hängt damit an der Geburtszeit.'), _hf
+        assert hauswechsel_fussnote(_hk, schwelle=0) is None
+        # Strukturbild mit den Planeten von oben dazu (§8 braucht mehr als zwei)
+        _fhv = [f for f in _fw if f['name'] not in WINKEL] + _fh
+        _t3h = strukturbild_text(strukturbild(
+            _fhv, _cw, jd_geburt=_jd, lat=_LA, lon=_LO)).split(
+            '### 3')[1].split('### 4')[0]
+        assert '⚠ Hauswechsel unter %d: Saturn' % KIPP_SCHWELLE in _t3h, _t3h
+        assert 'in Haus 5; im Text „' in _t3h and 'später"' in _t3h, _t3h
+        assert 'Kein Faktor wechselt unter' not in _t3h.split(
+            'Hauswechsel bei späterer Geburt')[1], _t3h
+        assert 'Hauswechsel bei späterer Geburt: nicht gerechnet' in \
+            strukturbild_text(strukturbild(_fhv, _cw, jd_geburt=_jd))
         print('Faktor-Kippminuten-Test: OK — Sonne', _so['frueher'],
-              'Minuten, Mond', _mo['frueher'], 'Minuten')
+              'Minuten, Mond', _mo['frueher'], 'Minuten | ungerundet: Sonne',
+              _s3['frueher_genau'], '| Hauswechsel Saturn',
+              _sa['spaeter_genau'], 'Minuten')
