@@ -146,8 +146,6 @@ section.cover {{ page: cover; position:relative; width:21cm; height:29.7cm;
 .cv-name {{ font-family:"Cinzel"; font-size:31pt; letter-spacing:0.15em;
    color:#f2ead6; }}
 .cv-rule {{ width:3.2cm; height:1pt; background:{GOLD_L}; margin:0 auto; }}
-.cv-sub {{ font-family:"EB Garamond"; font-size:11.4pt; letter-spacing:0.05em;
-   color:#cfd9d8; }}
 .cv-leit {{ font-family:"EB Garamond Italic"; font-style:italic; font-size:15.4pt;
    color:#4a3512; letter-spacing:0.02em; }}
 .cv-birth {{ font-family:"EB Garamond"; font-size:8.6pt; letter-spacing:0.2em;
@@ -256,8 +254,10 @@ def cover_html(kicker):
     """Das Cover. `kicker` ist der DOKUMENTTYP AUS DER H1 der analyse.md
     (parsed['doctype']) in Versalien — kein Feld des @@DECKBLATT-Blocks
     (Chris-Entscheidung 2026-09-19, Frage 3); einen beschreibenden Untertitel
-    hat das Cover nicht. Hoehen im 842-Raster: 88 Kicker, 112 Name, 168 Linie,
-    186 Zeile „Horoskop", 788 Leitsatz, 822 Geburtsdaten."""
+    hat das Cover nicht — auch keine zweite Typzeile: Unter der Linie stand bis
+    zum 2026-09-23 eine feste Zeile „Horoskop", die den Kicker doppelte
+    (Chris-Entscheidung: „nur einmal"). Hoehen im 842-Raster: 88 Kicker,
+    112 Name, 168 Linie, 788 Leitsatz, 822 Geburtsdaten."""
     return f"""<section class="cover">
 <div class="cv-sky"></div>
 {cover_stars()}
@@ -265,7 +265,6 @@ def cover_html(kicker):
 <div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">{esc(kicker)}</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
-<div class="cv-block cv-sub" style="top:{y2cm(186):.2f}cm">Horoskop</div>
 <div class="cv-block cv-leit" style="top:{y2cm(788):.2f}cm">{html.escape(LEITSATZ)}</div>
 <div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">{esc(GEBURTSZEILE)}</div>
 </section>"""
