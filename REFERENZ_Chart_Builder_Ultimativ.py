@@ -337,7 +337,9 @@ _BY = {f['name']: f for f in cd.factors}
 # mit Umlaut ('Glueckspunkt' vs 'Glückspunkt'). Woertlich abgeschrieben gab
 # das einen KeyError in konst_zeilen(). radix loest das seit dem 2026-09-15
 # mit Aliassen; hier dasselbe, damit die Vorlage nicht vom Zufall der
-# Schreibweise haengt.
+# Schreibweise haengt. Der Glueckspunkt ist seit dem 2026-09-23 ausgemustert
+# und steht nur noch in Datenblaettern von vor dem Stichtag; konst_zeilen()
+# uebergeht ihn sonst.
 for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
     if _a in _BY and _b not in _BY:
         _BY[_b] = _BY[_a]
@@ -382,22 +384,26 @@ def konst_zeilen():
                         cd.gr(cd.SUEDKNOTEN % 30), cd.haus(cd.SUEDKNOTEN),
                         'rückläufig' if _BY['Mondknoten']['retro'] else 'direkt'))
             continue
+        if n == 'Glueckspunkt' and n not in _BY:
+            # Seit 2026-09-23 ausgemustert: ein neues Chart fuehrt ihn nicht.
+            # Nur ein Datenblatt von vor dem Stichtag traegt ihn noch — dann
+            # rendert er wie bisher (Design-Render-Modul, Konstellationsseite).
+            continue
         f = _BY[n]
         lauf = 'rückläufig' if f['retro'] else 'direkt'
         if n == 'Glueckspunkt':
-            lauf = '—'
+            lauf = '—'                       # gerechneter Punkt, Altbestand
         # Glyphenregel wie in chartdoc._fac(): ueber die ZEICHENLAENGE, nicht
         # ueber den verdrahteten String 'Pho' (Design-Modul, Radseite, seit
         # 2026-09-08; hier nachgezogen 2026-09-16). Ein Feld von mehr als
         # einem Zeichen ist ein Name, kein Symbol.
         glyph = '' if len(f['glyph']) > 1 else f['glyph']
-        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der ASCII-Name der
-        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt.
-        # Die Namenstoleranz oben deckt nur `_BY` ab; `Glueckspunkt` stand
-        # deshalb zweimal in einer gerenderten Konstellationstabelle
-        # (Prueflaeufe Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.,
-        # beide Male Klasse 1, beide Male nur chart-lokal geflickt).
-        # verify(), die Pflicht-Bausteine und der Preflight sehen das nicht.
+        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der Name der
+        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt;
+        # `f['name']` traegt den Vertragsnamen. Ein ASCII-Name stand deshalb
+        # zweimal in einer gerenderten Konstellationstabelle (Prueflaeufe
+        # Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.). verify(), die
+        # Pflicht-Bausteine und der Preflight sehen das nicht.
         out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out
@@ -464,7 +470,8 @@ def dt(d, kurz=False):
 
 
 # Der §11-Report ist ASCII: freie Textfelder (Transit-Staende,
-# Stationen-Position, Ziel-Aufzaehlung) tragen 'Loewe' und 'Glueckspunkt'.
+# Stationen-Position, Ziel-Aufzaehlung) tragen 'Loewe' und — in einem
+# Datenblatt von vor dem 2026-09-23 — 'Glueckspunkt'.
 # ziel_label() greift dort nicht — darum hier einmal zurueckuebersetzen.
 _UM = {'Loewe': 'Löwe', 'Schuetze': 'Schütze', 'Glueckspunkt': 'Glückspunkt',
        'Suedknoten': 'Südknoten'}

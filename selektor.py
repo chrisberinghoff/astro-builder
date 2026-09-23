@@ -18,9 +18,12 @@ Hausbloecke und schreibt die Gewichtungsstufe als Deutungsanweisung in die
 referenz.md (Abstand <= 2° -> Nebenhaus fuehrt; 2°-5° -> Nebenhaus als Nebenton).
 Ohne `nebenhaus=` verhaelt sich alles wie zuvor.
 
-FAKTORNAMEN: kanonisch sind die zehn Planeten und die fuenf Spezialfaktoren
-CHIRON, LILITH, MONDKNOTEN, PHOLUS, GLUECKSPUNKT. Gaengige Schreibweisen loest
-FAKTOR_ALIAS auf (KNOTEN/NORDKNOTEN -> MONDKNOTEN, VERMOEGEN -> GLUECKSPUNKT ...).
+FAKTORNAMEN: kanonisch sind die zehn Planeten und die vier Spezialfaktoren
+CHIRON, LILITH, MONDKNOTEN, PHOLUS. Gaengige Schreibweisen loest FAKTOR_ALIAS
+auf (KNOTEN/NORDKNOTEN -> MONDKNOTEN ...). Der GLUECKSPUNKT ist seit dem
+2026-09-23 ausgemustert (AUSGEMUSTERT): Seine FAKTOR- und ASPEKT-Zeilen aus
+einem aelteren Datenblatt werden uebergangen und als HINWEIS gemeldet — nie als
+Fehlstelle, und seine Bibliotheksdatei gibt es nicht mehr.
 Die Knotenachse wird IMMER ueber die Nordknoten-Zeile gefuehrt — eine eigene
 SUEDKNOTEN-Zeile wird uebersprungen und protokolliert, weil die Referenz
 achsenbasiert ist (MONDKNOTEN_HAUS_6 = ☊6/☋12) und eine zweite Zeile mit haus=12
@@ -75,7 +78,6 @@ zweitem Argument prueft er zusaetzlich, ob jeder Block da ist.
     ...
     FAKTOR MONDKNOTEN zeichen=Wassermann haus=6
     FAKTOR PHOLUS zeichen=Fische haus=7 nebenhaus=8 abstand=4.17
-    FAKTOR GLUECKSPUNKT zeichen=Fische haus=7
     ACHSE AC zeichen=Loewe
     ACHSE MC zeichen=Widder
     ASPEKT SONNE MOND
@@ -109,6 +111,7 @@ FAKTOR_ALIAS = {
     'MONDKNOTENACHSE': 'MONDKNOTEN', 'KNOTENACHSE': 'MONDKNOTEN',
     'AUFSTEIGENDER MONDKNOTEN': 'MONDKNOTEN', 'DRACHENKOPF': 'MONDKNOTEN',
     'SCHWARZER MOND': 'LILITH', 'LILITH (SCHWARZER MOND)': 'LILITH',
+    # Nur noch zum Wiedererkennen: der Glueckspunkt ist ausgemustert (s. u.).
     'PARS FORTUNAE': 'GLUECKSPUNKT', 'VERMOEGEN': 'GLUECKSPUNKT',
     'GLUECKSPUNKT (PARS FORTUNAE)': 'GLUECKSPUNKT',
     'ASZENDENT': 'AC', 'DESZENDENT': 'DC',
@@ -124,6 +127,15 @@ SPIEGEL_FAKTOREN = {
     'SUEDKNOTEN': 'MONDKNOTEN', 'ABSTEIGENDER MONDKNOTEN': 'MONDKNOTEN',
     'DRACHENSCHWANZ': 'MONDKNOTEN',
 }
+
+# Faktoren, die seit einem Stichtag weder gerechnet noch gedeutet werden
+# (kanonischer Name -> Stichtag; Chris-Entscheidung 2026-09-23, dieselbe
+# Tabelle wie radix.AUSGEMUSTERT). Ein Datenblatt von vor dem Stichtag kann
+# sie noch im @@SELEKTOR-Block tragen. Ihre FAKTOR- und ASPEKT-Zeilen werden
+# uebergangen und als HINWEIS gemeldet. Weder ein harter Abbruch (das alte
+# Datenblatt ist sonst unbrauchbar) noch eine Fehlstelle (die liesse Schritt 2
+# den Faktor „aus den Nachbarbloecken" deuten).
+AUSGEMUSTERT = {'GLUECKSPUNKT': '2026-09-23'}
 
 # Grenzlagen-Schwellen (Grad vor der naechsten Hausspitze).
 GRENZ_ORB = 5.0      # bis hierher gilt ueberhaupt Grenzlage (= radix.HAUS_ORB)
@@ -145,8 +157,7 @@ F05 = '05_Aszendent_MC_Deszendent_Tabellen.txt'
 SPEZFILE = {'CHIRON': 'Chiron_Haus_Zeichen_Aspekte.txt',
             'LILITH': 'Lilith_SchwarzerMond_Haus_Zeichen_Aspekte.txt',
             'MONDKNOTEN': 'Mondknotenachse_Haus_Zeichen_Aspekte.txt',
-            'PHOLUS': 'Pholus_Haus_Zeichen_Aspekte.txt',
-            'GLUECKSPUNKT': 'Glueckspunkt_Haus_Zeichen_Aspekte.txt'}
+            'PHOLUS': 'Pholus_Haus_Zeichen_Aspekte.txt'}
 ZEICHENFILE = {'SONNE': F02, 'MOND': F02, 'MERKUR': F03, 'VENUS': F03,
                'MARS': F03, 'JUPITER': F04, 'SATURN': F04,
                'URANUS': F01, 'NEPTUN': F01, 'PLUTO': F01}
@@ -243,7 +254,7 @@ FAKTOR_ANZEIGE = {'SONNE': 'Sonne', 'MOND': 'Mond', 'MERKUR': 'Merkur',
                   'SATURN': 'Saturn', 'URANUS': 'Uranus', 'NEPTUN': 'Neptun',
                   'PLUTO': 'Pluto', 'CHIRON': 'Chiron', 'LILITH': 'Lilith',
                   'MONDKNOTEN': 'Mondknoten', 'SUEDKNOTEN': 'Südknoten',
-                  'PHOLUS': 'Pholus', 'GLUECKSPUNKT': 'Glückspunkt'}
+                  'PHOLUS': 'Pholus'}
 
 
 def _ord(n, tafel):
@@ -392,6 +403,12 @@ def parse_chart(text):
                 faktoren.append(sp)
                 continue
             name = norm_faktor(roh)
+            if name in AUSGEMUSTERT:
+                hinweise.append(
+                    'FAKTOR %s -> uebergangen: seit dem %s ausgemustert (weder '
+                    'gerechnet noch gedeutet, keine Bloecke). Die Zeile aus dem '
+                    '@@SELEKTOR-Block streichen.' % (name, AUSGEMUSTERT[name]))
+                continue
             zeichen = haus = nebenhaus = abstand = None
             fuehrt = False
             for p in parts[2:]:
@@ -419,6 +436,16 @@ def parse_chart(text):
             achsen[ax] = z
         elif kw == 'ASPEKT':
             if len(parts) >= 3:
+                weg = [norm_faktor(p) for p in parts[1:3]
+                       if norm_faktor(p) in AUSGEMUSTERT]
+                if weg:
+                    hinweise.append(
+                        'ASPEKT %s %s -> uebergangen: %s ist seit dem %s '
+                        'ausgemustert (weder gerechnet noch gedeutet). Die '
+                        'Zeile aus dem @@SELEKTOR-Block streichen.'
+                        % (norm(parts[1]), norm(parts[2]), weg[0],
+                           AUSGEMUSTERT[weg[0]]))
+                    continue
                 aspekte.append((norm_token(parts[1]), norm_token(parts[2])))
     # LEERE ASPEKTEBENE (neu 2026-09-15, Pruefbericht Geburtshoroskop
     # Schritt 3+4). Die ASPEKT-Zeilen sind der einzige Weg, auf dem
@@ -480,7 +507,7 @@ def load_bundle(path):
 
 
 # ---------------------------------------------------------------- Ableitung
-SPEZSET = ('CHIRON', 'LILITH', 'PHOLUS', 'GLUECKSPUNKT')
+SPEZSET = ('CHIRON', 'LILITH', 'PHOLUS')
 
 
 def resolve_aspect(a, b):
@@ -498,7 +525,7 @@ def resolve_aspect(a, b):
             ax2 = 'AC' if other == 'DC' else 'MC'
             return SPEZFILE['MONDKNOTEN'], 'MONDKNOTEN_' + ax2, 'für %s an der Achse gekippt' % other
         return None, None, 'nicht als Block geführt (%s-%s)' % (a, b)
-    # Spezialfaktor (Chiron/Lilith/Pholus/Glückspunkt) mit Planet oder Achse
+    # Spezialfaktor (Chiron/Lilith/Pholus) mit Planet oder Achse
     for sp in SPEZSET:
         if sp in (a, b):
             other = b if a == sp else a
@@ -1014,6 +1041,8 @@ def _pruefe_hart(chart):
             '%s->%s' % (k, v) for k, v in sorted(FAKTOR_ALIAS.items())))
         print('   Spiegelpole (bewusst uebersprungen): %s'
               % ', '.join(sorted(SPIEGEL_FAKTOREN)))
+        print('   Ausgemustert (uebergangen, mit HINWEIS): %s'
+              % ', '.join(sorted(AUSGEMUSTERT)))
         sys.exit(1)
 
 
@@ -1070,12 +1099,21 @@ def _selbsttest():
         'FAKTOR SATURN zeichen=Jungfrau haus=6 nebenhaus=7 abstand=3.25',
         'FAKTOR CHIRON zeichen=Stier haus=2 fuehrt=ja',
         'FAKTOR SUEDKNOTEN zeichen=Widder haus=4 nebenhaus=5 abstand=4.00',
+        'FAKTOR GLÜCKSPUNKT zeichen=Fische haus=7',
         'ACHSE AC zeichen=Widder',
         'ASPEKT SONNE MOND',
         'ASPEKT CHIRON LILITH',
         'ASPEKT AC MC',
+        'ASPEKT SONNE GLUECKSPUNKT',
         '@@ENDE'])
     chart = parse_chart(blk)
+    # Ausgemustert (2026-09-23): Glueckspunkt-Zeilen fallen mit HINWEIS weg —
+    # kein Faktor, kein Aspekt, keine Fehlstelle, kein Abbruch.
+    assert 'GLUECKSPUNKT' not in [f['name'] for f in chart['faktoren']]
+    assert all('GLUECKSPUNKT' not in a for a in chart['aspekte'])
+    assert sum('ausgemustert' in h for h in chart['hinweise']) == 2, \
+        chart['hinweise']
+    assert 'GLUECKSPUNKT' not in SPEZFILE and 'GLUECKSPUNKT' not in SPEZSET
     req, prot, grenz = build_requests(chart)
     g = dict((x['faktor'], x) for x in grenz)
     # W35: Wortform, echte Umlaute, keine Gradzahl; fuehrendes Haus vorn
@@ -1120,7 +1158,7 @@ def _selbsttest():
     assert len(r['fehlstellen']) == 2
     print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
-          'Nur-Liste-Modus (W40)]')
+          'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert]')
 
 
 def main():

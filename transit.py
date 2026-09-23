@@ -209,6 +209,13 @@ NAME_MAP = {'Knoten': 'Mondknoten',              # factors-Name -> Radix-Zielnam
 # `Nordknoten` soll nicht mehr abbrechen, sondern auf den Vertragsnamen zeigen.
 ALIAS_ZIEL = {'Knoten': 'Mondknoten', 'Nordknoten': 'Mondknoten'}
 
+# Ausgemustert seit 2026-09-23 (Chris-Entscheidung; dieselbe Liste wie
+# radix.AUSGEMUSTERT): der Glueckspunkt. Ein Datenblatt von vor dem Stichtag
+# fuehrt ihn noch im factors-Block. radix_from_chart_data() nimmt ihn nicht
+# als Transitziel auf — sonst rechnete ein neues Transit- oder EA-Dokument ihn
+# mit — und sagt das auf stderr.
+AUSGEMUSTERT = ('Glückspunkt', 'Glueckspunkt')
+
 # 2026-09-19 (W1): Exakt heisst Nulldurchgang. Ein Minimum OHNE Vorzeichenwechsel
 # der Differenz zum Aspektpunkt (Umkehr vor dem Punkt, Stationsberuehrung,
 # Pendel des wahren Knotens) ist eine Annaeherung, auch wenn es dem Punkt bis auf
@@ -259,8 +266,16 @@ def radix_from_chart_data(path):
     txt = open(path, encoding='utf-8').read()
     rx = re.compile(r"'name'\s*:\s*'([^']+)'[^{}]*?'lon'\s*:\s*(-?\d+\.?\d*)")
     radix = {}
+    weg = set()
     for name, lon in rx.findall(txt):
+        if name in AUSGEMUSTERT:
+            weg.add(name)
+            continue
         radix[NAME_MAP.get(name, name)] = float(lon)
+    if weg:
+        print("[hinweis] %s: seit dem 2026-09-23 ausgemustert, nicht als "
+              "Transitziel gerechnet (altes Datenblatt)." % ', '.join(sorted(weg)),
+              file=sys.stderr)
     if not radix:
         raise SystemExit(
             f"Keine Radix gefunden in {path}: erwartet den factors/achsen-Block "
@@ -2176,13 +2191,30 @@ def _selbsttest(still=False):
     finally:
         ERZWINGE_MOSEPH = alt_mo
         ZEITZONE = alt_zz
+    # Ausgemustert (2026-09-23): ein Glueckspunkt im factors-Block eines alten
+    # Datenblatts wird kein Transitziel. Konstruierter Block, keine echten Daten.
+    import tempfile, contextlib, io
+    with tempfile.NamedTemporaryFile('w', suffix='_chart_data.md', delete=False,
+                                     encoding='utf-8') as _tf:
+        _tf.write("factors = [{'name': 'Sonne', 'lon': 10.5}, "
+                  "{'name': 'Glückspunkt', 'lon': 99.0}, "
+                  "{'name': 'Knoten', 'lon': 200.0}]\n")
+    _err = io.StringIO()
+    with contextlib.redirect_stderr(_err):
+        _rx = radix_from_chart_data(_tf.name)
+    os.unlink(_tf.name)
+    pruefe(_rx == {'Sonne': 10.5, 'Mondknoten': 200.0},
+           "Ausgemustert: Glueckspunkt darf kein Transitziel sein (%r)" % (_rx,))
+    pruefe('ausgemustert' in _err.getvalue(),
+           "Ausgemustert: der Hinweis auf stderr fehlt")
     if not still:
         if fehler:
             print("Selbsttest transit.py: %d FEHLER" % len(fehler))
             for f_ in fehler:
                 print("  - " + f_)
         else:
-            print("Selbsttest transit.py: alle Faelle gruen (W1, W3, W45, W46, W55, F20, F21)")
+            print("Selbsttest transit.py: alle Faelle gruen (W1, W3, W45, W46, W55, F20, F21, "
+                  "Glueckspunkt ausgemustert)")
     return not fehler
 
 

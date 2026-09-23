@@ -15,7 +15,8 @@ Kategorien:
   haus          Haus_*    (beide Namensstile, Faktor-in-Haus)
   sonnenzeichen *_Sonnenzeichen  (ganze Datei = 1 Block)
   aspekt        *_Aspekte (Partnerblock je Aspekt, Textbasierte Partnererkennung)
-  spezial       Chiron/Glueckspunkt/Lilith/Pholus/Mondknotenachse (Haus/Zeichen/Aspekt)
+  spezial       Chiron/Lilith/Pholus/Mondknotenachse (Haus/Zeichen/Aspekt;
+                die Glueckspunkt-Datei ist seit 2026-09-23 ausgemustert)
   grundlagen    01        (ganze Datei = 1 Block)
   achsen        05        (AC je Zeichen + DC-Tabelle + MC-Tabelle)
 
@@ -54,7 +55,7 @@ RE_SIGN_I = re.compile(r'^(' + SIGN_RX + r')\b', re.IGNORECASE)
 RE_ASZ = re.compile(r'^ASZENDENT\s+(' + SIGN_RX + r')\b')
 # Faktor im/IM N. Haus  (optional fuehrendes Glyph; optional Knoten-Glyph nach Name)
 RE_HAUSFACT = re.compile(
-    r'^(?:[☉☽☿♀♂♃♄♅♆♇☊☋C⚷⚸⯛⊗]\s+)?'
+    r'^(?:[☉☽☿♀♂♃♄♅♆♇☊☋C⚷⚸⯛]\s+)?'
     r'(AUFSTEIGENDER\s+MONDKNOTEN|MONDKNOTEN|' + PLAN_RX + r')'
     r'\s+(?:[☊☋]\s+)?(?:im|IM)\s+(\d+)\.\s+(?:Haus|HAUS)\b')
 # Aspekt-Kopf: <tok> / <tok>  <A-Name> – <B-Name> [: Titel]
@@ -227,8 +228,6 @@ def spezfaktor(fname):
     f = fname.lower()
     if f.startswith('chiron'):
         return 'CHIRON'
-    if f.startswith('glueck') or f.startswith('glück'):
-        return 'GLUECKSPUNKT'
     if f.startswith('lilith'):
         return 'LILITH'
     if f.startswith('pholus'):

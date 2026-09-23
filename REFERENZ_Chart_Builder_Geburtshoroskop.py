@@ -285,6 +285,8 @@ KLASSISCH = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
 _BY = {f['name']: f for f in cd.factors}
 # Namenstoleranz: der chartdata.py-Vertrag schreibt 'Suedknoten' mit ue, den
 # Glueckspunkt mit Umlaut; beide Schreibweisen fuehren auf denselben Faktor.
+# Der Glueckspunkt ist seit dem 2026-09-23 ausgemustert und steht nur noch in
+# Datenblaettern von vor dem Stichtag; konst_zeilen() uebergeht ihn sonst.
 for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
     if _a in _BY and _b not in _BY:
         _BY[_b] = _BY[_a]
@@ -320,6 +322,11 @@ def konst_zeilen():
                         cd.gr(cd.SUEDKNOTEN % 30), cd.haus(cd.SUEDKNOTEN),
                         'rückläufig' if _BY['Mondknoten']['retro'] else 'direkt'))
             continue
+        if n == 'Glueckspunkt' and n not in _BY:
+            # Seit 2026-09-23 ausgemustert: ein neues Chart fuehrt ihn nicht.
+            # Nur ein Datenblatt von vor dem Stichtag traegt ihn noch — dann
+            # rendert er wie bisher (Design-Render-Modul, Konstellationsseite).
+            continue
         if n not in _BY:
             raise SystemExit(f'konst_zeilen(): Faktor {n!r} fehlt in chartdata.factors '
                              '— der chartdata.py-Vertrag (Datenblatt-Modul) verlangt '
@@ -327,17 +334,16 @@ def konst_zeilen():
         f = _BY[n]
         lauf = 'rückläufig' if f['retro'] else 'direkt'
         if n == 'Glueckspunkt':
-            lauf = '—'                       # gerechneter Punkt (F12)
+            lauf = '—'                       # gerechneter Punkt (F12), Altbestand
         # Glyphenregel wie in chartdoc._fac(): ueber die ZEICHENLAENGE — ein
         # Feld von mehr als einem Zeichen ist ein Name, kein Symbol.
         glyph = '' if len(f['glyph']) > 1 else f['glyph']
-        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der ASCII-Name der
-        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt.
-        # Die Namenstoleranz oben deckt nur `_BY` ab; `Glueckspunkt` stand
-        # deshalb zweimal in einer gerenderten Konstellationstabelle
-        # (Prueflaeufe Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.,
-        # beide Male Klasse 1, beide Male nur chart-lokal geflickt).
-        # verify(), die Pflicht-Bausteine und der Preflight sehen das nicht.
+        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der Name der
+        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt;
+        # `f['name']` traegt den Vertragsnamen. Ein ASCII-Name stand deshalb
+        # zweimal in einer gerenderten Konstellationstabelle (Prueflaeufe
+        # Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.). verify(), die
+        # Pflicht-Bausteine und der Preflight sehen das nicht.
         out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out

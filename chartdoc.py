@@ -772,12 +772,14 @@ KONST_KOPF = {'faktor': 'Faktor', 'zeichen': 'Zeichen', 'grad': 'Grad',
 # Orbis-Umstellung (s. radix.ASPEKT_ORB): Der frueher hier stehende Sammelwert
 # „alles Übrige 3°" hat verschwiegen, dass er Chiron, Lilith, Pholus,
 # Mondknoten und Glueckspunkt zu einer Gruppe zusammenfasste, die inzwischen
-# vier verschiedene Werte traegt. Aendert sich ein Wert in radix.ASPEKT_ORB,
+# vier verschiedene Werte traegt. Seit dem 2026-09-23 steht der Glueckspunkt
+# nicht mehr darin (ausgemustert, radix.AUSGEMUSTERT). Aendert sich ein Wert
+# in radix.ASPEKT_ORB,
 # aendert sich diese Zeile mit — sie ist die einzige Stelle, an der der Leser
 # erfaehrt, womit gerechnet wurde.
 ORBIS_ZEILE = ('Orbis nach Faktor: Sonne, Mond 8° · Merkur, Venus, Jupiter 6° '
                '· Mars, Saturn 5° · Uranus, Neptun, Pluto 4° · Achsen und '
-               'Chiron 5° · Lilith, Glückspunkt 3° · Pholus 2°. Der Mondknoten '
+               'Chiron 5° · Lilith 3° · Pholus 2°. Der Mondknoten '
                'übernimmt den Orbis des aspektierenden Faktors. Nebenaspekte '
                'enger, auf beide Faktor-Orbis gedeckelt.')
 
@@ -1589,7 +1591,7 @@ _LEGEND_ROWS_EN = [
 ]
 _ORBIS_ZEILE_EN = ('Orb by factor: Sun, Moon 8° · Mercury, Venus, Jupiter 6° '
                    '· Mars, Saturn 5° · Uranus, Neptune, Pluto 4° · axes and '
-                   'Chiron 5° · Lilith, Part of Fortune 3° · Pholus 2°. The '
+                   'Chiron 5° · Lilith 3° · Pholus 2°. The '
                    'lunar node takes the orb of the aspecting factor. Minor '
                    'aspects are tighter, capped at both factors\' orbs.')
 _ZL_SPALTE_EN = ('The far right column gives the number of contacts the '

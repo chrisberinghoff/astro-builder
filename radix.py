@@ -62,10 +62,9 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
     faktor_kippminuten(jd, factors, lat=None, lon=None) -> list | None
     faktor_kipp_warnungen(fk) -> list | None
         Seit 2026-09-19 (W34) dieselbe Kippminute für Planeten und Punkte
-        (Mond, Sonne … Glückspunkt): Minuten früherer/späterer Geburt bis zum
+        (Mond, Sonne … Pholus): Minuten früherer/späterer Geburt bis zum
         Zeichenwechsel, Warnung unter KIPP_SCHWELLE; läuft in strukturbild()
-        mit (jd_geburt genügt, der Glückspunkt braucht lat/lon) und in
-        zeichengrenze_fussnote(kipp, faktoren=fk).
+        mit (jd_geburt genügt) und in zeichengrenze_fussnote(kipp, faktoren=fk).
 
     glyphen_ergaenzen(factors) -> list          (FAKTOR_GLYPHE, 2026-09-19)
         Füllt leere 'glyph'-Felder mit dem Vertrags-Kürzel ('AC' … 'IC',
@@ -74,7 +73,6 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
     konfigurationen(factors, aspects, cusps=None) -> dict
     gruppiere_figuren(konf, aspects) -> dict      (Achsen-Doppelung: T-Quadrat
                                                   2026-09-09, Jod und Großtrigon 2026-09-14)
-    glueckspunkt(factors, cusps) -> dict          (Tag/Nacht selbst, 2026-09-09)
         T-Quadrat (mit leerer Spitze), Großkreuz, Großtrigon, Jod, Stellium —
         und seit 2026-09-08 Drachen (Kite) und Mystisches Rechteck. Ein Drachen
         führt sein Großtrigon selbst (EIN Befund).
@@ -92,6 +90,13 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
     Strukturbild nicht ausgibt, prüft keine Gegenprobe — ein Befund, den die
     Rechnung nicht kennt, kann in der Deutung nie fehlen. Deshalb stehen die
     Dinge im Code und nicht in einer Mahnung.
+
+    Ausgemustert seit 2026-09-23 (Chris-Entscheidung): der Glückspunkt.
+    glueckspunkt() und glueckspunkt_kopplung() sind entfernt, er wird weder
+    gerechnet noch gedeutet (AUSGEMUSTERT). Steht er aus einem älteren
+    Datenblatt noch in `factors`, rechnet huber_aspects() ihn mit dem
+    Vorgabewert weiter und meldet das einmal je Lauf — ein Dokument von vor
+    dem Stichtag rendert so unverändert.
 
 Verwendung als Modul (Schritt 3/4, Design-Konversation):
     import sys; sys.path.insert(0, "/home/claude")
@@ -132,7 +137,7 @@ FAKTOR_GLYPHE = {
     'Jupiter': '♃', 'Saturn': '♄', 'Uranus': '♅', 'Neptun': '♆', 'Pluto': '♇',
     'Mondknoten': '☊', 'Knoten': '☊', 'Nordknoten': '☊',
     'Südknoten': '☋', 'Suedknoten': '☋', 'Chiron': '⚷', 'Lilith': '⚸',
-    'Glückspunkt': '⊗', 'Glueckspunkt': '⊗', 'Pholus': 'Pho',
+    'Pholus': 'Pho',
     'AC': 'AC', 'MC': 'MC', 'DC': 'DC', 'IC': 'IC',
 }
 
@@ -171,9 +176,9 @@ DEFAULT_PALETTE = {
 # SATURN, Merkur ist dort ein Werkzeugplanet.
 #
 # Die Tabelle heisst deshalb seit dem 2026-09-15 ASPEKT_ORB und nicht mehr
-# HUBER_ORB: Huber fuehrt weder Achsen noch Chiron, Lilith, Pholus oder den
-# Glueckspunkt. Achsen aspektiert er ueberhaupt nicht (Aspektbild-Astrologie
-# S. 48-49). Diese fuenf Werte sind eigene, begruendete Setzungen:
+# HUBER_ORB: Huber fuehrt weder Achsen noch Chiron, Lilith oder Pholus.
+# Achsen aspektiert er ueberhaupt nicht (Aspektbild-Astrologie S. 48-49).
+# Diese vier Werte sind eigene, begruendete Setzungen:
 #   Achsen 5      - die ueberlieferte Konvention fuer Achsen und alle
 #                   nicht-leuchtenden Punkte. Vorher 9, also weiter als jeder
 #                   Planet ausser den Lichtern, ohne jeden Beleg; 9 Grad am AC
@@ -191,9 +196,8 @@ DEFAULT_PALETTE = {
 #                   mittlere Apogaeum, wird stationaer und rueckláufig; Koch
 #                   nennt die Schwingung selbst ein Artefakt der
 #                   Zweikoerper-Reduktion. Zurueckhaltung ist begruendet.
-#   Glueckspunkt 3 - rein gerechneter Punkt. Seine Kontakte zu AC und DC und zu
-#                   EINEM der beiden Lichter sind mathematisch erzwungen; sie
-#                   werden in aspektliste() gekennzeichnet, s. dort.
+# Der Glueckspunkt (bis 2026-09-22 mit 3) ist seit dem 2026-09-23 ausgemustert
+# und steht nicht mehr in der Tabelle — s. AUSGEMUSTERT.
 #
 # Der MONDKNOTEN bekommt keinen eigenen Wert. Huber, Mondknoten-Astrologie:
 # "Deshalb hat der Mondknoten auch keinen eigenen Orb (Aspektumraum)." Es gilt
@@ -202,20 +206,27 @@ ASPEKT_ORB = {
     'Sonne': 8, 'Mond': 8, 'Merkur': 6, 'Venus': 6, 'Jupiter': 6,
     'Saturn': 5, 'Mars': 5, 'Uranus': 4, 'Neptun': 4, 'Pluto': 4,
     'Lilith': 3, 'Chiron': 5, 'Pholus': 2,
-    'Glueckspunkt': 3, 'AC': 5, 'MC': 5, 'DC': 5, 'IC': 5,
+    'AC': 5, 'MC': 5, 'DC': 5, 'IC': 5,
     # Knoten: Platzhalterwerte. Wirksam ist KNOTEN_ERBT - der Wert hier greift
     # nur, wenn auch der Partner ein Knoten ist (kommt nicht vor, der
     # Suedknoten geht nicht in die Aspektrechnung).
     'Knoten': 3, 'Suedknoten': 3,
-    # Schreibweisen des `chartdata.py`-Vertrags. Ohne sie fanden
-    # `huber_aspects()` und `aspektliste()` fuer Mondknoten und Glueckspunkt
-    # KEINEN Eintrag und nahmen den Vorgabewert 3 — zufaellig derselbe Wert,
-    # den die Tabelle eine Zeile hoeher fuehrt, sodass der Fehler stumm blieb
-    # und eine Aenderung an 'Knoten'/'Glueckspunkt' wirkungslos gewesen waere.
-    # Ergaenzt 2026-09-15 (Pruefbericht Geburtshoroskop Schritt 3+4, 5.3).
-    # Am Ergebnis dieses und jedes bisherigen Charts aendert sich nichts.
-    'Mondknoten': 3, 'Südknoten': 3, 'Glückspunkt': 3,
+    # Schreibweisen des `chartdata.py`-Vertrags. Ohne sie fand
+    # `huber_aspects()` fuer den Mondknoten KEINEN Eintrag und nahm den
+    # Vorgabewert 3 — zufaellig derselbe Wert, den die Tabelle eine Zeile
+    # hoeher fuehrt, sodass der Fehler stumm blieb. Ergaenzt 2026-09-15
+    # (Pruefbericht Geburtshoroskop Schritt 3+4, 5.3).
+    'Mondknoten': 3, 'Südknoten': 3,
 }
+
+# Faktoren, die seit einem Stichtag weder gerechnet noch gedeutet werden
+# (Name -> Stichtag). Chris-Entscheidung 2026-09-23: der Glueckspunkt. Kein
+# Lauf setzt ihn mehr in `factors`. Steht er aus einem Datenblatt von vor dem
+# Stichtag noch darin, laeuft die Rechnung mit dem Vorgabewert 3 weiter (so
+# rendert ein altes Dokument unveraendert), und _orb_unbekannt() sagt einmal
+# je Lauf, dass er ausgemustert ist. Ein Folgeprodukt streicht ihn vorher
+# (Werkzeuge-Modul, Punkt 4). Begruendung: Aenderungsstand 2026-09-23.
+AUSGEMUSTERT = {'Glückspunkt': '2026-09-23', 'Glueckspunkt': '2026-09-23'}
 
 # Faktoren ohne eigenen Orbis: sie uebernehmen den des aspektierenden Partners.
 KNOTEN_ERBT = ('Knoten', 'Mondknoten', 'Suedknoten', 'Südknoten')
@@ -261,6 +272,14 @@ def _orb_unbekannt(name):
     if name in _ORB_GEMELDET:
         return
     _ORB_GEMELDET.add(name)
+    if name in AUSGEMUSTERT:
+        print('  ! AUSGEMUSTERT: %r wird seit dem %s weder gerechnet noch '
+              'gedeutet und gehoert in keinen neuen factors-Block. Steht er '
+              'aus einem aelteren Datenblatt darin, laeuft er hier mit 3 Grad '
+              'weiter, damit das alte Dokument unveraendert rendert; ein '
+              'Folgeprodukt streicht ihn (Werkzeuge-Modul, Punkt 4).'
+              % (name, AUSGEMUSTERT[name]))
+        return
     print('  ! ORBIS: %r steht nicht in radix.HUBER_ORB — es gilt der '
           'Vorgabewert 3 Grad. Ist das gewollt, Eintrag ergaenzen; ist es ein '
           'Schreibfehler, den Namen in der chart_data korrigieren.' % name)
@@ -390,48 +409,6 @@ def ist_achse(name):
     return name in ACHSEN_NAMEN
 
 
-def glueckspunkt_kopplung(factors):
-    """Die Faktorpaare, deren Winkel durch die Glueckspunkt-Formel ERZWUNGEN
-    ist — sie tragen keine eigene Information.
-
-    Aus GP = AC + Mond - Sonne (Tag) folgt GP - AC = Mond - Sonne und
-    GP - Mond = AC - Sonne. Aus GP = AC + Sonne - Mond (Nacht) folgt
-    GP - AC = Sonne - Mond und GP - Sonne = AC - Mond. In beiden Faellen ist
-    also der Kontakt zu AC (und damit auch zu DC) gekoppelt, dazu der zu GENAU
-    EINEM der beiden Lichter — welchem, entscheidet die Formel. Der Kontakt zum
-    anderen Licht ist frei.
-
-    Welche Formel gilt, wird hier aus den Positionen selbst zurueckgerechnet,
-    nicht uebergeben: So bleibt die Funktion auch dann richtig, wenn ein
-    Datenblatt den Glueckspunkt von Hand gesetzt hat.
-
-    Rueckgabe: dict {frozenset({name_a, name_b}): "spiegelt X-Y"}. Leer, wenn
-    Glueckspunkt, AC, Sonne oder Mond fehlen. Neu 2026-09-15.
-    """
-    pos = {f['name']: f['lon'] for f in factors}
-    gp = pos.get('Glueckspunkt', pos.get('Glückspunkt'))
-    ac, so, mo = pos.get('AC'), pos.get('Sonne'), pos.get('Mond')
-    if None in (gp, ac, so, mo):
-        return {}
-
-    def nah(x, y):
-        return min((x - y) % 360, (y - x) % 360) < 0.05
-
-    if nah(gp, (ac + mo - so) % 360):        # Tagformel
-        licht, gegen = 'Mond', 'Sonne'
-    elif nah(gp, (ac + so - mo) % 360):      # Nachtformel
-        licht, gegen = 'Sonne', 'Mond'
-    else:
-        return {}                            # von Hand gesetzt, nicht deutbar
-
-    g = 'Glueckspunkt' if 'Glueckspunkt' in pos else 'Glückspunkt'
-    k = {frozenset((g, 'AC')): 'spiegelt Mond-Sonne',
-         frozenset((g, licht)): f'spiegelt AC-{gegen}'}
-    if 'DC' in pos:
-        k[frozenset((g, 'DC'))] = 'spiegelt Mond-Sonne'
-    return k
-
-
 def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
                 sortieren=True):
     """Die Aspektliste, wie die Aspektseite sie braucht — gerechnet, nie
@@ -484,11 +461,13 @@ def aspektliste(factors, zusatz_paare=(), zusatz_orb=2.0, orbs=None,
 
 
 def _zeilen_zusammenziehen(roh, factors):
-    """Schritt 3 und die Glueckspunkt-Kennzeichnung von aspektliste() —
-    ausgelagert am 2026-09-19 (U2), unveraendert: strukturbild() braucht
-    fuer die Rangzeilen (§10) GENAU die Zeilen der Aspektseite, nicht eine
-    zweite, eigene Zaehlung. `roh` ist die Huber-Liste ohne Achse-Achse-
-    Paare (samt angehaengter Zusatzzeilen); Rueckgabe unsortiert.
+    """Schritt 3 von aspektliste() — ausgelagert am 2026-09-19 (U2),
+    unveraendert: strukturbild() braucht fuer die Rangzeilen (§10) GENAU die
+    Zeilen der Aspektseite, nicht eine zweite, eigene Zaehlung. `roh` ist die
+    Huber-Liste ohne Achse-Achse-Paare (samt angehaengter Zusatzzeilen);
+    Rueckgabe unsortiert. Die Kennzeichnung der erzwungenen
+    Glueckspunkt-Kontakte (seit 2026-09-15) ist mit dem Glueckspunkt am
+    2026-09-23 entfallen; `factors` bleibt als Parameter fuer die Aufrufer.
     """
     out, verbraucht = [], set()
     for i, a in enumerate(roh):
@@ -527,17 +506,6 @@ def _zeilen_zusammenziehen(roh, factors):
         r = dict(fuehrt)
         r['spiegel'] = f"{zweit['name']} {z_achse}"
         out.append(r)
-
-    # Erzwungene Glueckspunkt-Kontakte kennzeichnen (neu 2026-09-15). Sie
-    # bleiben in der Tabelle — die Rechenschaft ist vollstaendig —, aber die
-    # Spalte „zugleich" sagt, dass ihr Winkel aus der Formel folgt und nicht
-    # aus dem Bild. Ein vorhandener spiegel-Eintrag hat Vorrang.
-    kopp = glueckspunkt_kopplung(factors)
-    if kopp:
-        for r in out:
-            hin = kopp.get(frozenset((r['a'], r['b'])))
-            if hin and not r.get('spiegel'):
-                r['spiegel'] = hin
 
     return out
 
@@ -913,7 +881,7 @@ HERRSCHER_KLASSISCH = dict(HERRSCHER, **{
     'Skorpion': 'Mars', 'Wassermann': 'Saturn', 'Fische': 'Jupiter'})
 
 # Zaehlgewichte fuer die dritte, gewichtete Element-/Modusrechnung (Befund 5.3).
-# Grund: Ein schwaechstes Element, das nur von Pholus oder vom Gluueckspunkt
+# Grund: Ein schwaechstes Element, das nur von Pholus oder Lilith
 # getragen wird, ist etwas anderes als eines, das die Sonne traegt — die
 # ungewichtete Zaehlung kann beides nicht unterscheiden und fuehrt die
 # Befundzeile dann in die Irre. DC und IC zaehlen NICHT mit: sie sind die
@@ -923,22 +891,22 @@ GEWICHT = {
     'Merkur': 1.0, 'Venus': 1.0, 'Mars': 1.0, 'Jupiter': 1.0, 'Saturn': 1.0,
     'Uranus': 1.0, 'Neptun': 1.0, 'Pluto': 1.0,
     'Knoten': 0.5, 'Suedknoten': 0.5, 'Chiron': 0.5, 'Lilith': 0.5,
-    'Pholus': 0.5, 'Glueckspunkt': 0.5,
+    'Pholus': 0.5,
     # Schreibweisen des `chartdata.py`-Vertrags — dieselbe Luecke wie in
     # ASPEKT_ORB (2026-09-15) und ZYKLUS_ALIAS: `factors` fuehrt die Knotenachse
     # als 'Mondknoten'. Ohne diesen Eintrag zaehlte verteilung(gewichtet=True)
     # den Knoten mit dem Vorgabewert 1.0 statt 0.5 — im Prueffall Erde 7,5
     # statt 7 und veraenderlich 5,5 statt 5. Ergaenzt 2026-09-16
     # (Pruefbericht Geburtshoroskop Schritt 1+2, 1.1).
-    'Mondknoten': 0.5, 'Südknoten': 0.5, 'Glückspunkt': 0.5,
+    'Mondknoten': 0.5, 'Südknoten': 0.5,
     'DC': 0.0, 'IC': 0.0,
 }
 
-SPEZIALFAKTOREN = ('Chiron', 'Lilith', 'Pholus', 'Glueckspunkt',
+SPEZIALFAKTOREN = ('Chiron', 'Lilith', 'Pholus',
                    'Knoten', 'Suedknoten',
                    # Vertragsnamen, s. GEWICHT. Ohne sie fehlte der Mondknoten
                    # im Spezialfaktor-Netz des Strukturbilds (2026-09-16).
-                   'Mondknoten', 'Südknoten', 'Glückspunkt')
+                   'Mondknoten', 'Südknoten')
 WINKEL = ('AC', 'MC', 'DC', 'IC')
 # Die beiden Enden derselben Achse. Gebraucht in gruppiere_figuren():
 # Ist der Brennpunkt einer Figur ein Winkel, bekommt das Gegenende
@@ -964,7 +932,7 @@ _DICHTE_GEWICHT = {'voll': 1.0, 'einseitig': 0.5, 'neben': 0.5, 'zusatz': 0.5}
 # Strukturbild §8. Wer einen Wert aendert, zieht dort nach.
 #
 # Gerechnet wird ausschliesslich ueber die zehn klassischen Planeten (_PLANETEN):
-# keine Knoten, keine Spezialfaktoren, kein Glueckspunkt, keine Achsen.
+# keine Knoten, keine Spezialfaktoren, keine Achsen.
 MUSTER_BUENDEL = 120.0          # Buendel: alle Planeten innerhalb dieser Spanne
 MUSTER_SCHUESSEL = 180.0        # Schuessel: innerhalb einer Haelfte
 MUSTER_LOKOMOTIVE = 240.0       # Lokomotive: innerhalb zweier Drittel
@@ -1194,44 +1162,6 @@ def herrscherketten(factors, klassisch=False):
             'zulauf': {p: sorted(zulauf[p]) for p in sorted(zulauf)},
             'ohne_zulauf': sorted(p for p in endd if p not in zulauf),
             'eigenes_zeichen': sorted(endd)}
-
-
-def glueckspunkt(factors, cusps, ac=None, sonne=None, mond=None):
-    """Glueckspunkt (Pars Fortunae) mit eingebauter Tag-/Nacht-Entscheidung.
-
-    Tagformel   AC + Mond − Sonne  (Sonne UEBER dem Horizont, Haeuser 7–12)
-    Nachtformel AC + Sonne − Mond  (Sonne UNTER dem Horizont, Haeuser 1–6)
-
-    Neu am 2026-09-09 (Pruefbericht Geburtshoroskop, 5.9). Bis dahin stand nur
-    die Formel im Datenblatt-Modul und wurde in jedem Lauf von Hand gerechnet —
-    mit zwei Fallen: dem Vorzeichenwechsel zwischen beiden Formeln und der
-    Frage, woran „Tag" haengt. Es haengt am HAUS der Sonne (7–12 = ueber dem
-    Horizont), nicht an der Uhrzeit: Dieselbe Abenduhrzeit liegt im Sommer
-    noch im Tagbogen und im Winter laengst nicht mehr.
-
-    -> {'lon', 'tag', 'sonne_haus', 'formel'}
-    """
-    lon = {f['name']: f['lon'] for f in factors}
-    # FEHLERKORREKTUR 14.09.2026 (Pruefbericht EA Schritt 1+2, 1.8): Fehlte AC
-    # in `factors`, brach die Funktion mit einem nackten KeyError('AC') ab und
-    # sagte nicht, was fehlt. Das Datenblatt-Modul zeigt den Aufruf ohne den
-    # Hinweis, dass die Achsen zu diesem Zeitpunkt schon in der Liste stehen
-    # muessen — wer die Liste in der naheliegenden Reihenfolge baut, laeuft
-    # hinein.
-    if ac is None and 'AC' not in lon:
-        raise KeyError(
-            "glueckspunkt(): 'AC' fehlt in factors. Die Achsen AC/MC/DC/IC "
-            "gehoeren VOR dem Glueckspunkt in die factors-Liste (oder ac= "
-            "direkt uebergeben).")
-    ac = lon['AC'] if ac is None else ac
-    sonne = lon['Sonne'] if sonne is None else sonne
-    mond = lon['Mond'] if mond is None else mond
-    h = haus_und_grenzlage(sonne, cusps)['haus']
-    tag = 7 <= h <= 12
-    p = (ac + mond - sonne) % 360.0 if tag else (ac + sonne - mond) % 360.0
-    return {'lon': p, 'tag': tag, 'sonne_haus': h,
-            'formel': 'AC + Mond − Sonne (Tagformel)' if tag
-                      else 'AC + Sonne − Mond (Nachtformel)'}
 
 
 # --- Die zweite Etage der Hausherrscher (Aenderungspaket „Zugang statt Thema",
@@ -1505,8 +1435,8 @@ def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
 # einer Zeichengrenze (Pruefberichte vom 17.09.c, 17.09.e und 18.09.) wechselt
 # bei wenigen Minuten anderer Geburtszeit das Zeichen — dieselbe Logik, dasselbe
 # Mass: die Kippminute, gewarnt unter KIPP_SCHWELLE (Chris-Entscheidung
-# Frage 17). Praktisch trifft es schnelle Faktoren: Mond, Glueckspunkt (laeuft
-# mit dem AC), seltener Sonne, Merkur, Venus, Mars.
+# Frage 17). Praktisch trifft es schnelle Faktoren: Mond, seltener Sonne,
+# Merkur, Venus, Mars.
 KIPP_FAKTOR_GRENZE = 1.0        # Grad: naeher an einer Zeichengrenze -> der
                                 #   Faktor steht mit Kippminute in §3
 _KIPP_KOERPER = {'Sonne': 'SUN', 'Mond': 'MOON', 'Merkur': 'MERCURY',
@@ -1515,13 +1445,11 @@ _KIPP_KOERPER = {'Sonne': 'SUN', 'Mond': 'MOON', 'Merkur': 'MERCURY',
                  'Pluto': 'PLUTO', 'Mondknoten': 'TRUE_NODE',
                  'Knoten': 'TRUE_NODE', 'Nordknoten': 'TRUE_NODE',
                  'Lilith': 'OSCU_APOG', 'Chiron': 'CHIRON', 'Pholus': 'PHOLUS'}
-_GP_NAMEN = ('Glückspunkt', 'Glueckspunkt')
 _FAKTOR_ANZEIGE = {'Knoten': 'Mondknoten', 'Nordknoten': 'Mondknoten',
-                   'Glueckspunkt': 'Glückspunkt', 'Suedknoten': 'Südknoten'}
+                   'Suedknoten': 'Südknoten'}
 _FAKTOR_ARTIKEL = {'Sonne': ('Die Sonne', 'sie'), 'Mond': ('Der Mond', 'er'),
                    'Venus': ('Venus', 'sie'), 'Lilith': ('Lilith', 'sie'),
-                   'Mondknoten': ('Der Mondknoten', 'er'),
-                   'Glückspunkt': ('Der Glückspunkt', 'er')}
+                   'Mondknoten': ('Der Mondknoten', 'er')}
 
 
 def _gr_s(deg):
@@ -1548,10 +1476,10 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
     Gerechnet werden die zehn Planeten, der Mondknoten (wahrer Knoten), Lilith
     (oskulierend), Chiron und Pholus (beide brauchen seas_*.se1; fehlt die
     Datei, steht das in 'fehler' — sie laufen so langsam, dass sie binnen 180
-    Minuten nur aus Bogensekunden-Abstand kippen) und der Glueckspunkt: er
-    laeuft mit dem AC und braucht deshalb lat UND lon (Tag-/Nachtformel je
-    Minute ueber glueckspunkt(), `cusps` als Anker). Die Achsen und Spitzen
-    stehen in kippminuten().
+    Minuten nur aus Bogensekunden-Abstand kippen). Die Achsen und Spitzen
+    stehen in kippminuten(). `lat`, `lon` und `cusps` brauchte nur der
+    Glueckspunkt (ausgemustert 2026-09-23); sie bleiben ohne Wirkung stehen,
+    damit bestehende Aufrufe weiterlaufen.
 
     jd   Julianisches Datum der Geburt in UT (wie in strukturbild()).
     -> Liste von dicts in der Reihenfolge von `factors`:
@@ -1559,8 +1487,7 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
         Zeichengrenze), 'grenze' (z. B. 'Stier/Zwillinge'), 'lage' ('hinter' =
         kurz nach dem Zeichenbeginn, 'vor' = kurz vor dem Zeichenende),
         'frueher', 'spaeter', 'min', 'richtung', 'zeichen_frueher',
-        'zeichen_spaeter', 'grad_je_minute', 'gerechnet' (True beim
-        Glueckspunkt), 'fehler' (None oder der Grund)}
+        'zeichen_spaeter', 'grad_je_minute', 'fehler' (None oder der Grund)}
        'frueher'/'spaeter' wie bei kippminuten(): die erste Minute mit anderem
        Zeichen, None = kein Wechsel bis max_min.
     """
@@ -1578,8 +1505,7 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
     out = []
     for f in factors:
         nm = f['name']
-        ist_gp = nm in _GP_NAMEN
-        if nm in WINKEL or not (ist_gp or nm in _KIPP_KOERPER):
+        if nm in WINKEL or nm not in _KIPP_KOERPER:
             continue
         l0 = pos[nm]
         z = zeichen_index(l0)
@@ -1593,52 +1519,21 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
              'abstand_grenze': abst, 'grenze': grenze, 'lage': lage,
              'frueher': None, 'spaeter': None, 'min': None, 'richtung': None,
              'zeichen_frueher': None, 'zeichen_spaeter': None,
-             'grad_je_minute': None, 'gerechnet': ist_gp, 'fehler': None}
+             'grad_je_minute': None, 'fehler': None}
         out.append(e)
         try:
-            if ist_gp:
-                if lat is None or lon is None:
-                    e['fehler'] = ('ohne lat und lon keine Kippminute — er läuft '
-                                   'mit dem AC')
-                    continue
-                if 'Sonne' not in pos or 'Mond' not in pos:
-                    e['fehler'] = 'Sonne oder Mond fehlt in factors'
-                    continue
-                c0 = swe.houses_ex(jd, lat, lon, b"K")[0][:12]
-                anker = [c % 360.0 for c in (cusps or c0)]
-                s0 = swe.calc_ut(jd, swe.SUN, flag)[0][0]
-                m0 = swe.calc_ut(jd, swe.MOON, flag)[0][0]
-                ac0 = pos.get('AC', anker[0])
+            body = getattr(swe, _KIPP_KOERPER[nm])
+            x0 = swe.calc_ut(jd, body, flag)[0]
+            if _winkelabstand(x0[0], l0) > 0.05:
+                e['fehler'] = ('die Ephemeride steht für jd %s von der Länge '
+                               'in factors entfernt — jd, wahrer Knoten, '
+                               'oskulierende Lilith prüfen'
+                               % _gr_s(_winkelabstand(x0[0], l0)))
+                continue
 
-                def lage_bei(dt):
-                    ck = swe.houses_ex(jd + dt, lat, lon, b"K")[0][:12]
-                    cus = [(anker[i] + _delta(ck[i], c0[i])) % 360.0
-                           for i in range(12)]
-                    sk = pos['Sonne'] + _delta(
-                        swe.calc_ut(jd + dt, swe.SUN, flag)[0][0], s0)
-                    mk = pos['Mond'] + _delta(
-                        swe.calc_ut(jd + dt, swe.MOON, flag)[0][0], m0)
-                    return glueckspunkt([], cus, ac=(ac0 + _delta(ck[0], c0[0])),
-                                        sonne=sk % 360.0, mond=mk % 360.0)['lon']
-                if _winkelabstand(lage_bei(0.0), l0) > 0.05:
-                    e['fehler'] = ('seine Länge in factors folgt nicht der Formel '
-                                   'von radix.glueckspunkt() — von Hand gesetzt? '
-                                   'Kippminute nicht bestimmbar')
-                    continue
-                v = _winkelabstand(lage_bei(schritt), lage_bei(-schritt)) / 2.0
-            else:
-                body = getattr(swe, _KIPP_KOERPER[nm])
-                x0 = swe.calc_ut(jd, body, flag)[0]
-                if _winkelabstand(x0[0], l0) > 0.05:
-                    e['fehler'] = ('die Ephemeride steht für jd %s von der Länge '
-                                   'in factors entfernt — jd, wahrer Knoten, '
-                                   'oskulierende Lilith prüfen'
-                                   % _gr_s(_winkelabstand(x0[0], l0)))
-                    continue
-
-                def lage_bei(dt, _b=body, _x=x0[0]):
-                    return l0 + _delta(swe.calc_ut(jd + dt, _b, flag)[0][0], _x)
-                v = abs(x0[3]) / 1440.0
+            def lage_bei(dt, _b=body, _x=x0[0]):
+                return l0 + _delta(swe.calc_ut(jd + dt, _b, flag)[0][0], _x)
+            v = abs(x0[3]) / 1440.0
         except Exception as ex:
             _dt = re.search(r"file '([^']+)' not found", str(ex))
             # 2026-09-22 (Diagnoselauf zum Prueflauf Geburtshoroskop 1+2 vom
@@ -1667,8 +1562,8 @@ def faktor_kippminuten(jd, factors, lat=None, lon=None, cusps=None,
             continue
         e['grad_je_minute'] = v
         # Kann der Faktor binnen max_min ueberhaupt eine Grenze erreichen?
-        # (Faktor 2 gegen Beschleunigung; der Glueckspunkt wird immer gerechnet.)
-        if not ist_gp and abst > 2.0 * v * max_min + 1e-9:
+        # (Faktor 2 gegen Beschleunigung.)
+        if abst > 2.0 * v * max_min + 1e-9:
             continue
         for key, vz in (('frueher', -1), ('spaeter', 1)):
             for k in range(1, max_min + 1):
@@ -1689,7 +1584,7 @@ def faktor_kipp_warnungen(fk, schwelle=KIPP_SCHWELLE):
     fuer Planeten und Punkte), die knappste zuerst.
 
     -> [{'name', 'minuten', 'richtung', 'von', 'nach', 'grad_je_minute',
-         'abstand_grenze', 'grenze', 'lage', 'gerechnet'}]; leer, wenn keiner
+         'abstand_grenze', 'grenze', 'lage'}]; leer, wenn keiner
         unter der Schwelle liegt; None, wenn fk None ist.
     """
     if fk is None:
@@ -1704,8 +1599,7 @@ def faktor_kipp_warnungen(fk, schwelle=KIPP_SCHWELLE):
                              else e['zeichen_spaeter']),
                     'grad_je_minute': e['grad_je_minute'],
                     'abstand_grenze': e['abstand_grenze'],
-                    'grenze': e['grenze'], 'lage': e['lage'],
-                    'gerechnet': e['gerechnet']})
+                    'grenze': e['grenze'], 'lage': e['lage']})
     out.sort(key=lambda w: w['minuten'])
     return out
 
@@ -1914,7 +1808,7 @@ def rezeptionen(factors, klassisch=False):
 
 
 def spezialfaktor_netz(factors, aspects):
-    """Wie stehen Chiron, Lilith, Pholus, Glueckspunkt und die Knotenachse
+    """Wie stehen Chiron, Lilith, Pholus und die Knotenachse
     zueinander und zu den Winkeln? (Befund 5.5 des Prueflaufs.)
 
     In vielen Charts bilden sie ein eigenes, sehr sprechendes Netz. Das
@@ -3299,10 +3193,9 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             sb['kippminuten_abweichung'] = round(max(
                 _winkelabstand(k['lon'], cusps[i]) for i, k in enumerate(kipp)), 3)
     # Zeichengrenze der Faktoren (neu 2026-09-19, W34): braucht jd_geburt und
-    # pyswisseph; lat/lon nur fuer den Glueckspunkt.
+    # pyswisseph.
     if jd_geburt is not None:
-        _fk = faktor_kippminuten(jd_geburt, factors, lat=lat, lon=lon,
-                                 cusps=cusps)
+        _fk = faktor_kippminuten(jd_geburt, factors)
         sb['faktor_kippminuten'] = _fk
         sb['faktor_kipp_warnungen'] = faktor_kipp_warnungen(_fk)
     # Achsen-Doppelungen gruppieren (neu 2026-09-09, Pruefbericht 5.7): Die
@@ -3880,8 +3773,8 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     fk = sb.get('faktor_kippminuten')
     if fk is None:
         L.append('- Zeichengrenze der Faktoren: nicht gerechnet — strukturbild() '
-                 'braucht dafür jd_geburt (und pyswisseph), der Glückspunkt '
-                 'zusätzlich lat und lon (Gegenprobe g, seit 2026-09-19).')
+                 'braucht dafür jd_geburt und pyswisseph (Gegenprobe g, seit '
+                 '2026-09-19).')
     else:
         def _mn(x):
             return 'nie (>%d)' % KIPP_MAX if x is None else str(x)
@@ -3903,9 +3796,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
         for w in (sb.get('faktor_kipp_warnungen') or []):
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: "
                      f"{_faktor_anzeige(w['name'])}"
-                     + (' (gerechneter Punkt, läuft mit dem AC)'
-                        if w['gerechnet'] else '')
-                     + f" wechselt bei {w['minuten']} "
+                     f" wechselt bei {w['minuten']} "
                      f"{'Minute' if w['minuten'] == 1 else 'Minuten'} "
                      f"{w['richtung']}er Geburt das Zeichen ({w['von']} → "
                      f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute). "
@@ -4613,6 +4504,27 @@ def _hilfe_cli(argv=None):
 if __name__ == '__main__':
     if _hilfe_cli():          # python3 radix.py --hilfe [<name>]
         raise SystemExit(0)
+    # Glueckspunkt ausgemustert (2026-09-23): kein Orbis-, Glyphen-,
+    # Gewichts- oder Spezialfaktor-Eintrag, keine Rechenfunktion mehr; ein
+    # altes Datenblatt rechnet mit dem Vorgabewert weiter und bekommt EINE
+    # Meldung.
+    import contextlib as _cl, io as _io
+    for _n in ('Glückspunkt', 'Glueckspunkt'):
+        assert _n not in ASPEKT_ORB and _n not in FAKTOR_GLYPHE, _n
+        assert _n not in GEWICHT and _n not in SPEZIALFAKTOREN, _n
+        assert _n in AUSGEMUSTERT, _n
+    for _fn in ('glueckspunkt', 'glueckspunkt_kopplung'):
+        assert not hasattr(sys.modules[__name__], _fn), _fn
+    _buf = _io.StringIO()
+    with _cl.redirect_stdout(_buf):
+        _ga = huber_aspects([{'name': 'Sonne', 'lon': 10.0},
+                             {'name': 'Glückspunkt', 'lon': 12.0}])
+        huber_aspects([{'name': 'Mond', 'lon': 10.0},
+                       {'name': 'Glückspunkt', 'lon': 12.0}])
+    assert _buf.getvalue().count('AUSGEMUSTERT') == 1, _buf.getvalue()
+    assert len(_ga) == 1 and _ga[0]['name'] == 'Konjunktion', _ga
+    _ORB_GEMELDET.discard('Glückspunkt')
+
     _c = [i * 30.0 for i in range(12)]
     assert haus_und_grenzlage(28.0, _c)['grenzlage'] is True
     assert haus_und_grenzlage(28.0, _c)['nebenhaus'] == 2
@@ -4640,7 +4552,6 @@ if __name__ == '__main__':
           {'name': 'Pluto', 'lon': 215.6, 'retro': True},
           {'name': 'Knoten', 'lon': 318.4}, {'name': 'Chiron', 'lon': 64.2},
           {'name': 'Lilith', 'lon': 7.9}, {'name': 'Pholus', 'lon': 348.5},
-          {'name': 'Glueckspunkt', 'lon': 213.7},
           {'name': 'AC', 'lon': 131.0}, {'name': 'MC', 'lon': 46.0},
           {'name': 'DC', 'lon': 311.0}, {'name': 'IC', 'lon': 226.0}]
     _a = huber_aspects(_f)
@@ -5204,7 +5115,9 @@ if __name__ == '__main__':
     _t10 = strukturbild_text(_sb)
     assert '### 10 · Rangzeilen' in _t10 and 'Orb 9°' not in _t10
     _t4 = _t10.split('### 4')[1].split('### 5')[0]
-    assert 'Mars (gewichtet 1, gezählt 2)' in _t4, _t4       # vorher „Mars (1)"
+    # vorher „Mars (1)"; seit 2026-09-23 ohne den Glueckspunkt des
+    # Prueffalls (Mars stand im einseitigen Quadrat zu ihm): 0.5/1 statt 1/2
+    assert 'Mars (gewichtet 0.5, gezählt 1)' in _t4, _t4
     assert '(Winkel, Orb 5°)' in _t4, _t4
     _rz = rangzeilen_lesen(_t10)
     assert sorted(_rz) == sorted([
@@ -5278,7 +5191,6 @@ if __name__ == '__main__':
             ('Sonne', _swe.SUN), ('Mond', _swe.MOON), ('Merkur', _swe.MERCURY),
             ('Mars', _swe.MARS), ('Mondknoten', _swe.TRUE_NODE))]
         _fw += _ax(_cw[0], _cw[9])
-        _fw.append({'name': 'Glückspunkt', 'lon': glueckspunkt(_fw, _cw)['lon']})
         _fkm = faktor_kippminuten(_jd, _fw, lat=_LA, lon=_LO, cusps=_cw)
         _so = [e for e in _fkm if e['name'] == 'Sonne'][0]
         assert 6 <= _so['frueher'] <= 8 and _so['spaeter'] is None, _so
@@ -5287,7 +5199,7 @@ if __name__ == '__main__':
             _so['lon']) - 1) % 12]
         # Die gemeldete Minute ist die ERSTE mit anderem Zeichen (wie kippminuten)
         for _e in _fkm:
-            if _e['name'] in ('Glückspunkt',) or _e['fehler']:
+            if _e['fehler']:
                 continue
             _b = getattr(_swe, _KIPP_KOERPER[_e['name']])
             for _key, _vz in (('frueher', -1), ('spaeter', 1)):
@@ -5297,10 +5209,13 @@ if __name__ == '__main__':
                     _e['zeichen'], (_e, _key)
                 assert zeichen_name(_l(_jd + _vz * (_e[_key] - 1) / 1440.0, _b)) \
                     == _e['zeichen'], (_e, _key)
-        _gp = [e for e in _fkm if e['name'] == 'Glückspunkt'][0]
-        assert _gp['gerechnet'] and _gp['fehler'] is None and _gp['min'], _gp
-        _fw_ohne = faktor_kippminuten(_jd, _fw)          # ohne lat/lon
-        assert [e for e in _fw_ohne if e['name'] == 'Glückspunkt'][0]['fehler']
+        # lat/lon/cusps sind seit 2026-09-23 ohne Wirkung (nur der
+        # ausgemusterte Glueckspunkt brauchte sie): dasselbe Ergebnis ohne sie.
+        assert faktor_kippminuten(_jd, _fw) == _fkm
+        # Ein Glueckspunkt aus einem alten Datenblatt bekommt keine Kippminute.
+        assert not [e for e in faktor_kippminuten(
+            _jd, _fw + [{'name': 'Glückspunkt', 'lon': 100.0}])
+            if e['name'] == 'Glückspunkt']
         _fkw = faktor_kipp_warnungen(_fkm)
         assert _fkw[0]['minuten'] <= _fkw[-1]['minuten']
         assert any(w['name'] == 'Sonne' for w in _fkw), _fkw
@@ -5345,5 +5260,4 @@ if __name__ == '__main__':
         _fx = faktor_kippminuten(_jdm, [{'name': 'Mond', 'lon': 1.0}])[0]
         assert _fx['fehler'] and _fx['min'] is None, _fx
         print('Faktor-Kippminuten-Test: OK — Sonne', _so['frueher'],
-              'Minuten, Mond', _mo['frueher'], 'Minuten, Glückspunkt',
-              _gp['min'], 'Minuten')
+              'Minuten, Mond', _mo['frueher'], 'Minuten')
