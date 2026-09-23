@@ -14,9 +14,10 @@ falsch sind. Diese Vorlage traegt NUR, was ein Typ ohne Zeitebene braucht:
     3. KONST / ACHSEN      die Chartdaten (kommen aus chartdata.py)
     4. ANALYSE / CHARTDATA / OUT / RADPNG / DOCTYPE
 
-Der Transit nimmt weiter `REFERENZ_Chart_Builder_Ultimativ.py` (Transit-Uhr,
-Zeitleisten-Seite, Anhangtabellen; der Dateiname stammt aus der Zeit des
-Ultimativ-Horoskops, das am 2026-09-23 ausgemustert wurde).
+Der Transit nimmt `REFERENZ_Chart_Builder_Transit.py` (Transit-Uhr,
+Zeitleisten-Seite, Anhangtabellen; bis zum 2026-09-23 hiess sie
+`REFERENZ_Chart_Builder_Ultimativ.py`, nach dem an diesem Tag ausgemusterten
+Ultimativ-Horoskop).
 
 Alles andere — Struktur-CSS, Inhaltsverzeichnis, Radseite, Konstellationsseite,
 Aspektseite, Kapitel-Sektionen (`chartdoc.build_section()`: Kopf, Koerper,
@@ -68,6 +69,16 @@ RADPNG = '<klient>_radix.png'
 OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
 DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
 GEBURTSZEILE = '<TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Cover, letzte Zeile
+
+# Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
+# Hauswechsel; seit 2026-09-23c) — aus dem KOPF der chart_data uebernommen,
+# nicht gerechnet: JD in UT mit mindestens fuenf Nachkommastellen, Breite und
+# Laenge in Dezimalgrad. Solange einer fehlt, bricht der Builder mit Meldung ab.
+JD_GEBURT = None          # <<JD (UT) aus dem Kopf der chart_data>>
+LAT, LON = None, None     # <<Breite, Laenge aus dem Kopf der chart_data>>
+# Weitere Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
+# (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag.
+FUSSNOTEN_EXTRA = []
 
 from build import BASE_CSS                     # noqa: E402
 
@@ -257,7 +268,9 @@ def cover_html(kicker):
     hat das Cover nicht — auch keine zweite Typzeile: Unter der Linie stand bis
     zum 2026-09-23 eine feste Zeile „Horoskop", die den Kicker doppelte
     (Chris-Entscheidung: „nur einmal"). Hoehen im 842-Raster: 88 Kicker,
-    112 Name, 168 Linie, 788 Leitsatz, 822 Geburtsdaten."""
+    112 Name, 168 Linie, 788 Leitsatz, 822 Geburtsdaten. 788 ist die LETZTE
+    Leitsatzzeile: Ein langer Leitsatz wird am Gedankenstrich umbrochen und
+    waechst nach oben (chartdoc.leitsatz_block(), seit 2026-09-23c)."""
     return f"""<section class="cover">
 <div class="cv-sky"></div>
 {cover_stars()}
@@ -265,7 +278,7 @@ def cover_html(kicker):
 <div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">{esc(kicker)}</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
-<div class="cv-block cv-leit" style="top:{y2cm(788):.2f}cm">{html.escape(LEITSATZ)}</div>
+{chartdoc.leitsatz_block(LEITSATZ)}
 <div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">{esc(GEBURTSZEILE)}</div>
 </section>"""
 
@@ -358,10 +371,31 @@ ELEMENTE, MODI = chartdoc.verteilung(
     [(cd.name_of(_BY[n]['name']), _BY[n]['lon']) for n in KLASSISCH])
 
 
+# --- Fussnoten der Konstellationsseite (2026-09-23c) -------------------------
+# Die beiden Geburtszeit-Saetze (Zeichengrenze, Hauswechsel) kommen fertig aus
+# radix.konstellations_fussnoten(); die Funktion setzt den Ephemeridenpfad
+# selbst und bricht ab, statt einen Satz still wegzulassen (vorher uebergab
+# die Vorlage gar kein `fussnoten=`). lade.ephemeriden() holt pyswisseph und die
+# Dateien, wenn sie fehlen — im frischen Container bis zu zehn Minuten, darum
+# den Builder im Hintergrund starten. Vorn stehen die Saetze aus dem Datenblatt.
+def konst_fussnoten():
+    if None in (JD_GEBURT, LAT, LON):
+        raise SystemExit('JD_GEBURT, LAT und LON aus dem Kopf der chart_data '
+                         'eintragen (Fussnoten der Konstellationsseite).')
+    from lade import ephemeriden
+    ephemeriden(still=True)
+    return list(FUSSNOTEN_EXTRA) + radix.konstellations_fussnoten(
+        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON)
+
+
+KONST_FUSSNOTEN = konst_fussnoten()
+
+
 def chartbild(rad_breite, skala, konst_skala=1.0):
     return (chartdoc.radix_page(RADPNG, RAD_NOTE, bild_breite=rad_breite)
             + chartdoc.konstellationen_page(konst_zeilen(), achsen_zeilen(),
                                             ELEMENTE, MODI, note=KONST_NOTE,
+                                            fussnoten=KONST_FUSSNOTEN,
                                             skala=konst_skala)
             + chartdoc.aspekt_page(ASPEKTE, skala=skala))
 

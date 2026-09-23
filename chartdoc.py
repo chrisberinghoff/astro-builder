@@ -2058,6 +2058,64 @@ def _hat_fuss(it):
                 or (it.get('beleg') or '').strip())
 
 
+# --- Cover: der Leitsatz --------------------------------------------------
+# Neu 2026-09-23c (Pruefbericht Transit 3+4 vom 23.09.c, 1.3). Beide Vorlagen
+# setzten den Leitsatz als EINEN Block mit Oberkante 788 (842er Raster); ein
+# zweizeiliger lief nach unten in die Geburtsdatenzeile (822). Das
+# Design-Render-Modul (Deckblatt, Pflichtelement 1) verlangt den Umbruch am
+# Gedankenstrich, sonst ausgewogen, bis zu drei Zeilen — ohne Kuerzen und ohne
+# kleinere Schrift. Hier steht beides EINMAL fuer beide Vorlagen.
+LEITSATZ_ZEICHEN = 60          # Zeichen je Zeile; zwei Zeilen reichen bis rund 120
+LEITSATZ_ZEILEN_MAX = 3
+
+
+def leitsatz_zeilen(text, zeichen=LEITSATZ_ZEICHEN, max_zeilen=LEITSATZ_ZEILEN_MAX):
+    """Der Cover-Leitsatz als Kursivzeilen -> [str, ...].
+
+    Bis `zeichen` Zeichen EINE Zeile. Darueber so viele Zeilen, wie die Laenge
+    verlangt (hoechstens `max_zeilen`), umbrochen am Gedankenstrich, sonst
+    ausgewogen an Wortgrenzen; der Strich bleibt am Zeilenende, keine Zeile
+    beginnt mit ihm. Liegt der Strich so weit neben der ausgewogenen Stelle,
+    dass eine Zeile um mehr als ein Viertel von `zeichen` laenger wuerde,
+    gewinnt die Ausgewogenheit („Kurz — und dann ein langer Rest …"). Gekuerzt
+    wird nie."""
+    import itertools
+    t = " ".join(str(text or "").split())
+    if len(t) <= zeichen:
+        return [t] if t else []
+    w = t.split(" ")
+    n = max(1, min(max_zeilen, -(-len(t) // zeichen), len(w)))
+    bonus = zeichen // 4                      # so viel laenger darf eine Zeile am Strich sein
+    best = None
+    for cuts in itertools.combinations(range(1, len(w)), n - 1):
+        grenzen = (0,) + cuts + (len(w),)
+        zeilen = [" ".join(w[a:b]) for a, b in zip(grenzen, grenzen[1:])]
+        if any(z[:1] in ("—", "–") for z in zeilen[1:]):
+            continue
+        kosten = max(len(z) for z in zeilen) - bonus * sum(
+            z.endswith(("—", "–")) for z in zeilen[:-1])
+        if best is None or kosten < best[0]:
+            best = (kosten, zeilen)
+    return best[1] if best else [t]
+
+
+def leitsatz_block(text, unten=788, schrift_pt=15.4, zeilenhoehe=1.25):
+    """Der Leitsatz-Block des Covers als HTML (Klassen `cv-block cv-leit`).
+
+    Die LETZTE Zeile steht auf `unten` (842er Raster, wie die Hoehen der
+    Vorlagen), weitere Zeilen darueber — so bleibt der Abstand zur
+    Geburtsdatenzeile (822) gleich, wie lang der Leitsatz auch ist. Bei einer
+    Zeile ist die Ausgabe dieselbe wie vor dem 2026-09-23c."""
+    zeilen = leitsatz_zeilen(text)
+    if len(zeilen) <= 1:
+        return ('<div class="cv-block cv-leit" style="top:%.2fcm">%s</div>'
+                % (unten / 842 * 29.7, html.escape(zeilen[0] if zeilen else "")))
+    top = unten - (len(zeilen) - 1) * schrift_pt * zeilenhoehe
+    return ('<div class="cv-block cv-leit" style="top:%.2fcm;line-height:%s">%s</div>'
+            % (top / 842 * 29.7, zeilenhoehe,
+               " <br>".join(html.escape(z) for z in zeilen)))
+
+
 def pruefe_kapitelkopf(items):
     """Harte Gegenprobe vor dem Rendern: traegt JEDES Kapitel einen Kicker?
 
@@ -2077,7 +2135,18 @@ def pruefe_kapitelkopf(items):
     fuer alle uebrigen (`Auftakt`, `Rechenschaft`, `Hauptthemen`,
     `Konfliktfelder`, `Lebensaufgaben`, `Schlusswort`) sowie die
     Teiler-Kicker aus PART_KICKER.
+
+    items: die Kapitelliste `parse_analyse(...)['chapters']`. Seit dem
+    2026-09-23c nimmt die Funktion auch das ganze Ergebnis von
+    `parse_analyse()`, ein einzelnes Kapitel oder den Pfad bzw. Text der
+    analyse.md — mit dem Pfad aufgerufen brach sie mit AttributeError ab,
+    statt zu pruefen (Pruefbericht Transit 1+2 vom 23.09.b; dieselbe
+    Stolperstelle wie „Einzelkapitel statt parsed['chapters']").
     """
+    if isinstance(items, (str, os.PathLike)):
+        items = build.parse_analyse(items)['chapters']
+    elif isinstance(items, dict):
+        items = items['chapters'] if 'chapters' in items else [items]
     ohne = [(i, it.get('title') or '(ohne Titel)')
             for i, it in enumerate(items) if not (it.get('kicker') or '').strip()]
     if not ohne:
@@ -2712,7 +2781,44 @@ def _hilfe_cli(argv=None):
     return True
 
 
+def _selbsttest_leitsatz_kapitelkopf():
+    """2026-09-23c: Leitsatz-Umbruch und pruefe_kapitelkopf() mit Pfad/dict —
+    konstruierte Saetze, keine echten Daten."""
+    kurz = "Was trägt, darf leise sein."
+    assert leitsatz_zeilen(kurz) == [kurz]
+    assert leitsatz_block(kurz) == ('<div class="cv-block cv-leit" style="top:%.2fcm">%s</div>'
+                                    % (788 / 842 * 29.7, html.escape(kurz)))
+    lang = ("Wer die eigene Tiefe nicht mehr fürchtet — findet in ihr den Boden, "
+            "auf dem sich gehen lässt.")
+    z = leitsatz_zeilen(lang)
+    assert z == ["Wer die eigene Tiefe nicht mehr fürchtet —",
+                 "findet in ihr den Boden, auf dem sich gehen lässt."], z
+    b = leitsatz_block(lang)
+    assert "<br>" in b and "top:%.2fcm" % ((788 - 15.4 * 1.25) / 842 * 29.7) in b, b
+    ohne = ("Eine Form für das Mitgefühl finden heißt nicht weniger fühlen sondern "
+            "dem Gefühl ein Gefäß geben das hält auch wenn es voll ist und überläuft")
+    z3 = leitsatz_zeilen(ohne)
+    assert len(z3) == 3 and " ".join(z3) == ohne and max(map(len, z3)) <= 60, z3
+    import tempfile
+    md = ("# Geburtshoroskop — Probe\n\n## Auftakt · Wie dieses Horoskop zu lesen ist\n\n"
+          "Ein Satz.\n\n## Schlusswort · Probe\n\nNoch ein Satz.\n")
+    with tempfile.NamedTemporaryFile('w', suffix='_analyse.md', delete=False,
+                                     encoding='utf-8') as f:
+        f.write(md)
+    parsed = build.parse_analyse(f.name)
+    for arg in (f.name, parsed, parsed['chapters'], parsed['chapters'][0]):
+        pruefe_kapitelkopf(arg)
+    try:
+        pruefe_kapitelkopf({'kicker': '', 'title': 'Ohne Kicker', 'blocks': []})
+        raise AssertionError('pruefe_kapitelkopf: fehlender Kicker nicht gemeldet')
+    except RuntimeError:
+        pass
+    os.unlink(f.name)
+    print('Leitsatz-Umbruch und pruefe_kapitelkopf(): ok')
+
+
 if __name__ == '__main__':
     if _hilfe_cli():          # python3 chartdoc.py --hilfe [<name>]
         raise SystemExit(0)
     _selbsttest()
+    _selbsttest_leitsatz_kapitelkopf()

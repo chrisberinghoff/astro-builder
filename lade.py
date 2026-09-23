@@ -63,10 +63,12 @@ dreifach und liefen dreifach auseinander).
 `pruefe_repo()` haelt BEKANNT gegen das echte Repo — einmal laufen lassen,
 wenn ein Builder sich merkwuerdig verhaelt.
 
-Alle Builder liegen im BUILDER-Ordner und im Repo, hd.py und
-REFERENZ_Chart_Builder_Ultimativ.py seit dem 2026-09-08 ebenfalls (davor per
-project_read, weil sie Klientendaten trugen — die sind an dem Tag anonymisiert
-worden). NICHT ueber diesen Weg: blocks_bundle.txt (die Bibliothek selbst,
+Alle Builder liegen im BUILDER-Ordner und im Repo, hd.py und die
+Transit-Vorlage seit dem 2026-09-08 ebenfalls (davor per project_read, weil sie
+Klientendaten trugen — die sind an dem Tag anonymisiert worden). Die
+Transit-Vorlage heisst seit dem 2026-09-23 REFERENZ_Chart_Builder_Transit.py
+(vorher REFERENZ_Chart_Builder_Ultimativ.py).
+NICHT ueber diesen Weg: blocks_bundle.txt (die Bibliothek selbst,
 Werkzeuge-Modul Punkt 1) und alle .md-Module, die nur im Projektwissen liegen.
 
 Wer wirklich rechnet — Pholus in Schritt 1, transit.py im Transit-Lauf —
@@ -110,7 +112,7 @@ REPO = "https://raw.githubusercontent.com/chrisberinghoff/astro-builder/main/"
 BEKANNT = {
     "build", "chartdoc", "radix", "transit", "transitdata",
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
-    "hd", "REFERENZ_Chart_Builder_Ultimativ",
+    "hd", "REFERENZ_Chart_Builder_Transit",      # bis 2026-09-23: REFERENZ_Chart_Builder_Ultimativ
     "REFERENZ_Chart_Builder_Geburtshoroskop",   # seit 2026-09-20 (D3, K7): schlanke Vorlage fuer das Geburtshoroskop
     "inhaltsprobe",          # seit 2026-09-16: Analyse gegen chart_data (Schritt 2 und 3+4)
     "lade",
@@ -370,8 +372,8 @@ def _ephemeriden_warnung():
         "      from lade import ephemeriden\n"
         "      ephe = ephemeriden()      # installiert nur, wenn noetig, und "
         "liefert den Pfad fuer --ephe\n"
-        "  Wer nur den fertigen Report aus der chart_data parst "
-        "(Schritt 3+4), braucht sie nicht.\n"
+        "  Schritt 3+4 braucht sie fuer die Fussnoten der Konstellationsseite;\n"
+        "  die Vorlagen holen sie dort selbst (seit 2026-09-23c).\n"
         "  Rechnet transit.py ohne sie, bricht es selbst hart ab."
     )
 

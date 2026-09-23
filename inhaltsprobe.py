@@ -1842,6 +1842,29 @@ def _thema_feld(roh, name):
 def _kontakt_name(k):
     return "T-%s %s R-%s" % (ANZEIGE.get(k[0], k[0]), k[1], ANZEIGE.get(k[2], k[2]))
 
+# Ziel einer Registerzeile in Prosa (2026-09-23c): der Faktor hinter
+# „dein…"/„your" — auch mit EINEM Adjektiv („deinem eigenen Jupiter", „deinem
+# natalen Mond") und einem Vorsatz mit Bindestrich („deiner Fische-Sonne") — oder
+# hinter zu/zum/zur/über/auf/to („zur Venus") oder als zweites Ziel hinter
+# und/sowie/oder („zu deiner Sonne und Venus"). „dein laufender Jupiter" zaehlt
+# nicht, das ist der Transiter. Gelesen wird nur der KOPF der Zeile, vor dem
+# ersten Gedankenstrich, Komma, Semikolon oder der ersten Klammer; was dahinter
+# steht („…, der Herrscherin deines Aszendenten"), ist Erlaeuterung
+# (Zweitleser 2026-09-23c).
+_PROSA_ZIEL_VOR_RE = re.compile(
+    r"(?:(?<![\wäöüÄÖÜß])(?:dein(?:em|er|en|es|e)?|your)\s+"
+    r"(?:(?!(?:laufend|transitierend|running|transiting)\w*\s)[\wäöüÄÖÜß]+\s+)?"
+    r"|(?<![\wäöüÄÖÜß])(?:zu|zum|zur|über|ueber|auf|to|und|sowie|oder|and|or)\s+"
+    r"(?:de[mnr]\s+|the\s+)?)"
+    r"(?:[\wäöüÄÖÜß]+-)?$", re.I)
+
+
+def _prosa_ziele(z):
+    """Die Faktoren, die im Kopf einer Registerzeile als Radix-Ziel stehen -> set."""
+    kopf = re.split(r"\s[—–]\s|[,;(]", z or "", 1)[0]
+    return {f for a, _e, f in _faktoren_im_satz(kopf)
+            if _PROSA_ZIEL_VOR_RE.search(kopf[max(0, a - 40):a])}
+
 def _registerzeile(k, zeilen):
     """Die Registerzeile, die den Kontakt k nennt: Transiter UND Ziel; traegt die
     Zeile ein Aspektwort, muss es passen; beim Selbst-Transit (Saturn □ Saturn,
@@ -1858,12 +1881,27 @@ def _registerzeile(k, zeilen):
         _r_seite = {kanon(m) for m in re.findall(r"\bR-\s?([A-Za-zÄÖÜäöüß]+)", z)}
         if _t_seite and _r_seite and not (t in _t_seite and r in _r_seite):
             continue
+        # ZIEL PRUEFEN AUCH IN PROSA (2026-09-23c; Pruefberichte Transit 1+2 vom
+        # 23.09.b und 3+4 vom 23.09.c: 4 PRUEFEN, keines zutreffend). Ohne
+        # Praefixe nahm die Probe die ERSTE Zeile mit beiden Namen — beim
+        # vertauschten Paar („Mondknoten im Sextil zu deinem Jupiter" fuer
+        # T-Jupiter ⚹ R-Mondknoten) und beim Selbst-Transit (die Zeile desselben
+        # Transiters an einem anderen Ziel) eine fremde. In Prosa steht das
+        # Radix-Ziel hinter „dein…"/„your"; nennt die Zeile so ein Ziel, muss r
+        # darunter sein. Eine Zeile ohne solches Ziel wird geprueft wie bisher.
+        if not (_t_seite and _r_seite):
+            _ziele = set(_r_seite) or _prosa_ziele(z)
+            _ziele |= {SPIEGEL_FAKTOR[x] for x in _ziele if x in SPIEGEL_FAKTOR}
+            if _ziele and r not in _ziele:
+                continue
         if t == r:
             n = sum(len(re.findall(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", z))
                     for s, kk in _FAKTOR_SCHREIBWEISEN if kk == t)
             if t == "MONDKNOTEN":
                 n += len(re.findall(r"(?<![\wäöüÄÖÜß])Knoten(?![\wäöüÄÖÜß])", z))
-            if n < 2 and not re.search(r"R(?:ü|ue)ckkehr|Wiederkehr|eigen", z):
+            if n < 2 and not re.search(r"R(?:ü|ue)ckkehr|Wiederkehr|"   # „eigen" als Wort,
+                                       r"(?<![\wäöüÄÖÜß])[Ee]igen(?:e[mnrs]?)?"  # nicht in „zeigen"
+                                       r"(?![\wäöüÄÖÜß])", z):              # (2026-09-23c)
                 continue
         arten = {(_art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2)))
                  for m in ASPEKT_RE.finditer(z)}
@@ -3581,6 +3619,44 @@ def _neues_glied(satz, pos, naechster_marker):
     g = _GENUS.get(kanon(mg.group(2)))          # None: MC/IC, jedes Genus
     return {"der": "m", "die": "f"}.get(mg.group(1), "n") == g or \
         (g is None and mg.group(1) == "das")
+# (6) RELATIVSATZ, AUCH MIT PRAEPOSITION (2026-09-23c; Pruefberichte Transit 1+2
+#     vom 23.09.b und 3+4 vom 23.09.c): Das Pronomen am Satzanfang ist Subjekt
+#     des Hauptsatzes. Steht ein Marker in einem Relativsatz, der dahinter
+#     beginnt („Er ist die Spitze einer Figur, in der dein Mond und die Ballung
+#     aus Venus und Saturn im Sextil stehen und beide im Quincunx zu Merkur"),
+#     traegt (a) das Pronomen nicht hinein — vorher wurde sein Bezug (Merkur)
+#     Partner des Merkur im Relativsatz. Ein Komma zwischen Relativsatz und
+#     Marker schliesst ihn; Artikel + Faktor („, in der Sonne", „, der Mond")
+#     ist kein Relativsatz. Wie bei (b) wird die Probe dadurch nur leiser.
+_RELATIV_PRAEP_RE = re.compile(
+    r",\s+(?:(?:in|an|auf|aus|bei|mit|nach|von|vor|zu|über|ueber|unter|hinter|"
+    r"neben|zwischen|durch|für|fuer|gegen|um|ohne|seit|with|to|on|at|from|by|for)\s+)?"
+    r"(?:der|die|das|dem|den|denen|deren|dessen|welche[rsmn]?|which|who|whom|whose)"
+    r"(?![\wäöüÄÖÜß])(?!\s+(?:%s|Knoten)(?![\wäöüÄÖÜß]))" % _FAKTOR_RE, re.I)
+
+
+def _im_relativsatz(satz, pos):
+    """(6): Steht `pos` in einem Relativsatz, der davor beginnt und bis dahin
+    nicht durch Komma oder Semikolon geschlossen ist?"""
+    for r in _RELATIV_PRAEP_RE.finditer(satz, 0, pos):
+        if not re.search(r"[,;]", satz[r.end():pos]):
+            return True
+    return False
+# (7) SELBSTPAAR NUR BEI TRANSITERN (2026-09-23c): Ein Faktor mit sich selbst
+#     ist nur im Transit und nur bei einem laufenden Planeten eine
+#     Konstellation (Saturn-Rückkehr, Knotenwiederkehr). „Merkur … Merkur" kann
+#     es nicht geben — so ein Paar entsteht nur aus einem falsch aufgeloesten
+#     Bezug (dieselben Pruefberichte: „Merkur Quincunx Merkur").
+_SELBST_TRANSITER = {"MARS", "JUPITER", "SATURN", "URANUS", "NEPTUN", "PLUTO",
+                     "CHIRON", "MONDKNOTEN"}
+
+
+def _paar_ok(x, y, typ):
+    """(3), (7): Achsenpaare nie; ein Faktor mit sich selbst nur im Transit und
+    nur, wenn er transitieren kann."""
+    if frozenset((x, y)) in _ACHSENPAARE:
+        return False
+    return x != y or (typ == "transit" and x in _SELBST_TRANSITER)
 # (3) ACHSENPAAR — AC/DC und MC/IC stehen einander immer gegenüber; ein Satz, der
 #     beide Enden nennt („über deinen Deszendenten … deinem Aszendenten
 #     gegenüber"), behauptet damit keinen Aspekt. Solche Paarungen zaehlen nicht.
@@ -3673,10 +3749,18 @@ def _konstellationen(satz, vorher=""):
             davor, danach = [danach[0]], danach[1:]
         if not davor and vorher and _PRONOMEN_ANFANG_RE.match(satz):      # (a)
             fv = _faktoren_im_satz(vorher)
-            davor = [fv[-1][2]] if fv else []
+            kand = [fv[-1][2]] if fv else []
             if danach:
-                davor = list(dict.fromkeys(davor + _pronomen_bezug(
+                kand = list(dict.fromkeys(kand + _pronomen_bezug(
                     _PRONOMEN_ANFANG_RE.match(satz).group(1), "", vorher)))
+            if _im_relativsatz(satz, m.start()):                           # (6)
+                # Kein Paar — aber die Aufzaehlung (1) des naechsten Markers erbt,
+                # was (a) gesetzt haette; sonst wurde der Partner dieses Markers
+                # Subjekt des naechsten (Zweitleser 2026-09-23c).
+                if kand:
+                    vorige_davor = kand
+                continue
+            davor = kand
         if not danach and len(set(davor)) >= 2:
             danach = [davor[-1]]
             davor = [f for f in davor[:-1] if f != danach[0]]
@@ -3757,8 +3841,7 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
                     continue
                 gesehen.add((art, m.start()))
                 paarungen = [(x, y) for x in reversed(davor) for y in danach
-                             if (x != y or typ == "transit")
-                             and frozenset((x, y)) not in _ACHSENPAARE]     # (3)
+                             if _paar_ok(x, y, typ)]                        # (3), (7)
                 if not paarungen:           # „Pluto … zu sich selbst": Zyklus, kein Radix-Aspekt
                     continue
                 p.geprueft += 1
@@ -4801,6 +4884,52 @@ def _selbsttest(still=False):
     _ist = _p13_mit_vorsatz("Sie bilden gemeinsam ein Quadrat zu deiner Sonne.",
                             "Mars und Saturn stehen in deinem zehnten Haus.")
     assert frozenset(("SATURN", "SONNE")) in _ist, "P13 Plural-Sie: %r" % _ist
+    # 2026-09-23c (6): das Satzanfangs-Pronomen traegt nicht in einen Relativsatz,
+    # (7): Selbstpaar nur bei einem Transiter; konstruierte Saetze
+    _v6 = "Merkur ist der Planet, bei dem alles zusammenläuft: Er verwaltet deine Sonne."
+    _s6 = ("Er ist zugleich die Spitze einer Figur, in der dein Mond und die Ballung aus "
+           "Venus und Saturn im Sextil stehen und beide im Quincunx zu Merkur.")
+    assert not [d for d, a, _n, _m in _konstellationen(_s6, _v6) if a == "Quincunx"], \
+        "P13 (6): Pronomen im Relativsatz"
+    _ist = _p13_mit_vorsatz("Er, der durch dein zwölftes Haus läuft, bildet ein Quadrat zu "
+                            "deiner Venus.", "Saturn wandert ab März weiter.")
+    assert frozenset(("SATURN", "VENUS")) in _ist, "P13 (6) greift trotz Komma: %r" % _ist
+    assert not _paar_ok("MERKUR", "MERKUR", "transit") and _paar_ok("SATURN", "SATURN", "transit") \
+        and not _paar_ok("SATURN", "SATURN", "geburt") and not _paar_ok("AC", "DC", "transit"), \
+        "P13 (7) Selbstpaar"
+    # 2026-09-23c: P5 nimmt die Registerzeile mit dem richtigen Ziel
+    _zl = ["Jupiter im Trigon zu deinem MC — der Weg nach außen zeigt sich (Kapitel 2).",
+           "Mondknoten im Sextil zu deinem Jupiter — klingt mit in Kapitel 3.",
+           "Jupiter im Sextil zu deinem Mondknoten — klingt mit in Kapitel 7.",
+           "Jupiter im Trigon zu deinem Jupiter — klingt mit in Kapitel 2.",
+           "Mondknoten im Sextil zu deinem MC — der Knoten zeigt nach außen.",
+           "Mondknoten im Sextil zu deinem Mondknoten — klingt mit in Kapitel 7.",
+           "Saturn-Rückkehr — klingt mit in Kapitel 4.",
+           "Jupiter im Sextil zur Venus, der Herrscherin deines Aszendenten — Kapitel 3.",
+           "Neptun im Trigon zu deinem natalen Mond und deiner Venus — Kapitel 5.",
+           "Saturn □ R-Mond, dazu deine Sonne im Blick — Kapitel 6.",
+           "Mondknoten über deinem Südknoten — die Knoten tauschen die Plätze.",
+           "Jupiter im Trigon — neue Wege zeigen sich (Kapitel 2).",
+           "Saturn im Quadrat zu deiner Sonne und Venus — Kapitel 4."]
+    for _k, _soll in ((("JUPITER", "Sextil", "MONDKNOTEN"), 2),
+                      (("MONDKNOTEN", "Sextil", "JUPITER"), 1),
+                      (("JUPITER", "Trigon", "JUPITER"), 3),
+                      (("MONDKNOTEN", "Sextil", "MONDKNOTEN"), 5),
+                      (("JUPITER", "Trigon", "MC"), 0),
+                      (("SATURN", "Konjunktion", "SATURN"), 6),
+                      (("JUPITER", "Sextil", "VENUS"), 7),
+                      (("NEPTUN", "Trigon", "MOND"), 8),
+                      (("SATURN", "Quadrat", "MOND"), 9),
+                      (("MONDKNOTEN", "Opposition", "MONDKNOTEN"), 10)):
+        assert _registerzeile(_k, _zl) == _zl[_soll], "P5 Registerzeile: %r -> %r" % (
+            _k, _registerzeile(_k, _zl))
+    assert _registerzeile(("SATURN", "Quadrat", "VENUS"), _zl) == _zl[12], "P5 zweites Ziel"
+    assert _registerzeile(("JUPITER", "Trigon", "JUPITER"), _zl[11:12]) is None, \
+        'P5: „zeigen" gilt nicht als „eigen"'
+    _ist = _p13_mit_vorsatz("Er öffnet ein Feld, in dem im Sextil zu deiner Venus und im "
+                            "Trigon zu deinem Mars zwei Wege liegen.",
+                            "Jupiter wandert ab dem Frühjahr weiter.")
+    assert frozenset(("VENUS", "MARS")) not in _ist, "P13 (6) + Aufzählung (1): %r" % _ist
     assert _ZUSATZ_SEG_ANFANG_RE.match("Finsternis auf R-Mond ☽ — 12.08.2026") and \
         _ZUSATZ_SEG_ANFANG_RE.match("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027") \
         and not _ZUSATZ_SEG_ANFANG_RE.match("T-Saturn ♄ Quadrat □ R-Mond ☽ — exakt 01.03.2027"), \

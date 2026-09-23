@@ -77,6 +77,12 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         und steht in §3; der Fußnotensatz steht als eigene Fußnote neben dem
         von zeichengrenze_fussnote().
 
+    konstellations_fussnoten(jd, factors, cusps, lat, lon) -> list
+        Seit 2026-09-23c: beide Fußnoten zur Geburtszeit (Zeichengrenze,
+        Hauswechsel) für die Konstellationsseite in EINEM Aufruf. Setzt den
+        Ephemeridenpfad selbst und bricht ab, statt eine Fußnote still
+        wegzulassen. Die beiden Vorlagen rufen sie auf.
+
     glyphen_ergaenzen(factors) -> list          (FAKTOR_GLYPHE, 2026-09-19)
         Füllt leere 'glyph'-Felder mit dem Vertrags-Kürzel ('AC' … 'IC',
         'Pho') bzw. Symbol und meldet jede Ergänzung.
@@ -1952,6 +1958,99 @@ def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE):
             + ('. Die Hausdeutung dieser Faktoren hängt damit an der '
                'Geburtszeit.' if len(teile) > 1 else
                '. Die Hausdeutung hängt damit an der Geburtszeit.'))
+
+
+def _ephe_pfad_setzen(swe):
+    """Setzt den Swiss-Ephemeris-Pfad aus lade.ephemeriden_pfad() (nur lesend,
+    installiert nichts) bzw. SE_EPHE_PATH -> Pfad oder None."""
+    import os as _os
+    pfad = None
+    try:
+        import lade as _lade
+        pfad = _lade.ephemeriden_pfad()
+    except Exception:
+        pfad = None
+    pfad = pfad or _os.environ.get('SE_EPHE_PATH') or None
+    if pfad:
+        swe.set_ephe_path(pfad)
+    return pfad
+
+
+def konstellations_fussnoten(jd, factors, cusps, lat, lon,
+                             schwelle=KIPP_SCHWELLE):
+    """Beide Geburtszeit-Fussnoten der Konstellationsseite in EINEM Aufruf —
+    Zeichengrenze (Spitzen und Faktoren) und Hauswechsel — als Liste fertiger
+    Saetze fuer `chartdoc.konstellationen_page(..., fussnoten=[...])`; leer,
+    wenn keine faellig ist (neu 2026-09-23c).
+
+    BRICHT AB, statt eine Fussnote still wegzulassen: ohne pyswisseph, ohne
+    Ephemeridendateien (seas_*.se1), wenn die Spitzen fuer jd/lat/lon um mehr
+    als 0,05° von `cusps` abweichen (JD, Breite, Laenge werden in der Vorlage
+    von Hand eingetragen: vertauscht, falsches Vorzeichen, zu wenig
+    Nachkommastellen — Zweitleser 2026-09-23c) und wenn ein Faktor `fehler`
+    traegt. Den Pfad setzt die Funktion selbst; fehlen Paket oder Dateien, ist
+    `from lade import ephemeriden; ephemeriden()` der naechste Schritt.
+
+    Grund (Pruefberichte Transit 3+4 vom 23.09.c, 1.4, und Geburtshoroskop 3+4
+    vom 23.09.c, K1-1; vorher dreimal Klasse 2): Ohne gesetzten Pfad meldete
+    faktor_kippminuten() Chiron und Pholus als `fehler`,
+    zeichengrenze_fussnote() gab still None, und keine Vorlage rief die
+    Funktionen ueberhaupt auf — eine faellige Fussnote fiel weg, verify() blieb
+    gruen.
+
+    jd        JD der Geburt in UT, mindestens fuenf Nachkommastellen (Kopf der
+              chart_data)
+    factors   der factors-Block (cd.factors); cusps die zwoelf Koch-Spitzen
+              (cd.CUSPS); lat, lon Geburtsort (Kopf der chart_data)
+    -> [str, ...]: erst der Zeichengrenzen-, dann der Hauswechsel-Satz, je
+       einer oder keiner; jeder ist ein EIGENER Eintrag in fussnoten=[…].
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        raise RuntimeError(
+            'konstellations_fussnoten(): pyswisseph fehlt — vorher '
+            '`from lade import ephemeriden; ephemeriden()` aufrufen (im '
+            'frischen Container beim ersten Mal bis zu zehn Minuten).')
+    if not _ephe_pfad_setzen(swe):
+        raise RuntimeError(
+            'konstellations_fussnoten(): keine Swiss-Ephemeris-Dateien '
+            '(seas_*.se1) gefunden — `from lade import ephemeriden; '
+            'ephemeriden()` aufrufen. Ohne sie fallen Chiron und Pholus '
+            'still aus der Zeichengrenzen-Pruefung.')
+    _c = swe.houses_ex(jd, lat, lon, b"K")[0][:12]
+    _c1 = swe.houses_ex(jd + 1.0 / 86400.0, lat, lon, b"K")[0][:12]
+    _abw = max(_winkelabstand(_c[i], cusps[i]) for i in range(12))
+    # Toleranz 0,05° plus die Spitzenbewegung in einer Sekunde: Ein JD mit fuenf
+    # Nachkommastellen ist auf knapp eine Sekunde genau, und nahe dem Polarkreis
+    # laufen die Spitzen so schnell, dass das allein ueber 0,05° reicht
+    # (Zweitleser 2026-09-23c).
+    _tol = 0.05 + max(_winkelabstand(_c1[i], _c[i]) for i in range(12))
+    if _abw > _tol:
+        raise RuntimeError(
+            'konstellations_fussnoten(): die Spitzen fuer JD, Breite und Laenge '
+            'weichen um %s von den Spitzen der chart_data ab — JD (UT, mindestens '
+            'fuenf Nachkommastellen), Breite und Laenge aus ihrem Kopf pruefen '
+            '(vertauscht? Vorzeichen?).' % _gr_s(_abw))
+    kipp = kippminuten(jd, lat, lon)
+    fk = faktor_kippminuten(jd, factors)
+    hk = haus_kippminuten(jd, factors, cusps, lat, lon)
+    fehl = ['%s: %s' % (e['name'], e['fehler']) for e in (fk or [])
+            if e.get('fehler')]
+    if kipp is None or fk is None or hk is None or fehl:
+        raise RuntimeError(
+            'konstellations_fussnoten(): die Kippminuten sind nicht vollstaendig '
+            'rechenbar — ' + ('; '.join(fehl) if fehl else
+                               'pyswisseph lieferte nichts')
+            + '. Das ist NICHT „keine Fussnote faellig": JD (UT, mindestens fuenf '
+              'Nachkommastellen), Breite und Laenge aus dem Kopf der chart_data '
+              'pruefen.')
+    out = []
+    for satz in (zeichengrenze_fussnote(kipp, schwelle=schwelle, faktoren=fk),
+                 hauswechsel_fussnote(hk, schwelle=schwelle)):
+        if satz:
+            out.append(satz)
+    return out
 
 
 def hausherrscher(factors, cusps, aspects=None, klassisch=False,
@@ -5168,6 +5267,30 @@ if __name__ == '__main__':
         assert len(_kw) == 6 and _kw == sorted(_kw, key=lambda w: w['minuten'])
         assert kipp_warnungen(_kp, schwelle=0) == []
         assert kipp_warnungen(None) is None
+        # 2026-09-23c: konstellations_fussnoten() — Liste mit Ephemeride, Abbruch
+        # bei einem Faktor, dessen Laenge nicht zum JD passt (statt still None)
+        _cu_fn = list(_swe.houses_ex(_JD, _LAT, _LON, b"K")[0][:12])
+        _ep_fn = _ephe_pfad_setzen(_swe)
+        if _ep_fn:
+            _fac_fn = [{'name': n, 'lon': _swe.calc_ut(_JD, getattr(_swe, k),
+                                                      _swe.FLG_SWIEPH)[0][0]}
+                       for n, k in (('Sonne', 'SUN'), ('Mond', 'MOON'),
+                                    ('Chiron', 'CHIRON'), ('Pholus', 'PHOLUS'))]
+            _fn = konstellations_fussnoten(_JD, _fac_fn, _cu_fn, _LAT, _LON)
+            assert isinstance(_fn, list) and all(isinstance(x, str) for x in _fn), _fn
+            _fac_fn[1] = dict(_fac_fn[1], lon=(_fac_fn[1]['lon'] + 1.0) % 360.0)
+            try:
+                konstellations_fussnoten(_JD, _fac_fn, _cu_fn, _LAT, _LON)
+                raise AssertionError('konstellations_fussnoten: fehler nicht gemeldet')
+            except RuntimeError as _e:
+                assert 'Mond' in str(_e), _e
+            try:                               # Breite und Laenge vertauscht
+                konstellations_fussnoten(_JD, _fac_fn, _cu_fn, _LON, _LAT)
+                raise AssertionError('konstellations_fussnoten: Spitzen nicht gegengeprueft')
+            except RuntimeError as _e:
+                assert 'Spitzen' in str(_e), _e
+        else:
+            print('konstellations_fussnoten-Test: uebersprungen (keine Ephemeridendateien)')
         # Das Strukturbild traegt die Kippminuten und die Abweichungsprobe
         _cu_kipp = list(_swe.houses_ex(_JD, _LAT, _LON, b"K")[0][:12])
         _fkp = [{'name': 'Sonne', 'lon': 280.0}, {'name': 'Mond', 'lon': 100.0},
