@@ -54,6 +54,14 @@ fuer den nicht fuehrenden Faktor haengt vom Typ ab: Heisst die Datei
 `<klient>_Transit_chart_data.md`, gibt es kein Rechenschaftskapitel (das
 Register „Mitlaufendes" fuehrt Kontakte, nicht Faktoren).
 
+TRANSIT (seit 2026-09-23, Aufraeumlauf Ladekosten, Block D): Heisst die Datei
+`<klient>_Transit_chart_data.md`, zieht der Selektor die Gruppen
+'Sonnenzeichen-Hintergrund' und 'Grundlagen' gar nicht erst (NICHT_IM_TRANSIT).
+Der Transit-Lauf vom 22.09.c las dort rund 120 KB, die nichts trugen. Die
+'Spezialfaktor-Methodik' bleibt — aus ihr kamen zwei gebrauchte Aspekt-Stellen —,
+und fuehrt die Sonne ein Thema (`fuehrt=ja`), bleibt das Sonnenzeichen-Kapitel in
+der gelesenen Gruppe 'Sonnenzeichen'. Im Nur-Liste-Modus gilt dasselbe.
+
 FEHLSTELLEN (eindeutig seit 2026-09-19, W36): Ein angeforderter Aspekt, fuer den
 die Bibliothek keinen Block fuehrt (Spezialfaktor mit Spezialfaktor, Achse mit
 Achse, ausserhalb des Systems), IST eine Fehlstelle. Sie bricht nicht ab: Die
@@ -547,8 +555,11 @@ def resolve_aspect(a, b):
     return None, None, 'nicht als Block geführt (Achse-Achse/außersystemisch)'
 
 
-def build_requests(chart):
-    """-> (requests, protocol, grenzlagen)   request=(gruppe, srcfile, key, note)"""
+def build_requests(chart, typ=None):
+    """-> (requests, protocol, grenzlagen)   request=(gruppe, srcfile, key, note)
+
+    typ: None oder 'transit' (s. typ_aus_pfad()). Im Transit fallen die Gruppen
+    aus NICHT_IM_TRANSIT weg; das Protokoll nennt sie in einer Zeile."""
     req, prot, grenz = [], [], []
     haeuser = set()
 
@@ -672,6 +683,13 @@ def build_requests(chart):
         else:
             ohne.append((a, b, note))
             prot.append('ASPEKT %s-%s -> FEHLSTELLE: %s' % (a, b, note))
+    if typ == 'transit':
+        weg = [r for r in req if r[0] in NICHT_IM_TRANSIT]
+        req = [r for r in req if r[0] not in NICHT_IM_TRANSIT]
+        if weg:
+            prot.append('TRANSIT -> nicht gezogen: %s (%d Anfrage(n), im Transit '
+                        'ungenutzt)' % (' · '.join(sorted(set(r[0] for r in weg))),
+                                        len(weg)))
     return req, prot, grenz
 
 
@@ -699,6 +717,12 @@ GRUPPEN = ['Planet-in-Zeichen', 'Planet-in-Haus', 'Haus-Allgemein', 'Achsen',
 # `Sonnenzeichen` — dort traegt es die Deutung tatsaechlich mit.
 UEBERSPRINGBAR = ('Sonnenzeichen-Hintergrund', 'Grundlagen',
                   'Spezialfaktor-Methodik')
+
+# Gruppen, die der Selektor im TRANSIT gar nicht zieht (2026-09-23, Aufraeumlauf
+# Ladekosten, Block D). Belegt am Transit-Lauf vom 22.09.c: Ab Zeile 1052 der
+# referenz.md standen rund 120 KB, die nichts trugen. Die Spezialfaktor-Methodik
+# fehlt hier absichtlich — aus ihr kamen zwei gebrauchte Aspekt-Stellen.
+NICHT_IM_TRANSIT = ('Sonnenzeichen-Hintergrund', 'Grundlagen')
 
 
 # Zeichen-Tabellen, aus denen nur die eigene Zeile gebraucht wird.
@@ -751,10 +775,11 @@ def _zeichenschnitt(text, praefix_muster, zeichen):
     return '\n'.join(behalten).rstrip() + '\n', gespart
 
 
-def select(chart_text, blocks_ref):
-    """blocks_ref = Verzeichnis blocks/ ODER Bündeldatei blocks_bundle.txt."""
+def select(chart_text, blocks_ref, typ=None):
+    """blocks_ref = Verzeichnis blocks/ ODER Bündeldatei blocks_bundle.txt.
+    typ: None oder 'transit' — s. build_requests() und NICHT_IM_TRANSIT."""
     chart = parse_chart(chart_text)
-    req, prot, grenz = build_requests(chart)
+    req, prot, grenz = build_requests(chart, typ)
     bundle = None if os.path.isdir(blocks_ref) else load_bundle(blocks_ref)
     cache = {}
 
@@ -851,6 +876,11 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
     _z = {}
     for gruppe, _s, _k, _n, text in ordered:
         _z[gruppe] = _z.get(gruppe, 0) + len(text.split('\n')) + 2
+    if typ == 'transit':
+        out.append('>')
+        out.append('> TRANSIT: Grundlagen und ein nicht fuehrendes '
+                   'Sonnenzeichen-Kapitel sind nicht gezogen —')
+        out.append('> sie trugen im Transit nichts (s. selektor.NICHT_IM_TRANSIT).')
     _skip = [(g, _z[g]) for g in UEBERSPRINGBAR if _z.get(g)]
     if _skip:
         out.append('>')
@@ -965,7 +995,7 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
     return '\n'.join(out) + '\n'
 
 
-def referenzliste(chart_text, blocks_ref=None):
+def referenzliste(chart_text, blocks_ref=None, typ=None):
     """Nur-Liste-Modus (neu 2026-09-19, W40): was das Chart aus der Bibliothek
     braucht — ohne Bibliothek und ohne referenz.md.
 
@@ -979,9 +1009,11 @@ def referenzliste(chart_text, blocks_ref=None):
        Aspekte ohne Block), fehlt [(Datei, Schluessel)] (nur mit blocks_ref,
        sonst None), chart (das geparste Datenblatt mit 'hinweise' und
        'unbekannt').
+    typ: None oder 'transit' — im Transit ohne die Gruppen aus
+    NICHT_IM_TRANSIT, wie im vollen Lauf.
     """
     chart = parse_chart(chart_text)
-    req, _prot, _grenz = build_requests(chart)
+    req, _prot, _grenz = build_requests(chart, typ)
     dateien = {}
     for _gruppe, src, key, _note in req:
         keys = dateien.setdefault(src, [])
@@ -989,7 +1021,7 @@ def referenzliste(chart_text, blocks_ref=None):
             keys.append(key)
     fehlt = None
     if blocks_ref is not None:
-        fehlt = select(chart_text, blocks_ref)[4]
+        fehlt = select(chart_text, blocks_ref, typ)[4]
     return {'dateien': dateien, 'fehlstellen': list(chart.get('ohne_block', [])),
             'fehlt': fehlt, 'chart': chart}
 
@@ -1061,7 +1093,7 @@ def _melde_ohne_block(ohne):
 def _main_liste(chart_path, blocks_ref=None):
     """Nur-Liste-Modus auf der Kommandozeile (2026-09-19, W40)."""
     text = open(chart_path, encoding='utf-8').read()
-    r = referenzliste(text, blocks_ref)
+    r = referenzliste(text, blocks_ref, typ_aus_pfad(chart_path))
     chart = r['chart']
     for h in chart.get('hinweise', []):
         print('   HINWEIS %s' % h)
@@ -1151,6 +1183,27 @@ def _selbsttest():
     assert typ_aus_pfad('/x/muster_Transit_chart_data.md') == 'transit'
     assert typ_aus_pfad('muster_chart_data.md') is None
     assert typ_aus_pfad('muster_EA_chart_data.md') is None
+    # Block D (2026-09-23): Im Transit keine Grundlagen, kein Sonnenzeichen-
+    # Hintergrund; Spezialfaktor-Methodik und fuehrendes Sonnenzeichen bleiben.
+    gruppen = lambda rq: set(x[0] for x in rq)
+    assert {'Grundlagen', 'Sonnenzeichen'} <= gruppen(req)
+    req_t, prot_t, _g = build_requests(parse_chart(blk), 'transit')
+    assert not gruppen(req_t) & set(NICHT_IM_TRANSIT), gruppen(req_t)
+    assert {'Sonnenzeichen', 'Spezialfaktor-Methodik'} <= gruppen(req_t)
+    assert sum(p.startswith('TRANSIT -> nicht gezogen') for p in prot_t) == 1
+    blk_h = blk.replace('FAKTOR SONNE zeichen=Widder haus=1 fuehrt=ja',
+                        'FAKTOR SONNE zeichen=Widder haus=1')
+    assert 'Sonnenzeichen-Hintergrund' in gruppen(build_requests(parse_chart(blk_h))[0])
+    req_th = build_requests(parse_chart(blk_h), 'transit')[0]
+    assert not gruppen(req_th) & {'Sonnenzeichen-Hintergrund', 'Sonnenzeichen', 'Grundlagen'}
+    assert gruppen(req_th) - set(NICHT_IM_TRANSIT) == gruppen(req_th)
+    r_t = referenzliste(blk_h, typ='transit')
+    assert F01 not in r_t['dateien'] and 'Widder_Sonnenzeichen.txt' not in r_t['dateien']
+    assert F01 in referenzliste(blk_h)['dateien']
+    md_tk = assemble_md(chart, [], prot_t, [], grenz, typ='transit')
+    assert 'TRANSIT: Grundlagen' in md_tk and 'TRANSIT: Grundlagen' not in md
+    # Ausserhalb des Transits unveraendert
+    assert build_requests(parse_chart(blk))[0] == req
     # W40: Nur-Liste-Modus ohne Bibliothek
     r = referenzliste(blk)
     assert r['fehlt'] is None and 'Sonne_Aspekte.txt' in r['dateien']
@@ -1158,7 +1211,8 @@ def _selbsttest():
     assert len(r['fehlstellen']) == 2
     print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
-          'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert]')
+          'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
+          'Transit-Schnitt (Block D)]')
 
 
 def main():
@@ -1196,14 +1250,15 @@ def main():
         os.path.basename(chart_path).replace('chart_data', 'referenz')
     typ = typ_aus_pfad(chart_path)
     text = open(chart_path, encoding='utf-8').read()
-    chart, req, prot, ordered, missing, grenz = select(text, blocks_dir)
+    chart, req, prot, ordered, missing, grenz = select(text, blocks_dir, typ)
     print('Faktoren :', len(chart['faktoren']),
           '| Aspekte:', len(chart['aspekte']),
           '| Bloecke gezogen:', len(ordered),
           '| Grenzlagen:', len(grenz))
     if typ == 'transit':
         print('   TYP Transit (Dateiname) — Grenzlagen-Wortlaut ohne '
-              'Rechenschaftskapitel')
+              'Rechenschaftskapitel; Grundlagen und nicht fuehrendes '
+              'Sonnenzeichen-Kapitel nicht gezogen')
     for g in grenz:
         print('   GRENZLAGE %-12s Haus %s -> %s  (%s)'
               % (g['faktor'], g['haus'], g['nebenhaus'], g['stufe']))
