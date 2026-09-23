@@ -402,7 +402,11 @@ section.front {{ page: front; break-before: page; }}
 
 .legs {{ display:table; width:100%; table-layout:fixed; }}
 .legs > .row {{ display:table-row; }}
-.legs .cell {{ display:table-cell; width:50%; vertical-align:top; }}
+/* box-sizing (2026-09-23, Pruefbericht Transit 3+4 vom 23.09., 1.5): Ohne es
+   schiebt das padding-right der linken Zelle die rechte um genau diesen Betrag
+   ueber die Satzkante (gemessen 19,32 cm bei 19,1 cm). */
+.legs .cell {{ display:table-cell; width:50%; vertical-align:top;
+   box-sizing:border-box; }}
 .legs .cell.links {{ padding-right:0.46cm; }}
 
 /* Farb-/Strichmuster in „Die Linien im Rad" */
@@ -436,7 +440,8 @@ section.front {{ page: front; break-before: page; }}
 /* ---------- Element- / Modus-Verteilung ---------- */
 .dist {{ display:table; width:100%; table-layout:fixed; margin:0 0 0.46cm 0; }}
 .dist > .row {{ display:table-row; }}
-.dist .cell {{ display:table-cell; width:50%; vertical-align:top; }}
+.dist .cell {{ display:table-cell; width:50%; vertical-align:top;
+   box-sizing:border-box; }}   /* wie .legs .cell, s. dort */
 .dist .cell.links {{ padding-right:0.6cm; }}
 h4.blockkopf {{ font-family:"EB Garamond"; font-weight:400;
    text-transform:uppercase; letter-spacing:0.18em; font-size:7.4pt;
@@ -679,6 +684,13 @@ td.zz {{ color:#4c4335; font-size:0.94em; }}
 .fuss-sig {{ font-family:"EB Garamond Italic"; font-style:italic;
    color:{PETROL_L}; font-size:8.8pt; line-height:1.34; column-span:all;
    margin:0 0 0.22cm 0; }}
+/* 2026-09-23 (Pruefbericht Transit 3+4 vom 23.09., 1.4): Im Zweispalter gibt
+   WeasyPrint einem column-span:all-Element nicht nur die Linie (s. o.), sondern
+   auch die Breite INKLUSIVE beider Innenabstaende von .beleg — Signatur- und
+   Stand-Zeile liefen bis 19,35 cm bei einer Satzkante von 19,1 cm. Der Ausgleich
+   ist die Summe beider Innenabstaende (2 x 0,4 cm) und gilt nur im Zweispalter;
+   wer das Padding von .beleg aendert, zieht ihn nach. */
+.beleg.two .fuss-sig, .beleg.two .beleg-stand {{ margin-right:0.8cm; }}
 
 p {{ margin:0 0 0.5em 0; text-align:justify; hyphens:auto; }}
 p.first {{ margin-top:0.4cm; }}

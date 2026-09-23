@@ -3164,6 +3164,26 @@ def _ist_knotenrueckkehr(e):
                  or e.get("ziel") in ("Mondknoten", "Nordknoten")))
 
 
+def _gegenenden(fak):
+    """Die Gegenenden der Achsen in `fak`, die selbst nicht in `fak` stehen
+    (bei RESSOURCEN_FAKTOREN: IC und DC). Ohne radix leer — dann bricht
+    _achsen_spiegel_zusammenziehen() ohnehin mit einer klaren Meldung ab."""
+    try:
+        import radix as _rx
+    except Exception:                          # noqa: BLE001
+        return set()
+    return {_rx._GEGENACHSE[x] for x in fak if x in _rx._GEGENACHSE} - set(fak)
+
+
+def _zaehlt_fuer_ressource(e, fak):
+    """Ein Eintrag zaehlt, wenn ein Ende in `fak` steht oder sein Spiegel
+    ('Sextil MC') an einem Ende aus `fak` liegt."""
+    if e["a"] in fak or e["b"] in fak:
+        return True
+    sp = (e.get("spiegel") or "").split()
+    return bool(sp) and sp[-1] in fak
+
+
 def _achsen_spiegel_zusammenziehen(treffer):
     """F18 (2026-09-19): Eine Achsen-Spiegelzeile ist EINE Gabe mit EINEM
     Eintrag (Datenblatt-Modul, geklaert 2026-09-18). Harmonisch trifft ein
@@ -3309,8 +3329,17 @@ def ressourcen_liste(chart_data_pfad: str, faktoren=None,
     roh = _ressourcen_zeilen(chart_data_pfad)
     treffer = []
     if radix:
-        treffer = [e for e in roh if e["a"] in fak or e["b"] in fak]
-        treffer = _achsen_spiegel_zusammenziehen(treffer)
+        # 2026-09-23 (Pruefbericht Geburtshoroskop 1+2 vom 22.09.c, Klasse 1
+        # Nr. 1): Das Gegenende einer Achse aus `fak` (IC zum MC, DC zum AC)
+        # muss mit in den Zusammenzug, sonst sieht er die zweite Zeile eines
+        # Faktors ausserhalb von `fak` nie — Trigon IC plus Sextil MC fiel auf
+        # „⚹ MC … neben" ohne Spiegel, und die Satzpflicht am Deutungsort sank
+        # von drei auf einen Satz. Eine Zeile zum Gegenende zaehlt danach nur,
+        # wenn sie Spiegel eines Eintrags an einem Ende aus `fak` geworden ist.
+        gegen = _gegenenden(fak)
+        kand = [e for e in roh if {e["a"], e["b"]} & (set(fak) | gegen)]
+        treffer = [e for e in _achsen_spiegel_zusammenziehen(kand)
+                   if _zaehlt_fuer_ressource(e, fak)]
     treffer.sort(key=lambda e: e["orb"])
     zeilen = ["%s %s %s %s %s%s — Deutungsort: "
               % (e["a"], e["glyph"], e["b"], e["orb_txt"], e["stufe"],
@@ -3735,6 +3764,22 @@ def _selbsttest():
                 "Mond ⚹ MC 2°10′ voll (zugleich Trigon IC) — Deutungsort: "],
                 "F18: %r" % rl["zeilen"])
             pruefe("EIN Eintrag" in ressourcen_block(rg), "F18: Kopfsatz")
+            # 2026-09-23: Faktor AUSSERHALB der Menge — das Gegenende muss in
+            # den Zusammenzug; eine einzelne Zeile zum DC zaehlt nicht.
+            rtab2 = "\n".join([
+                "### Volle Aspekte (1)", "",
+                "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+                "|---|---|---|---|---|---|",
+                "| Jupiter | △ Trigon | IC | 1°20′ | blau |  |", "",
+                "### Nebenaspekte (2)", "",
+                "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+                "|---|---|---|---|---|---|",
+                "| Jupiter | ⚹ Sextil | MC | 1°20′ | blau |  |",
+                "| Saturn | ⚹ Sextil | DC | 0°40′ | blau |  |", ""])
+            rl2 = ressourcen_liste(datei("r2_chart_data.md", rtab2))
+            pruefe(rl2["zeilen"] == [
+                "Jupiter △ IC 1°20′ voll (zugleich Sextil MC) — Deutungsort: "],
+                "F18/Gegenende: %r" % rl2["zeilen"])
             beide = ressourcen_liste(rg, events_json_pfad=evj, radix=True)
             pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 5
                    and len(beide["zeilen"]) == 7, "W22: Ultimativ (radix=True)")

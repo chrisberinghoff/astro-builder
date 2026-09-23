@@ -767,7 +767,18 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     die Sammelfelder `exakt_gesamt`, `wirkorb_von_gesamt`, `wirkorb_bis_gesamt`;
     `fruehere_durchgaenge` fuehrt je Wirkorb-Kontakt der langsamen Transiter die
     frueheren Durchgaenge mit Datum und Alter. Schema:
-    log/SCHNITTSTELLE_events_json.md des Wartungslaufs 2026-09-19."""
+    log/SCHNITTSTELLE_events_json.md des Wartungslaufs 2026-09-19.
+
+    EIN KONTAKT, MEHRERE EINTRAEGE (2026-09-23, Pruefbericht Transit 1+2 vom
+    22.09.c, Klasse 1 Nr. 4): `events` fuehrt je PASSAGE einen Eintrag. Liegen
+    zwei Perioden im Erfassungsorb weiter als _passage_luecke() auseinander (Mars
+    150, sonst 210 Tage), sind es zwei Eintraege mit demselben Schluessel
+    (transit, ziel, aspekt). Einer davon kann den Wirkorb nie erreichen:
+    im_wirkorb=False, `exakt` und `wirkorb_perioden` leer — eine Annaeherung, kein
+    Fehler. Wer je Kontakt gruppiert (Dichte, Zeitleiste, Register), sammelt ALLE
+    Eintraege eines Schluessels und rechnet mit `wirkorb_perioden`; ein dict ueber
+    den Schluessel behaelt sonst den zuletzt gelesenen — ein Lauf setzte so ein
+    Kapitel auf null Tage."""
     global ERZWINGE_MOSEPH
     ERZWINGE_MOSEPH = bool(moseph)           # 2026-09-19 (F21)
     if tz is not None:

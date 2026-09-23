@@ -454,7 +454,10 @@ if __name__ == '__main__':
         lambda breaks: build_html(breaks, skala, rad, kskala),
         OUT, items, colon_pairs, SEITEN,
         required_fields={'Leitsatz': LEITSATZ, 'Titelmotiv': TITELMOTIV},
-        extra_must=[(LEITSATZ, 'Leitsatz aufs Cover')],
+        # 2026-09-23 (Pruefbericht Transit 3+4 vom 23.09., 1.6): die ERSTE Zeile,
+        # wie Design-Render, „Durchsetzung" — mehrzeilig gesetzt steht der ganze
+        # Leitsatz im HTML nirgends am Stueck.
+        extra_must=[(LEITSATZ.split(" — ")[0].split("\n")[0], 'Leitsatz aufs Cover')],
         doctype=DOCTYPE)
     print('Aspektzeilen:', len(ASPEKTE), '| Kapitel:', len(items),
           '| Seiten:', len(doc.pages))

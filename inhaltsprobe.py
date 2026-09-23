@@ -1502,9 +1502,20 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
             if tab is None:
                 p.hinweise.append("%s — nicht in der Ständetabelle, Gradminute nicht geprüft" % stelle)
             else:
-                if abs(tab[0] - st["minuten"]) > 1:
+                # 2026-09-23 (Pruefbericht Geburtshoroskop 3+4 vom 22.09.c, Inhalt
+                # Nr. 1): 1′ lief bis dahin still durch — genau so stand ein
+                # abgeschnittener statt des gerundeten Werts an fuenf Stellen im Text,
+                # und erst der Zweitleser fand es. Der Beleg uebernimmt den Wert der
+                # Staendetabelle; 1′ ist deshalb PRUEFEN, mehr bleibt FEHLER.
+                _abw = abs(tab[0] - st["minuten"])
+                if _abw > 1:
                     p.fehler.append("%s — %s, Ständetabelle sagt %s"
                                     % (stelle, _orb_txt(st["minuten"]), _orb_txt(tab[0])))
+                elif _abw == 1:
+                    p.pruefen.append("%s — %s, Ständetabelle sagt %s: 1′ daneben — "
+                                     "abgeschnitten statt gerundet? Der Beleg übernimmt "
+                                     "den Wert der Ständetabelle"
+                                     % (stelle, _orb_txt(st["minuten"]), _orb_txt(tab[0])))
                 if tab[1] != st["zeichen"]:
                     p.fehler.append("%s — Zeichen %s, Ständetabelle sagt %s"
                                     % (stelle, st["zeichen"], tab[1]))
@@ -3485,6 +3496,31 @@ def _bild_arten(wort):
 # beiordnenden Faelle — ein Relativsatz oder ein Gedankenstrich verbindet
 # haeufig genau die Faktoren, um die es geht.
 _SATZGLIED_RE = re.compile(r",\s+(?:und|aber|doch|oder|sondern)\s|;\s")
+# 2026-09-23 (Pruefberichte Geburtshoroskop 3+4 vom 22.09.c, 1+2 vom 22.09.c und
+# 23.09., Transit 1+2 vom 22.09.c): drei Satzformen, aus denen P13 ein Paar baute,
+# das der Satz nicht behauptet.
+# (1) AUFZAEHLUNG — „ein Trigon zu Saturn und ein Quadrat zu Mars": Der zweite
+#     Marker steht direkt hinter „und/sowie/oder/," (+ Artikel/Praeposition); er
+#     teilt das Subjekt des ersten, sein „davor" ist nicht der Partner des ersten.
+_AUFZAEHLUNG_RE = re.compile(
+    r"(?:,|(?<![\wäöüß])(?:und|sowie|oder|and|or)(?![\wäöüß]))\s+"
+    r"(?:(?:ein|eine|einen|einem|einer|das|die|den|dem|der|zu|zum|zur|mit|im|in|"
+    r"a|an|the|to|with)\s+)*$", re.I)
+# (2) RELATIVSATZ — „im Trigon zum Mond, der seinerseits Saturn quadriert": Das
+#     „danach" eines Markers endet am Relativsatz, sonst wird der Faktor darin
+#     zum Partner des Subjekts (Merkur–Saturn statt Merkur–Mond).
+_RELATIV_RE = re.compile(r",\s+(?:der|die|das|dessen|deren|welche[rsmn]?|which|who|whose)"
+                         r"(?![\wäöüß])", re.I)
+# (3) ACHSENPAAR — AC/DC und MC/IC stehen einander immer gegenüber; ein Satz, der
+#     beide Enden nennt („über deinen Deszendenten … deinem Aszendenten
+#     gegenüber"), behauptet damit keinen Aspekt. Solche Paarungen zaehlen nicht.
+_ACHSENPAARE = {frozenset(("AC", "DC")), frozenset(("MC", "IC"))}
+# (4) ZUSATZ-SEGMENTE im Transit-Beleg („Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆")
+#     decken die gleichnamige Konstellation im Text; P1 prueft ihr Datum.
+_ZUSATZ_KONTAKT_RE = re.compile(
+    r"(?:Sonnenbogen|solar[\s-]*arc)[\s-]+(?P<t>" + _FAKTOR_RE + r")(?![\wäöüÄÖÜß])"
+    r"(?P<mitte>.*?)(?<![\wäöüÄÖÜß])R-\s*(?P<r>" + _FAKTOR_RE + r"|Knoten)(?![\wäöüÄÖÜß])",
+    re.I | re.S)
 
 
 def _konstellationen(satz, vorher=""):
@@ -3507,6 +3543,7 @@ def _konstellationen(satz, vorher=""):
     # Faktor ZWISCHEN zwei Markern gehoert weiter zu beiden — dort steht er
     # wirklich in beiden Konstellationen.
     marker.sort(key=lambda t: t[0].start())
+    vorige_davor = None
     for _i, (m, art) in enumerate(marker):
         if _VERNEINUNG_RE.search(satz[max(0, m.start() - 25):m.start()]):
             continue
@@ -3533,10 +3570,19 @@ def _konstellationen(satz, vorher=""):
             vor_grenze = max(vor_grenze, marker[_i - 1][0].end())
         if _i + 1 < len(marker):
             nach_grenze = min(nach_grenze, marker[_i + 1][0].start())
+        for mr in _RELATIV_RE.finditer(satz, m.end(), nach_grenze):   # (2)
+            if any(a >= m.end() and e <= mr.start() for a, e, _f in fak):
+                nach_grenze = mr.start()
+                break
         davor = [f for a, e, f in fak if a >= vor_grenze and e <= m.start()
                  and m.start() - e <= _FENSTER]
         danach = [f for a, e, f in fak if a >= m.end() and e <= nach_grenze
                   and a - m.end() <= _FENSTER]
+        if _i and vorige_davor:                                         # (1)
+            v_ende = marker[_i - 1][0].end()
+            if _AUFZAEHLUNG_RE.search(satz[v_ende:m.start()]) and any(
+                    a >= v_ende and e <= m.start() for a, e, _f in fak):
+                davor = list(vorige_davor)
         if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
                                                or m.group(0).casefold().endswith("zwischen")):
             davor, danach = [danach[0]], danach[1:]
@@ -3548,6 +3594,7 @@ def _konstellationen(satz, vorher=""):
             davor = [f for f in davor[:-1] if f != danach[0]]
         if davor and danach:
             out.append((davor, art, danach, m))
+            vorige_davor = davor
     return out
 
 def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
@@ -3564,6 +3611,13 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
             if k and k["art"]:
                 kontakte.add((k["t"], k["art"], k["r"]))
                 continue
+            z = _ZUSATZ_KONTAKT_RE.search(seg)                           # (4)
+            if z:
+                ma = ASPEKT_RE.search(z.group("mitte"))
+                if ma:
+                    z_art = _art(ma.group(1)) if ma.group(1) else _ASP_GLYPH.get(ma.group(2))
+                    kontakte.add((kanon(z.group("t")), z_art, kanon(z.group("r"))))
+                    continue
             if form == "instrument":        # alle Angaben gehoeren zur Funktion des Segments
                 st = _staende_segment(seg)
                 fa = st["faktor"] if st else None
@@ -3615,7 +3669,8 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
                     continue
                 gesehen.add((art, m.start()))
                 paarungen = [(x, y) for x in reversed(davor) for y in danach
-                             if x != y or typ == "transit"]
+                             if (x != y or typ == "transit")
+                             and frozenset((x, y)) not in _ACHSENPAARE]     # (3)
                 if not paarungen:           # „Pluto … zu sich selbst": Zyklus, kein Radix-Aspekt
                     continue
                 p.geprueft += 1
@@ -4596,6 +4651,27 @@ def _selbsttest(still=False):
                        ("Der tiefste Punkt deines Lebens liegt nicht hier.", True),
                        ("Was am tiefsten liegt, meldet sich zuletzt.", True)):
         assert bool(SUPERLATIV_RE.search(satz)) == soll, "W29 Superlativ: %r" % satz
+    # P13-Satzformen (2026-09-23): Aufzaehlung, Relativsatz, Achsenpaar, Zusatz-Segment
+    def _p13_paare(satz):
+        return {frozenset((x, y)) for d, _a, n, _m in _konstellationen(satz)
+                for x in d for y in n if x != y}
+    for satz, soll in (
+            ("Dein Mond hat ein Trigon zu Saturn und ein Quadrat zu Mars.",
+             {("MOND", "SATURN"), ("MOND", "MARS")}),
+            ("Dein Mars steht im Quadrat zu Pluto, im Trigon zu Jupiter und im Sextil zu Venus.",
+             {("MARS", "PLUTO"), ("MARS", "JUPITER"), ("MARS", "VENUS")}),
+            ("Dein Merkur steht im Trigon zum Mond, der seinerseits Saturn quadriert.",
+             {("MERKUR", "MOND")}),
+            ("Uranus steht im Quadrat zur Sonne, und Pluto trägt das Trigon zum Mond.",
+             {("URANUS", "SONNE"), ("PLUTO", "MOND")}),
+            ("Sonne und Venus stehen im Quadrat zu Mars.",
+             {("SONNE", "MARS"), ("VENUS", "MARS")})):
+        ist = _p13_paare(satz)
+        assert ist == {frozenset(p) for p in soll}, "P13 Satzform: %r -> %r" % (satz, ist)
+    assert frozenset(("DC", "AC")) in _ACHSENPAARE and frozenset(("MC", "IC")) in _ACHSENPAARE
+    _z = _ZUSATZ_KONTAKT_RE.search("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027")
+    assert _z and kanon(_z.group("t")) == "MERKUR" and kanon(_z.group("r")) == "NEPTUN", \
+        "P13 Zusatz-Segment nicht gelesen"
     # W29: der Deckel zaehlt nur die Wortliste — vier andere Superlative bleiben still
     _k = [{"kicker": "Kapitel 2", "title": "Probe", "blocks": [{"type": "p", "text":
           "Hier reicht es am weitesten. Die meisten Wochen sind ruhig. Am höchsten steht "
@@ -4931,6 +5007,58 @@ def _main(argv):
 # Funktion und wird DORT ergaenzt, nie hier.
 # ---------------------------------------------------------------------------
 
+# 2026-09-23 (Pruefberichte Transit 1+2 vom 22.09.c: 17 Aufrufe/28.843 B Quelltext;
+# Geburtshoroskop 1+2 vom 23.09.: 15 Aufrufe/77.349 B): Die Modultexte sagen, WAS die
+# Proben pruefen, nicht, WORAN sie es erkennen. Das steht hier, an einer Stelle:
+# `inhaltsprobe.hilfe('LESEFORMATE')`. Wer einen Leser aendert, zieht diesen Text nach.
+LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-09-23).
+
+THEMENLISTE (chart_data) — P3, P6, P7, P15; build.aspekt_heimat() liest gleich.
+  Beginn an der ersten Zeile `THEMA <n> |`; Ende am ersten Vorkommen von
+  `RECHENSCHAFT`, `REGISTER:` oder `GESTRICHEN:` — das blanke Wort genügt: Steht es
+  in einer Auswahlbegründung hinter den THEMA-Zeilen, endet die Liste dort.
+  Felder `name=wert`, getrennt durch ` | `. Gelesen: titel, fuehrt (der Faktor am
+  Anfang des Werts; im Transit der Kontakt `T-X <Aspekt> R-Y`), form (Vorgabe voll),
+  leitachse (beginnt mit „ja"), teil.
+
+BELEG (analyse) — P1, P2, P13, P14.
+  Segmente getrennt durch ` · `. Segment 1 = Stand: `Faktor Glyphe Gradminute Zeichen
+  Glyphe, n. Haus` (Grenzlage: führendes Haus vorn). P2 hält Zeichen und Haus gegen @@SELEKTOR,
+  die Gradminute gegen die Ständetabelle: 1′ Abweichung PRÜFEN, mehr FEHLER.
+  Ab Segment 2 genau EINE Aspektbeziehung mit Wort UND Glyphe.
+  Transit: `T-X Glyphe Aspekt Glyphe R-Y — exakt TT.MM.JJJJ, …` bzw. `— nicht exakt,
+  Annäherung bis x′ am TT.MM.JJJJ`; im Lagebild `— am Stichtag Orb 0,57°`.
+  Zusatz-Segmente: `Sonnenbogen-X … R-Y — exakt TT.MM.JJJJ`, `Finsternis auf R-Y —
+  TT.MM.JJJJ`, `progressiver Mond → Haus n — TT.MM.JJJJ`. Datum IMMER TT.MM.JJJJ,
+  auch in einer englischen Fassung.
+
+REGISTER im Transit (`Mitlaufendes`) — P5.
+  Eine Zeile deckt einen Kontakt, wenn sie Transiter UND Ziel nennt; trägt sie die
+  Präfixe T-/R-, muss der Transiter hinter T- und das Ziel hinter R- stehen; trägt
+  sie ein Aspektwort, muss es stimmen. Selbst-Transit: der Name zweimal oder
+  „Rückkehr"/„Wiederkehr"/„eigen…". Klingt der Kontakt in einem Kapitel mit, nennt
+  die Zeile `Kapitel n`. Mitklingende Kontakte ohne Zeile: EINE Sammelzeile (FEHLER).
+  Soll-Menge mit events.json aus build.kontakt_heimat(); ohne sie aus dem Block
+  `TRANSIT-RECHENSCHAFT:` (Ende an Überschrift, `@@`, `THEMA n |` oder
+  `GESTRICHEN:`/`RECHENSCHAFT:`/`REGISTER:`).
+
+DEUTUNGSORT (Ressourcen-Block) — P15.
+  Zeile `… — Deutungsort: Thema n` | `Ressource n` | `Was trägt`; im Transit auch
+  „Was dich durch diese Zeit trägt" (Abschnitt `###`). Ein anderer Ort ist PRÜFEN.
+  Gezählt werden die Sätze ab dem Satz, der BEIDE Faktoren nennt (oder zwei Sätzen,
+  die sie zusammen nennen), bis zu einem Satz nur über andere Faktoren.
+
+KONSTELLATION IM TEXT — P13.
+  Ein Aspektwort (auch Glyphe) oder ein Bild der Übersetzungstabelle zwischen zwei
+  Faktoren im selben Satz, je höchstens 90 Zeichen entfernt. Geschnitten wird am
+  Hauptsatz („, und", „, aber", „;"), am Nachbarmarker und am Relativsatz
+  („…, der …"). Eine Aufzählung („ein Trigon zu A und ein Quadrat zu B") teilt das
+  Subjekt. Die beiden Enden EINER Achse (AC/DC, MC/IC) bilden kein Paar. Verneintes
+  zählt nicht. Eine gedeckte Paarung genügt; Pronomen am Satzanfang („Er …") nimmt
+  den letzten Faktor des Vorsatzes.
+"""
+
+
 def hilfe(name=None, datei=None):
     """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
 
@@ -4942,6 +5070,8 @@ def hilfe(name=None, datei=None):
                           Konstante ihr voller Wert; 'modul' = der Docstring der
                           Datei selbst.
     hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
+    hilfe('LESEFORMATE')  woran die Proben den Text erkennen — Themenliste,
+                          Beleg-Segmente, Register, Deutungsort, P13-Schnitte.
     Kommandozeile:        python3 <builder>.py --hilfe [<name>]
     Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
     """
@@ -4973,6 +5103,9 @@ def hilfe(name=None, datei=None):
         elif _insp.isfunction(o) or _insp.isclass(o):
             L.append('%s.%s%s' % (_mn, name, _sig(o)))
             L.append(_insp.getdoc(o) or '(kein Docstring — Signatur gilt)')
+        elif isinstance(o, str) and '\n' in o:     # Lesetext (LESEFORMATE) als Text
+            L.append('%s.%s:' % (_mn, name))
+            L.append(o)
         else:
             L.append('%s.%s = %r' % (_mn, name, o))
     else:
