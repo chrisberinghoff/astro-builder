@@ -181,7 +181,8 @@ P11 Zahlen-Deckung   (2026-09-19, U1 a) jedes Tagesdatum, jeder Monat, jede
                      wenn es als Alter dasteht oder ±1,5 Jahre an einem
                      Zyklusfenster (Strukturbild §7) eines im Satz (oder im Satz
                      davor) genannten Faktors liegt; „das n. Lebensjahr" ist Alter
-                     n−1. Nur PRUEFEN; englisch: uebersprungen.
+                     n−1. Nur PRUEFEN; englisch mit eigenen Wortlisten (seit
+                     2026-09-22).
 P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", „die
                      zweitengste", „die meisten Verbindungen", „einzige", „kein
                      anderer", „x von y", „mehr als die Hälfte", „n Verbindungen",
@@ -189,8 +190,12 @@ P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", �
                      stehen, gegen sie gehalten — Gleichstand, falsche Zaehlung
                      (gezaehlt/gewichtet), falscher Rang, gewichtete Dichte als
                      Anzahl; ohne Rangzeilen jede Aussage PRUEFEN. Achsen-Spiegel
-                     (Knoten △ AC / Knoten ⚹ DC) belegen EINEN Rang. Nur PRUEFEN;
-                     englisch: uebersprungen.
+                     (Knoten △ AC / Knoten ⚹ DC) belegen EINEN Rang. „folgt
+                     keinem anderen" steht gegen Strukturbild §3 (Planeten im
+                     eigenen Zeichen); „alle n Jahre" ist eine Umlaufzeit und
+                     zaehlt nicht; spricht das Rangwort von Verbindungen, gilt die
+                     Verbindungs-Rangzeile (2026-09-24). Nur PRUEFEN; englisch mit
+                     eigenen Wortlisten (seit 2026-09-22).
 P13 Beleg-Deckung    (2026-09-19, U1 c; Klartext-Regel, Chris-Entscheidung Frage
                      4 = 1) jede im Fliesstext benannte Konstellation — Aspektwort
                      oder Bild der Uebersetzungstabelle zwischen zwei Faktoren —
@@ -3088,7 +3093,12 @@ _RANG_MUSTER = (
         r"(?<![\wäöüß])(?:(?P<n>zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn|elf|zwölf|"
         r"zwoelf|\d{1,2})|(?:nur|genau|bloß|lediglich|gerade\s+einmal|nicht\s+mehr\s+als)\s+"
         r"(?P<ein>eine[rnm]?|ein))\s+(?:[\wäöüß]+\s+)?Verbindung(?:en)?(?![\wäöüß])", re.I)),
-    ("alle_n", re.compile(r"(?<![\wäöüß])alle\s+(?:%s)(?![\wäöüß])" % _ZAHLWORT, re.I)),
+    # 2026-09-24 (Pruefberichte vom 24.09.): „alle zwölf Jahre", „etwa alle neun Jahre"
+    # nennen eine Umlaufzeit (Strukturbild §7; keine Probe prueft sie), keine Zaehlung
+    # im Chart — sie kamen in jedem Lauf als PRUEFEN und stimmten jedes Mal.
+    ("alle_n", re.compile(r"(?<![\wäöüß])alle\s+(?:%s)(?![\wäöüß])"
+                          r"(?!\s+(?:(?:bis|oder)\s+\S+\s+)?(?:Jahr|Monat|Woche|Tag)\w*)"
+                          % _ZAHLWORT, re.I)),
 )
 
 # Englische Rang-, Zaehl- und Einzigkeitswoerter (2026-09-22, W57-Nachzug).
@@ -3145,6 +3155,38 @@ _RANG_MUSTER_EN = (
     ("alle_n", re.compile(r"(?<!\w)all\s+(?:of\s+)?(?:the\s+|your\s+)?(?:%s)(?!\w)" % _ZAHLWORT_EN, re.I)),
 )
 
+# 2026-09-24 (Pruefberichte vom 24.09., alle vier Geburtshoroskop-Laeufe und Transit
+# 1+2): Das Bild „der Planet, der keinem anderen folgt" schreibt das Klartext-Modul
+# fuer den Endherrscher vor; P12 meldete es als Einzigkeit ohne Rangzeile — bis zu drei
+# PRUEFEN je Geburtshoroskop, alle zutreffend. Die Fundstelle ist Strukturbild §3: Wer
+# im eigenen Zeichen steht (Enddispositoren und „ohne Zulauf"), folgt keinem anderen.
+# Gedeckt ist der Satz, wenn er alle diese Planeten nennt — bei „Er …" am Satzanfang
+# zaehlt der Bezug des Pronomens dazu, ohne eigenen Faktor der ganze Vorsatz. Stehen
+# dort mehrere und nennt der Satz nicht alle, bleibt PRUEFEN — mit der Liste aus §3
+# (Transit 1+2 vom 24.09., Inhalt Nr. 7: „der Planet, der keinem anderen folgt" bei
+# zwei Endstellen). Gilt nur fuer den Treffer, der selbst „folgt" traegt.
+_FOLGT_KEINEM_RE = re.compile(
+    r"(?<![\wäöüß])(?:keinem\s+anderen(?:\s+[\wäöüß]+)?\s+folg\w*"
+    r"|folg\w*\s+(?:[\wäöüß]+\s+)?keinem\s+anderen|follows?\s+no\s+other)", re.I)
+_EIGENES_ZEICHEN_RE = re.compile(
+    r"^- (?:Enddispositoren \(im eigenen Zeichen[^)]*\)|Im eigenen Zeichen ohne Zulauf "
+    r"\([^)]*\)):[ \t]*(?P<liste>[^\n]*)$", re.M)
+
+
+def _eigenes_zeichen(txt):
+    """Strukturbild §3 der chart_data: die Planeten im eigenen Zeichen
+    (Enddispositoren und „ohne Zulauf") -> set kanonischer Namen, leer, wenn keiner
+    dort steht; None, wenn keine der beiden Zeilen im Text steht (§3 fehlt)."""
+    out, gefunden = set(), False
+    for m in _EIGENES_ZEICHEN_RE.finditer(txt or ""):
+        gefunden = True
+        liste = re.sub(r"\([^)]*\)", "", m.group("liste"))     # „(Ketten von …)" weg
+        for teil in liste.split(","):
+            k = kanon(teil.strip().rstrip(".").strip())
+            if k in ANZEIGE:
+                out.add(k)
+    return out if gefunden else None
+
 def _hat_referent(satz):
     """Spricht der Satz ueber das Chart? Nur dann ist ein Rangwort eine Aussage,
     die eine Zahl braucht („die engste Verbindung deines Bildes" — nicht „deine
@@ -3200,9 +3242,11 @@ _P12_PLANETENMENGE_RE = re.compile(
     r"|zwischen\s+zwei\s+(?:deiner\s+)?(?:zehn\s+)?Hauptkräfte(?:n)?", re.I)
 
 
-def _rang_befund(art, m, satz, rz, typ, vorher=""):
+def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
     """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
-    vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …")."""
+    vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …").
+    eigen: die Planeten im eigenen Zeichen aus Strukturbild §3 (`_eigenes_zeichen()`,
+    None: §3 fehlt), Fundstelle fuer „der Planet, der keinem anderen folgt" (2026-09-24)."""
     if not rz:
         return ("Rang-, Zähl- oder Einzigkeitsaussage — das Datenblatt hat keine Rangzeilen "
                 "(Strukturbild §10, seit 2026-09-19); die Zahl von Hand gegen die Tabellen halten")
@@ -3302,6 +3346,21 @@ def _rang_befund(art, m, satz, rz, typ, vorher=""):
                 % (_rang_txt(e).split(". ", 1)[1], r, beschr, k,
                    "; ".join(_rang_txt(x) for x in oben) or "—"))
     if art in ("einzig", "kein_anderer"):
+        if art == "kein_anderer" and any(x.start() <= m.start() < x.end()
+                                         for x in _FOLGT_KEINEM_RE.finditer(satz)):  # 2026-09-24, §3
+            ziel = set(fak)
+            pm = _PRONOMEN_ANFANG_RE.match(satz)
+            if pm:
+                ziel |= set(_pronomen_bezug(pm.group(1), "", vorher) or fak_v[-1:])
+            elif not ziel:
+                ziel |= set(fak_v)
+            if eigen and eigen <= ziel:
+                return None
+            return ("„folgt keinem anderen“ — Strukturbild §3, im eigenen Zeichen: %s; der Satz "
+                    "nennt %s" % ((", ".join(ANZEIGE.get(x, x) for x in sorted(eigen)) or "keiner")
+                                  if eigen is not None else "— (§3 nicht gefunden)",
+                                  ", ".join(ANZEIGE.get(x, x) for x in sorted(set(fak)))
+                                  or "keinen Planeten"))
         null = art == "einzig" and re.search(r"kein\w*\s+$", satz[max(0, m.start() - 12):m.start()])
         if element or modus:
             name, fam = (element, "elemente") if element else (modus, "modi")
@@ -3352,7 +3411,14 @@ def _rang_befund(art, m, satz, rz, typ, vorher=""):
     if art in ("meiste", "wenigste"):
         eine = bool(g.get("mit"))           # „mit die meisten": einer der ersten drei Ränge
                                             # („der Faktor mit den meisten" bleibt Rang 1 allein)
-        if element or modus:
+        # 2026-09-24 (Geburtshoroskop 1+2 vom 24.09., Nr. 2.2; 3+4b): Spricht das
+        # Rangwort selbst von Verbindungen („am dichtesten verschaltete", „die meisten
+        # Verbindungen"), gilt die Verbindungs-Rangzeile — auch wenn anderswo im Satz ein
+        # Element steht („…, und die Luft in dir hat keinen anderen Planeten als ihn").
+        verbindung = (re.search(r"verschalt|verbunden|vernetzt|angebunden", m.group(0), re.I)
+                      or re.match(r"\s+(?:[\wäöüß]+\s+){0,2}?(?:Verbindung|Aspekt|Kontakt|Verkehr)",
+                                  satz[m.end():], re.I))
+        if (element or modus) and not verbindung:
             name, fam = (element, "elemente") if element else (modus, "modi")
             schl = ["%s-%s" % (fam, a) for a in zaehlungen()]
             gemeint = [name]
@@ -3450,6 +3516,7 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
     # weiterhin, und jede ANDERE Art von Befund meldet das Getriebe-Kapitel
     # unveraendert.
     getriebe_zahlen = 0
+    eigen = _eigenes_zeichen(txt)                                   # 2026-09-24, §3
     for ch, bewegung, text in _fliesstext(chapters):
         ist_getriebe = (_ist_kicker(ch, "Getriebe")
                         or _kapitelart(ch, typ, chapters) == "Getriebe-Kapitel")
@@ -3465,7 +3532,8 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                     continue
                 belegt.append((a, e))
                 p.geprueft += 1
-                befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "")
+                befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "",
+                                      eigen=eigen)
                 if befund:
                     if ist_getriebe and befund.startswith(("Zählaussage", "Count statement")):
                         getriebe_zahlen += 1
@@ -3586,8 +3654,8 @@ _SATZGLIED_RE = re.compile(r",\s+(?:und|aber|doch|oder|sondern)\s|;\s")
 # (1) AUFZAEHLUNG — „ein Trigon zu Saturn und ein Quadrat zu Mars": Der zweite
 #     Marker steht direkt hinter „und/sowie/oder/," (+ Artikel/Praeposition); er
 #     teilt das Subjekt des ersten, sein „davor" ist nicht der Partner des ersten.
-_AUFZAEHLUNG_RE = re.compile(
-    r"(?:,|(?<![\wäöüß])(?:und|sowie|oder|and|or)(?![\wäöüß]))\s+"
+_AUFZAEHLUNG_RE = re.compile(          # „als auch" seit 2026-09-24
+    r"(?:,|(?<![\wäöüß])(?:und|sowie|oder|als\s+auch|and|or)(?![\wäöüß]))\s+"
     r"(?:(?:ein|eine|einen|einem|einer|das|die|den|dem|der|zu|zum|zur|mit|im|in|"
     r"a|an|the|to|with)\s+)*$", re.I)
 # (2) RELATIVSATZ — „im Trigon zum Mond, der seinerseits Saturn quadriert": Das
@@ -3647,6 +3715,30 @@ def _im_relativsatz(satz, pos):
 #     Konstellation (Saturn-Rückkehr, Knotenwiederkehr). „Merkur … Merkur" kann
 #     es nicht geben — so ein Paar entsteht nur aus einem falsch aufgeloesten
 #     Bezug (dieselben Pruefberichte: „Merkur Quincunx Merkur").
+# (8) AUFZAEHLUNG OHNE SUBJEKT (2026-09-24; Pruefberichte Geburtshoroskop 1+2 und
+#     3+4b vom 24.09., Z-23.09.c Nr. 2): Fand der erste Marker einer Aufzaehlung
+#     kein Subjekt („…; er steht im Sextil zu A und im Sextil zu B" — das Pronomen
+#     steht hinter dem Semikolon, nicht am Satzanfang), bekam der zweite Marker das
+#     Objekt des ersten als Partner (A–B). Jetzt bekommt er keinen Partner mehr aus
+#     dem ersten Glied; ein Subjekt findet er nur noch ueber „zwischen" oder ein
+#     Pronomen am Satzanfang.
+# (9) NEBENSATZ (2026-09-24; Pruefberichte Transit 1+2 und 3+4 vom 24.09., Z-23.09.c
+#     Nr. 2): Komma + unterordnende Konjunktion („, während A und B einander
+#     gegenüberstehen", „, weil …") eroeffnet einen Satz mit eigenem Subjekt. Seine
+#     Faktoren zaehlen nicht zum „danach" eines Markers, bis zum naechsten Komma oder
+#     Semikolon; was dahinter steht („…, wenn man so will, zu deinem Mars"), zaehlt
+#     wieder. Vorher wurde ein Faktor daraus zum Partner (A Sextil B statt Subjekt
+#     Sextil A). „sowohl … , als auch" ist kein Nebensatz. Stand vor dem Schnitt ein Faktor
+#     hinter dem Marker, paart die Nachstellung danach nicht nach vorn („A und B
+#     stehen beide im Quadrat, weil C sie trifft" ergaebe sonst A–B; Befund des
+#     Zweitpruefers 2026-09-24). Beide Regeln nehmen falsche Paare weg; (9) bildet
+#     keine neuen, (8) nur ueber „zwischen" oder ein Pronomen am Satzanfang.
+_NEBENSATZ_RE = re.compile(
+    r",\s+(?:während|waehrend|weil|obwohl|obgleich|wenn|falls|sobald|solange|sofern|"
+    r"als(?!\s+auch(?![\wäöüÄÖÜß]))|da|indem|nachdem|bevor|ehe|seitdem|damit|sodass|so\s+dass|"
+    r"wobei|wohingegen|dass|"
+    r"while|whereas|because|although|though|when|since|before|after|until|unless)"
+    r"(?![\wäöüÄÖÜß])", re.I)
 _SELBST_TRANSITER = {"MARS", "JUPITER", "SATURN", "URANUS", "NEPTUN", "PLUTO",
                      "CHIRON", "MONDKNOTEN"}
 
@@ -3724,11 +3816,18 @@ def _konstellationen(satz, vorher=""):
                                                      marker[_i + 1][0].start()):  # (5)
                 nach_grenze = mr.start()
                 break
+        ns_spannen = []                                                  # (9)
+        for mn in _NEBENSATZ_RE.finditer(satz, m.end(), nach_grenze):
+            mk = re.compile(r"[,;]").search(satz, mn.end(), nach_grenze)
+            ns_spannen.append((mn.start(), mk.start() if mk else nach_grenze))
+        vor_schnitt = any(s_ <= a < t_ and a - m.end() <= _FENSTER
+                          for a, e, _f in fak for s_, t_ in ns_spannen)  # (9): Partner entfernt?
         davor_pos = [(a, e, f) for a, e, f in fak if a >= vor_grenze and e <= m.start()
                      and m.start() - e <= _FENSTER]
         davor = [f for _a, _e, f in davor_pos]
         danach = [f for a, e, f in fak if a >= m.end() and e <= nach_grenze
-                  and a - m.end() <= _FENSTER]
+                  and a - m.end() <= _FENSTER
+                  and not any(s_ <= a < t_ for s_, t_ in ns_spannen)]     # (9)
         if danach and davor_pos and all(_OBJEKT_VOR_RE.search(satz[max(0, a - 30):a])
                                         for a, _e, _f in davor_pos):       # (b)
             pm = None
@@ -3739,11 +3838,11 @@ def _konstellationen(satz, vorher=""):
                 bezug = _pronomen_bezug(pm.group(0), satz[:pm.start()], vorher,
                                         vorige_davor if _i else None)
                 davor = davor + [f for f in bezug if f not in davor]
-        if _i and vorige_davor:                                         # (1)
+        if _i:                                                          # (1), (8)
             v_ende = marker[_i - 1][0].end()
             if _AUFZAEHLUNG_RE.search(satz[v_ende:m.start()]) and any(
                     a >= v_ende and e <= m.start() for a, e, _f in fak):
-                davor = list(vorige_davor)
+                davor = list(vorige_davor or [])
         if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
                                                or m.group(0).casefold().endswith("zwischen")):
             davor, danach = [danach[0]], danach[1:]
@@ -3761,7 +3860,7 @@ def _konstellationen(satz, vorher=""):
                     vorige_davor = kand
                 continue
             davor = kand
-        if not danach and len(set(davor)) >= 2:
+        if not danach and len(set(davor)) >= 2 and not vor_schnitt:     # (9): nur leiser
             danach = [davor[-1]]
             davor = [f for f in davor[:-1] if f != danach[0]]
         if davor and danach:
@@ -4930,6 +5029,85 @@ def _selbsttest(still=False):
                             "Trigon zu deinem Mars zwei Wege liegen.",
                             "Jupiter wandert ab dem Frühjahr weiter.")
     assert frozenset(("VENUS", "MARS")) not in _ist, "P13 (6) + Aufzählung (1): %r" % _ist
+    # 2026-09-24: (8) Aufzaehlung ohne Subjekt, (9) Nebensatz; konstruierte Saetze
+    _ist = _p13_paare("Dein Mars arbeitet leise; er steht im Trigon zu Saturn und im Trigon "
+                      "zu Neptun.")
+    assert frozenset(("SATURN", "NEPTUN")) not in _ist, "P13 (8) Aufzählung ohne Subjekt: %r" % _ist
+    _s9 = ("Er läuft im Trigon zu deinem Mond — ein ruhiger Weg — und gibt deiner Venus ein "
+           "Sextil, während Mond und Venus sich gegenüberstehen.")
+    _v9 = "Jupiter wandert ab dem Sommer weiter."
+    assert not [1 for d, a, n, _m in _konstellationen(_s9, _v9) if a == "Sextil"
+                and "MOND" in set(d) | set(n)], "P13 (9) Nebensatz"
+    assert frozenset(("JUPITER", "MOND")) in _p13_mit_vorsatz(_s9, _v9), "P13 (9) schneidet zu früh"
+    assert _p13_paare("Dein Mars steht im Quadrat zu Saturn, während dein Mond ruhig bleibt.") == \
+        {frozenset(("MARS", "SATURN"))}, "P13 (9) Hauptsatz vor dem Nebensatz"
+    assert frozenset(("MARS", "SATURN")) not in _p13_paare(
+        "Mars und Saturn stehen beide im Quadrat, weil Pluto sie trifft."), \
+        "P13 (9) Nachstellung paart nach dem Schnitt nach vorn"
+    assert frozenset(("SATURN", "URANUS")) in _p13_paare(
+        "Dein Saturn steht im Quincunx, wenn man so will, zu deinem Uranus."), \
+        "P13 (9) Spanne endet am Komma"
+    assert {frozenset(("MARS", "VENUS")), frozenset(("MARS", "JUPITER"))} <= _p13_paare(
+        "Dein Mars steht im Trigon sowohl zu Venus, als auch zu Jupiter."), \
+        "P13 (9) „als auch“ ist kein Nebensatz"
+    assert _p13_paare("Dein Mars steht sowohl im Trigon zu Venus, als auch im Sextil zu "
+                      "Jupiter.") == {frozenset(("MARS", "VENUS")), frozenset(("MARS", "JUPITER"))}, \
+        "P13 (1) „als auch“ reiht auf"
+    # 2026-09-24: P12 — §3 als Fundstelle, Umlaufzeit, Verbindungs-Rangzeile
+    _txt12 = ("- Enddispositoren (im eigenen Zeichen, und eine fremde Kette endet bei ihm): "
+              "Saturn (Ketten von Sonne, Mond).\n"
+              "- Im eigenen Zeichen ohne Zulauf (folgt keinem anderen, aber keine fremde Kette "
+              "endet bei ihm — kein Enddispositor): Venus.\n"
+              "- RANG verbindungen-gewichtet [voll 1]: 1. Merkur 4 · 2. Saturn 3\n"
+              "- RANG verbindungen-gezaehlt [je 1]: 1. Saturn 5 · 2. Merkur 4\n"
+              "- RANG elemente-gezaehlt [zehn Planeten]: 1. Erde 4 von 10 = 40 % (Saturn, Venus, "
+              "Mars, Jupiter) · 2. Luft 1 von 10 = 10 % (Merkur)\n")
+    assert _eigenes_zeichen(_txt12) == {"SATURN", "VENUS"}, _eigenes_zeichen(_txt12)
+    assert _eigenes_zeichen("- RANG verbindungen-gezaehlt [je 1]: 1. Saturn 5") is None, \
+        "P12 §3 fehlt: None"
+    _rz12, _eig12 = _rangzeilen_lesen(_txt12), _eigenes_zeichen(_txt12)
+
+    def _p12_satz(satz, vorher="", eigen=_eig12, txt_rz=_rz12):
+        out = []
+        for art, rx in _RANG_MUSTER:
+            for m_ in rx.finditer(satz):
+                b = _rang_befund(art, m_, satz, txt_rz, "geburt", vorher, eigen=eigen)
+                if b:
+                    out.append((art, b))
+        return out
+    assert _p12_satz("Saturn ist neben Venus der Planet, der keinem anderen folgt.") == [], \
+        "P12 §3 gedeckt"
+    assert _p12_satz("Er ist der Planet, der keinem anderen folgt, wie sonst nur deine Venus.",
+                     "Saturn steht im Steinbock.") == [], "P12 §3 mit Vorsatz"
+    assert [a for a, _b in _p12_satz("Saturn ist der Planet, der keinem anderen folgt.")] == \
+        ["kein_anderer"], "P12 §3: zweite Endstelle ungenannt muss PRÜFEN bleiben"
+    assert [a for a, _b in _p12_satz("Er ist der Planet, der keinem anderen folgt.",
+                                     "Saturn steht im Trigon zu deiner Venus.")] == \
+        ["kein_anderer"], "P12 §3: das Pronomen meint nur Saturn, nicht Venus"
+    assert [a for a, _b in _p12_satz("Saturn folgt keinem anderen, und in der Luft steht kein "
+                                     "anderer Planet als er.", eigen={"SATURN"})] == \
+        ["kein_anderer"], "P12 §3 gilt nur für den Treffer mit „folgt“"
+    assert _p12_satz("Jupiter kehrt alle zwölf Jahre an seinen Platz zurück, ein Planet "
+                     "mit weitem Weg.") == [], "P12 Umlaufzeit"
+    assert [a for a, _b in _p12_satz("Alle vier Planeten der Erde stehen im zehnten Haus.")] == \
+        ["alle_n"], "P12 alle n ohne Zeitangabe bleibt"
+    assert _p12_satz("Gewichtet ist dein Merkur der am dichtesten verschaltete Faktor deines "
+                     "Bildes, und die Luft in dir hat keinen anderen Planeten als ihn.") == [], \
+        "P12 Verbindungs-Rangzeile trotz Element im Satz"
+    try:                            # 2026-09-24: §3-Leser gegen die echte radix-Ausgabe
+        import radix as _rx3
+        if hasattr(_rx3, "strukturbild_text"):
+            _t3 = _rx3.strukturbild_text(_rx3.strukturbild(
+                [{"name": "Sonne", "lon": 5.0}, {"name": "Mars", "lon": 10.0},
+                 {"name": "Pluto", "lon": 215.0}, {"name": "Mond", "lon": 195.0},
+                 {"name": "Venus", "lon": 100.0}, {"name": "AC", "lon": 0.0},
+                 {"name": "MC", "lon": 270.0}, {"name": "DC", "lon": 180.0},
+                 {"name": "IC", "lon": 90.0}], [i * 30.0 for i in range(12)]))
+            assert _eigenes_zeichen(_t3) == {"MARS", "PLUTO"}, \
+                "Strukturbild §3: Zeilenformat weicht von radix ab — _EIGENES_ZEICHEN_RE nachziehen"
+            berichte.append("§3-Leser gleich radix.py")
+    except ImportError:
+        berichte.append("radix.py nicht importierbar — §3-Vergleich übersprungen")
     assert _ZUSATZ_SEG_ANFANG_RE.match("Finsternis auf R-Mond ☽ — 12.08.2026") and \
         _ZUSATZ_SEG_ANFANG_RE.match("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027") \
         and not _ZUSATZ_SEG_ANFANG_RE.match("T-Saturn ♄ Quadrat □ R-Mond ☽ — exakt 01.03.2027"), \
@@ -5276,7 +5454,7 @@ def _main(argv):
 # Geburtshoroskop 1+2 vom 23.09.: 15 Aufrufe/77.349 B): Die Modultexte sagen, WAS die
 # Proben pruefen, nicht, WORAN sie es erkennen. Das steht hier, an einer Stelle:
 # `inhaltsprobe.hilfe('LESEFORMATE')`. Wer einen Leser aendert, zieht diesen Text nach.
-LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-09-23).
+LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-09-24).
 
 THEMENLISTE (chart_data) — P3, P6, P7, P15; build.aspekt_heimat() liest gleich.
   Beginn an der ersten Zeile `THEMA <n> |`; Ende am ersten Vorkommen von
@@ -5325,7 +5503,16 @@ KONSTELLATION IM TEXT — P13.
   Faktoren, die nur als Objekt dastehen („über deinen Aszendenten"), kommt sein
   Bezug als Subjekt dazu — beides nur, wenn hinter dem Aspektwort ein Faktor steht.
   Komma + Artikel + Faktor im Nominativ vor dem nächsten Aspektwort („…, der
-  Mondknoten im Trigon …") beginnt ein neues Glied.
+  Mondknoten im Trigon …") beginnt ein neues Glied. Findet das erste Glied einer
+  Aufzählung kein Subjekt, nimmt das zweite keinen Partner aus ihm. Die Faktoren eines
+  Nebensatzes (Komma + „während", „weil", „als", „dass" …, bis zum nächsten Komma)
+  zählen nicht hinter dem Aspektwort; stand dort einer, paart die Probe nicht nach vorn.
+
+STRUKTURBILD §3 (chart_data) — P12.
+  Die Zeilen „- Enddispositoren (im eigenen Zeichen, …): …" und „- Im eigenen Zeichen
+  ohne Zulauf (…): …", Namen durch Komma getrennt; Klammern („(Ketten von …)") zählen
+  nicht. Wer dort steht, folgt keinem anderen. Fehlen beide Zeilen, meldet P12 „§3
+  nicht gefunden".
 """
 
 
