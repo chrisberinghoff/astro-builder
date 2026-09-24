@@ -35,22 +35,21 @@ FARBE = {'Pluto': '#7d3b46', 'Neptun': '#2f6070', 'Uranus': '#4a7a63',
 
 # (Themenname, Untertitel, [Transiter], Farbe) oder
 # (Themenname, Untertitel, [Transiter], Farbe, [Ziele]) — Reihenfolge und
-# Wortlaut wie die Themenkapitel des Transits. Ein Eintrag der Zielliste ist
-# entweder ein reiner Zielname ('Mond') oder ein Paar aus Aspekt und Ziel
-# ('Quadrat Sonne'); s. _passt().
+# Wortlaut wie die Themenkapitel des Transits. Ein Eintrag der Zielliste ist ein
+# reiner Zielname ('Mond'), ein Paar aus Aspekt und Ziel ('Quadrat Sonne'), ein
+# Paar aus Transiter und Ziel ('Saturn Mond') oder alle drei ('Saturn Quadrat
+# Mond'); s. _passt().
+# 2026-09-24 (Klasse-2-Entscheidungslauf, Datenschutz-Grep vor dem Upload): Hier
+# standen bis dahin die Themennamen und Untertitel EINES echten Laufs — abgeleitete
+# Deutungsergebnisse, die nach dem Datenschutz-Guardrail des Kerns nicht ins Repo
+# gehoeren. Jetzt Platzhalter: Wer vergisst, THEMEN im Chart-Builder zu
+# ueberschreiben, sieht die spitzen Klammern in der Uhr, statt fremde Namen zu
+# drucken.
 THEMEN = [
-    ('Die Tiefenlinie', 'was die Wandlungskraft zwei Jahre lang durcharbeitet',
-     ['Pluto'], '#7d3b46'),
-    ('Die Leiselinie', 'das Feine prüft Ideal, Struktur und Wort',
-     ['Neptun'], '#2f6070'),
-    ('Der Weckruf', 'Uranus rüttelt an Denken, Bindung und Struktur',
-     ['Uranus'], '#4a7a63'),
-    ('Die Heilerlinie', 'Chiron zwischen Wurzel, Liebe und Tiefe',
-     ['Chiron'], '#a8553a'),
-    ('Die Straße der Verbindlichkeit', 'Saturn nimmt den Weg ab',
-     ['Saturn'], '#6b5c48'),
-    ('Das Jupiter-Jahr und der Knotentakt', 'die schnelleren Zeiger',
-     ['Jupiter', 'Knoten'], '#b8862f'),
+    ('<Titel Themenkapitel 1>', '<laufende Planeten und getroffene Punkte>',
+     ['Pluto', 'Neptun', 'Uranus'], '#7d3b46'),
+    ('<Titel Themenkapitel 2>', '<laufende Planeten und getroffene Punkte>',
+     ['Saturn', 'Chiron', 'Jupiter', 'Knoten'], '#6b5c48'),
 ]
 
 # Beschriftungen der Zeitachse. Nur diese drei Woerter der Grafik sind
@@ -117,18 +116,26 @@ H_ACHSE = 4.2      # Achse + Stationsleiste unten
 def _passt(r, ziele):
     """Trifft eine Langlaeufer-Zeile die Zielliste eines Themas?
 
-    Ein Eintrag der Liste ist entweder ein reiner Zielname ('Mond') oder ein
-    Paar aus Aspekt und Ziel ('Quadrat Sonne'). Das Paar wird gebraucht, sobald
-    EIN laufender Planet zwei Themenkapitel mit DENSELBEN Zielen traegt und die
-    Kapitel sich nur im Winkel unterscheiden — etwa eine harmonische Phase im
-    ersten Jahr und dieselben Punkte im Reibungswinkel im zweiten. Ohne die
-    Aspektangabe zoege das erste Thema beide Phasen an sich, und das zweite
-    Kapitel bliebe ohne Block. Reine Zielnamen bleiben unveraendert gueltig —
-    die Erweiterung ist rueckwaertskompatibel.
+    Ein Eintrag der Liste ist einer von vier Formen:
+      'Mond'                  reiner Zielname — jede Zeile an diesem Ziel
+      'Quadrat Sonne'         Aspekt und Ziel
+      'Saturn Mond'           Transiter und Ziel
+      'Saturn Quadrat Mond'   alle drei
+    Aspekt und Ziel werden gebraucht, sobald EIN laufender Planet zwei
+    Themenkapitel mit DENSELBEN Zielen traegt und die Kapitel sich nur im Winkel
+    unterscheiden. Transiter und Ziel (2026-09-24, Klasse-2-Entscheidungslauf
+    T12) werden gebraucht, sobald ein Thema MEHRERE Transiter hat, die an
+    verschiedenen Zielen mitklingen: Ohne sie zog ein Zielname die Linie jedes
+    Transiters des Themas an sich, auch themenlose — die Uhr zeichnete dann
+    fremde Linien mit oder liess eigene weg. Jede Zeile geht in das ERSTE
+    passende Thema; ein Eintrag ohne Zielliste nimmt jede Zeile seiner
+    Transiter. Die aelteren Formen gelten unveraendert.
     """
     if ziele is None:
         return True
-    return r['ziel'] in ziele or f"{r['aspekt']} {r['ziel']}" in ziele
+    return (r['ziel'] in ziele or f"{r['aspekt']} {r['ziel']}" in ziele
+            or f"{r['transiter']} {r['ziel']}" in ziele
+            or f"{r['transiter']} {r['aspekt']} {r['ziel']}" in ziele)
 
 
 def stationen(daten):
@@ -159,10 +166,10 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
     # --- Bloecke zusammenstellen, Hoehe vorab bestimmen ---------------------
     # Ein THEMEN-Eintrag ist (Name, Untertitel, [Transiter], Farbe) oder
     # (Name, Untertitel, [Transiter], Farbe, [Ziele]). Die Zielliste ist
-    # noetig, sobald EIN laufender Planet zwei Themenkapitel traegt (Pluto auf
-    # der Wertachse vs. Pluto auf der Seelenachse) — ohne sie liefen beide
-    # Kapitel in einen Block mit nur einem der beiden Namen. Jede Zeile geht in
-    # das ERSTE passende Thema; ein Eintrag ohne Zielliste sammelt den Rest.
+    # noetig, sobald EIN laufender Planet zwei Themenkapitel traegt oder ein
+    # Thema mehrere Transiter an verschiedenen Zielen hat (Formen s. _passt()).
+    # Jede Zeile geht in das ERSTE passende Thema; ein Eintrag ohne Zielliste
+    # nimmt jede Zeile seiner Transiter.
     bloecke, vergeben = [], set()
     for eintrag in THEMEN:
         name, unter, transiter, col = eintrag[:4]

@@ -256,6 +256,26 @@ def ist_selbst_transit(transit, ziel):
         return ziel in ('Mondknoten', 'Nordknoten', 'Knoten', 'Suedknoten', 'Südknoten')
     return transit == ziel
 
+# 2026-09-24 (Klasse-2-Entscheidungslauf, T10): Rang 1 des Transit-Moduls („immer ein
+# Thema") gilt den LEBENSMITTE-MARKERN, nicht jedem Selbst-Transit. `selbst_transit`
+# steht an jedem Kontakt eines Planeten mit seinem Geburtsort, auch an Trigon und
+# Sextil; wer das Feld als Rang 1 las, haette im Prueflauf Transit 1+2 vom 22.09.b
+# fuenf von acht Kapiteln vergeben. Die Liste steht hier und nur hier — das Modul
+# verweist auf das Feld `lebensmitte`. Welche Marker dazugehoeren, ist eine
+# Chris-Entscheidung (Transit-Modul, Rangskala); bis auf Weiteres die sechs, die das
+# Modul am 2026-09-24 nannte.
+LEBENSMITTE = (('Saturn', 'Konjunktion'), ('Saturn', 'Quadrat'), ('Jupiter', 'Konjunktion'),
+               ('Uranus', 'Opposition'), ('Neptun', 'Quadrat'), ('Knoten', 'Konjunktion'))
+
+def ist_lebensmitte(transit, ziel, aspekt):
+    """Lebensmitte-Marker (Rang 1 des Transit-Moduls): Saturn-Rueckkehr und
+    Saturn-Quadrat, Jupiter-Rueckkehr, Uranus-Opposition, Neptun-Quadrat und die
+    Knotenrueckkehr (Transit-Knoten auf dem Radix-Mondknoten, nicht auf dem
+    Suedknoten). Jeder Marker ist auch ein Selbst-Transit, nicht umgekehrt."""
+    if (transit, aspekt) not in LEBENSMITTE or not ist_selbst_transit(transit, ziel):
+        return False
+    return transit != 'Knoten' or ziel in ('Mondknoten', 'Nordknoten', 'Knoten')
+
 # ---------------------------------------------------------------------------
 # Radix aus chart_data.md (factors/achsen-Block)
 # ---------------------------------------------------------------------------
@@ -769,6 +789,12 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     frueheren Durchgaenge mit Datum und Alter. Schema:
     log/SCHNITTSTELLE_events_json.md des Wartungslaufs 2026-09-19.
 
+    `selbst_transit` / `lebensmitte` (2026-09-24): `selbst_transit` steht an JEDEM
+    Kontakt eines Planeten mit seinem Geburtsort (auch Trigon, Sextil),
+    `lebensmitte` nur an den Markern aus LEBENSMITTE (s. ist_lebensmitte()) — das
+    ist das Feld, das Rang 1 des Transit-Moduls meint. Beide stehen in `events`,
+    `im_orb`, `langlaeufer` und `fruehere_durchgaenge`.
+
     EIN KONTAKT, MEHRERE EINTRAEGE (2026-09-23, Pruefbericht Transit 1+2 vom
     22.09.c, Klasse 1 Nr. 4): `events` fuehrt je PASSAGE einen Eintrag. Liegen
     zwei Perioden im Erfassungsorb weiter als _passage_luecke() auseinander (Mars
@@ -990,7 +1016,8 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                 min_orb_im_fenster=(round(mf,3) if mf is not None else None),
                 wirkorb_im_fenster=bool(mf is not None and mf<=orb),
                 orb_stichtag=round(orbs[i_asof],4),
-                selbst_transit=ist_selbst_transit(tname,rname)))
+                selbst_transit=ist_selbst_transit(tname,rname),
+                lebensmitte=ist_lebensmitte(tname,rname,aname)))       # 2026-09-24 (T10)
             _intern.append(dict(key=(tname,rname,aname),sel=sel,kr=kr,i0=i0,i1=i1,
                                 w=w,pa=pa,pb=pb))
 
@@ -1226,7 +1253,8 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                     min_orb_alter=_alter_voll(s['min_datum'],geb),
                     ab_rechenbeginn=(ia==0)))
         fruehere.append(dict(transit=tn,aspekt=an,ziel=rn,primaer=(rn in primary),
-                             selbst_transit=ist_selbst_transit(tn,rn),durchgaenge=dg))
+                             selbst_transit=ist_selbst_transit(tn,rn),
+                             lebensmitte=ist_lebensmitte(tn,rn,an),durchgaenge=dg))
 
     # --- JETZT: Momentaufnahme zum Stichtag ---------------------------------
     _idx={id(e):i for i,e in enumerate(events)}
@@ -1303,7 +1331,8 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
             min_orb_ab_stichtag_datum=(m_ab[1].isoformat() if m_ab else None),
             min_orb_bis_stichtag=(round(m_bis[0],3) if m_bis else None),
             wirkorb_jetzt=wj, wirkorb_kommend=wk, wirkorb_vorbei=wv,
-            selbst_transit=ist_selbst_transit(tname,rname)))
+            selbst_transit=ist_selbst_transit(tname,rname),
+            lebensmitte=ist_lebensmitte(tname,rname,aname)))
     im_orb.sort(key=lambda x:(0 if x['primaer'] else 1, x['orb_grad']))
 
     nachhall=[]; anmarsch=[]
@@ -1357,7 +1386,7 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
             event_nr=idx, annaeherung=e['annaeherung'],
             beginn_abgeschnitten=e['beginn_abgeschnitten'],
             exakt_nach_fenster=e['exakt_nach_fenster'],
-            selbst_transit=e['selbst_transit']))
+            selbst_transit=e['selbst_transit'], lebensmitte=e['lebensmitte']))
     langlaeufer.sort(key=lambda x:(0 if x['primaer'] else 1, -x['dauer_tage']))
 
     # --- Verdichtungen je Monat (primaere Wirkorb-Kontakte) -----------------
@@ -2092,6 +2121,15 @@ def _selbsttest(still=False):
             # W55
             pruefe(ist_selbst_transit('Saturn', 'Saturn') and ist_selbst_transit('Knoten', 'Mondknoten')
                    and not ist_selbst_transit('Saturn', 'Sonne'), "W55: Selbst-Transit falsch erkannt")
+            # T10 (2026-09-24): Lebensmitte-Marker sind eine Teilmenge der Selbst-Transite
+            pruefe(ist_lebensmitte('Saturn', 'Saturn', 'Quadrat')
+                   and ist_lebensmitte('Knoten', 'Mondknoten', 'Konjunktion')
+                   and not ist_lebensmitte('Saturn', 'Saturn', 'Trigon')
+                   and not ist_lebensmitte('Knoten', 'Südknoten', 'Konjunktion')
+                   and not ist_lebensmitte('Jupiter', 'Sonne', 'Konjunktion'),
+                   "T10: Lebensmitte-Marker falsch erkannt")
+            pruefe(all(('lebensmitte' in e) and (not e['lebensmitte'] or e['selbst_transit'])
+                       for e in res['events']), "T10: Feld lebensmitte fehlt oder widerspricht")
 
         # --- W3: fruehere Durchgaenge mit Alter (Jupiter-Rueckkehr) -----------
         jg = 2440000.5                                   # konstruierter Geburtszeitpunkt

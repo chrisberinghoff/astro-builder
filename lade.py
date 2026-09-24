@@ -152,8 +152,16 @@ SCHRITTE = {
     # `import selektor`), und ohne den Eintrag brach der erste Aufruf im
     # Design-Lauf mit ModuleNotFoundError ab (Pruefbericht Geburtshoroskop
     # Schritt 3+4 vom 2026-09-16d, Klasse 1 Nr. 1.1).
-    "3+4":      ("build", "chartdoc", "radix", "selektor", "inhaltsprobe"),
-    "transit":  ("transit", "transitdata", "transituhr_fusion"),
+    # Die Vorlagen seit dem 2026-09-24 (Klasse-2-Entscheidungslauf T14): Das
+    # Design-Render-Modul laesst den Chart-Builder aus der Vorlage bauen, der
+    # Ladeschritt holte sie aber nicht — ueber den BUILDER-Ordner ohne Wirkung,
+    # ueber das Repo musste sie einzeln geholt werden, und kein Modul sagte es
+    # (Pruefbericht Geburtshoroskop 3+4 vom 24.09.). Ein Import kostet nichts;
+    # der Transit-Lauf zieht beide Vorlagen, nutzt aber nur seine.
+    "3+4":      ("build", "chartdoc", "radix", "selektor", "inhaltsprobe",
+                 "REFERENZ_Chart_Builder_Geburtshoroskop"),
+    "transit":  ("transit", "transitdata", "transituhr_fusion",
+                 "REFERENZ_Chart_Builder_Transit"),
     "restyle":  ("build", "chartdoc", "radix", "restyle"),
     "hdgk":     ("hd",),
     "bibliothek": ("markiere", "selektor"),
@@ -163,8 +171,8 @@ SCHRITTE = {
 _SCHRITT_TEXT = {
     "1":        "Datenblatt (Heimat-Probe braucht build, Referenzdatei-Liste selektor)",
     "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
-    "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render)",
-    "transit":  "zusaetzlich beim Transit-Lauf",
+    "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render; mit der Geburtshoroskop-Vorlage)",
+    "transit":  "zusaetzlich beim Transit-Lauf (mit der Transit-Vorlage)",
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
     "hdgk":     "Human Design / Gene Keys",
     "bibliothek": "Bibliotheks-Umbau und Selektor-Pflege",
@@ -599,6 +607,11 @@ def _selbsttest():
                 abrufe.clear()
                 namen = lade_schritt("1", ziel=tmp, still=True)
                 assert "selektor.py" in namen, namen
+                # T14 (2026-09-24): die Vorlagen kommen mit ihrem Schritt
+                namen = lade_schritt("3+4", ziel=tmp, still=True)
+                assert "REFERENZ_Chart_Builder_Geburtshoroskop.py" in namen, namen
+                namen = lade_schritt("transit", ziel=tmp, still=True)
+                assert "REFERENZ_Chart_Builder_Transit.py" in namen, namen
             (pathlib.Path(tmp) / "radix.py").write_text("", encoding="utf-8")
             try:
                 lade("radix", ziel=tmp, still=True)

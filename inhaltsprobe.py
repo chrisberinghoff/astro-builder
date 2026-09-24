@@ -90,8 +90,8 @@ prueft (der Getriebe-Beleg in P1, der Abgleich gegen events.json ohne `--events`
 steht mit Grund unter der Probe und zaehlt in die Schlusszeile „s übersprungen" —
 vorher stand es nur als Hinweis, und die Schlusszeile meldete „0 übersprungen".
 
-Die fuenfzehn Proben
---------------------
+Die siebzehn Proben
+-------------------
 P1  Beleg-Aspekte    jedes Aspekt-Segment eines Normal-Belegs (Faktor A, Aspektart,
                      Faktor B, Orb) muss so in einer der vier Aspekttabellen stehen,
                      Orb auf 1' genau; Stufe (voll/einseitig/neben) nur PRUEFEN.
@@ -167,8 +167,8 @@ P10 Wortscan        die vier Listen der Inneren Arbeit, Probe 9 — Superlative
                      Fehlalarm-Klassen standen offen — "Zerstoerung" traf
                      "Stoerung", "solltest du" traf die von Prinzip 12 VERLANGTE
                      Lassen-Formulierung. Beides ist hier eine Zeile. Nur
-                     PRUEFEN. Der Superlativ-Deckel (drei) zaehlt nur die
-                     Treffer dieser Liste; „zum tiefsten Punkt" gilt als IC-Fuegung
+                     PRUEFEN. Der Superlativ-Deckel (einer je gedeutetem
+                     Kapitel, mindestens drei) zaehlt nur die Treffer dieser Liste; „zum tiefsten Punkt" gilt als IC-Fuegung
                      wie die volle Form (2026-09-19, W29). Dazu die ZEITFORM der
                      Widerstands-Bewegung (2026-09-19, W4): Perfekt und Praeteritum
                      („Er hat dich geschützt", „It has spared you") — das Argument
@@ -216,13 +216,29 @@ P15 Ressourcen-Tiefe (2026-09-19, W37) je Zeile des Ressourcen-Blocks am
                      mindestens einer (Transit: jeder Kontakt drei). Gezaehlt ab
                      dem Satz, der beide Faktoren nennt (oder zwei Saetzen, die
                      sie zusammen nennen), bis zu einem Satz nur ueber andere
-                     Faktoren. Nur PRUEFEN.
+                     Faktoren. Transit: Deutungsort `Mitlaufendes (Deckel)` fuer
+                     Kontakte ueber dem Deckel von sechs — dort genuegt eine Zeile
+                     im Kapitel `Mitlaufendes`, die beide Faktoren nennt
+                     (2026-09-24). Nur PRUEFEN.
+P16 Laenge           (2026-09-24, vorher Skript im Klartext-Modul) die Woerter der
+                     gedeuteten Kapitel (Kapitel mit Bewegungsfolge, Getriebe,
+                     Instrument; nicht das Lagebild): faellt das Mittel der letzten
+                     drei unter 60 % der ersten drei, FEHLER — ausser form=kurz,
+                     form=ressource oder duenn=ja erklaert es (Hinweis). Unter vier
+                     gedeuteten Kapiteln AUSSAGELOS.
+P17 Subjekt          (2026-09-24, Innere Arbeit Pruefung 1) Planet, Achse, Zeichen,
+                     Haus mit Ordnungszahl oder „die Seele" als Satzsubjekt: in den
+                     Bewegungen 1 und 3–6 jede Subjekt-Stellung, ohne Bewegungsfolge
+                     (Getriebe, Instrument, Pflichtteile) nur mit Handlungsverb;
+                     Bewegung 2 und 7 bleiben frei (Anker). Nur PRUEFEN; englische
+                     Fassung uebersprungen.
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
 Fall ohne reales Geburtsdatum, ohne Uhrzeit, ohne Namen, ohne Staende eines realen
 Charts (Datenschutz-Guardrail des Kerns) — einmal fehlerfrei, einmal mit je einem
-eingebauten Fehler je Probe P1–P6 und P11–P15 und je einem Treffer fuer P8, P9 und
-P10, einmal mit Zugang-Kapitel; dazu ein Transit-Fall mit konstruierter events.json
+eingebauten Fehler je Probe P1–P6 und P11–P15 und je einem Treffer fuer P8, P9,
+P10 und P17, einmal mit Zugang-Kapitel; P16 und die Satzmuster von P17 als
+Einzelproben; dazu ein Transit-Fall mit konstruierter events.json
 (Daten aus Julianischen Tageszahlen gerechnet, kein Datum im Quelltext), fehlerfrei,
 mit eingebauten Fehlern und ohne events.json. Eine Probe, die ihren Testfehler nicht
 findet, ist nicht fertig. Der Selbsttest ist Teil des Moduls und laeuft bei jedem
@@ -4219,13 +4235,34 @@ def _p15_ressourcen(chapters, typ, txt, zuordnung):
                                  "trägt“ im Schlusswort)" % name)
                 continue
             wo = "„Was trägt“"
+        elif re.search(r"Mitlaufendes\s*\(\s*Deckel\s*\)|(?:Also\s+running|Running\s+alongside)"
+                       r"\s*\(\s*cap\s*\)", ort, re.I):
+            # 2026-09-24 (Klasse-2-Entscheidungslauf T10): Kontakte ueber dem Deckel von
+            # sechs (Transit-Modul, „Der Deckel") stehen mit ihrer Zeile im Kapitel
+            # `Mitlaufendes`. Gezaehlt wird dort kein Satz — die Zeile muss nur beide
+            # Faktoren nennen. Bis dahin kannte P15 keine Schreibweise dafuer und meldete
+            # jeden solchen Eintrag als unbekannten Deutungsort (Transit 18.09. bis 24.09.).
+            if typ != "transit":
+                p.pruefen.append("%s — Deutungsort „%s“ gibt es nur im Transit (Deckel)"
+                                 % (name, _kurz(ort, 40)))
+                continue
+            reg = [c for c in chapters if _ist_kicker(c, "Mitlaufendes")]
+            if not reg:
+                p.pruefen.append("%s — Deutungsort „Mitlaufendes (Deckel)“, aber kein Kapitel "
+                                 "„Mitlaufendes“" % name)
+                continue
+            _n, _anker = _saetze_am_ort(a, b, [g for c in reg for g in _abschnitte(c)])
+            if _anker is None:
+                p.pruefen.append("%s — über dem Deckel, aber keine Zeile im Kapitel "
+                                 "„Mitlaufendes“ nennt beide Faktoren" % name)
+            continue
         elif not ort:
             p.pruefen.append("%s — ohne Deutungsort (kein Eintrag ohne Deutungsort; wer keinen "
                              "bekommt, geht in „Was trägt“)" % name)
             continue
         else:
             p.pruefen.append("%s — Deutungsort „%s“ unbekannt (erwartet: Thema n, Ressource n, "
-                             "Was trägt)" % (name, _kurz(ort, 40)))
+                             "Was trägt; im Transit auch Mitlaufendes (Deckel))" % (name, _kurz(ort, 40)))
             continue
         n_saetze, anker = _saetze_am_ort(a, b, gruppen)
         # Achsen-Spiegel (build seit 2026-09-19, F18): „Venus △ AC … (zugleich Sextil
@@ -4244,6 +4281,296 @@ def _p15_ressourcen(chapters, typ, txt, zuordnung):
                                                 _kurz(anker, 70), soll))
     if p.geprueft == 0 and not p.pruefen:
         return p.aussagelos("Ressourcen-Block ohne lesbare Zeile mit Deutungsort")
+    return p.abschluss()
+
+
+# ---------------------------------------------------------------------------
+# P16 Laengen-Gegenprobe (2026-09-24, Klasse-2-Entscheidungslauf T3)
+# ---------------------------------------------------------------------------
+# Bis zum 2026-09-24 stand die Probe als Skript im Klartext-Modul, das jeder Lauf
+# abtippte, mit einer eigenen Kickerliste: Sie zaehlte das Lagebild des Transits
+# („Der Stand heute") mit, das Datenblatt-Modul nicht — im Transit-Prueflauf vom
+# 24.09. ergab das 0,79 gegen 0,66. Hier gilt EINE Definition, die des
+# Datenblatt-Moduls (Schritt 2, Schnittgrenze): gedeutet sind die Kapitel mit
+# Bewegungsfolge (`Kapitel n`, Zugang) sowie Getriebe- und Instrument-Kapitel;
+# Auftakt, Lagebild, Rechenschaft bzw. Mitlaufendes, Buendel-Kapitel und
+# Schlusswort zaehlen nicht. Gezaehlt werden die Woerter der Absaetze und
+# Zwischentitel, nicht Signatur und Beleg. Faellt das Mittel der letzten drei
+# gedeuteten Kapitel unter LAENGE_SCHWELLE des Mittels der ersten drei, ist das ein
+# FEHLER — ausser eines der letzten drei traegt form=kurz oder form=ressource
+# (Themenliste) oder ist ein Zugang mit duenn=ja (ZUGANG-Block); dann steht die
+# Erklaerung als Hinweis da. Unter vier gedeuteten Kapiteln sind erste und letzte
+# drei dieselben: AUSSAGELOS.
+LAENGE_SCHWELLE = 0.60
+
+def _ist_gedeutet(ch):
+    return (_kicker_nr(ch.get("kicker")) is not None or _ist_zugang(ch)
+            or _ist_kicker(ch, "Getriebe", "Instrument"))
+
+def _woerter(ch):
+    return sum(len(_ws(b.get("text")).split()) for b in (ch.get("blocks") or ()))
+
+def _zugang_duenn(ch, txt):
+    """Traegt die ZUGANG-Zeile dieses Zugangs duenn=ja? Bereich aus dem Kicker
+    (`Zugang Beruf` -> beruf); ohne Bereich genuegt irgendeine Zeile mit duenn=ja."""
+    k = _ws(ch.get("kicker"))
+    bereich = k.split(" ", 1)[1].casefold() if " " in k else ""
+    for zeile in re.findall(r"(?m)^ZUGANG\s+\d+\s*\|.*(?:\n[ \t]+\|.*)*", txt or ""):
+        if re.search(r"duenn\s*=\s*ja", zeile, re.I) and (not bereich or bereich in zeile.casefold()):
+            return True
+    return False
+
+def _p16_laenge(chapters, typ, txt, themen, zuordnung):
+    p = _Probe("P16", "Längen-Gegenprobe (letzte drei gegen erste drei gedeutete Kapitel)")
+    p.einheit = "gedeutete Kapitel"
+    ged = [(ch, _woerter(ch)) for ch in chapters if _ist_gedeutet(ch)]
+    p.geprueft = len(ged)
+    if len(ged) < 4:
+        return p.aussagelos("%d gedeutete Kapitel — unter vier sind die ersten und die letzten "
+                            "drei dieselben" % len(ged))
+    erste = sum(w for _c, w in ged[:3]) / 3.0
+    letzte = sum(w for _c, w in ged[-3:]) / 3.0
+    if erste <= 0:
+        return p.aussagelos("die ersten drei gedeuteten Kapitel tragen keinen Fließtext")
+    q = letzte / erste
+    p.hinweise.append(("erste drei im Mittel %d Wörter, letzte drei %d, Verhältnis %.2f "
+                       "(Schwelle %.2f)" % (round(erste), round(letzte), q, LAENGE_SCHWELLE)
+                       ).replace(".", ",")
+                      + " — " + ", ".join("%s %d" % (_ws(c.get("kicker")), w) for c, w in ged))
+    if q >= LAENGE_SCHWELLE:
+        return p.abschluss()
+    ab = _zaehlung_ab(chapters, typ)
+    nach_nr = {t["nr"]: t for t in (themen or ())}
+    erkl = []
+    for ch, _w in ged[-3:]:
+        th = (zuordnung or {}).get(id(ch))
+        if th is None and _kicker_nr(ch.get("kicker")) is not None:
+            th = nach_nr.get(_kicker_nr(ch.get("kicker")) - ab + 1)
+        if th and th.get("form") in ("kurz", "ressource"):
+            erkl.append("%s: form=%s" % (_ws(ch.get("kicker")), th["form"]))
+        elif _ist_zugang(ch) and _zugang_duenn(ch, txt):
+            erkl.append("%s: duenn=ja" % _ws(ch.get("kicker")))
+    if erkl:
+        p.hinweise.append("Abfall erklärt durch " + "; ".join(erkl))
+    else:
+        p.fehler.append("die letzten drei gedeuteten Kapitel haben im Mittel %d %% der ersten drei "
+                        "(Schwelle %d %%) — die hinteren Kapitel werden nachgeschrieben, nicht "
+                        "wegdiskutiert (Datenblatt-Modul, Schritt 2)"
+                        % (round(q * 100), round(LAENGE_SCHWELLE * 100)))
+    return p.abschluss()
+
+# ---------------------------------------------------------------------------
+# P17 Subjekt-Probe (2026-09-24, Klasse-2-Entscheidungslauf E5, Chris-Entscheidung)
+# ---------------------------------------------------------------------------
+# Innere Arbeit, Prinzip 1 und Pruefung 1: Die Person ist Subjekt des Satzes, nicht
+# der Planet. Bis zum 2026-09-24 lief die Probe nur von Hand; in den Transit-
+# Prueflaeufen vom 23.09.b und 24.09. fand der Lauf je 13 bis 14 Treffer, die kein
+# Werkzeug meldete. Gesucht werden Planeten, Achsen, Zeichen, ein Haus mit
+# Ordnungszahl und „die Seele" in Subjekt-Stellung: am Satz- oder Gliedanfang (auch
+# hinter „;", „:", Gedankenstrich, Konjunktion), hinter einem Artikel oder
+# Relativpronomen, das keiner Praeposition folgt, und hinter einem Verb
+# (Umstellung: „wird Saturn zum Aufseher", „sitzen Mond und Jupiter"). Nicht hinter
+# einer Praeposition oder einem Dativ-, Genitiv- oder Akkusativ-Artikel; „der" vor
+# einem weiblichen Namen ist Dativ. Aufzaehlungen erben die Stellung ihres ersten
+# Glieds („zu Sonne, Mond und Saturn"). Die Probe versteht keine Grammatik — jeder
+# Treffer ist PRUEFEN.
+# Zonen (Regel: Innere Arbeit, Pruefung 1):
+#   streng        Bewegungen 1, 3, 4, 5 und 6 der Themenkapitel: jede
+#                 Subjekt-Stellung ist ein Treffer.
+#   Anker         Bewegung 2 („Was da arbeitet") und 7 (Rahmen bzw. „Zeit"): nichts,
+#                 dort stehen die Anker.
+#   Grundfassung  alles ohne Bewegungswortlaut — Getriebe, Instrument, die
+#                 Pflichtteile („Was trägt", „Was dich durch diese Zeit trägt"),
+#                 Auftakt, Lagebild, Register: Der Anker darf Subjekt sein, solange er
+#                 verortet („steht", „bildet", „läuft über" — _P17_ANKERVERBEN);
+#                 gemeldet wird jedes andere Verb („Saturn verlangt", „dein Mond im
+#                 Widder braucht").
+# Englische Analysen: uebersprungen (die Muster sind deutsch).
+_P17_NAMEN = frozenset((
+    "Sonne", "Mond", "Merkur", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptun",
+    "Pluto", "Chiron", "Lilith", "Mondknoten", "Nordknoten", "Südknoten", "Knoten",
+    "Aszendent", "Deszendent", "AC", "MC", "DC", "IC", "Seele",
+    "Widder", "Stier", "Zwillinge", "Krebs", "Löwe", "Jungfrau", "Waage", "Skorpion",
+    "Schütze", "Steinbock", "Wassermann", "Fische"))
+# „der" vor diesen Namen ist Dativ oder Genitiv, nie Nominativ
+_P17_WEIBLICH = frozenset(("Sonne", "Venus", "Lilith", "Seele", "Waage", "Jungfrau",
+                           "Zwillinge", "Fische"))
+_P17_ORDINAL_RE = re.compile(r"^(?:\d{1,2}\.|erste|zweite|dritte|vierte|fünfte|sechste|"
+                             r"siebte|achte|neunte|zehnte|elfte|zwölfte)$")
+_P17_PRAEP = frozenset((
+    "zu", "zum", "zur", "mit", "von", "vom", "bei", "beim", "an", "am", "ans", "auf", "aufs",
+    "aus", "in", "im", "ins", "über", "unter", "vor", "vorm", "hinter", "neben", "zwischen",
+    "gegen", "durch", "für", "um", "nach", "seit", "ohne", "bis", "wie", "als", "samt",
+    "nahe", "entlang", "gegenüber", "trotz", "wegen", "statt", "innerhalb", "außerhalb",
+    "dank", "laut", "je", "pro", "unterm", "überm", "hinterm"))
+_P17_OBLIQ = frozenset((
+    "dem", "den", "des", "deinem", "deinen", "deines", "deiner", "einem", "einen", "eines",
+    "einer", "diesem", "diesen", "seinem", "seinen", "seines", "seiner", "ihrem", "ihren",
+    "ihres", "ihrer", "jedem", "jeden", "keinem", "keinen", "keines", "keiner", "unserem",
+    "unseren", "unseres", "unserer"))
+_P17_NOM = frozenset((
+    "der", "die", "das", "ein", "eine", "dein", "deine", "jeder", "jede", "jedes", "dieser",
+    "diese", "dieses", "kein", "keine", "sein", "seine", "ihr", "ihre", "welcher", "welche",
+    "welches", "unser", "unsere"))
+_P17_PRONOMEN = frozenset((
+    "du", "dich", "dir", "ich", "mich", "mir", "er", "sie", "es", "wir", "uns", "euch", "ihn",
+    "ihm", "ihnen", "man", "sich", "jemand", "niemand", "etwas", "nichts", "alles"))
+_P17_BINDER = frozenset((
+    "und", "oder", "aber", "denn", "doch", "sondern", "weil", "wenn", "dass", "ob",
+    "während", "obwohl", "sobald", "solange", "bevor", "nachdem", "damit", "sodass", "wo",
+    "wohin", "woher", "falls", "indem", "sowie", "was", "wer"))
+_P17_BRUCH = frozenset((";", ":", "—", "–", "(", "„", "“", "\"", "»", "«"))
+# Verben, mit denen ein Anker nur VERORTET (Stellung, Lauf, Struktur, Zugehoerigkeit).
+# In der Grundfassung darf ein Name damit Subjekt sein; jedes andere Verb dahinter
+# macht ihn zum Handelnden („Saturn verlangt", „dein Mond im Stier braucht") und wird
+# gemeldet. Bewusst eine Erlaubt- statt einer Verbotsliste: Handlungsverben gibt es zu
+# viele, als dass eine Liste sie faende.
+_P17_ANKERVERBEN = frozenset((
+    "steht", "stehen", "stand", "standen", "liegt", "liegen", "lag", "lagen", "sitzt",
+    "sitzen", "saß", "saßen", "befindet", "befinden", "bildet", "bilden", "bildete",
+    "bildeten", "läuft", "laufen", "lief", "liefen", "wandert", "wandern", "wanderte",
+    "zieht", "ziehen", "zog", "trifft", "treffen", "traf", "berührt", "berühren",
+    "berührte", "kreuzt", "kreuzen", "erreicht", "erreichen", "erreichte", "kehrt",
+    "kehren", "kehrte", "geht", "gehen", "ging", "kommt", "kommen", "kam", "wird",
+    "werden", "wurde", "wurden", "ist", "sind", "war", "waren", "wäre", "hat", "haben",
+    "hatte", "hatten", "heißt", "heißen", "bedeutet", "bedeuten", "gehört", "gehören",
+    "zählt", "zählen", "folgt", "folgen", "herrscht", "herrschen", "regiert", "regieren",
+    "verwaltet", "verwalten", "disponiert", "teilt", "teilen", "fällt", "fallen", "fiel",
+    "wechselt", "wechseln", "klingt", "klingen", "zeigt", "zeigen", "beschreibt",
+    "beschreiben", "markiert", "verbindet", "verbinden", "bleibt", "bleiben", "blieb",
+    "rückt", "rücken", "nähert", "nähern", "entfernt", "steigt", "steigen", "beginnt",
+    "beginnen", "endet", "enden", "schließt", "schließen", "reicht", "reichen",
+    "überquert", "passiert", "durchläuft", "verlässt", "betritt", "streift",
+    "quadriert", "opponiert"))
+_P17_TOKEN_RE = re.compile(r"\d{1,2}\.(?=\s+Haus\b)|[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)*"
+                           r"|[;:—–,(„“\"»«]")
+
+def _p17_name(tok):
+    """Kopf eines Tokens, wenn es ein gesuchter Name ist: `Widder-Mond` -> Mond;
+    `Saturn-Rückkehr` -> None (der Name ist Bestimmungswort, nicht Kopf)."""
+    teile = tok.split("-")
+    return teile[-1] if teile[-1] in _P17_NAMEN else None
+
+def _p17_ist_adjektiv(tok):
+    t = tok.casefold()
+    return (tok[:1].islower() and len(t) > 3 and t.endswith(("e", "en", "er", "es", "em"))
+            and t not in _P17_PRAEP and t not in _P17_OBLIQ and t not in _P17_NOM
+            and t not in _P17_BINDER and t not in _P17_PRONOMEN) or bool(_P17_ORDINAL_RE.match(tok))
+
+def _p17_kandidaten(satz):
+    """[(Name, Token-Index, Art)] fuer jeden Namen in Subjekt-Stellung; Art: start
+    (Satz-/Gliedanfang), artikel, verb:<Verb davor> (Umstellung), reihe (erbt vom
+    Glied davor)."""
+    tok = _P17_TOKEN_RE.findall(satz)
+    namen = []                              # (i, name, ist_kandidat, art)
+    for i, t in enumerate(tok):
+        name = _p17_name(t)
+        if name is None and t == "Haus" and i > 0 and _P17_ORDINAL_RE.match(tok[i - 1]):
+            name = "Haus"
+        if name is None:
+            continue
+        # Reihe: „zu Sonne, Mond und Saturn" — erbt die Stellung des vorigen Namens,
+        # wenn zwischen beiden nur Komma, und/oder und hoechstens zwei Woerter stehen
+        if namen and i - namen[-1][0] <= 4 and tok[i - 1] in (",", "und", "oder", "sowie"):
+            _i0, _n0, kand0, a0 = namen[-1]
+            namen.append((i, name, kand0, a0 if a0.startswith("verb:") else "reihe"))
+            continue
+        j = i - 1
+        if name == "Haus":
+            j -= 1                          # die Ordnungszahl gehoert zum Namen
+        # Adjektive nur zwischen Artikel bzw. Praeposition und Name ueberspringen
+        # („der laufende Jupiter", „mit ganzer Seele") — sonst ist das Wort davor ein
+        # Verb auf -en („sitzen Mond und Jupiter") und bleibt stehen
+        k = j
+        while k >= 0 and _p17_ist_adjektiv(tok[k]) and i - k <= 3:
+            k -= 1
+        if k != j and k >= 0 and (tok[k].casefold() in _P17_NOM or tok[k].casefold() in _P17_OBLIQ
+                                  or tok[k].casefold() in _P17_PRAEP):
+            j = k
+        if j < 0 or tok[j] in _P17_BRUCH or tok[j] == ",":
+            kand, art = True, "start"
+        else:
+            vor = tok[j].casefold()
+            if vor in _P17_PRAEP or vor in _P17_OBLIQ or vor in _P17_PRONOMEN:
+                kand, art = False, ""
+            elif vor in _P17_NOM:
+                davor = tok[j - 1].casefold() if j > 0 else ""
+                if davor in _P17_PRAEP or (vor == "der" and name in _P17_WEIBLICH):
+                    kand, art = False, ""
+                else:
+                    kand, art = True, "artikel"
+            elif vor in _P17_BINDER:
+                kand, art = True, "start"
+            elif tok[j][:1].isupper():
+                kand, art = False, ""       # Apposition oder Satzanfang eines Nomens
+            else:
+                kand, art = True, "verb:" + tok[j].casefold()
+        namen.append((i, name, kand, art))
+    return [(n, i, a) for i, n, k, a in namen if k], tok
+
+def _p17_folgeverb(tok, i):
+    """Das erste Verb-Wort hinter dem Namen: ueberspringt Praepositionalgruppen
+    („dein Mond im Widder fühlt") und Artikel, hoechstens fuenf Woerter weit."""
+    k, n = i + 1, 0
+    while k < len(tok) and n < 6:
+        t = tok[k]
+        tl = t.casefold()
+        if t in _P17_BRUCH or t == ",":
+            return None
+        if (tl in _P17_PRAEP or tl in _P17_OBLIQ or tl in _P17_NOM or t[:1].isupper()
+                or tl in ("und", "oder", "sowie")
+                or _P17_ORDINAL_RE.match(t) or _p17_ist_adjektiv(t)):
+            k, n = k + 1, n + 1
+            continue
+        return tl
+    return None
+
+def _p17_handelt(tok, i, art):
+    """Grundfassung: Handelt der Name? Ja, wenn das Verb davor (Umstellung) oder das
+    erste Verb dahinter kein verortendes ist."""
+    verb = art[5:] if art.startswith("verb:") else _p17_folgeverb(tok, i)
+    return bool(verb) and verb not in _P17_ANKERVERBEN
+
+def _p17_zone(bewegung, typ):
+    if not bewegung:
+        return "grund"
+    t = _ws(bewegung).casefold()
+    for idx, eintrag in enumerate(WORTLAUTE.get(typ) or ()):
+        namen = eintrag if isinstance(eintrag, tuple) else (eintrag,)
+        if any(t == n.casefold() for n in namen):
+            return "anker" if idx in (1, 6) else "streng"
+    return "grund"
+
+def _p17_subjekt(chapters, typ, sprache_analyse="de"):
+    p = _Probe("P17", "Subjekt-Probe (Planet, Zeichen, Haus oder Seele als Satzsubjekt)")
+    p.einheit = "Sätze"
+    if sprache_analyse == "en":
+        return p.uebersprungen("englische Fassung — die Muster der Subjekt-Probe sind deutsch")
+    if typ not in TYPEN:
+        return p.uebersprungen("Typ unbekannt — die Bewegungswortlaute fehlen")
+    for ch in chapters:
+        bewegung = None
+        for b in ch["blocks"]:
+            if b.get("type") == "subhead":
+                bewegung = _ws(b["text"])
+                continue
+            zone = _p17_zone(bewegung, typ)
+            if zone == "anker":
+                continue
+            for _a, _e, satz in _saetze_pos(b["text"]):
+                p.geprueft += 1
+                kand, tok = _p17_kandidaten(satz)
+                if zone == "grund":
+                    kand = [(n, i, a) for n, i, a in kand if _p17_handelt(tok, i, a)]
+                if not kand:
+                    continue
+                wer = ", ".join(dict.fromkeys(n for n, _i, _a in kand))
+                p.pruefen.append("%s · %s: „%s“ — %s als Satzsubjekt (%s)" % (
+                    _ws(ch.get("kicker")), bewegung or _ws(ch.get("title")), _kurz(satz, 110), wer,
+                    "außerhalb von Thema und Rahmen" if zone == "streng"
+                    else "als Handelnder, nicht als Anker"))
+    if p.geprueft == 0:
+        return p.aussagelos("kein Fließtext außerhalb der Anker-Bewegungen")
     return p.abschluss()
 
 # ---------------------------------------------------------------------------
@@ -4309,7 +4636,10 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
     p13 = _p13_beleg_deckung(chapters, typ, tabelle, txt, events)
     p14 = _p14_kopfblock(chapters, typ)
     p15 = _p15_ressourcen(chapters, typ, txt, zuordnung)
-    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15]
+    # 2026-09-24 (Klasse-2-Entscheidungslauf): T3 (P16), E5 (P17)
+    p16 = _p16_laenge(chapters, typ, txt, themen, zuordnung)
+    p17 = _p17_subjekt(chapters, typ, sprache_analyse)
+    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17]
 
     fehler = sum(len(p.fehler) for p in proben)
     pruefen_n = sum(len(p.pruefen) for p in proben)
@@ -4500,11 +4830,11 @@ Das Bild ruht auf wenigen Kräften, die einander kaum stützen. Wasser trägt nu
 
 ### Die Sonne — der Kern
 
-Deine Sonne im Widder im ersten Haus fängt an, bevor die Frage gestellt ist. Was daraus unter Druck wird, steht in Kapitel 2.
+Dein Wesen fängt an, bevor die Frage gestellt ist; die Sonne steht im Widder im ersten Haus. Was daraus unter Druck wird, steht in Kapitel 2.
 
 ### Der Mond — wie du fühlst
 
-Dein Mond im Stier im zweiten Haus braucht Dauer, um sich sicher zu fühlen. Er hält, was einmal da ist.
+Dein Gefühl braucht Dauer, um sicher zu werden; der Mond steht im Stier im zweiten Haus. Es hält, was einmal da ist.
 
 ## Kapitel 2 · Der Anfang, der sich selbst genügt
 
@@ -4747,7 +5077,7 @@ Der Teil, der zuerst losgeht, hat ein gutes Argument: Wer schnell ist, muss nich
 
 ### Die zwei Formen und das Dazwischen
 
-Die reife Form lässt Saturn bremsen, wo es sinnvoll ist. Die regressive Form rennt gegen die Wand und fühlt sich dabei wie Mut an. Dazwischen liegt der Normalfall: Du merkst die Bremse und gibst trotzdem Gas.
+Die reife Form bremst, wo es sinnvoll ist. Die regressive Form rennt gegen die Wand und fühlt sich dabei wie Mut an. Dazwischen liegt der Normalfall: Du merkst die Bremse und gibst trotzdem Gas.
 
 ### Womit du arbeiten kannst
 
@@ -4797,7 +5127,7 @@ Hier steht, was im Fenster läuft und kein eigenes Kapitel bekommt.
 
 ### Was dich durch diese Zeit trägt
 
-Jupiter im Trigon zu deinem Mond trägt in diesen Monaten mit, auch wenn es sich nicht meldet. Du erkennst es daran, dass weniger Kraft nötig ist als sonst.
+In diesen Monaten trägt etwas mit, auch wenn es sich nicht meldet: Jupiter läuft im Trigon zu deinem Mond. Du erkennst es daran, dass weniger Kraft nötig ist als sonst.
 
 ### Was erreichbar ist
 
@@ -5158,6 +5488,52 @@ def _selbsttest(still=False):
         "deutsche Zeitraumtafel nach dem Umbau nicht mehr gleich"
     berichte.append("englische Tafeln P11/P12 aktiv")
 
+    # 2026-09-24 (Klasse-2-Entscheidungslauf): P16 Laenge und P17 Subjekt als Einzelproben
+    def _kap(kicker, n_woerter, bewegung=None, text=None):
+        bl = [{"type": "subhead", "text": bewegung}] if bewegung else []
+        return {"kicker": kicker, "title": "Probe", "signatur": "", "beleg": "",
+                "blocks": bl + [{"type": "p", "text": text or " ".join(["Wort"] * n_woerter)}]}
+    _k16 = [_kap("Getriebe", 400), _kap("Instrument", 400), _kap("Kapitel 1", 400),
+            _kap("Kapitel 2", 200), _kap("Kapitel 3", 150), _kap("Kapitel 4", 150)]
+    _p = _p16_laenge(_k16, "geburt", "", [], {})
+    assert _p.status == "FEHLER" and "42 %" in _p.fehler[0], "P16 Abfall: %s %s" % (_p.status, _p.fehler)
+    _th = [{"nr": 4, "form": "kurz"}]
+    _p = _p16_laenge(_k16, "geburt", "", _th, {})
+    assert _p.status == "OK" and any("form=kurz" in h for h in _p.hinweise), "P16 form=kurz: %s" % _p.hinweise
+    _p = _p16_laenge([_kap("Der Stand heute", 1000)] + [_kap("Kapitel %d" % i, 300) for i in (1, 2, 3, 4)],
+                     "transit", "", [], {})
+    assert _p.status == "OK" and _p.geprueft == 4, "P16: das Lagebild zählt mit (%s)" % _p.geprueft
+    assert _p16_laenge(_k16[:3], "geburt", "", [], {}).status == "AUSSAGELOS", "P16 unter vier Kapiteln"
+    _zg = [_kap("Getriebe", 400), _kap("Kapitel 1", 400), _kap("Kapitel 2", 400), _kap("Kapitel 3", 100),
+           _kap("Zugang Beruf", 100), _kap("Kapitel 4", 100)]
+    _zg[3], _zg[4] = _zg[4], _zg[3]
+    assert _p16_laenge(_zg, "geburt", "ZUGANG 1 | bereich=Beruf | haeuser=10\n  | duenn=ja", [], {}
+                       ).status == "OK", "P16 duenn=ja erklärt den Abfall nicht"
+    for _s in ("Der laufende Jupiter weckt etwas, das schon da ist.",
+               "Das Muster, das Saturn hier anstößt, ist älter als er.",
+               "In der regressiven Form wird Saturn zum Aufseher.",
+               "Merkur hat es geprüft; Jupiter lässt es gelten.",
+               "In deinem Bild sitzen Mond und Jupiter am selben Punkt.",
+               "Ein Mond im Widder fühlt schnell.", "Und der schnelle Widder-Mond lernt die Geduld.",
+               "Es geht leicht, denn Saturn scheint ihm recht zu geben.",
+               "Das zwölfte Haus nimmt dich aus dem Lärm.", "Deine Seele will etwas anderes.",
+               "Was Saturn dazugibt, ist Form."):
+        assert _p17_kandidaten(_s)[0], "P17 übersieht: %r" % _s
+    for _s in ("Du stehst im Quadrat zu deinem Saturn.", "Das zeigt sich am Trigon zu Sonne, Mond und Saturn.",
+               "Die Saturn-Rückkehr kommt um die dreißig.", "Im zwölften Haus liegt vieles.",
+               "Wenn du Saturn begegnest, wird es still.", "Du gehst mit ganzer Seele hinein.",
+               "Es gehört zu der Sonne, die du bist.", "Die Opposition zwischen Mond und Saturn bleibt."):
+        assert not _p17_kandidaten(_s)[0], "P17 Fehlalarm: %r" % _s
+    for _s, _soll in (("Dein Mond steht im Stier im fünften Haus.", False),
+                      ("Saturn läuft über deine Sonne.", False),
+                      ("Am Stichtag steht Saturn im Quadrat zu deiner Sonne.", False),
+                      ("Mond und Jupiter stehen am selben Punkt.", False),
+                      ("Dein Mond im Widder fühlt schnell.", True), ("Chiron stellt die Berufungsfrage.", True),
+                      ("Dann drückt Saturn auf deine Sonne.", True)):
+        _k, _t = _p17_kandidaten(_s)
+        assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Grundfassung: %r" % _s
+    berichte.append("P16 und P17 als Einzelproben")
+
     # 1) fehlerfrei
     r = lauf(_TEST_CHART, _TEST_ANALYSE)
     st = {nr: p["status"] for nr, p in r["proben"].items()}
@@ -5210,6 +5586,9 @@ def _selbsttest(still=False):
                    "**Beleg:** Sonne ☉ 10°00′ Widder ♈, 1. Haus\n")                             # P14 Buendel mit Beleg
     a = ersetze(a, "Was Saturn dazugibt, ist Form: Das Gefühl bekommt einen Rahmen, in dem es "
                    "bleiben kann. ", "")                                                         # P15 zu kurz
+    a = ersetze(a, "Einmal am Tag den ersten Impuls bemerken, ohne ihm zu folgen.",
+                   "Einmal am Tag den ersten Impuls bemerken, ohne ihm zu folgen. Dein Merkur will "
+                   "das anders.")                                                                # P17 Subjekt
     r2 = lauf(c, a)
     erwarte(r2, (("P1", "fehler", "Orb 2°10′"), ("P1", "fehler", "unbekanntes Zeichen „∡“"),
                  ("P2", "fehler", "führendes Haus 3"), ("P3", "fehler", "Themenliste sagt Merkur"),
@@ -5223,7 +5602,8 @@ def _selbsttest(still=False):
                  ("P13", "pruefen", "Mars Quadrat Saturn steht in keinem Beleg"),
                  ("P14", "fehler", "Lebensaufgaben · Woran du wächst: Signatur fehlt"),
                  ("P14", "fehler", "Konfliktfelder · Wo es reibt: trägt einen Beleg"),
-                 ("P15", "pruefen", "Mond △ Saturn (voll) — am Deutungsort Thema 2")), "Lauf 2")
+                 ("P15", "pruefen", "Mond △ Saturn (voll) — am Deutungsort Thema 2"),
+                 ("P17", "pruefen", "Merkur als Satzsubjekt (außerhalb von Thema und Rahmen)")), "Lauf 2")
     # Negativkontrollen des Wortscans: die Fehlalarm-Klassen, an denen die
     # Modulregel gewachsen ist, duerfen NICHT anschlagen.
     fehlt = []
@@ -5266,8 +5646,9 @@ def _selbsttest(still=False):
     st4 = {nr: p["status"] for nr, p in r4["proben"].items()}
     berichte.append("Lauf 4 (Transit mit events.json): " + ", ".join("%s=%s" % kv for kv in st4.items()))
     assert r4["typ"] == "transit" and r4["fehler"] == 0 and r4["pruefen"] == 0 and \
-        not r4["uebersprungen"], "Lauf 4 nicht sauber: %s\n%s\n%s" % (st4, befunde(r4),
-                                                                     r4["uebersprungen"])
+        [nr for nr, _art, _g in r4["uebersprungen"]] == ["P16"], \
+        "Lauf 4 nicht sauber (nur P16 aussagelos, zwei Kapitel): %s\n%s\n%s" % (
+            st4, befunde(r4), r4["uebersprungen"])
     assert r4["proben"]["P1"]["geprueft"] == 5 and r4["proben"]["P5"]["geprueft"] == 3 and \
         r4["proben"]["P14"]["geprueft"] == 6, "Lauf 4: Zählung P1/P5/P14 %s" % (
             [r4["proben"][n]["geprueft"] for n in ("P1", "P5", "P14")])
@@ -5275,6 +5656,10 @@ def _selbsttest(still=False):
     # 5) Transit mit eingebauten Fehlern
     a5 = ta
     a5 = ersetze(a5, "## Zur Lesart · Wie du", "## Vorwort · Wie du")                   # W23 (Gegenprobe)
+    a5 = ersetze(a5, "Einmal im Monat etwas annehmen, ohne es zu verdienen.",
+                 "Einmal im Monat etwas annehmen, ohne es zu verdienen. Jupiter macht vieles möglich.")  # P17 streng
+    a5 = ersetze(a5, "beides erzählen die folgenden Kapitel.",
+                 "beides erzählen die folgenden Kapitel. Saturn verlangt jetzt Geduld.")   # P17 Grundfassung
     a5 = ersetze(a5, "Orb 0,57°", "Orb 0,75°")                                              # W10 Stichtag-Orb
     a5 = ersetze(a5, "am Stichtag Orb 2,40°, zulaufend; exakt %s" % w["e150"],
                  "am Stichtag Orb 2,40°, zulaufend; exakt %s · T-Mondknoten ☊ Konjunktion ☌ "
@@ -5311,7 +5696,9 @@ def _selbsttest(still=False):
                  ("P11", "pruefen", "Monat „%s“" % w["mM2500"]),
                  ("P11", "pruefen", "Altersangabe „als du neun warst“"),
                  ("P13", "pruefen", "Pluto Quadrat Sonne steht in keinem Beleg"),
-                 ("P15", "pruefen", "Jupiter △ Mond (Transit) — am Deutungsort Thema 2")), "Lauf 5")
+                 ("P15", "pruefen", "Jupiter △ Mond (Transit) — am Deutungsort Thema 2"),
+                 ("P17", "pruefen", "Jupiter als Satzsubjekt (außerhalb von Thema und Rahmen)"),
+                 ("P17", "pruefen", "Saturn als Satzsubjekt (als Handelnder, nicht als Anker)")), "Lauf 5")
     st5 = {nr: p["status"] for nr, p in r5["proben"].items()}
     berichte.append("Lauf 5 (Transit, eingebaute Fehler): " + ", ".join("%s=%s" % kv for kv in st5.items()))
     # 5b) Lagebild ohne Kopfblock (W10) — ein Fehler, den bisher erst Schritt 3 fand
@@ -5326,8 +5713,9 @@ def _selbsttest(still=False):
     st6 = {nr: p["status"] for nr, p in r6["proben"].items()}
     berichte.append("Lauf 6 (Transit ohne events.json): " + ", ".join("%s=%s" % kv for kv in st6.items()))
     assert r6["fehler"] == 0 and r6["pruefen"] == 0, "Lauf 6 nicht sauber: %s\n%s" % (st6, befunde(r6))
-    assert [(nr, art) for nr, art, _g in r6["uebersprungen"]] == [("P1", "teilweise übersprungen")] and \
-        "events.json" in r6["uebersprungen"][0][2], "Lauf 6: %s" % r6["uebersprungen"]
+    assert [(nr, art) for nr, art, _g in r6["uebersprungen"]] == [
+        ("P16", "aussagelos"), ("P1", "teilweise übersprungen")] and \
+        "events.json" in r6["uebersprungen"][1][2], "Lauf 6: %s" % r6["uebersprungen"]
     # eine events.json, die es nicht gibt, bricht laut ab (Rueckgabewert 2 der CLI)
     d6 = tempfile.mkdtemp(prefix="inhaltsprobe_")
     pa6, pc6 = os.path.join(d6, "prueffall_analyse.md"), os.path.join(d6, "prueffall_chart_data.md")
@@ -5399,13 +5787,26 @@ def _selbsttest(still=False):
                            "## Gesamtbild · Was unter allem liegt"))
     erwarte(r7b, (("P3", "fehler", "trägt das Getriebe-Kapitel den Wort-Kicker"),), "Lauf 7b")
 
+    # 8) Transit: Deutungsort „Mitlaufendes (Deckel)“ (2026-09-24, T10)
+    c8 = ersetze(tc, "T-Jupiter △ R-Mond    im Wirkorb    — Deutungsort: Thema 2",
+                 "T-Jupiter △ R-Mond    im Wirkorb    — Deutungsort: Thema 2\n"
+                 "T-Neptun ⚹ R-Mars    im Wirkorb    — Deutungsort: Mitlaufendes (Deckel)")
+    r8 = lauf(c8, ta, tev)
+    assert not r8["proben"]["P15"]["pruefen"] and r8["proben"]["P15"]["geprueft"] == 2, \
+        "Lauf 8: Deckel-Eintrag nicht erkannt: %s" % r8["proben"]["P15"]["pruefen"]
+    r8b = lauf(ersetze(c8, "T-Neptun ⚹ R-Mars    im Wirkorb    — Deutungsort: Mitlaufendes (Deckel)",
+                       "T-Uranus △ R-Venus    im Wirkorb    — Deutungsort: Mitlaufendes (Deckel)"), ta, tev)
+    erwarte(r8b, (("P15", "pruefen", "über dem Deckel, aber keine Zeile"),), "Lauf 8b")
+    berichte.append("Lauf 8 (Transit, Deutungsort über dem Deckel): erkannt, 8b gemeldet")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
               "Getriebe-Beleg teilweise übersprungen), Lauf 2 findet je Probe den eingebauten Fehler, "
               "Lauf 3 liest das Zugang-Kapitel; Transit: Lauf 4 sauber mit events.json, Lauf 5 und 5b "
               "finden die eingebauten Fehler, Lauf 6 ohne events.json nur teilweise übersprungen; "
-              "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn]")
+              "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
+              "Lauf 8 Deutungsort über dem Deckel; P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):
@@ -5487,7 +5888,9 @@ REGISTER im Transit (`Mitlaufendes`) — P5.
 
 DEUTUNGSORT (Ressourcen-Block) — P15.
   Zeile `… — Deutungsort: Thema n` | `Ressource n` | `Was trägt`; im Transit auch
-  „Was dich durch diese Zeit trägt" (Abschnitt `###`). Ein anderer Ort ist PRÜFEN.
+  „Was dich durch diese Zeit trägt" (Abschnitt `###`) und `Mitlaufendes (Deckel)`
+  für Kontakte über dem Deckel von sechs — dort genügt eine Zeile im Kapitel
+  `Mitlaufendes`, die beide Faktoren nennt. Ein anderer Ort ist PRÜFEN.
   Gezählt werden die Sätze ab dem Satz, der BEIDE Faktoren nennt (oder zwei Sätzen,
   die sie zusammen nennen), bis zu einem Satz nur über andere Faktoren.
 
@@ -5507,6 +5910,19 @@ KONSTELLATION IM TEXT — P13.
   Aufzählung kein Subjekt, nimmt das zweite keinen Partner aus ihm. Die Faktoren eines
   Nebensatzes (Komma + „während", „weil", „als", „dass" …, bis zum nächsten Komma)
   zählen nicht hinter dem Aspektwort; stand dort einer, paart die Probe nicht nach vorn.
+
+GEDEUTETE KAPITEL — P16.
+  Kicker `Kapitel n` (englisch `Chapter n`), `Zugang …`, `Getriebe`, `Instrument`
+  samt ihren englischen Namen; nicht das Lagebild „Der Stand heute". Gezählt werden
+  die Wörter der Absätze und Zwischentitel, nicht Signatur und Beleg. Ausnahmen aus
+  `form=kurz`/`form=ressource` der THEMA-Zeile und `duenn=ja` der ZUGANG-Zeile.
+
+SUBJEKT — P17.
+  Satzsubjekt heißt: Name (Planet, Achse, Zeichen, „die Seele", ein Haus mit
+  Ordnungszahl) am Satz- oder Gliedanfang, hinter Artikel oder Relativpronomen ohne
+  Präposition davor, oder hinter einem Verb („wird Saturn zum Aufseher"). Die Zone
+  kommt aus dem letzten `###`-Zwischentitel: Bewegung 1 und 3–6 streng, 2 und 7 frei,
+  ohne Bewegungswortlaut nur mit einem Verb außerhalb von `_P17_ANKERVERBEN`.
 
 STRUKTURBILD §3 (chart_data) — P12.
   Die Zeilen „- Enddispositoren (im eigenen Zeichen, …): …" und „- Im eigenen Zeichen

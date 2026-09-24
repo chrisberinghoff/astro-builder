@@ -2368,15 +2368,38 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     Liest NUR das chart_data.md — die Themenliste und die Aspekttabellen stehen
     beide dort, die Probe läuft also schon in Schritt 1, vor der Freigabe.
 
-    Rückgabe: {'tabelle': n, 'mit_heimat': [...], 'ohne_heimat': [...],
-               'dokumentiert': [...], 'offen': [...], 'doppelt': [...],
-               'unlesbar': [(abschnitt, zeile), ...], 'ok': bool}
+    Rückgabe: {'tabelle': n, 'je_tabelle': [(Tabelle, n), ...], 'mit_heimat': [...],
+               'ohne_heimat': [...], 'dokumentiert': [...] (weggelassen),
+               'anderswo_gedeutet': [...] (Getriebe, Instrument), 'offen': [...],
+               'doppelt': [...], 'unlesbar': [(abschnitt, zeile), ...], 'ok': bool}
     `offen` ist die Fehlerliste: weder Heimat noch dokumentierte Weglassung.
     `unlesbar` (neu 2026-09-19, F2): Zeilen der Aspekttabellen, die wie eine
     Tabellenzeile aussehen, aber kein Paar ergeben — etwa ein Zeichen, das die
     Probe nicht kennt (`∡` statt `⚼`), oder ein Symbol in der Faktorzelle.
     Vorher fielen sie still aus der Prüfmenge (falsch-grün); jetzt ist die
     Probe dann nicht grün, und der Bericht nennt die Zeile.
+
+    WAS DIE PROBE LIEST (2026-09-24, Klasse-2-Entscheidungslauf T11 — vorher
+    stand das nur zum Teil im Datenblatt-Modul, und zwei Marken standen nirgends):
+      Prüfmenge     die Tabellen unter `### Volle Aspekte`, `### Einseitige
+                    Aspekte`, `### Nebenaspekte`, `### Untergrund-Aspekte` und,
+                    als alter Name, `### Hauptaspekte` — jede bis zur nächsten
+                    Überschrift oder zum nächsten @@-Block; Paar in einer Zelle
+                    oder über drei Zellen. `je_tabelle` nennt die Zahl je
+                    Tabelle; die Untergrund-Tabelle zählt mit.
+      Heimat        die `aspekte=`-Felder der THEMA-Zeilen (Transit-Kapitel mit
+                    `teil=jetzt` zählen nicht). Ein Paar in zwei Themen: doppelt.
+      Dokumentiert  NUR die Zeilen unter der Überschrift `### Aspekte ohne
+                    Deutungs-Heimat — ausdrückliche Weglassung` (zwei bis vier
+                    #), je Zeile ein Paar (Tabellenzeile oder `Faktor Glyphe
+                    Faktor`, Zusatzebene mit ∠, ⚼ oder –Wort–). Nennt die Zeile
+                    das Getriebe- oder das Instrument-Kapitel, steht das Paar in
+                    `anderswo_gedeutet`, sonst in `dokumentiert` (weggelassen).
+                    Andere Wörter im Datenblatt — „Weglassung", „GESTRICHEN" —
+                    dokumentieren nichts mehr (bis 2026-09-23 öffneten sie
+                    einen Scan bis zur nächsten Überschrift und machten Paare
+                    still zu „dokumentiert").
+      offen         weder Heimat noch dokumentiert: die Fehlerliste.
     """
     import re as _re
     txt = open(chart_data_pfad, encoding="utf-8").read()
@@ -2422,13 +2445,15 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     # Folge: Die Prüftabelle bestand in JEDEM Standardlauf nur aus den drei
     # Untergrund-Aspekten, die Probe übersah den Rest und meldete trotzdem
     # "keine offenen" — ein stiller Freispruch.
-    tabelle, unlesbar = set(), []
+    tabelle, unlesbar, je_tabelle = set(), [], []
     for kopf in ("### Hauptaspekte", "### Volle Aspekte",
                  "### Einseitige Aspekte", "### Nebenaspekte"):
         if kopf not in txt:
             continue
         teil, _ = _ah_abschnitt(txt, kopf)
-        tabelle |= _paare(teil, "[%s]" % _AH_GLYPH, unlesbar, kopf)
+        _p = _paare(teil, "[%s]" % _AH_GLYPH, unlesbar, kopf)
+        je_tabelle.append((kopf[4:], len(_p)))
+        tabelle |= _p
     if "### Untergrund-Aspekte" in txt:
         teil, _ = _ah_abschnitt(txt, "### Untergrund-Aspekte")
         # TRENNER DER UNTERGRUND-TABELLE (korrigiert 2026-09-16, Pruefbericht
@@ -2448,8 +2473,10 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         # 2026-09-19 (F2): Glyphen der Tabelle sind ∠ Halbquadrat und
         # ⚼ Anderthalbquadrat (Datenblatt-Modul); jedes andere Zeichen
         # (etwa ∡) landet in `unlesbar`, statt still zu fehlen.
-        tabelle |= _paare(teil, "[—⚼∠]|" + _AH_WORT, unlesbar,
-                          "### Untergrund-Aspekte")
+        _p = _paare(teil, "[—⚼∠]|" + _AH_WORT, unlesbar,
+                    "### Untergrund-Aspekte")
+        je_tabelle.append(("Untergrund-Aspekte", len(_p)))
+        tabelle |= _p
 
     heimat, doppelt = {}, []
     # EINSTIEGSMARKE DER THEMENLISTE (korrigiert 2026-09-16, Pruefbericht
@@ -2502,25 +2529,30 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
     # Aufgefallen ist es nur, weil der Prueffall zufaellig keine Fehlstelle
     # hatte. Jetzt endet jeder Marken-Abschnitt an der naechsten Ueberschrift —
     # dieselbe Begrenzung, die der Tabellen-Scan oben schon benutzt.
-    dok = set()
-    for marke in ("Aspekte ohne Deutungs-Heimat", "Weglassung", "GESTRICHEN"):
-        stelle = 0
-        while True:
-            i = txt.find(marke, stelle)
-            if i < 0:
-                break
-            teil, stelle = _ah_abschnitt(txt, marke, i)
-            # ZUSATZEBENE MIT (neu 2026-09-17): Seit dem 2026-09-16 liegt die
-            # Untergrund-Tabelle in der Pruefmenge, ihre Aspektarten tragen ⚼
-            # und ∠ — ohne sie hier ist eine Untergrund-Zeile pruefbar, aber
-            # nicht dokumentierbar. Beim Patchen der Grenzen aufgefallen.
-            dok |= _paare(teil, "[%s—⚼∠]|%s" % (_AH_GLYPH, _AH_WORT))
+    # 2026-09-24 (Klasse-2-Entscheidungslauf T11): NUR noch die Ueberschrift
+    # `### Aspekte ohne Deutungs-Heimat` (Datenblatt-Modul). Bis dahin oeffneten
+    # auch die Woerter „Weglassung" und „GESTRICHEN" irgendwo im Datenblatt einen
+    # Scan bis zur naechsten Ueberschrift; ein GESTRICHEN-Absatz der Themenliste
+    # machte Paare so still zu „dokumentiert" (Klasse-2-Befunde Geburtshoroskop
+    # 1+2 vom 23.09. Nr. 3 und vom 24.09. Nr. 11). Jede Zeile der Liste traegt
+    # einen Weglassungsgrund oder das Kapitel, das den Aspekt ausserhalb der
+    # Themenliste deutet (Getriebe, Instrument) — beides wird getrennt gezaehlt,
+    # weil das Datenblatt-Modul beides trennt (Befund vom 22.09.c Nr. 6).
+    dok, anderswo = set(), set()
+    for mk in _re.finditer(r"(?m)^#{2,4}\s*Aspekte ohne Deutungs-Heimat[^\n]*", txt):
+        teil, _ = _ah_abschnitt(txt, mk.group(0), mk.start())
+        for zeile in (teil or "").splitlines():
+            paare = _paare(zeile, "[%s—⚼∠]|%s" % (_AH_GLYPH, _AH_WORT))
             for m in _re.finditer(r"(%s)\s*(?:[%s⚼∠]|—|%s)\s*(%s)"
-                                  % (_AH_NAME, _AH_GLYPH, _AH_WORT, _AH_NAME), teil):
-                dok.add(frozenset([m.group(1), m.group(2)]))
+                                  % (_AH_NAME, _AH_GLYPH, _AH_WORT, _AH_NAME), zeile):
+                paare.add(frozenset([m.group(1), m.group(2)]))
+            if _re.search(r"Getriebe|Instrument", zeile):
+                anderswo |= paare
+            else:
+                dok |= paare
 
     ohne = sorted(tabelle - set(heimat), key=lambda x: sorted(x))
-    offen = [p for p in ohne if p not in dok]
+    offen = [p for p in ohne if p not in dok and p not in anderswo]
     # AUSSAGELOS (neu 2026-09-06, Prüfbericht Transit 1.3): Findet die Probe
     # keine einzige Aspektzeile, hat sie NICHTS geprüft. Das als "ok" zu melden
     # ist gefährlicher als ein Fehler, weil es wie eine bestandene Prüfung
@@ -2532,7 +2564,10 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
         "aussagelos": not tabelle,
         "mit_heimat": sorted(" — ".join(sorted(p)) for p in set(heimat) & tabelle),
         "ohne_heimat": [" — ".join(sorted(p)) for p in ohne],
-        "dokumentiert": [" — ".join(sorted(p)) for p in ohne if p in dok],
+        "dokumentiert": [" — ".join(sorted(p)) for p in ohne
+                         if p in dok and p not in anderswo],
+        "anderswo_gedeutet": [" — ".join(sorted(p)) for p in ohne if p in anderswo],
+        "je_tabelle": je_tabelle,
         "offen": [" — ".join(sorted(p)) for p in offen],
         "doppelt": [(" — ".join(a), b, c) for a, b, c in doppelt],
         "unlesbar": unlesbar,
@@ -3036,13 +3071,22 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
                 "Hauptaspekte). Beim Transit-Horoskop ist das "
                 "normal: dort gilt kontakt_heimat_bericht(chart_data, events_json). "
                 "Bei einem Geburtshoroskop ist es ein Fehler im Datenblatt.")
+    tab = " · ".join("%s %d" % (k.replace(" Aspekte", "").replace("-Aspekte", "")
+                                  .replace("aspekte", ""), n)
+                     for k, n in r.get("je_tabelle", []))
     if r["ok"]:
-        return ("Aspekt-Heimat: %d Aspekte, %d mit Heimat, %d dokumentiert "
-                "weggelassen, keine Doppelheimat, keine offenen."
-                % (r["tabelle"], len(r["mit_heimat"]), len(r["dokumentiert"])))
-    L = ["Aspekt-Heimat: FEHLER (%d Aspekte in der Tabelle)." % r["tabelle"]]
+        return ("Aspekt-Heimat: %d Aspekte (%s), %d mit Heimat, %d dokumentiert "
+                "weggelassen, %d im Getriebe- oder Instrument-Kapitel gedeutet, "
+                "keine Doppelheimat, keine offenen."
+                % (r["tabelle"], tab, len(r["mit_heimat"]), len(r["dokumentiert"]),
+                   len(r.get("anderswo_gedeutet", []))))
+    L = ["Aspekt-Heimat: FEHLER (%d Aspekte in den Tabellen: %s)." % (r["tabelle"], tab)]
     for p in r["offen"]:
         L.append("  OHNE HEIMAT und nicht dokumentiert: %s" % p)
+    if r["offen"]:
+        L.append("  Dokumentiert wird nur unter der Überschrift „### Aspekte ohne "
+                 "Deutungs-Heimat — ausdrückliche Weglassung“, je Zeile ein Paar mit "
+                 "Grund oder Kapitel (build.hilfe('aspekt_heimat')).")
     for p, a, b in r["doppelt"]:
         L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (p, a, b))
     return "\n".join(L + unl)
@@ -3511,6 +3555,20 @@ def _selbsttest():
         pruefe(r["tabelle"] == 3 and len(r["unlesbar"]) == 1 and not r["ok"]
                and "UNLESBARE TABELLENZEILE" in b and "∡" in b and "⚼" in b,
                "F2: unlesbare Zeile nicht gemeldet: %r / %s" % (r, b))
+        # T11 (2026-09-24): nur die Ueberschrift dokumentiert; zwei Arten
+        wegl = ("\n### Aspekte ohne Deutungs-Heimat — ausdrückliche Weglassung\n\n"
+                "- Venus △ Saturn — 2°00′, voll — gedeutet im Instrument-Kapitel\n")
+        r = aspekt_heimat(datei("g4.md", tab + th1 + th2 + schluss + wegl))
+        b = aspekt_heimat_bericht(os.path.join(tmp, "g4.md"))
+        pruefe(r["ok"] and r["anderswo_gedeutet"] == ["Saturn — Venus"]
+               and not r["dokumentiert"] and "Untergrund 2" in b
+               and "1 im Getriebe- oder Instrument-Kapitel" in b,
+               "T11: Instrument-Zeile nicht getrennt gezaehlt: %r / %s" % (r, b))
+        r = aspekt_heimat(datei("g5.md", tab + th1 + th2 + schluss.replace(
+            "GESTRICHEN: keine.", "GESTRICHEN: Venus △ Saturn (Weglassung)")))
+        b = aspekt_heimat_bericht(os.path.join(tmp, "g5.md"))
+        pruefe(r["offen"] == ["Saturn — Venus"] and "Dokumentiert wird nur" in b,
+               "T11: GESTRICHEN/Weglassung dokumentiert noch still: %r" % r)
 
         # --- W7, W9, L19, W22, L16: Transit mit konstruiertem events.json ---
         S0, E0 = "2031-01-01", "2032-12-31"

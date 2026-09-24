@@ -3707,13 +3707,17 @@ def _vert_zeile(v):
 STRUKTURBILD_TYPEN = ('geburtshoroskop', 'transit')   # EA/Ultimativ ausgemustert 2026-09-23
 
 # Wohin eine ⚠-Zeile der Gegenprobe g geht (Zeichengrenze wie Hauswechsel) —
-# Chris-Entscheidung 2026-09-23, fuer alle Typen; die Regel steht im
-# Datenblatt-Modul, Gegenprobe g.
+# Chris-Entscheidung 2026-09-23, fuer alle Typen. Seit dem 2026-09-24
+# (Klasse-2-Entscheidungslauf T5) steht die Liste NUR hier; das Datenblatt-Modul
+# verweist auf diese Zeile. Die Ausnahme fuer eine Stelle, die nur mitklingt,
+# stand in der Klammer hinter dem Hinweissatz und liess offen, ob auch die
+# Auftakt-Nennung entfaellt (Geburtshoroskop 1+2 vom 24.09., Nr. 3): sie
+# entfaellt, beide Textstellen gehen zusammen.
 _KIPP_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
                'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
                'in den Handlungsblock am Ende von Schritt 1+2; im Text ein '
-               'Hinweissatz im Kapitel, das die Stelle trägt (klingt sie nur '
-               'mit, genügt diese Zeile), und eine Nennung im Auftakt '
+               'Hinweissatz im Kapitel, das die Stelle trägt, und eine Nennung '
+               'im Auftakt — klingt die Stelle nur mit, entfallen beide '
                '(Gegenprobe g).')
 
 

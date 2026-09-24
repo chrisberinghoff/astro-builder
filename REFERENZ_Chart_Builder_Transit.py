@@ -98,6 +98,10 @@ LAT, LON = None, None     # <<Breite, Laenge aus dem Kopf der chart_data>>
 # Weitere Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
 # (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag.
 FUSSNOTEN_EXTRA = []
+# Geburtszeile des Covers — wie in der Geburtshoroskop-Vorlage eine Konstante mit
+# Platzhalter und Abbruch in __main__ (2026-09-24, T13; vorher stand der
+# Platzhalter im HTML, und die Schreibweise las ein Lauf erst am fertigen PDF ab).
+GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Tag ohne fuehrende Null, Monat in VERSALIEN, Ort ohne Land
 
 tdat.setze_quelle(CHARTDATA)
 from build import BASE_CSS                     # noqa: E402
@@ -121,7 +125,10 @@ ORNAMENT = DECKBLATT['GLYPHEN']             # Teiler-Seiten + Inhaltsverzeichnis
 PART_KICKER = set()       # Transit: keine Teiler-Kapitel (Teil I–III gehoerten zum Ultimativ)
 # Eigene Seite (kein Teiler-Layout). Das Schlusswort laeuft bewusst NICHT hier
 # mit: der erzwungene Umbruch liess im Erstlauf eine Seite mit vier Zeilen.
-OPEN_PAGE = {'Auftakt'}
+# Der Auftakt des Transits heisst `Zur Lesart` — bis zum 2026-09-24 stand hier
+# 'Auftakt', der Eintrag griff nie (Pruefberichte Transit 3+4 vom 23.09.c und
+# 24.09.). Als erstes Kapitel beginnt er ohnehin auf eigener Seite.
+OPEN_PAGE = {'Zur Lesart'}
 
 # Breitenleiter fuer die Einmessung von Radseite und Transit-Uhr: 15,6 cm
 # abwaerts in 0,2-cm-Schritten (K8/W62, 2026-09-20; vorher ab 17,2 cm).
@@ -178,10 +185,15 @@ section.cover {{ page: cover; position:relative; width:21cm; height:29.7cm;
 .cv-name {{ font-family:"Cinzel"; font-size:31pt; letter-spacing:0.15em;
    color:#f2ead6; }}
 .cv-rule {{ width:3.2cm; height:1pt; background:{GOLD_L}; margin:0 auto; }}
+/* Leitsatz und Geburtszeile: Farben fuer HELLEN unteren Rand; dunkles Motiv
+   -> COVER_HELL = True (Klasse .hell unten) */
 .cv-leit {{ font-family:"EB Garamond Italic"; font-style:italic; font-size:15.4pt;
    color:#4a3512; letter-spacing:0.02em; }}
 .cv-birth {{ font-family:"EB Garamond"; font-size:8.6pt; letter-spacing:0.2em;
    color:#6b5220; }}
+.cv-bild {{ position:absolute; top:0; left:0; width:21cm; height:29.7cm; }}
+section.cover.hell .cv-leit {{ color:#f3ead6; }}
+section.cover.hell .cv-birth {{ color:#e3d3ae; }}
 .cv-gl {{ position:absolute; font-family:"DejaVu Sans","FreeSerif",sans-serif;
    text-align:center; }}
 """
@@ -277,6 +289,40 @@ def y2cm(y):
     return y / 842 * 29.7
 
 
+# VOLLBILD-COVER (2026-09-24, Klasse-2-Entscheidungslauf T13). Rechnet der Lauf das
+# Titelmotiv als ganzseitiges PNG (Design-Render-Modul, „Eine Flaeche, die von
+# MEHREREN Seiten abblendet": Licht und Gegenstaende pixelweise), setzt er
+# COVER_BILD auf den Pfad und schreibt die Rechnung in cover_bild_rechnen();
+# __main__ ruft sie bei jedem Lauf, wie rad_zeichnen(). cover_html() legt das
+# PNG dann an die Stelle von .cv-sky, Sternfeld und SVG. Bis dahin gab es dafuer
+# keinen Einhaengepunkt, und cover_html() wurde zweimal von Hand ersetzt
+# (Pruefberichte Geburtshoroskop 3+4 vom 23.09.c, Transit 3+4 vom 24.09.).
+# COVER_HELL schaltet Leitsatz und Geburtszeile auf helle Schrift: Die Farben in
+# COVER_CSS sind fuer einen HELLEN unteren Rand gesetzt (der Platzhalter-Verlauf
+# endet hell); auf einem dunklen Motiv verschwinden sie, und kein Preflight sieht
+# das (Befund Geburtshoroskop 3+4 vom 24.09.b).
+COVER_BILD = None      # <<Pfad des im Lauf gerechneten Vollbild-PNG — oder None>>
+COVER_HELL = False     # True: dunkles Motiv am unteren Rand, Leitsatz und Geburtszeile hell
+
+
+def cover_bild_rechnen():
+    """Rechnet das Vollbild-PNG nach TITELMOTIV und schreibt es nach COVER_BILD.
+    Je Chart neu — hier steht nur die Schnittstelle. __main__ ruft sie, sobald
+    COVER_BILD gesetzt ist; ein herumliegendes PNG ist nicht vertrauenswuerdig."""
+    raise SystemExit('REFERENZ-Vorlage: COVER_BILD ist gesetzt, aber '
+                     'cover_bild_rechnen() rechnet noch nichts.')
+
+
+def _cover_grund():
+    """Hintergrund des Covers: das gerechnete Vollbild oder Verlauf, Sterne, SVG."""
+    if COVER_BILD:
+        import base64
+        with open(COVER_BILD, 'rb') as f:
+            daten = base64.b64encode(f.read()).decode('ascii')
+        return '<img class="cv-bild" src="data:image/png;base64,%s">' % daten
+    return '<div class="cv-sky"></div>\n%s\n%s' % (cover_stars(), cover_svg())
+
+
 def glyphe(x, y, size, color, zeichen, op=0.9):
     """Eine tragende Glyphe aus DECKBLATT['GLYPHEN'], dezent ueber dem SVG."""
     return (f'<div class="cv-gl" style="left:{(x-40)/595*21:.3f}cm;'
@@ -305,15 +351,13 @@ def cover_html():
     # LETZTE Leitsatzzeile: chartdoc.leitsatz_block() bricht am Gedankenstrich
     # um und laesst einen langen Leitsatz nach oben wachsen — vorher lief die
     # zweite Zeile in die Geburtsdaten (Pruefbericht Transit 3+4 vom 23.09.c).
-    return f"""<section class="cover">
-<div class="cv-sky"></div>
-{cover_stars()}
-{cover_svg()}
+    return f"""<section class="{'cover hell' if COVER_HELL else 'cover'}">
+{_cover_grund()}
 <div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">&lt;&lt;KICKER — Dokumenttyp aus der H1 der analyse.md (parsed['doctype']), in VERSALIEN; KEIN Feld des @@DECKBLATT-Blocks&gt;&gt;</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
 {chartdoc.leitsatz_block(LEITSATZ)}
-<div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">&lt;TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT&gt;</div>
+<div class="cv-block cv-birth" style="top:{y2cm(822):.2f}cm">{esc(GEBURTSZEILE)}</div>
 </section>"""
 
 
@@ -329,10 +373,12 @@ TD = tdat.parse()
 # und Südknoten selbst (F22); gestrichen 2026-09-20.)
 
 # Die Themennamen der Uhr sind die TITEL DER THEMENKAPITEL des laufenden
-# Charts — erfundene Namen sind ein Fehler. tuhr.THEMEN ist im Repo mit den
-# Namen eines einzelnen Laufs vorbelegt und MUSS hier ueberschrieben werden.
-# Traegt EIN Transiter zwei Themenkapitel, bekommt der erste Eintrag eine
-# Zielliste als fuenftes Feld; jede Zeile geht in das ERSTE passende Thema.
+# Charts — erfundene Namen sind ein Fehler. tuhr.THEMEN ist im Repo mit
+# Platzhaltern vorbelegt (seit 2026-09-24) und MUSS hier ueberschrieben werden.
+# Eine Zielliste als fuenftes Feld braucht ein Eintrag, sobald ein Transiter
+# zwei Themenkapitel traegt oder ein Thema mehrere Transiter an verschiedenen
+# Zielen hat — Formen s. tuhr._passt() ('Mond', 'Quadrat Sonne', 'Saturn Mond',
+# 'Saturn Quadrat Mond'); jede Zeile geht in das ERSTE passende Thema.
 tuhr.THEMEN = [
     ('<Titel Themenkapitel>', '<Untertitel>', ['<Transiter>'], '#7d3b46',
      ['<Ziel>', '<Ziel>']),
@@ -568,7 +614,7 @@ Zielpunkte und werden im Text nicht eigens gedeutet.</p>
 <th>Stationen</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
 <div class="anh-note">Dauer in Monaten über die volle Berührung
 (Snapshot-Orb 3,0°). Datumsangaben TT.MM.JJ. <span class="mk">←</span> vor der
-Spanne heißt: die Linie lief schon vor dem Stichtag; <span class="mk">→</span>
+Spanne heißt: die Linie lief schon vor Beginn des Fensters; <span class="mk">→</span>
 dahinter: sie reicht über das Fenster hinaus.</div>
 </section>"""
 
@@ -654,8 +700,8 @@ zurückkehren.</p>
 <col style="width:1.6cm"><col style="width:1.75cm"><col style="width:2.5cm">
 <col style="width:9.4cm"></colgroup>
 <tbody>{stat}</tbody></table>
-<div class="anh-note">Snapshot-Orb 3,0°; was im Wirk-Orb von 1,5° steht, wird
-in den Themenkapiteln eigens gedeutet.</div>
+<div class="anh-note">Snapshot-Orb 3,0°; was im Wirk-Orb von 1,5° an einem primären
+Ziel steht, deuten die Themenkapitel oder nennt das Kapitel „Mitlaufendes“.</div>
 </section>"""
 
 
@@ -771,9 +817,20 @@ if __name__ == '__main__':
                          'PALETTE_GESETZT = True setzen (Design-Render-Modul, '
                          '„Deckblatt": die Vorlage liefert Mechanik, nie Inhalt).')
 
-    # 1. Grafiken IMMER selbst zeichnen — nie ein herumliegendes PNG benutzen.
+    # Platzhalter mit Abbruchmarke wie in der Geburtshoroskop-Vorlage
+    # (2026-09-24, T13): ihre spitzen Klammern gingen sonst still ins PDF.
+    for _n, _v in (('GEBURTSZEILE', GEBURTSZEILE), ('RAD_NOTE', RAD_NOTE)):
+        if '<' in _v and '>' in _v:
+            raise SystemExit('REFERENZ-Vorlage: %s traegt noch den Platzhalter '
+                             '— Datum, Zeit und Ort aus der chart_data '
+                             'eintragen.' % _n)
+
+    # 1. Grafiken (und ein Vollbild-Cover) IMMER selbst zeichnen — nie ein
+    #    herumliegendes PNG benutzen.
     rad_zeichnen()
     uhr_zeichnen()
+    if COVER_BILD:
+        cover_bild_rechnen()
 
     # 2. Einmessen statt schaetzen — am Frontmatter allein (s. Docstring der
     #    Datei): groesste Breite/Schriftstufe, bei der die Seite einseitig bleibt.
@@ -794,8 +851,9 @@ if __name__ == '__main__':
         lambda ks: frontmatter(skala=skala, uhr_breite=uhr, rad_breite=rad,
                                konst_skala=ks),
         'PG_konst', chartdoc.KONST_STUFEN, was='Konstellationsseite')
-    # Die Zeitleiste passt beim Standardfenster (8 Quartale) bei 1.0; ab etwa
-    # elf Quartalen wird sie wie die Aspektseite eingemessen (chartdoc).
+    # Die Zeitleiste wird IMMER eingemessen: Schon beim Standardfenster (acht
+    # Quartale) brauchte sie 0,96 (Pruefbericht Transit 3+4 vom 23.09.c) — die
+    # fruehere Notiz „passt bei acht Quartalen bei 1.0" stimmte nicht.
     zl_skala = chartdoc.passe_ein(
         lambda zs: frontmatter(skala=skala, uhr_breite=uhr, rad_breite=rad,
                                konst_skala=kskala, zl_skala=zs),

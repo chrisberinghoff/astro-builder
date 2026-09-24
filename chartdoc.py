@@ -11,8 +11,8 @@ Konstellationsseite und Aspektseite, der satz-sichere Kapitelbau und der
 Zwei-Pass-Lauf, der die Seitenzahlen fuers Inhaltsverzeichnis aus dem
 gerenderten Dokument holt statt sie zu schaetzen.
 
-HAUSSTIL — gemeinsam festgelegt am 2026-07-27, Vorlage waren Seite 2-4 eines
-Kombi-Horoskops und Seite 2 eines Ultimativ-Horoskops.
+HAUSSTIL — gemeinsam festgelegt am 2026-07-27; Vorlage waren Seiten zweier
+frueherer Produkte (Kombi- und Ultimativ-Horoskop, beide inzwischen ausgemustert).
 Die Werte in HAUSSTIL unten sind ENTSCHIEDEN, nicht gewachsen; wer sie aendert,
 aendert den Hausstil aller kuenftigen Horoskope. Kurzfassung der Beschluesse:
   * Chartbild-Strecke in fester Reihenfolge: Inhalt -> Radseite ->
@@ -1080,6 +1080,17 @@ def _zl_liste(x, leer='—'):
     return esc(' · '.join(str(t) for t in x))
 
 
+def _zl_dichte(x):
+    """Dichte-Zelle der Zeitleiste: umgebrochen wird nur zwischen den Monaten
+    („ · "), nie innerhalb eines Eintrags — vorher brach „Aug 5 (2)" zwischen
+    Zahl und Klammerzahl um (Pruefbericht Transit 3+4 vom 23.09.b; geschuetzt
+    seit 2026-09-24 mit geschuetzten Leerzeichen)."""
+    if not x:
+        return _zl_liste(x)
+    teile = x.split(' · ') if isinstance(x, str) else [str(t) for t in x]
+    return esc(' · '.join(t.strip().replace(' ', '\u00a0') for t in teile))
+
+
 # --- Leser fuer den @@ZEITLEISTE-Block (neu 2026-09-19, W12) ---------------
 
 class ZeitleisteError(ValueError):
@@ -1364,7 +1375,7 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
             f'<td class="zs">{esc(str(spanne))}</td>'
             f'<td class="zd">{zd}</td>'
             f'<td class="zr">{_zl_liste(ruht)}</td>'
-            f'<td class="zz">{_zl_liste(dichte)}</td></tr>')
+            f'<td class="zz">{_zl_dichte(dichte)}</td></tr>')
     ld = lead if lead is not None else ZL_LEAD
     nt = note if note is not None else ZL_NOTE
     if lead is not None and note is None and ZL_SPALTE not in lead:
@@ -1999,8 +2010,10 @@ def build_section(i, it, breaks, part_kicker=(), open_page=(), erstes=False):
 
     Neu 2026-09-17 (Klasse-2-Entscheidungslauf). Bis dahin stand die
     Kapitel-Schleife samt ihrer CSS-Klassennamen (`chapter`, `chapter-first`,
-    `part`, `part-inner`) NUR in `claude/REFERENZ_Chart_Builder_Ultimativ.py`;
-    kein Modul nannte sie, und zwei Prueflaeufe haben das als Befund gemeldet.
+    `part`, `part-inner`) NUR in der damaligen Transit-Vorlage (heute
+    `REFERENZ_Chart_Builder_Transit.py`, bis 2026-09-23 unter dem Namen des
+    ausgemusterten Ultimativ-Horoskops); kein Modul nannte sie, und zwei
+    Prueflaeufe haben das als Befund gemeldet.
     Sie gehoeren hierher: dieselbe Begruendung, mit der `build_bloecke()` am
     2026-09-09 die Block-Schleife uebernommen hat. Wer die Schleife weiter von
     Hand baut, ist damit nicht falsch — diese Funktion tut genau dasselbe.
@@ -2131,10 +2144,12 @@ def pruefe_kapitelkopf(items):
     `parse_analyse()`, wo sie ueberlesen wurde — gebaut wie
     `pruefe_kapitelfuss()`: harter Abbruch mit der zu aendernden Zeile.
 
-    Vorgesehen sind Zahl-Kicker fuer die deutenden Kapitel und Wort-Kicker
-    fuer alle uebrigen (`Auftakt`, `Rechenschaft`, `Hauptthemen`,
-    `Konfliktfelder`, `Lebensaufgaben`, `Schlusswort`) sowie die
-    Teiler-Kicker aus PART_KICKER.
+    Vorgesehen sind Zahl-Kicker fuer die Themenkapitel und Wort-Kicker fuer
+    alle uebrigen — im Geburtshoroskop `Auftakt`, `Getriebe`, `Instrument`,
+    `Zugang <Bereich>`, `Rechenschaft`, `Hauptthemen`, `Konfliktfelder`,
+    `Lebensaufgaben`, `Schlusswort`; im Transit `Zur Lesart`, `Der Stand heute`,
+    `Mitlaufendes`, `Schlusswort` (Liste vervollstaendigt 2026-09-24) — sowie
+    die Teiler-Kicker aus PART_KICKER. Geprueft wird nur, DASS ein Kicker steht.
 
     items: die Kapitelliste `parse_analyse(...)['chapters']`. Seit dem
     2026-09-23c nimmt die Funktion auch das ganze Ergebnis von
@@ -2583,6 +2598,9 @@ def _selbsttest():
     """Selbsttest ohne Render (neu 2026-09-19): lies_zeitleiste(),
     zeitleiste_page() mit Marke (W12) und die kopf-Pruefung von inhalt_page()
     (W61). Konstruierter Block — keine echten Daten."""
+    # 2026-09-24 (T14): die Dichte-Zelle bricht nur zwischen den Monaten um
+    _d = _zl_dichte('Jul 3 (1) · Aug 5 (2)')
+    assert _d == 'Jul\u00a03\u00a0(1) · Aug\u00a05\u00a0(2)', repr(_d)
     block = '\n'.join([
         '# Datenblatt (konstruiert)',
         'Sprachfassung: der @@ZEITLEISTE-Block steht am Ende.',

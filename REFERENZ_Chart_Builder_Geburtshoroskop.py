@@ -68,7 +68,7 @@ ANALYSE = '/home/claude/<klient>_analyse.md'
 RADPNG = '<klient>_radix.png'
 OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
 DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
-GEBURTSZEILE = '<TT. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Cover, letzte Zeile
+GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat ausgeschrieben in VERSALIEN, Ort ohne Land (Hausstil der fertigen PDFs; festgelegt 2026-09-24, T13)
 
 # Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
 # Hauswechsel; seit 2026-09-23c) — aus dem KOPF der chart_data uebernommen,
@@ -157,10 +157,15 @@ section.cover {{ page: cover; position:relative; width:21cm; height:29.7cm;
 .cv-name {{ font-family:"Cinzel"; font-size:31pt; letter-spacing:0.15em;
    color:#f2ead6; }}
 .cv-rule {{ width:3.2cm; height:1pt; background:{GOLD_L}; margin:0 auto; }}
+/* Leitsatz und Geburtszeile: Farben fuer HELLEN unteren Rand; dunkles Motiv
+   -> COVER_HELL = True (Klasse .hell unten) */
 .cv-leit {{ font-family:"EB Garamond Italic"; font-style:italic; font-size:15.4pt;
    color:#4a3512; letter-spacing:0.02em; }}
 .cv-birth {{ font-family:"EB Garamond"; font-size:8.6pt; letter-spacing:0.2em;
    color:#6b5220; }}
+.cv-bild {{ position:absolute; top:0; left:0; width:21cm; height:29.7cm; }}
+section.cover.hell .cv-leit {{ color:#f3ead6; }}
+section.cover.hell .cv-birth {{ color:#e3d3ae; }}
 .cv-gl {{ position:absolute; font-family:"DejaVu Sans","FreeSerif",sans-serif;
    text-align:center; }}
 """
@@ -254,6 +259,40 @@ def y2cm(y):
     return y / 842 * 29.7
 
 
+# VOLLBILD-COVER (2026-09-24, Klasse-2-Entscheidungslauf T13). Rechnet der Lauf das
+# Titelmotiv als ganzseitiges PNG (Design-Render-Modul, „Eine Flaeche, die von
+# MEHREREN Seiten abblendet": Licht und Gegenstaende pixelweise), setzt er
+# COVER_BILD auf den Pfad und schreibt die Rechnung in cover_bild_rechnen();
+# __main__ ruft sie bei jedem Lauf, wie rad_zeichnen(). cover_html() legt das
+# PNG dann an die Stelle von .cv-sky, Sternfeld und SVG. Bis dahin gab es dafuer
+# keinen Einhaengepunkt, und cover_html() wurde zweimal von Hand ersetzt
+# (Pruefberichte Geburtshoroskop 3+4 vom 23.09.c, Transit 3+4 vom 24.09.).
+# COVER_HELL schaltet Leitsatz und Geburtszeile auf helle Schrift: Die Farben in
+# COVER_CSS sind fuer einen HELLEN unteren Rand gesetzt (der Platzhalter-Verlauf
+# endet hell); auf einem dunklen Motiv verschwinden sie, und kein Preflight sieht
+# das (Befund Geburtshoroskop 3+4 vom 24.09.b).
+COVER_BILD = None      # <<Pfad des im Lauf gerechneten Vollbild-PNG — oder None>>
+COVER_HELL = False     # True: dunkles Motiv am unteren Rand, Leitsatz und Geburtszeile hell
+
+
+def cover_bild_rechnen():
+    """Rechnet das Vollbild-PNG nach TITELMOTIV und schreibt es nach COVER_BILD.
+    Je Chart neu — hier steht nur die Schnittstelle. __main__ ruft sie, sobald
+    COVER_BILD gesetzt ist; ein herumliegendes PNG ist nicht vertrauenswuerdig."""
+    raise SystemExit('REFERENZ-Vorlage: COVER_BILD ist gesetzt, aber '
+                     'cover_bild_rechnen() rechnet noch nichts.')
+
+
+def _cover_grund():
+    """Hintergrund des Covers: das gerechnete Vollbild oder Verlauf, Sterne, SVG."""
+    if COVER_BILD:
+        import base64
+        with open(COVER_BILD, 'rb') as f:
+            daten = base64.b64encode(f.read()).decode('ascii')
+        return '<img class="cv-bild" src="data:image/png;base64,%s">' % daten
+    return '<div class="cv-sky"></div>\n%s\n%s' % (cover_stars(), cover_svg())
+
+
 def glyphe(x, y, size, color, zeichen, op=0.9):
     """Eine tragende Glyphe aus DECKBLATT['GLYPHEN'], dezent ueber dem SVG."""
     return (f'<div class="cv-gl" style="left:{(x-40)/595*21:.3f}cm;'
@@ -271,10 +310,8 @@ def cover_html(kicker):
     112 Name, 168 Linie, 788 Leitsatz, 822 Geburtsdaten. 788 ist die LETZTE
     Leitsatzzeile: Ein langer Leitsatz wird am Gedankenstrich umbrochen und
     waechst nach oben (chartdoc.leitsatz_block(), seit 2026-09-23c)."""
-    return f"""<section class="cover">
-<div class="cv-sky"></div>
-{cover_stars()}
-{cover_svg()}
+    return f"""<section class="{'cover hell' if COVER_HELL else 'cover'}">
+{_cover_grund()}
 <div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">{esc(kicker)}</div>
 <div class="cv-block cv-name" style="top:{y2cm(112):.2f}cm">{VORNAME.upper()}</div>
 <div class="cv-block" style="top:{y2cm(168):.2f}cm"><div class="cv-rule"></div></div>
@@ -461,8 +498,11 @@ if __name__ == '__main__':
                              '— Datum, Zeit und Ort aus der chart_data '
                              'eintragen.' % _n)
 
-    # 1. Rad IMMER selbst zeichnen — nie ein herumliegendes PNG benutzen.
+    # 1. Rad (und ein Vollbild-Cover) IMMER selbst zeichnen — nie ein
+    #    herumliegendes PNG benutzen.
     rad_zeichnen()
+    if COVER_BILD:
+        cover_bild_rechnen()
 
     # 2. Einmessen statt schaetzen — am Frontmatter allein (s. Docstring der
     #    Datei): groesste Breite/Schriftstufe, bei der die Seite einseitig bleibt.
