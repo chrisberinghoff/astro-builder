@@ -262,16 +262,23 @@ def ist_selbst_transit(transit, ziel):
 # Sextil; wer das Feld als Rang 1 las, haette im Prueflauf Transit 1+2 vom 22.09.b
 # fuenf von acht Kapiteln vergeben. Die Liste steht hier und nur hier — das Modul
 # verweist auf das Feld `lebensmitte`. Welche Marker dazugehoeren, ist eine
-# Chris-Entscheidung (Transit-Modul, Rangskala); bis auf Weiteres die sechs, die das
-# Modul am 2026-09-24 nannte.
-LEBENSMITTE = (('Saturn', 'Konjunktion'), ('Saturn', 'Quadrat'), ('Jupiter', 'Konjunktion'),
-               ('Uranus', 'Opposition'), ('Neptun', 'Quadrat'), ('Knoten', 'Konjunktion'))
+# Chris-Entscheidung (Transit-Modul, Rangskala): die sechs, die das Modul am
+# 2026-09-24 nannte, und seit demselben Tag (Frage 2 des Klasse-2-Entscheidungslaufs)
+# dazu Saturn-Opposition, Pluto-Quadrat und Chiron-Rueckkehr. Pflicht ist ein Marker
+# nur, wenn er im Fenster liegt; sonst steht er gar nicht in der events.json. Wer ihn
+# trifft, entscheidet das Alter (Saturn-Opposition um 14, 44 und 73, Chiron-Rueckkehr
+# um 50, Pluto-Quadrat je nach Jahrgang zwischen Mitte 30 und Mitte 50 —
+# `radix.pluto_quadrat_alter()`).
+LEBENSMITTE = (('Saturn', 'Konjunktion'), ('Saturn', 'Quadrat'), ('Saturn', 'Opposition'),
+               ('Jupiter', 'Konjunktion'), ('Uranus', 'Opposition'), ('Neptun', 'Quadrat'),
+               ('Pluto', 'Quadrat'), ('Chiron', 'Konjunktion'), ('Knoten', 'Konjunktion'))
 
 def ist_lebensmitte(transit, ziel, aspekt):
-    """Lebensmitte-Marker (Rang 1 des Transit-Moduls): Saturn-Rueckkehr und
-    Saturn-Quadrat, Jupiter-Rueckkehr, Uranus-Opposition, Neptun-Quadrat und die
-    Knotenrueckkehr (Transit-Knoten auf dem Radix-Mondknoten, nicht auf dem
-    Suedknoten). Jeder Marker ist auch ein Selbst-Transit, nicht umgekehrt."""
+    """Lebensmitte-Marker (Rang 1 des Transit-Moduls): Saturn-Rueckkehr,
+    Saturn-Quadrat und Saturn-Opposition, Jupiter-Rueckkehr, Uranus-Opposition,
+    Neptun-Quadrat, Pluto-Quadrat, Chiron-Rueckkehr und die Knotenrueckkehr
+    (Transit-Knoten auf dem Radix-Mondknoten, nicht auf dem Suedknoten). Jeder
+    Marker ist auch ein Selbst-Transit, nicht umgekehrt."""
     if (transit, aspekt) not in LEBENSMITTE or not ist_selbst_transit(transit, ziel):
         return False
     return transit != 'Knoten' or ziel in ('Mondknoten', 'Nordknoten', 'Knoten')
@@ -2128,6 +2135,15 @@ def _selbsttest(still=False):
                    and not ist_lebensmitte('Knoten', 'Südknoten', 'Konjunktion')
                    and not ist_lebensmitte('Jupiter', 'Sonne', 'Konjunktion'),
                    "T10: Lebensmitte-Marker falsch erkannt")
+            # Frage 2 (2026-09-24): Saturn-Opposition, Pluto-Quadrat, Chiron-Rueckkehr
+            pruefe(ist_lebensmitte('Saturn', 'Saturn', 'Opposition')
+                   and ist_lebensmitte('Pluto', 'Pluto', 'Quadrat')
+                   and ist_lebensmitte('Chiron', 'Chiron', 'Konjunktion')
+                   and not ist_lebensmitte('Pluto', 'Pluto', 'Opposition')
+                   and not ist_lebensmitte('Chiron', 'Chiron', 'Opposition')
+                   and not ist_lebensmitte('Pluto', 'Sonne', 'Quadrat')
+                   and len(LEBENSMITTE) == 9,
+                   "Frage 2: Lebensmitte-Marker der Erweiterung falsch erkannt")
             pruefe(all(('lebensmitte' in e) and (not e['lebensmitte'] or e['selbst_transit'])
                        for e in res['events']), "T10: Feld lebensmitte fehlt oder widerspricht")
 
