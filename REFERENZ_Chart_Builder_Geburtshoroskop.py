@@ -351,6 +351,14 @@ KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
               'Haus steht vorn.')
 
 
+def konst_note(zeilen):
+    """KONST_NOTE nur, wenn die Haus-Spalte eine Doppelangabe traegt (`8/9`), sonst
+    None — Design-Render-Modul, Konstellationsseite. 2026-09-25: Vorher stand die
+    Fussnote in jedem PDF, auch ohne eine einzige Doppelzahl; Preflight und verify()
+    sehen das nicht, nur der Rasterblick (Pruefberichte Schritt 3+4 vom 25.09.)."""
+    return KONST_NOTE if any('/' in str(z[4]) for z in zeilen if z[0] != 'SEP') else None
+
+
 def rad_zeichnen():
     """Radix-Rad. Kein `title=` — die Bildunterschrift steht als RAD_NOTE im
     Dokument und laeuft damit in EB Garamond statt in matplotlibs Groteske."""
@@ -429,9 +437,10 @@ KONST_FUSSNOTEN = konst_fussnoten()
 
 
 def chartbild(rad_breite, skala, konst_skala=1.0):
+    zeilen = konst_zeilen()
     return (chartdoc.radix_page(RADPNG, RAD_NOTE, bild_breite=rad_breite)
-            + chartdoc.konstellationen_page(konst_zeilen(), achsen_zeilen(),
-                                            ELEMENTE, MODI, note=KONST_NOTE,
+            + chartdoc.konstellationen_page(zeilen, achsen_zeilen(),
+                                            ELEMENTE, MODI, note=konst_note(zeilen),
                                             fussnoten=KONST_FUSSNOTEN,
                                             skala=konst_skala)
             + chartdoc.aspekt_page(ASPEKTE, skala=skala))

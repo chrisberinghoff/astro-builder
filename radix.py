@@ -535,11 +535,31 @@ HAUS_ORB = 5   # Grenzlagen-Orb in Grad, planetenunabhängig
 
 
 def _gr(deg):
-    """Grad-Betrag als N°NN′ (Grad + Bogenminuten)."""
+    """Grad-Betrag als N°NN′ (Grad + Bogenminuten) — fuer Orbs, Abstaende und
+    Spannen. Einen Stand im Zeichen formatiert gr_zeichen()."""
     d = int(deg)
     m = int(round((deg - d) * 60))
     if m == 60:
         d, m = d + 1, 0
+    return f"{d}°{m:02d}′"
+
+
+def gr_zeichen(lon):
+    """Stand im Zeichen als N°NN′ — die Vertragsfunktion `gr` der chart-eigenen
+    chartdata.py (Datenblatt-Modul, „chartdata.py — der Vertrag": ein Einzeiler
+    hierauf) und die Rundung der Ständetabelle. Nimmt die ekliptikale Laenge oder
+    schon den Rest `lon % 30` und rundet einmal auf die Bogenminute. Was auf 30°00′
+    runden wuerde, bleibt 29°59′: Der Faktor steht noch im alten Zeichen, und
+    „30°00′ Löwe" zeigte die Grenze statt des Zeichens (2026-09-25, Pruefberichte
+    Geburtshoroskop 1+2b und 3+4b vom 25.09.). Orbs und Abstaende rundet `_gr()`
+    bzw. `build.orb_text()` — dort ist der Uebertrag richtig."""
+    x = float(lon) % 30.0
+    d = int(x)
+    m = int(round((x - d) * 60))
+    if m == 60:
+        d, m = d + 1, 0
+    if d >= 30:
+        return "29°59′"
     return f"{d}°{m:02d}′"
 
 
@@ -4318,7 +4338,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             haus = f", Haus {ls['haus_spalte']}" if ls.get('haus_spalte') else ''
             dort = ', '.join(f"{b['name']} ({_gr(b['orb'])})"
                              for b in ls['besetzt']) or 'nichts'
-            zeile += (f" — leere Spitze {_gr(ls['lon'] % 30)} {ls['zeichen']}"
+            zeile += (f" — leere Spitze {gr_zeichen(ls['lon'])} {ls['zeichen']}"
                       f"{haus}; dort: {dort}")
             # ACHSENENDE AUF DER SPITZE (2026-09-19, W33): Brennpunkt auf
             # einem Winkel oder dem Mondknoten (selbst oder konjunkt) — das
@@ -4460,7 +4480,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             if not o:
                 return '?'
             haus = f", Haus {o['haus_spalte']}" if o.get('haus_spalte') else ''
-            return f"{_gr(o['lon'] % 30)} {o['zeichen']}{haus}"
+            return f"{gr_zeichen(o['lon'])} {o['zeichen']}{haus}"
 
         def _pl(o):
             return f"{o['name']} ({o['zeichen']}" + (
@@ -4870,6 +4890,11 @@ if __name__ == '__main__':
     assert haus_spalte(15.0, _c) == '1'
     assert haus_spalte(28.5, _c) == '2/1'      # 1°30' vor Spitze -> Nebenhaus fuehrt
     assert haus_spalte(26.5, _c) == '1/2'      # 3°30' vor Spitze -> rechnerisch fuehrt
+    # 2026-09-25: Stand im Zeichen nie 30°00′ (Zeichengrenze), Orbs mit Uebertrag
+    assert gr_zeichen(29.998533) == '29°59′' and gr_zeichen(359.9999) == '29°59′'
+    assert gr_zeichen(125.5) == '5°30′' and gr_zeichen(0.4917) == '0°30′'
+    assert gr_zeichen(29.99) == '29°59′' and gr_zeichen(30.0) == '0°00′'
+    assert _gr(2.99999) == '3°00′'
     print('Grenzlage-Test:', haus_und_grenzlage(28.0, _c)['label'],
           '| Spalte:', haus_spalte(28.5, _c))
 

@@ -415,6 +415,14 @@ KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
               'Haus steht vorn.')
 
 
+def konst_note(zeilen):
+    """KONST_NOTE nur, wenn die Haus-Spalte eine Doppelangabe traegt (`8/9`), sonst
+    None — Design-Render-Modul, Konstellationsseite. 2026-09-25: Vorher stand die
+    Fussnote in jedem PDF, auch ohne eine einzige Doppelzahl; Preflight und verify()
+    sehen das nicht, nur der Rasterblick (Pruefberichte Schritt 3+4 vom 25.09.)."""
+    return KONST_NOTE if any('/' in str(z[4]) for z in zeilen if z[0] != 'SEP') else None
+
+
 def rad_zeichnen():
     """Radix-Rad. Kein `title=` — die Bildunterschrift steht als RAD_NOTE im
     Dokument und laeuft damit in EB Garamond statt in matplotlibs Groteske."""
@@ -487,6 +495,8 @@ UHR_NOTE = (f"Fenster {TD['fenster']['start'].strftime('%d.%m.%Y')} bis "
 
 # Dreiteiliger Vorspann der Uhr. chartdoc.uhr_lead() liefert eine einteilige
 # Fassung; die Themenuhr braucht mehr Erklaerung, darum hier ausgeschrieben.
+# 2026-09-25: Blasse Zeilen stehen in der Uhr, WEIL ein Kapitel sie zu seiner Figur
+# zaehlt — „im Text nicht eigens behandelt" war falsch (Transit 3+4 vom 25.09.).
 UHR_LEAD = [
     'Jede Zeile ist eine lange Linie: ein Planet, der gerade am Himmel läuft, '
     'berührt über Wochen oder Monate hinweg eine Stelle deines Geburtsbildes. '
@@ -501,8 +511,9 @@ UHR_LEAD = [
     'zeigt, wann das geschieht: blass die volle Berührungszeit, kräftig die '
     'Strecke, in der die Linie wirklich arbeitet, und die kleinen weißen '
     'Punkte die einzelnen Tage, an denen der Winkel exakt steht. Blass '
-    'gesetzte Zeilen — wo es sie gibt — sind Nebenlinien, die im Text nicht '
-    'eigens behandelt werden.',
+    'gesetzte Zeilen — wo es sie gibt — sind Nebenlinien: Sie berühren keinen '
+    'der Punkte, die dieses Dokument durchgehend verfolgt, und stehen hier, '
+    'weil das Kapitel ihres Blocks von ihnen erzählt.',
 
     f'Die acht Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
     f'dieses Horoskop entstanden ist. Was links der senkrechten Marke liegt, '
@@ -533,9 +544,10 @@ KONST_FUSSNOTEN = konst_fussnoten()
 
 
 def chartbild(rad_breite, uhr_breite, skala, konst_skala=1.0):
+    zeilen = konst_zeilen()
     return (chartdoc.radix_page(RADPNG, RAD_NOTE, bild_breite=rad_breite)
-            + chartdoc.konstellationen_page(konst_zeilen(), achsen_zeilen(),
-                                            ELEMENTE, MODI, note=KONST_NOTE,
+            + chartdoc.konstellationen_page(zeilen, achsen_zeilen(),
+                                            ELEMENTE, MODI, note=konst_note(zeilen),
                                             fussnoten=KONST_FUSSNOTEN,
                                             skala=konst_skala)
             + chartdoc.aspekt_page(ASPEKTE, skala=skala)
@@ -603,7 +615,7 @@ def anhang_langlaeufer():
 <p class="fm-lead">Alle {len(TD['langlaeufer'])} Langläufer des Fensters mit
 Spanne, Dauer, sämtlichen Exaktdaten und den Stationen des laufenden Planeten.
 Grau gesetzt sind die sekundären Linien — sie berühren keinen der primären
-Zielpunkte und werden im Text nicht eigens gedeutet.</p>
+Zielpunkte; im Text kommen sie nur vor, wo ein Kapitel sie zu seinem Thema zählt.</p>
 <table class="anh">
 <colgroup><col style="width:0.5cm"><col style="width:1.6cm">
 <col style="width:1.5cm"><col style="width:1.55cm"><col style="width:2.85cm">

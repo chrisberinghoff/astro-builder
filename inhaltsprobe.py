@@ -192,7 +192,8 @@ P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", �
                      Anzahl; ohne Rangzeilen jede Aussage PRUEFEN. Achsen-Spiegel
                      (Knoten △ AC / Knoten ⚹ DC) belegen EINEN Rang. „folgt
                      keinem anderen" steht gegen Strukturbild §3 (Planeten im
-                     eigenen Zeichen); „alle n Jahre" ist eine Umlaufzeit und
+                     eigenen Zeichen) — in der Einzahl alle, als Eigenschaft der
+                     genannte (2026-09-25); „alle n Jahre" ist eine Umlaufzeit und
                      zaehlt nicht; spricht das Rangwort von Verbindungen, gilt die
                      Verbindungs-Rangzeile (2026-09-24). Nur PRUEFEN; englisch mit
                      eigenen Wortlisten (seit 2026-09-22).
@@ -230,8 +231,9 @@ P17 Subjekt          (2026-09-24, Innere Arbeit Pruefung 1) Planet, Achse, Zeich
                      Haus mit Ordnungszahl oder „die Seele" als Satzsubjekt: in den
                      Bewegungen 1 und 3–6 jede Subjekt-Stellung, ohne Bewegungsfolge
                      (Getriebe, Instrument, Pflichtteile) nur mit Handlungsverb;
-                     Bewegung 2 und 7 bleiben frei (Anker). Nur PRUEFEN; englische
-                     Fassung uebersprungen.
+                     Bewegung 2 und 7 bleiben frei (Anker). Seit 2026-09-25 auch
+                     der Relativsatz mit handelndem Verb („Saturn, der … trägt").
+                     Nur PRUEFEN; englische Fassung uebersprungen.
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
 Fall ohne reales Geburtsdatum, ohne Uhrzeit, ohne Namen, ohne Staende eines realen
@@ -3181,9 +3183,29 @@ _RANG_MUSTER_EN = (
 # dort mehrere und nennt der Satz nicht alle, bleibt PRUEFEN — mit der Liste aus §3
 # (Transit 1+2 vom 24.09., Inhalt Nr. 7: „der Planet, der keinem anderen folgt" bei
 # zwei Endstellen). Gilt nur fuer den Treffer, der selbst „folgt" traegt.
+# 2026-09-25 (Pruefberichte vom 25.09.): Einzahl und Eigenschaft getrennt. „der
+# Planet, der keinem anderen folgt", „als einziger", „nur er" behaupten Einzigkeit —
+# gedeckt nur, wenn der Satz ALLE Planeten aus §3 nennt (so bisher). „dein Mond …
+# folgt keinem anderen" sagt eine Eigenschaft des genannten Planeten — gedeckt, wenn
+# er in §3 steht; vorher blieb auch das PRUEFEN, sobald §3 mehrere fuehrte (vier
+# Laeufe, jedes Mal richtig). Dazu die Variante „richtet sich nach keinem anderen",
+# die gegen die Element-Rangzeile lief (Geburtshoroskop 1+2b und 3+4b vom 25.09.).
 _FOLGT_KEINEM_RE = re.compile(
     r"(?<![\wäöüß])(?:keinem\s+anderen(?:\s+[\wäöüß]+)?\s+folg\w*"
-    r"|folg\w*\s+(?:[\wäöüß]+\s+)?keinem\s+anderen|follows?\s+no\s+other)", re.I)
+    r"|folg\w*\s+(?:[\wäöüß]+\s+){0,2}keinem\s+anderen"
+    r"|richte\w*\s+sich\s+(?:[\wäöüß]+\s+)?nach\s+keinem\s+anderen"
+    r"|sich\s+nach\s+keinem\s+anderen(?:\s+[\wäöüß]+)?\s+richte\w*"
+    r"|follows?\s+no\s+other)", re.I)
+# Einzahl: der Text VOR „keinem anderen" endet auf „der Planet, der …" bzw. traegt
+# „als einzige(r)", „der/die einzige", „nur er/sie"
+_FOLGT_EINZAHL_RE = re.compile(
+    r"(?<![\wäöüß])(?:der|die|das)\s+(?:einzige[nr]?\s+)?(?:Planet|Kraft|Faktor|Stelle|"
+    r"Punkt|Instanz|Endstelle|Endpunkt|Herrscher|Endherrscher)\s*,\s*(?:der|die|das)\s+"
+    r"(?:[\wäöüß]+\s+){0,4}$"
+    r"|(?<![\wäöüß])(?:als\s+einzige[rsn]?|(?:der|die|das)\s+einzige[rn]?)(?![\wäöüß])"
+    r"(?:\s+[\wäöüß]+){0,6}\s*$"
+    r"|(?<![\wäöüß])(?:nur|allein)\s+(?:er|sie)\s+(?:[\wäöüß]+\s+){0,2}$"
+    r"|(?<![\wäöüß])(?:the\s+only|only)\s+(?:[\w]+\s+){0,4}$", re.I)
 _EIGENES_ZEICHEN_RE = re.compile(
     r"^- (?:Enddispositoren \(im eigenen Zeichen[^)]*\)|Im eigenen Zeichen ohne Zulauf "
     r"\([^)]*\)):[ \t]*(?P<liste>[^\n]*)$", re.M)
@@ -3370,13 +3392,25 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
                 ziel |= set(_pronomen_bezug(pm.group(1), "", vorher) or fak_v[-1:])
             elif not ziel:
                 ziel |= set(fak_v)
-            if eigen and eigen <= ziel:
+            dort = ((", ".join(ANZEIGE.get(x, x) for x in sorted(eigen)) or "keiner")
+                    if eigen is not None else "— (§3 nicht gefunden)")
+            # 2026-09-25: Einzahl gegen Eigenschaft (s. _FOLGT_EINZAHL_RE)
+            if _FOLGT_EINZAHL_RE.search(satz[max(0, m.start() - 90):m.start()]):
+                if eigen and eigen <= ziel:
+                    return None
+                return ("„folgt keinem anderen“ in der Einzahl („der Planet, der …“, „als "
+                        "einziger“) — Strukturbild §3, im eigenen Zeichen: %s; der Satz nennt "
+                        "%s. Stehen dort mehrere, alle nennen oder die Einzahl auflösen"
+                        % (dort, ", ".join(ANZEIGE.get(x, x) for x in sorted(ziel))
+                           or "keinen Planeten"))
+            vor_f = [f for a_, _e, f in sorted(_faktoren_im_satz(satz)) if a_ < m.start()]
+            wer = set(vor_f[-1:]) or ziel       # der genannte Planet davor, sonst der Bezug
+            if eigen and wer and wer <= eigen:
                 return None
-            return ("„folgt keinem anderen“ — Strukturbild §3, im eigenen Zeichen: %s; der Satz "
-                    "nennt %s" % ((", ".join(ANZEIGE.get(x, x) for x in sorted(eigen)) or "keiner")
-                                  if eigen is not None else "— (§3 nicht gefunden)",
-                                  ", ".join(ANZEIGE.get(x, x) for x in sorted(set(fak)))
-                                  or "keinen Planeten"))
+            return ("„folgt keinem anderen“ — %s steht nicht unter den Planeten im eigenen "
+                    "Zeichen (Strukturbild §3: %s)"
+                    % (", ".join(ANZEIGE.get(x, x) for x in sorted(wer)) or "kein genannter Planet",
+                       dort))
         null = art == "einzig" and re.search(r"kein\w*\s+$", satz[max(0, m.start() - 12):m.start()])
         if element or modus:
             name, fam = (element, "elemente") if element else (modus, "modi")
@@ -3484,6 +3518,15 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
         return ("Rangzeilen %s: %s%s" % (name, "; ".join("%s %d %%" % (a, e["prozent"]) for a, e in werte),
                                          " — gilt nur %s; die Zählung nennen" % passt[0] if passt else ""))
     if art == "n_verbindungen":
+        # 2026-09-25 (Geburtshoroskop 1+2 vom 25.09., 1.2): Ein Wort zwischen Zahl und
+        # „Verbindung" („drei weitere", „zwei leise") zaehlt eine Teilmenge, die keine
+        # Rangzeile traegt. Vorher lief der Satz gegen die Gesamtzahl und bekam bei
+        # zufaellig gleichem Wert „gewichtete Dichte als Anzahl gelesen" — ein falscher
+        # Grund; der richtige ist die Zaehlregel des Typmoduls.
+        if g.get("n") and re.match(r"\S+\s+[\wäöüß]+\s+Verbindung", m.group(0), re.I):
+            return ("Zählaussage über eine Teilmenge („%s“) — keine Rangzeile trägt sie; "
+                    "außerhalb des Getriebes bleiben Zählungen im Beleg (Typmodul, "
+                    "„Zählungen IM Fließtext“)" % _ws(m.group(0)))
         n = _zahl_wert(g["n"]) if g.get("n") else 1
         vor = [f for a_, e_, f in _faktoren_im_satz(satz) if a_ < m.start()]
         f = vor[-1] if vor else (fak[0] if fak else (fak_v[-1] if fak_v else None))
@@ -4386,6 +4429,12 @@ def _p16_laenge(chapters, typ, txt, themen, zuordnung):
 #                 gemeldet wird jedes andere Verb („Saturn verlangt", „dein Mond im
 #                 Widder braucht").
 # Englische Analysen: uebersprungen (die Muster sind deutsch).
+# 2026-09-25 (Wartungslauf zu den Pruefberichten vom 25.09.): In allen acht Laeufen
+# kamen verortende Saetze als Handelnde — ein Adverb galt als Verb („steht auch
+# Saturn"), ein Pluralverb auf -en als Adjektiv („Jupiter und Neptun stehen knapp"),
+# „heißt" traf die Ankerliste wegen casefold() nie, das Bild „wo die Sonne untergeht"
+# und das Objekt in „Du hast deine Sonne …" zaehlten mit. Umgekehrt uebersah die
+# Probe den handelnden Relativsatz („Saturn, der die Verantwortung trägt").
 _P17_NAMEN = frozenset((
     "Sonne", "Mond", "Merkur", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptun",
     "Pluto", "Chiron", "Lilith", "Mondknoten", "Nordknoten", "Südknoten", "Knoten",
@@ -4407,18 +4456,22 @@ _P17_OBLIQ = frozenset((
     "dem", "den", "des", "deinem", "deinen", "deines", "deiner", "einem", "einen", "eines",
     "einer", "diesem", "diesen", "seinem", "seinen", "seines", "seiner", "ihrem", "ihren",
     "ihres", "ihrer", "jedem", "jeden", "keinem", "keinen", "keines", "keiner", "unserem",
-    "unseren", "unseres", "unserer"))
+    "unseren", "unseres", "unserer",
+    "demselben", "denselben", "desselben", "derselben", "jenem", "jenen", "solchem",
+    "solchen"))
 _P17_NOM = frozenset((
     "der", "die", "das", "ein", "eine", "dein", "deine", "jeder", "jede", "jedes", "dieser",
     "diese", "dieses", "kein", "keine", "sein", "seine", "ihr", "ihre", "welcher", "welche",
-    "welches", "unser", "unsere"))
+    "welches", "unser", "unsere",
+    "derselbe", "dieselbe", "dasselbe", "dieselben", "jener", "jene", "jenes", "solcher",
+    "solche", "solches"))
 _P17_PRONOMEN = frozenset((
     "du", "dich", "dir", "ich", "mich", "mir", "er", "sie", "es", "wir", "uns", "euch", "ihn",
     "ihm", "ihnen", "man", "sich", "jemand", "niemand", "etwas", "nichts", "alles"))
 _P17_BINDER = frozenset((
     "und", "oder", "aber", "denn", "doch", "sondern", "weil", "wenn", "dass", "ob",
     "während", "obwohl", "sobald", "solange", "bevor", "nachdem", "damit", "sodass", "wo",
-    "wohin", "woher", "falls", "indem", "sowie", "was", "wer"))
+    "wohin", "woher", "falls", "indem", "sowie", "was", "wer", "da"))
 _P17_BRUCH = frozenset((";", ":", "—", "–", "(", "„", "“", "\"", "»", "«"))
 # Verben, mit denen ein Anker nur VERORTET (Stellung, Lauf, Struktur, Zugehoerigkeit).
 # In der Grundfassung darf ein Name damit Subjekt sein; jedes andere Verb dahinter
@@ -4441,7 +4494,70 @@ _P17_ANKERVERBEN = frozenset((
     "rückt", "rücken", "nähert", "nähern", "entfernt", "steigt", "steigen", "beginnt",
     "beginnen", "endet", "enden", "schließt", "schließen", "reicht", "reichen",
     "überquert", "passiert", "durchläuft", "verlässt", "betritt", "streift",
-    "quadriert", "opponiert"))
+    "quadriert", "opponiert",
+    # 2026-09-25 (Pruefberichte vom 25.09.): Horizont-Verben („wo die Sonne
+    # untergeht" ist das Bild des Horizonts, kein Handeln), zusammengesetzte Formen
+    # und die Partizipien der Ankerverben („hat … gestanden")
+    "aufgeht", "aufgehen", "aufging", "aufgingen", "untergeht", "untergehen",
+    "unterging", "untergingen", "gegenübersteht", "gegenüberstehen", "gegenüberstand",
+    "gegenüberliegt", "gegenüberliegen", "zusammenläuft", "zusammenlaufen",
+    "zusammentrifft", "zusammentreffen", "vorbeizieht", "vorbeiziehen", "zurückläuft",
+    "zurücklaufen", "wären", "hätte", "hätten", "würde", "würden",
+    "gestanden", "gelegen", "gesessen", "befunden", "gebildet", "gelaufen", "gewandert",
+    "gezogen", "getroffen", "gekreuzt", "gekehrt", "gegangen", "gekommen", "geworden",
+    "gewesen", "gehabt", "geheißen", "gezählt", "gefolgt", "geherrscht", "geteilt",
+    "gefallen", "gewechselt", "geklungen", "gezeigt", "beschrieben", "verbunden",
+    "geblieben", "gerückt", "genähert", "gestiegen", "begonnen", "geendet", "geschlossen",
+    "gereicht", "durchlaufen", "verlassen", "betreten", "gestreift", "aufgegangen",
+    "untergegangen"))
+# 2026-09-25 (Pruefberichte vom 25.09., P17 in allen acht Laeufen): Adverbien und
+# Partikeln zwischen Verb und Name oder hinter dem Namen („steht auch Saturn", „steht
+# allein Venus", „dein Mars genau auf …") galten als Verb und machten den Namen zum
+# Handelnden — 2 bis 8 PRUEFEN je Lauf, keines zutreffend. Sie werden uebersprungen.
+_P17_ADVERB = frozenset((
+    "auch", "nur", "allein", "dagegen", "hingegen", "jedoch", "zudem", "außerdem",
+    "ebenfalls", "ebenso", "gleichfalls", "noch", "schon", "bereits", "erst", "gerade",
+    "genau", "knapp", "ganz", "fast", "beinahe", "nahezu", "kaum", "sogar", "selbst",
+    "wiederum", "also", "dann", "dort", "hier", "jetzt", "nun", "heute", "damals",
+    "zugleich", "gleichzeitig", "derzeit", "zuerst", "zuletzt", "wieder", "immer", "oft",
+    "manchmal", "stets", "nie", "niemals", "nicht", "zwar", "eben", "etwa", "vielleicht",
+    "wohl", "ja", "nämlich", "eigentlich", "besonders", "insbesondere", "ausgerechnet",
+    "vorn", "vorne", "hinten", "oben", "unten", "mitten", "weit", "exakt", "ungefähr",
+    "rund", "sehr", "so", "mehr", "weniger", "meist", "meistens", "deshalb", "daher",
+    "darum", "trotzdem", "dennoch", "dazu", "dabei", "davon", "darin", "darauf",
+    "daneben", "dahinter", "darüber", "darunter", "danach", "davor", "dafür", "sonst",
+    "zusammen", "gemeinsam", "einzig", "lediglich", "bloß", "direkt", "unmittelbar",
+    "zeitgleich", "tatsächlich", "wirklich", "dicht", "eng", "schließlich", "letztlich",
+    "ohnehin", "längst", "bald", "später", "früher", "vorher", "nachher", "somit",
+    "folglich", "rückläufig"))
+# Zahl- und Mengenwoerter („bilden die engste Verbindung zwischen zwei …") sind kein Verb
+_P17_ZAHL = frozenset((
+    "zwei", "drei", "vier", "fünf", "sechs", "sieben", "acht", "neun", "zehn", "elf",
+    "zwölf", "beide", "beiden", "alle", "allen", "aller", "viele", "vielen", "einige",
+    "einigen", "mehrere", "mehreren", "wenige", "wenigen", "manche", "manchen"))
+# Objekt-Pronomen hinter dem Namen („Uranus steht ihm gegenüber", „weil Saturn dir
+# Halt gibt") — das Verb steht dahinter
+_P17_OBJEKT = frozenset(("ihm", "ihr", "ihn", "ihnen", "dir", "dich", "mir", "mich", "uns",
+                         "euch", "sich", "es", "einander"))
+# Subjekt im selben Glied VOR dem Namen („Du hast deine Sonne am Deszendenten") —
+# dann ist der Name Objekt
+_P17_SUBJEKT_PRONOMEN = frozenset(("du", "ich", "wir", "man", "er"))
+# Hilfsverben: hinter „hat"/„wird" entscheidet das Partizip bzw. der Infinitiv am
+# Gliedende („Merkur hat es geprüft", „wird Saturn Geduld verlangen"); fehlt es,
+# entscheidet das Hilfsverb selbst („wird Saturn zum Aufseher"). „ist … verschaltet"
+# ist Zustand und bleibt Anker.
+_P17_HABEN = frozenset(("hat", "haben", "hatte", "hatten", "hätte", "hätten"))
+_P17_WERDEN = frozenset(("wird", "werden", "wurde", "wurden", "würde", "würden"))
+_P17_REL = frozenset(("der", "die", "das", "welcher", "welche", "welches"))
+# Die Vergleiche laufen ueber casefold(), und casefold() macht aus „ß" „ss": „heißt"
+# traf „heisst" nie, „außerhalb" nie „ausserhalb" (2026-09-25 — „der Deszendent
+# heißt" kam deshalb als Handelnder). Alle Vergleichslisten werden ebenso gefaltet.
+(_P17_PRAEP, _P17_OBLIQ, _P17_NOM, _P17_PRONOMEN, _P17_BINDER, _P17_ANKERVERBEN, _P17_ADVERB,
+ _P17_ZAHL, _P17_OBJEKT, _P17_SUBJEKT_PRONOMEN, _P17_HABEN, _P17_WERDEN, _P17_REL) = (
+    frozenset(w.casefold() for w in _l) for _l in (
+        _P17_PRAEP, _P17_OBLIQ, _P17_NOM, _P17_PRONOMEN, _P17_BINDER, _P17_ANKERVERBEN,
+        _P17_ADVERB, _P17_ZAHL, _P17_OBJEKT, _P17_SUBJEKT_PRONOMEN, _P17_HABEN, _P17_WERDEN,
+        _P17_REL))
 _P17_TOKEN_RE = re.compile(r"\d{1,2}\.(?=\s+Haus\b)|[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)*"
                            r"|[;:—–,(„“\"»«]")
 
@@ -4457,10 +4573,72 @@ def _p17_ist_adjektiv(tok):
             and t not in _P17_PRAEP and t not in _P17_OBLIQ and t not in _P17_NOM
             and t not in _P17_BINDER and t not in _P17_PRONOMEN) or bool(_P17_ORDINAL_RE.match(tok))
 
+def _p17_ohne_adverb(tok, j):
+    """Index des ersten Worts ab j rueckwaerts, das kein Adverb ist (2026-09-25)."""
+    while j >= 0 and tok[j].casefold() in _P17_ADVERB:
+        j -= 1
+    return j
+
+def _p17_ist_verbwort(t):
+    """Kann das Wort ein Verb sein? Kleingeschrieben und kein Funktionswort (Artikel,
+    Praeposition, Pronomen, Konjunktion, Adverb, Zahlwort) — 2026-09-25."""
+    tl = t.casefold()
+    return (t[:1].islower() and t.isalpha() and len(t) > 1 and tl not in _P17_PRAEP
+            and tl not in _P17_OBLIQ and tl not in _P17_NOM and tl not in _P17_PRONOMEN
+            and tl not in _P17_BINDER and tl not in _P17_ADVERB and tl not in _P17_ZAHL
+            and not _P17_ORDINAL_RE.match(t))
+
+def _p17_subjekt_davor(tok, i):
+    """Steht im selben Glied vor dem Namen ein Subjekt-Pronomen („Du hast deine
+    Sonne …", „wenn du deine Sonne …")? Dann ist der Name Objekt (2026-09-25)."""
+    k = i - 1
+    while k >= 0 and tok[k] not in _P17_BRUCH and tok[k] != "," \
+            and tok[k].casefold() not in _P17_BINDER:
+        if tok[k].casefold() in _P17_SUBJEKT_PRONOMEN:
+            return True
+        k -= 1
+    return False
+
+def _p17_nach_hilfsverb(tok, k, hilfs):
+    """Hinter „hat"/„wird" (Token k oder davor) entscheidet das letzte Wort des
+    Glieds, wenn es ein Partizip oder Infinitiv ist; sonst das Hilfsverb selbst."""
+    e = k + 1
+    while e < len(tok) and tok[e] not in _P17_BRUCH and tok[e] != ",":
+        e += 1
+    letzt = tok[e - 1] if e - 1 > k else ""
+    lt = letzt.casefold()
+    if letzt and _p17_ist_verbwort(letzt) and (lt.endswith(("en", "ern", "eln", "t"))
+                                               or lt.startswith("ge")):
+        return lt
+    return hilfs
+
+def _p17_relativverb(tok, i):
+    """Name mit Relativsatz („Saturn, der die Verantwortung trägt, …"): das Verb am
+    Gliedende, wenn es handelt; sonst None. Ein Subjekt-Pronomen im Relativsatz
+    („die Sonne, die du bist") macht das Relativpronomen zum Objekt (2026-09-25)."""
+    if i + 3 >= len(tok) or tok[i + 1] != "," or tok[i + 2].casefold() not in _P17_REL:
+        return None
+    k = i + 3
+    while k < len(tok) and tok[k] not in _P17_BRUCH and tok[k] != ",":
+        k += 1
+    glied = tok[i + 3:k]
+    if not glied or any(t.casefold() in _P17_SUBJEKT_PRONOMEN for t in glied):
+        return None
+    verb = glied[-1]
+    if verb.casefold() in _P17_HABEN | _P17_WERDEN and len(glied) > 1 \
+            and _p17_ist_verbwort(glied[-2]):
+        verb = glied[-2]                    # „der dich geprägt hat" -> geprägt
+    vl = verb.casefold()
+    if not _p17_ist_verbwort(verb) or vl in _P17_ANKERVERBEN:
+        return None
+    return vl
+
 def _p17_kandidaten(satz):
     """[(Name, Token-Index, Art)] fuer jeden Namen in Subjekt-Stellung; Art: start
-    (Satz-/Gliedanfang), artikel, verb:<Verb davor> (Umstellung), reihe (erbt vom
-    Glied davor)."""
+    (Satz-/Gliedanfang), artikel, verb:<Verb davor> (Umstellung, auch vor einem
+    Artikel: „steht deine Sonne"), reihe (erbt vom Glied davor), relativ:<Verb>
+    (Name mit handelndem Relativsatz). Adverbien davor werden uebersprungen, ein
+    Subjekt-Pronomen im selben Glied davor macht den Name zum Objekt."""
     tok = _P17_TOKEN_RE.findall(satz)
     namen = []                              # (i, name, ist_kandidat, art)
     for i, t in enumerate(tok):
@@ -4487,6 +4665,9 @@ def _p17_kandidaten(satz):
         if k != j and k >= 0 and (tok[k].casefold() in _P17_NOM or tok[k].casefold() in _P17_OBLIQ
                                   or tok[k].casefold() in _P17_PRAEP):
             j = k
+        # 2026-09-25: Adverbien davor ueberspringen („steht auch Saturn", „steht allein
+        # Venus") — bis dahin galt das Adverb als vorangestelltes Verb
+        j = _p17_ohne_adverb(tok, j)
         if j < 0 or tok[j] in _P17_BRUCH or tok[j] == ",":
             kand, art = True, "start"
         else:
@@ -4499,27 +4680,57 @@ def _p17_kandidaten(satz):
                     kand, art = False, ""
                 else:
                     kand, art = True, "artikel"
+                    # 2026-09-25: Steht vor dem Artikel ein Verb („steht deine Sonne",
+                    # „bildet dein Merkur"), ist das die Umstellung — dieses Verb
+                    # entscheidet, nicht das erste Wort hinter dem Namen
+                    v = _p17_ohne_adverb(tok, j - 1)
+                    if v >= 0 and _p17_ist_verbwort(tok[v]):
+                        art = "verb:" + tok[v].casefold()
             elif vor in _P17_BINDER:
                 kand, art = True, "start"
             elif tok[j][:1].isupper():
                 kand, art = False, ""       # Apposition oder Satzanfang eines Nomens
             else:
                 kand, art = True, "verb:" + tok[j].casefold()
+        if kand and _p17_subjekt_davor(tok, i):     # 2026-09-25: „Du hast deine Sonne …"
+            kand, art = False, ""
         namen.append((i, name, kand, art))
-    return [(n, i, a) for i, n, k, a in namen if k], tok
+    out = [(n, i, a) for i, n, k, a in namen if k]
+    # 2026-09-25: Relativsatz mit dem Namen als Bezugswort und handelndem Verb
+    # („Saturn, der die Verantwortung trägt", „eine Venus, die … übersetzt") —
+    # bis dahin von keiner Stellung erfasst (Geburtshoroskop 1+2 vom 25.09., 1.4)
+    for i, name, _k, _a in namen:
+        verb = _p17_relativverb(tok, i)
+        if verb:
+            out.append((name, i, "relativ:" + verb))
+    return out, tok
 
 def _p17_folgeverb(tok, i):
     """Das erste Verb-Wort hinter dem Namen: ueberspringt Praepositionalgruppen
-    („dein Mond im Widder fühlt") und Artikel, hoechstens fuenf Woerter weit."""
+    („dein Mond im Widder fühlt"), Artikel, Adverbien, Zahlwoerter und
+    Objekt-Pronomen, hoechstens acht Woerter weit. (2026-09-25) Ein Ankerverb gilt
+    sofort; ein Wort auf -en usw. ist nur hinter Artikel, Praeposition, Zahl oder
+    Adjektiv ein Adjektiv („im stillen Wasser") — direkt hinter einem Namen ist es
+    das Verb („Jupiter und Neptun stehen"); hinter „hat"/„wird" entscheidet das
+    Partizip bzw. der Infinitiv am Gliedende."""
     k, n = i + 1, 0
-    while k < len(tok) and n < 6:
+    while k < len(tok) and n < 8:
         t = tok[k]
         tl = t.casefold()
         if t in _P17_BRUCH or t == ",":
             return None
+        if tl in _P17_HABEN or tl in _P17_WERDEN:
+            return _p17_nach_hilfsverb(tok, k, tl)
+        if tl in _P17_ANKERVERBEN:
+            return tl
+        vl = tok[k - 1].casefold()
+        adjektiv = _p17_ist_adjektiv(t) and (vl in _P17_NOM or vl in _P17_OBLIQ
+                                             or vl in _P17_PRAEP or vl in _P17_ZAHL
+                                             or _p17_ist_adjektiv(tok[k - 1]))
         if (tl in _P17_PRAEP or tl in _P17_OBLIQ or tl in _P17_NOM or t[:1].isupper()
-                or tl in ("und", "oder", "sowie")
-                or _P17_ORDINAL_RE.match(t) or _p17_ist_adjektiv(t)):
+                or tl in ("und", "oder", "sowie") or tl in _P17_ADVERB
+                or tl in _P17_ZAHL or tl in _P17_OBJEKT
+                or _P17_ORDINAL_RE.match(t) or adjektiv):
             k, n = k + 1, n + 1
             continue
         return tl
@@ -4527,8 +4738,17 @@ def _p17_folgeverb(tok, i):
 
 def _p17_handelt(tok, i, art):
     """Grundfassung: Handelt der Name? Ja, wenn das Verb davor (Umstellung) oder das
-    erste Verb dahinter kein verortendes ist."""
-    verb = art[5:] if art.startswith("verb:") else _p17_folgeverb(tok, i)
+    erste Verb dahinter kein verortendes ist. (2026-09-25) Bei „hat"/„wird" davor
+    entscheidet das Partizip bzw. der Infinitiv am Gliedende; ein Relativsatz-Treffer
+    handelt immer — Kandidat wird er nur mit handelndem Verb."""
+    if art.startswith("relativ:"):
+        return True
+    if art.startswith("verb:"):
+        verb = art[5:]
+        if verb in _P17_HABEN or verb in _P17_WERDEN:
+            verb = _p17_nach_hilfsverb(tok, i, verb)
+    else:
+        verb = _p17_folgeverb(tok, i)
     return bool(verb) and verb not in _P17_ANKERVERBEN
 
 def _p17_zone(bewegung, typ):
@@ -5424,6 +5644,25 @@ def _selbsttest(still=False):
     assert _p12_satz("Gewichtet ist dein Merkur der am dichtesten verschaltete Faktor deines "
                      "Bildes, und die Luft in dir hat keinen anderen Planeten als ihn.") == [], \
         "P12 Verbindungs-Rangzeile trotz Element im Satz"
+    # 2026-09-25: Eigenschaft gegen Einzahl, „richtet sich nach", Teilmenge
+    assert _p12_satz("Deine Venus steht auf eigenem Boden und folgt keinem anderen.") == [], \
+        "P12 §3 Eigenschaft: der genannte Planet steht in §3"
+    assert _p12_satz("Ketten enden bei ihm, und er folgt keinem anderen, weil er im eigenen "
+                     "Zeichen steht.", "Saturn steht im Steinbock.") == [], \
+        "P12 §3 Eigenschaft mit Pronomen aus dem Vorsatz"
+    assert _p12_satz("Deine Venus richtet sich nach keinem anderen Planeten.") == [], \
+        "P12 §3 Variante „richtet sich nach keinem anderen“"
+    _b12 = _p12_satz("Dein Mars folgt keinem anderen.")
+    assert [a for a, _b in _b12] == ["kein_anderer"] and "steht nicht" in _b12[0][1], \
+        "P12 §3 Eigenschaft: Planet außerhalb von §3 muss PRÜFEN bleiben (%s)" % _b12
+    _b12 = _p12_satz("Als einzige deiner Kräfte folgt deine Venus keinem anderen.")
+    assert [a for a, _b in _b12] == ["kein_anderer"] and "Einzahl" in _b12[0][1], \
+        "P12 §3 Einzahl mit „als einzige“ (%s)" % _b12
+    _b12 = _p12_satz("Saturn ist der Planet, der keinem anderen folgt.")
+    assert "Einzahl" in _b12[0][1], "P12 §3 Einzahl-Meldung nennt die Einzahl (%s)" % _b12
+    _b12 = _p12_satz("Drei weitere Verbindungen Saturns haben ihre Heimat in anderen Kapiteln.")
+    assert [a for a, _b in _b12] == ["n_verbindungen"] and _b12[0][1].startswith(
+        "Zählaussage über eine Teilmenge"), "P12 Teilmenge statt gewichteter Dichte (%s)" % _b12
     try:                            # 2026-09-24: §3-Leser gegen die echte radix-Ausgabe
         import radix as _rx3
         if hasattr(_rx3, "strukturbild_text"):
@@ -5532,6 +5771,26 @@ def _selbsttest(still=False):
                       ("Dann drückt Saturn auf deine Sonne.", True)):
         _k, _t = _p17_kandidaten(_s)
         assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Grundfassung: %r" % _s
+    # 2026-09-25: Adverb, Pluralverb, Umstellung vor dem Artikel, „derselbe", Horizont,
+    # „heißt", Objekt-Pronomen, Hilfsverb, Relativsatz (konstruierte Saetze)
+    for _s, _soll in (("Im Frühjahr steht auch Jupiter im Trigon zu deinem Merkur.", False),
+                      ("Unter den Planeten steht allein Mars in einem solchen Zeichen.", False),
+                      ("Uranus und Neptun stehen knapp vor dem Aszendenten.", False),
+                      ("Mond und Saturn bilden die engste Verbindung zwischen zwei Kräften.", False),
+                      ("Dazu steht dein Mars ganz am Ende des Zeichens.", False),
+                      ("Gewichtet ist dein Mond am dichtesten verschaltet.", False),
+                      ("Hier steht derselbe Mond vorn und Saturn am Ende.", False),
+                      ("Es ist der Punkt, an dem die Sonne am Abend untergeht.", False),
+                      ("Der Punkt, der Aszendent heißt, liegt im Osten.", False),
+                      ("Neptun und Pluto stehen in weitem Winkel zu ihm.", False),
+                      ("Deshalb braucht dein Mond Raum.", True), ("Auch Saturn verlangt Geduld.", True),
+                      ("Mars und Venus verlangen Nähe.", True),
+                      ("Im Sommer wird Saturn Geduld verlangen.", True),
+                      ("Saturn, der die Verantwortung trägt, steht im Quadrat zum Mond.", True)):
+        _k, _t = _p17_kandidaten(_s)
+        assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Grundfassung: %r" % _s
+    assert not _p17_kandidaten("Du hast deine Venus am Aszendenten.")[0], "P17: Objekt hinter „Du hast“"
+    assert not _p17_kandidaten("Es gehört zu der Sonne, die du bist.")[0], "P17: Relativsatz mit „du“"
     berichte.append("P16 und P17 als Einzelproben")
 
     # 1) fehlerfrei
@@ -5923,11 +6182,18 @@ SUBJEKT — P17.
   Präposition davor, oder hinter einem Verb („wird Saturn zum Aufseher"). Die Zone
   kommt aus dem letzten `###`-Zwischentitel: Bewegung 1 und 3–6 streng, 2 und 7 frei,
   ohne Bewegungswortlaut nur mit einem Verb außerhalb von `_P17_ANKERVERBEN`.
+  Adverbien davor zählen nicht („steht auch Saturn"); vor einem Artikel entscheidet
+  das Verb davor („steht deine Sonne"); ein Subjekt-Pronomen im selben Glied davor
+  macht den Namen zum Objekt („Du hast deine Sonne …"); ein Relativsatz mit
+  handelndem Verb („Saturn, der die Verantwortung trägt") zählt in jeder Zone.
 
 STRUKTURBILD §3 (chart_data) — P12.
   Die Zeilen „- Enddispositoren (im eigenen Zeichen, …): …" und „- Im eigenen Zeichen
   ohne Zulauf (…): …", Namen durch Komma getrennt; Klammern („(Ketten von …)") zählen
-  nicht. Wer dort steht, folgt keinem anderen. Fehlen beide Zeilen, meldet P12 „§3
+  nicht. Wer dort steht, folgt keinem anderen. Die Einzahl („der Planet, der keinem
+  anderen folgt", „als einziger") ist gedeckt, wenn der Satz alle nennt; die
+  Eigenschaft („dein Mond … folgt keinem anderen", „richtet sich nach keinem
+  anderen"), wenn der genannte dort steht. Fehlen beide Zeilen, meldet P12 „§3
   nicht gefunden".
 """
 
