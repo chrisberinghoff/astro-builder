@@ -2,11 +2,7 @@
 # -*- coding: utf-8 -*-
 """REFERENZ: schlanker Chart-Builder fuer das Geburtshoroskop.
 
-Neu 2026-09-20 (Aufraeumlauf D, Block D3; K7/W58). Bis dahin war
-`REFERENZ_Chart_Builder_Ultimativ.py` die einzige Vorlage — zur Haelfte
-Ultimativ-Stoff (Transit-Uhr, Zeitleiste, Anhangtabellen, `tdat`/`tuhr`), der
-im Geburtshoroskop ungenutzt mitlief und Wortlaute trug, die in anderen Typen
-falsch sind. Diese Vorlage traegt NUR, was ein Typ ohne Zeitebene braucht:
+Diese Vorlage traegt NUR, was ein Typ ohne Zeitebene braucht:
 
     1. PALETTE             die Farbwerte, abgeleitet aus DECKBLATT['PALETTE']
     2. COVER_CSS + cover_svg()/cover_html()
@@ -15,9 +11,7 @@ falsch sind. Diese Vorlage traegt NUR, was ein Typ ohne Zeitebene braucht:
     4. ANALYSE / CHARTDATA / OUT / RADPNG / DOCTYPE
 
 Der Transit nimmt `REFERENZ_Chart_Builder_Transit.py` (Transit-Uhr,
-Zeitleisten-Seite, Anhangtabellen; bis zum 2026-09-23 hiess sie
-`REFERENZ_Chart_Builder_Ultimativ.py`, nach dem an diesem Tag ausgemusterten
-Ultimativ-Horoskop).
+Zeitleisten-Seite, Anhangtabellen).
 
 Alles andere — Struktur-CSS, Inhaltsverzeichnis, Radseite, Konstellationsseite,
 Aspektseite, Kapitel-Sektionen (`chartdoc.build_section()`: Kopf, Koerper,
@@ -33,7 +27,7 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
   * Die Vorlage liefert MECHANIK, nie Inhalt. Palette und Cover-Verlauf sind
     PLATZHALTER mit sichtbarer Marke (PALETTE_GESETZT): Solange die Marke
     steht, laeuft der Builder nicht — so rendert kein Lauf still die Farben
-    eines anderen Charts (Befund G34-17c Nr. 8 an der Ultimativ-Vorlage).
+    eines anderen Charts.
   * Der Builder ZEICHNET SEIN RAD SELBST, bei jedem Lauf (rad_zeichnen). Ein
     PNG, das vom letzten Direktaufruf herumliegt, rendert still einen alten
     Datenstand.
@@ -42,9 +36,7 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
     (`nur_frontmatter=True`): Cover, Inhalt und Chartbild-Strecke ohne die
     Kapitel. Die gemessenen Seiten liegen vor den Kapiteln, ihr Umbruch
     haengt nicht an ihnen; jeder Messrender ist damit vier Seiten statt
-    vierzig (K8/W62: bis 44 Renders je Lauf). Die Breitenleiter beginnt bei
-    15,6 cm — getroffen wurde in 7 von 10 Laeufen 15,2 cm, die alte Leiter ab
-    17,2 cm kostete 8 bis 10 Renders umsonst.
+    vierzig. Die Breitenleiter beginnt bei 15,6 cm.
   * Die Seitenfolge hinter dem Cover ist fest: Inhalt, Radix, Konstellationen,
     Aspekte, dann die Kapitel. Beim Geburtshoroskop gibt es keine
     Teiler-Kapitel (PART_KICKER leer) und keine typ-eigenen Grafikseiten.
@@ -68,10 +60,10 @@ ANALYSE = '/home/claude/<klient>_analyse.md'
 RADPNG = '<klient>_radix.png'
 OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
 DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
-GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM MEZ/MESZ · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat ausgeschrieben in VERSALIEN, Ort ohne Land (Hausstil der fertigen PDFs; festgelegt 2026-09-24, T13)
+GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …)
 
 # Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
-# Hauswechsel; seit 2026-09-23c) — aus dem KOPF der chart_data uebernommen,
+# Hauswechsel) — aus dem KOPF der chart_data uebernommen,
 # nicht gerechnet: JD in UT mit mindestens fuenf Nachkommastellen, Breite und
 # Laenge in Dezimalgrad. Solange einer fehlt, bricht der Builder mit Meldung ab.
 JD_GEBURT = None          # <<JD (UT) aus dem Kopf der chart_data>>
@@ -97,7 +89,7 @@ PART_KICKER = set()       # Geburtshoroskop: keine Teiler-Kapitel
 OPEN_PAGE = {'Auftakt'}   # eigene Seite; das Schlusswort bewusst NICHT
 
 # Breitenleiter fuer die Einmessung der Radseite: 15,6 cm abwaerts in
-# 0,2-cm-Schritten (K8/W62, 2026-09-20; vorher ab 17,2 cm).
+# 0,2-cm-Schritten.
 BREITEN = ['%.1fcm' % (x / 10) for x in range(156, 118, -2)]
 
 # --- Palette ---------------------------------------------------------------
@@ -259,18 +251,14 @@ def y2cm(y):
     return y / 842 * 29.7
 
 
-# VOLLBILD-COVER (2026-09-24, Klasse-2-Entscheidungslauf T13). Rechnet der Lauf das
-# Titelmotiv als ganzseitiges PNG (Design-Render-Modul, „Eine Flaeche, die von
-# MEHREREN Seiten abblendet": Licht und Gegenstaende pixelweise), setzt er
-# COVER_BILD auf den Pfad und schreibt die Rechnung in cover_bild_rechnen();
-# __main__ ruft sie bei jedem Lauf, wie rad_zeichnen(). cover_html() legt das
-# PNG dann an die Stelle von .cv-sky, Sternfeld und SVG. Bis dahin gab es dafuer
-# keinen Einhaengepunkt, und cover_html() wurde zweimal von Hand ersetzt
-# (Pruefberichte Geburtshoroskop 3+4 vom 23.09.c, Transit 3+4 vom 24.09.).
+# VOLLBILD-COVER. Rechnet der Lauf das Titelmotiv als ganzseitiges PNG
+# (Design-Render-Modul, „Eine Flaeche, die von MEHREREN Seiten abblendet"),
+# setzt er COVER_BILD auf den Pfad und schreibt die Rechnung in
+# cover_bild_rechnen(); __main__ ruft sie bei jedem Lauf, wie rad_zeichnen().
+# cover_html() legt das PNG an die Stelle von .cv-sky, Sternfeld und SVG.
 # COVER_HELL schaltet Leitsatz und Geburtszeile auf helle Schrift: Die Farben in
-# COVER_CSS sind fuer einen HELLEN unteren Rand gesetzt (der Platzhalter-Verlauf
-# endet hell); auf einem dunklen Motiv verschwinden sie, und kein Preflight sieht
-# das (Befund Geburtshoroskop 3+4 vom 24.09.b).
+# COVER_CSS sind fuer einen HELLEN unteren Rand gesetzt; auf einem dunklen
+# Motiv verschwinden sie, und kein Preflight sieht das.
 COVER_BILD = None      # <<Pfad des im Lauf gerechneten Vollbild-PNG — oder None>>
 COVER_HELL = False     # True: dunkles Motiv am unteren Rand, Leitsatz und Geburtszeile hell
 
@@ -302,14 +290,12 @@ def glyphe(x, y, size, color, zeichen, op=0.9):
 
 def cover_html(kicker):
     """Das Cover. `kicker` ist der DOKUMENTTYP AUS DER H1 der analyse.md
-    (parsed['doctype']) in Versalien — kein Feld des @@DECKBLATT-Blocks
-    (Chris-Entscheidung 2026-09-19, Frage 3); einen beschreibenden Untertitel
-    hat das Cover nicht — auch keine zweite Typzeile: Unter der Linie stand bis
-    zum 2026-09-23 eine feste Zeile „Horoskop", die den Kicker doppelte
-    (Chris-Entscheidung: „nur einmal"). Hoehen im 842-Raster: 88 Kicker,
+    (parsed['doctype']) in Versalien — kein Feld des @@DECKBLATT-Blocks;
+    einen beschreibenden Untertitel und eine zweite Typzeile hat das Cover
+    nicht. Hoehen im 842-Raster: 88 Kicker,
     112 Name, 168 Linie, 788 Leitsatz, 822 Geburtsdaten. 788 ist die LETZTE
     Leitsatzzeile: Ein langer Leitsatz wird am Gedankenstrich umbrochen und
-    waechst nach oben (chartdoc.leitsatz_block(), seit 2026-09-23c)."""
+    waechst nach oben (chartdoc.leitsatz_block())."""
     return f"""<section class="{'cover hell' if COVER_HELL else 'cover'}">
 {_cover_grund()}
 <div class="cv-block cv-kicker" style="top:{y2cm(88):.2f}cm">{esc(kicker)}</div>
@@ -333,17 +319,16 @@ REIHENFOLGE = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
 KLASSISCH = ['Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
              'Uranus', 'Neptun', 'Pluto']
 _BY = {f['name']: f for f in cd.factors}
-# Namenstoleranz: der chartdata.py-Vertrag schreibt 'Suedknoten' mit ue, den
-# Glueckspunkt mit Umlaut; beide Schreibweisen fuehren auf denselben Faktor.
-# Der Glueckspunkt ist seit dem 2026-09-23 ausgemustert und steht nur noch in
-# Datenblaettern von vor dem Stichtag; konst_zeilen() uebergeht ihn sonst.
+# Namenstoleranz: beide Schreibweisen fuehren auf denselben Faktor. Der
+# Glueckspunkt ist ausgemustert und steht nur in alten Datenblaettern.
 for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
     if _a in _BY and _b not in _BY:
         _BY[_b] = _BY[_a]
     elif _b in _BY and _a not in _BY:
         _BY[_a] = _BY[_b]
 
-RAD_NOTE = (f'{VORNAME} · <TT. Monat JJJJ, HH:MM MEZ/MESZ> · <Ort> · '
+# Datum und Zone wie GEBURTSZEILE (Tag ohne fuehrende Null), hier in Normalschrift.
+RAD_NOTE = (f'{VORNAME} · <T. Monat JJJJ, HH:MM ZONE> · <Ort> · '
             'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
             'nach Huber-Orbis')
 KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
@@ -353,9 +338,7 @@ KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
 
 def konst_note(zeilen):
     """KONST_NOTE nur, wenn die Haus-Spalte eine Doppelangabe traegt (`8/9`), sonst
-    None — Design-Render-Modul, Konstellationsseite. 2026-09-25: Vorher stand die
-    Fussnote in jedem PDF, auch ohne eine einzige Doppelzahl; Preflight und verify()
-    sehen das nicht, nur der Rasterblick (Pruefberichte Schritt 3+4 vom 25.09.)."""
+    None — Design-Render-Modul, Konstellationsseite."""
     return KONST_NOTE if any('/' in str(z[4]) for z in zeilen if z[0] != 'SEP') else None
 
 
@@ -375,14 +358,13 @@ def konst_zeilen():
             continue
         if n == 'Suedknoten':
             # Der Suedknoten ist der Mondknoten um 180 Grad — beide Enden der
-            # Achse laufen gleich; der Lauf wird ABGELEITET, nie gesetzt (W8).
+            # Achse laufen gleich; der Lauf wird ABGELEITET, nie gesetzt.
             out.append(('☋', 'Südknoten', cd.sign_name(cd.SUEDKNOTEN),
                         cd.gr(cd.SUEDKNOTEN % 30), cd.haus(cd.SUEDKNOTEN),
                         'rückläufig' if _BY['Mondknoten']['retro'] else 'direkt'))
             continue
         if n == 'Glueckspunkt' and n not in _BY:
-            # Seit 2026-09-23 ausgemustert: ein neues Chart fuehrt ihn nicht.
-            # Nur ein Datenblatt von vor dem Stichtag traegt ihn noch — dann
+            # Ausgemustert; nur ein altes Datenblatt traegt ihn noch — dann
             # rendert er wie bisher (Design-Render-Modul, Konstellationsseite).
             continue
         if n not in _BY:
@@ -392,16 +374,13 @@ def konst_zeilen():
         f = _BY[n]
         lauf = 'rückläufig' if f['retro'] else 'direkt'
         if n == 'Glueckspunkt':
-            lauf = '—'                       # gerechneter Punkt (F12), Altbestand
+            lauf = '—'                       # gerechneter Punkt, Altbestand
         # Glyphenregel wie in chartdoc._fac(): ueber die ZEICHENLAENGE — ein
         # Feld von mehr als einem Zeichen ist ein Name, kein Symbol.
         glyph = '' if len(f['glyph']) > 1 else f['glyph']
-        # 2026-09-22: NICHT `cd.name_of(n)` — `n` ist der Name der
-        # REIHENFOLGE-Liste, `name_of()` gibt genau zurueck, was es bekommt;
-        # `f['name']` traegt den Vertragsnamen. Ein ASCII-Name stand deshalb
-        # zweimal in einer gerenderten Konstellationstabelle (Prueflaeufe
-        # Geburtshoroskop Schritt 3+4 vom 20.09. und 22.09.). verify(), die
-        # Pflicht-Bausteine und der Preflight sehen das nicht.
+        # NICHT `cd.name_of(n)` — `n` ist der Name der REIHENFOLGE-Liste;
+        # `f['name']` traegt den Vertragsnamen. Einen ASCII-Namen in der
+        # Tabelle sehen verify(), Pflicht-Bausteine und Preflight nicht.
         out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
                     cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
     return out
@@ -416,13 +395,13 @@ ELEMENTE, MODI = chartdoc.verteilung(
     [(cd.name_of(_BY[n]['name']), _BY[n]['lon']) for n in KLASSISCH])
 
 
-# --- Fussnoten der Konstellationsseite (2026-09-23c) -------------------------
+# --- Fussnoten der Konstellationsseite --------------------------------------
 # Die beiden Geburtszeit-Saetze (Zeichengrenze, Hauswechsel) kommen fertig aus
 # radix.konstellations_fussnoten(); die Funktion setzt den Ephemeridenpfad
-# selbst und bricht ab, statt einen Satz still wegzulassen (vorher uebergab
-# die Vorlage gar kein `fussnoten=`). lade.ephemeriden() holt pyswisseph und die
-# Dateien, wenn sie fehlen — im frischen Container bis zu zehn Minuten, darum
-# den Builder im Hintergrund starten. Vorn stehen die Saetze aus dem Datenblatt.
+# selbst und bricht ab, statt einen Satz still wegzulassen. lade.ephemeriden()
+# holt pyswisseph und die Dateien, wenn sie fehlen — im frischen Container bis
+# zu zehn Minuten, darum den Builder im Hintergrund starten. Vorn stehen die
+# Saetze aus dem Datenblatt.
 def konst_fussnoten():
     if None in (JD_GEBURT, LAT, LON):
         raise SystemExit('JD_GEBURT, LAT und LON aus dem Kopf der chart_data '
@@ -496,11 +475,8 @@ if __name__ == '__main__':
                          'PALETTE_GESETZT = True setzen (Design-Render-Modul, '
                          '„Deckblatt": die Vorlage liefert Mechanik, nie Inhalt).')
 
-    # 2026-09-22 (Prueflauf Geburtshoroskop Schritt 3+4 vom 2026-09-22):
-    # GEBURTSZEILE und RAD_NOTE sind Platzhalter wie PALETTE_GESETZT, hatten
-    # aber keine Abbruchmarke — ihre spitzen Klammern waeren still ins PDF
-    # gegangen. Geprueft wird der Platzhalter selbst, damit keine zweite
-    # Marke zu pflegen ist.
+    # GEBURTSZEILE und RAD_NOTE: Geprueft wird der Platzhalter selbst — seine
+    # spitzen Klammern gingen sonst still ins PDF.
     for _n, _v in (('GEBURTSZEILE', GEBURTSZEILE), ('RAD_NOTE', RAD_NOTE)):
         if '<' in _v and '>' in _v:
             raise SystemExit('REFERENZ-Vorlage: %s traegt noch den Platzhalter '
@@ -519,10 +495,7 @@ if __name__ == '__main__':
         return build_html(nur_frontmatter=True, **kw)
 
     #    Hat der Lauf schon eingemessen, werden die Werte oben gesetzt und
-    #    hier NICHT neu gemessen: Bis zum 2026-09-22 lief die Einmessung
-    #    zweimal, wenn ein Lauf sie zur Vorbereitung ausfuehrte und das
-    #    __main__ sie danach wiederholte — acht Messrender doppelt, ohne
-    #    dass es auffiel.
+    #    hier NICHT neu gemessen.
     rad = RAD_BREITE if RAD_BREITE is not None else chartdoc.passe_ein(
         lambda w: frontmatter(rad_breite=w), 'PG_rad', BREITEN, was='Radseite')
     skala = ASPEKT_SKALA if ASPEKT_SKALA is not None else \
@@ -537,9 +510,8 @@ if __name__ == '__main__':
         lambda breaks: build_html(breaks, skala, rad, kskala),
         OUT, items, colon_pairs, SEITEN,
         required_fields={'Leitsatz': LEITSATZ, 'Titelmotiv': TITELMOTIV},
-        # 2026-09-23 (Pruefbericht Transit 3+4 vom 23.09., 1.6): die ERSTE Zeile,
-        # wie Design-Render, „Durchsetzung" — mehrzeilig gesetzt steht der ganze
-        # Leitsatz im HTML nirgends am Stueck.
+        # Die ERSTE Zeile (Design-Render, „Durchsetzung") — mehrzeilig gesetzt
+        # steht der ganze Leitsatz im HTML nirgends am Stueck.
         extra_must=[(LEITSATZ.split(" — ")[0].split("\n")[0], 'Leitsatz aufs Cover')],
         doctype=DOCTYPE)
     print('Aspektzeilen:', len(ASPEKTE), '| Kapitel:', len(items),

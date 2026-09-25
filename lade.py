@@ -148,16 +148,11 @@ SCHRITTE = {
     # ModuleNotFoundError ab. Ein Import kostet keine Token; die Alternative waere
     # gewesen, den Kern zu aendern, damit er weniger verlangt.
     "2":        ("selektor", "build", "inhaltsprobe", "chartdoc"),
-    # `selektor` gehoert auch zu 3+4: inhaltsprobe.py importiert es (Zeile
-    # `import selektor`), und ohne den Eintrag brach der erste Aufruf im
-    # Design-Lauf mit ModuleNotFoundError ab (Pruefbericht Geburtshoroskop
-    # Schritt 3+4 vom 2026-09-16d, Klasse 1 Nr. 1.1).
-    # Die Vorlagen seit dem 2026-09-24 (Klasse-2-Entscheidungslauf T14): Das
-    # Design-Render-Modul laesst den Chart-Builder aus der Vorlage bauen, der
-    # Ladeschritt holte sie aber nicht — ueber den BUILDER-Ordner ohne Wirkung,
-    # ueber das Repo musste sie einzeln geholt werden, und kein Modul sagte es
-    # (Pruefbericht Geburtshoroskop 3+4 vom 24.09.). Ein Import kostet nichts;
-    # der Transit-Lauf zieht beide Vorlagen, nutzt aber nur seine.
+    # 3+4: `selektor`, weil inhaltsprobe.py es importiert — auch im Transit;
+    # die Geburtshoroskop-Vorlage, weil das Design-Render-Modul den
+    # Chart-Builder aus ihr bauen laesst. Der Transit-Lauf zieht sie mit und
+    # nutzt nur seine (Schritt "transit"): Eine Datei mehr kostet nichts und
+    # ist kein Befund.
     "3+4":      ("build", "chartdoc", "radix", "selektor", "inhaltsprobe",
                  "REFERENZ_Chart_Builder_Geburtshoroskop"),
     "transit":  ("transit", "transitdata", "transituhr_fusion",
@@ -171,7 +166,7 @@ SCHRITTE = {
 _SCHRITT_TEXT = {
     "1":        "Datenblatt (Heimat-Probe braucht build, Referenzdatei-Liste selektor)",
     "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
-    "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render; mit der Geburtshoroskop-Vorlage)",
+    "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render, sie braucht selektor; Geburtshoroskop-Vorlage — im Transit liegt sie ungenutzt daneben, kein Befund)",
     "transit":  "zusaetzlich beim Transit-Lauf (mit der Transit-Vorlage)",
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
     "hdgk":     "Human Design / Gene Keys",

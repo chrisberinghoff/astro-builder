@@ -87,7 +87,7 @@ except ImportError:                                  # Python < 3.9
     ZoneInfo = None
 
 MOSEPH = swe.FLG_MOSEPH | swe.FLG_SPEED          # Rueckfall: keine ext. Dateien
-HAUPT_MODELL = 'Moshier'                         # wird in _transiters() gesetzt
+HAUPT_MODELL = '(wird beim Lauf gesetzt)'        # setzt _transiters(): Swiss Ephemeris oder Moshier
 SWIEPH = swe.FLG_SWIEPH | swe.FLG_SPEED          # Chiron: braucht seas_*.se1
 
 # ---------------------------------------------------------------------------
@@ -560,9 +560,9 @@ def haus_fuehrung(lon, cusps, orb=5.0, schwelle=2.0):
                 return dict(haus=haus, nebenhaus=None, fuehrend=haus, stufe=None,
                             abstand=None, spalte=str(haus))
             neben = haus % 12 + 1
-            # Stufe auf dem auf 0,01° gerundeten Abstand — wie radix.haus_spalte(),
-            # damit die Angabe mit der Staendetabelle der chart_data uebereinstimmt
-            if round(bis, 2) <= schwelle:
+            # Stufe auf dem auf 0,0001° gerundeten Abstand — wie radix.haus_spalte()
+            # und selektor (abstand=), damit alle drei dieselbe Stufe nennen
+            if round(bis, 4) <= schwelle:
                 return dict(haus=haus, nebenhaus=neben, fuehrend=neben,
                             stufe='Schwellenlage', abstand=round(bis, 4),
                             spalte=f"{neben}/{haus}")
@@ -2253,6 +2253,9 @@ def _selbsttest(still=False):
         if _r is not None and hasattr(_r, 'haus_spalte'):
             pruefe(all(haus_fuehrung(x / 7.0, cz)['spalte'] == _r.haus_spalte(x / 7.0, cz)
                        for x in range(0, 2520)), "F20: Abweichung von radix.haus_spalte()")
+            pruefe(all(haus_fuehrung(30.0 - b, cz)['spalte'] == _r.haus_spalte(30.0 - b, cz)
+                       for b in (1.99996, 2.00004, 2.003, 2.0049, 2.0051)),
+                   "F20: Stufe an der 2°-Schwelle weicht von radix ab")
     finally:
         ERZWINGE_MOSEPH = alt_mo
         ZEITZONE = alt_zz

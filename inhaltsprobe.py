@@ -3808,6 +3808,25 @@ def _paar_ok(x, y, typ):
     if frozenset((x, y)) in _ACHSENPAARE:
         return False
     return x != y or (typ == "transit" and x in _SELBST_TRANSITER)
+
+
+# (10) SELBSTPAAR NUR MIT RADIX-MARKE AUF EINER SEITE (2026-09-25, T20): Ein Satz
+#      traegt Y–Y nur, wenn Y einmal als Radixpunkt steht („R-", „dein …") und
+#      einmal ohne diese Marke (der Laufende; ein Pronomen am Satzanfang zaehlt
+#      so). Zweimal markiert („T-Neptun ⚹ R-Mars — im Sextil zu deinem Mars") oder
+#      zweimal unmarkiert („Er steht Chiron gegenueber, Chiron in den Zwillingen")
+#      ist derselbe Radixpunkt zweimal — kein Paar, die Probe wird nur leiser.
+_RADIX_MARKE_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:R-\s*|(?:dein\w*|your)\s+"
+                             r"(?:[\wäöüÄÖÜß-]+\s+)?)$", re.I)
+
+
+def _selbstpaar_im_satz(satz, x):
+    """(10): Traegt der Satz das Selbstpaar x–x?"""
+    marken = {bool(_RADIX_MARKE_RE.search(satz[max(0, a - 40):a]))
+              for a, _e, f in _faktoren_im_satz(satz) if f == x}
+    if _PRONOMEN_ANFANG_RE.match(satz):
+        marken.add(False)
+    return marken == {True, False}
 # (3) ACHSENPAAR — AC/DC und MC/IC stehen einander immer gegenüber; ein Satz, der
 #     beide Enden nennt („über deinen Deszendenten … deinem Aszendenten
 #     gegenüber"), behauptet damit keinen Aspekt. Solche Paarungen zaehlen nicht.
@@ -3999,7 +4018,8 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
                     continue
                 gesehen.add((art, m.start()))
                 paarungen = [(x, y) for x in reversed(davor) for y in danach
-                             if _paar_ok(x, y, typ)]                        # (3), (7)
+                             if _paar_ok(x, y, typ)                         # (3), (7)
+                             and (x != y or _selbstpaar_im_satz(satz, x))]  # (10)
                 if not paarungen:           # „Pluto … zu sich selbst": Zyklus, kein Radix-Aspekt
                     continue
                 p.geprueft += 1
@@ -5546,6 +5566,11 @@ def _selbsttest(still=False):
     assert not _paar_ok("MERKUR", "MERKUR", "transit") and _paar_ok("SATURN", "SATURN", "transit") \
         and not _paar_ok("SATURN", "SATURN", "geburt") and not _paar_ok("AC", "DC", "transit"), \
         "P13 (7) Selbstpaar"
+    # (10), 2026-09-25 (T20): Selbstpaar nur mit Radix-Marke auf genau einer Seite
+    assert not _selbstpaar_im_satz("T-Uranus △ R-Saturn — im Trigon zu deinem Saturn.", "SATURN") \
+        and not _selbstpaar_im_satz("Er steht Chiron gegenüber, Chiron in den Zwillingen.", "CHIRON") \
+        and _selbstpaar_im_satz("Saturn steht im Quadrat zu deinem Saturn.", "SATURN") \
+        and _selbstpaar_im_satz("Er steht im Quadrat zu deinem Saturn.", "SATURN"), "P13 (10) Selbstpaar"
     # 2026-09-23c: P5 nimmt die Registerzeile mit dem richtigen Ziel
     _zl = ["Jupiter im Trigon zu deinem MC — der Weg nach außen zeigt sich (Kapitel 2).",
            "Mondknoten im Sextil zu deinem Jupiter — klingt mit in Kapitel 3.",
@@ -5911,6 +5936,19 @@ def _selbsttest(still=False):
     assert r4["proben"]["P1"]["geprueft"] == 5 and r4["proben"]["P5"]["geprueft"] == 3 and \
         r4["proben"]["P14"]["geprueft"] == 6, "Lauf 4: Zählung P1/P5/P14 %s" % (
             [r4["proben"][n]["geprueft"] for n in ("P1", "P5", "P14")])
+    # 4c) 2026-09-25 (T20): Registerzeile in Pflichtform und wiederholende
+    #     Apposition bleiben still; ein echtes Selbstpaar ohne Kontakt nicht.
+    ta4c = ersetze(ersetze(ta, "2. Neptun im Sextil zu deinem Mars",
+                           "2. T-Neptun ⚹ R-Mars — im Sextil zu deinem Mars"),
+                   "Hier steht, was im Fenster läuft und kein eigenes Kapitel bekommt.",
+                   "Hier steht, was im Fenster läuft und kein eigenes Kapitel bekommt. "
+                   "Er steht Mars gegenüber, Mars im Zeichen des Aufbruchs.")
+    p4c = lauf(tc, ta4c, tev)["proben"]["P13"]
+    assert not p4c["pruefen"], "Lauf 4c: P13 Selbstpaar: %s" % p4c["pruefen"]
+    p4d = lauf(tc, ersetze(ta4c, "Er steht Mars gegenüber, Mars im Zeichen des Aufbruchs.",
+                           "Saturn steht im Quadrat zu deinem Saturn."), tev)["proben"]["P13"]
+    assert len(p4d["pruefen"]) == 1 and "Saturn Quadrat Saturn" in p4d["pruefen"][0], \
+        "Lauf 4d: echtes Selbstpaar nicht gemeldet: %s" % p4d["pruefen"]
 
     # 5) Transit mit eingebauten Fehlern
     a5 = ta

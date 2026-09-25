@@ -568,10 +568,11 @@ def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
 
     Rueckgabe: dict {'haus': int, 'nebenhaus': int|None, 'grenzlage': bool,
     'abstand_spitze': float|None, 'label': str}.
-    `abstand_spitze` ist der Abstand zur NAECHSTEN Spitze in Dezimalgrad (zwei
+    `abstand_spitze` ist der Abstand zur NAECHSTEN Spitze in Dezimalgrad (vier
     Nachkommastellen) — derselbe Wert, der im `@@SELEKTOR`-Block der chart_data
-    als `abstand=` steht (Datenblatt-Modul); der ⚠-Block der referenz.md nennt
-    ihn in Bogenminuten. Bis 2° Schwellenlage (Nebenhaus fuehrt), 2–5°
+    als `abstand=` steht, unveraendert uebernommen (Datenblatt-Modul); der
+    ⚠-Block der referenz.md nennt ihn in Bogenminuten, auf dieselbe Minute
+    gerundet wie `label`. Bis 2° Schwellenlage (Nebenhaus fuehrt), 2–5°
     Grenzlage (rechnerisches Haus fuehrt). `label` ist die Langform
     („Haus 12 (Grenzlage → 1, 1°47′ vor Spitze 1)"); die Kurzform der
     Konstellationstabelle liefert haus_spalte(). Liegt lon in keinem Haus
@@ -585,15 +586,16 @@ def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
         if rel < span:
             haus = k + 1
             bis_spitze = span - rel
+            ab = round(bis_spitze, 4)     # eine Rundung fuer label, Stufe, selektor
             grenz = bis_spitze <= orb
             neben = (haus % 12) + 1 if grenz else None
             if grenz:
                 label = (f"Haus {haus} (Grenzlage → {neben}, "
-                         f"{_gr(bis_spitze)} vor Spitze {neben})")
+                         f"{_gr(ab)} vor Spitze {neben})")
             else:
                 label = f"Haus {haus}"
             return {'haus': haus, 'nebenhaus': neben, 'grenzlage': grenz,
-                    'abstand_spitze': round(bis_spitze, 2), 'label': label}
+                    'abstand_spitze': ab, 'label': label}
     return {'haus': None, 'nebenhaus': None, 'grenzlage': False,
             'abstand_spitze': None, 'label': 'Haus ?'}
 
@@ -2323,6 +2325,10 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
 
     Jeder T-Quadrat-Eintrag traegt seit dem 2026-09-08 zusaetzlich
     `leere_spitze` (s. `leere_spitze()`): Zeichen, Haus und was dort steht.
+    Beim Jod steht der Gegenpunkt der Spitze in 'jod_gegenpunkt' ({Spitze:
+    dieselbe Rueckgabe wie leere_spitze()}); die Jod-Eintraege bleiben
+    unveraendert. Das Haus-Stellium zaehlt nach dem FUEHRENDEN Haus (bis 2°
+    vor der Spitze das Nebenhaus, wie haus_spalte()).
     Ein Grosskreuz hat KEINE leere Spitze; seit 2026-09-19 (W33) steht zu jedem
     Eintrag in 'grosskreuz' an derselben Stelle von 'grosskreuz_achsen' das
     Paar seiner Gegenpaare [[a, b], [c, d]] — ueber sie laeuft die Entlastung.
@@ -2459,6 +2465,13 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
                         drachen.append(eintrag)
     getragen = [d['trigon'] for d in drachen]
     gt = [t for t in gt if t not in getragen]
+    # Gegenpunkt der Jod-Spitze (Figur-Regel: beim Jod Spitze UND Gegenpunkt).
+    jod_gp = {}
+    for j in jod:
+        if j['apex'] not in jod_gp:
+            jod_gp[j['apex']] = leere_spitze(lon_of[j['apex']], factors, cusps,
+                                             apex_name=j['apex'],
+                                             aspects=aspects)
 
     # Mystisches Rechteck: zwei Oppositionen ohne gemeinsamen Faktor, deren
     # vier Seiten abwechselnd Trigon und Sextil sind. Geometrisch folgt aus
@@ -2520,14 +2533,16 @@ def konfigurationen(factors, aspects, orb_stellium_zeichen=True, cusps=None):
         for f in factors:
             if f['name'] in WINKEL:
                 continue
-            h = haus_und_grenzlage(f['lon'], cusps)['haus']
+            hg = haus_und_grenzlage(f['lon'], cusps)
+            h = (hg['nebenhaus'] if hg['grenzlage']
+                 and hg['abstand_spitze'] <= 2 else hg['haus'])
             nach_haus.setdefault(h, []).append(f['name'])
         stell_h = [{'haus': h, 'faktoren': sorted(v)}
                    for h, v in sorted(nach_haus.items()) if _stellium(v)]
     return {'t_quadrat': tq, 'grosskreuz': gk, 'grosstrigon': gt, 'jod': jod,
             'drachen': drachen, 'rechteck': rechteck,
             'stellium_zeichen': stell_z, 'stellium_haus': stell_h,
-            'grosskreuz_achsen': gk_achsen}
+            'grosskreuz_achsen': gk_achsen, 'jod_gegenpunkt': jod_gp}
 
 
 # --- Verteilungsmuster: Hemisphaeren, Quadranten, Jones-Muster ---------------
@@ -4398,8 +4413,17 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                  f"{' ☍ '.join(r['achsen'][0])} und {' ☍ '.join(r['achsen'][1])}"
                  f" — Trigone {', '.join('–'.join(s) for s in r['trigone'])}; "
                  f"Sextile {', '.join('–'.join(s) for s in r['sextile'])}.")
+    _jgp = kf.get('jod_gegenpunkt') or {}
     for j in kf['jod']:
-        L.append(f"- Jod: Basis {' ⚹ '.join(j['basis'])}, Spitze {j['apex']}")
+        zeile = f"- Jod: Basis {' ⚹ '.join(j['basis'])}, Spitze {j['apex']}"
+        gp = _jgp.get(j['apex'])
+        if gp:
+            haus = f", Haus {gp['haus_spalte']}" if gp.get('haus_spalte') else ''
+            dort = ', '.join(f"{b['name']} ({_gr(b['orb'])})"
+                             for b in gp['besetzt']) or 'nichts'
+            zeile += (f" — Gegenpunkt der Spitze {gr_zeichen(gp['lon'])} "
+                      f"{gp['zeichen']}{haus}; dort: {dort}")
+        L.append(zeile)
     z_gruppen = [tuple(s['faktoren']) for s in kf['stellium_zeichen']]
     for s in kf['stellium_zeichen']:
         L.append(f"- Stellium in {s['zeichen']}: {', '.join(s['faktoren'])}")
@@ -5130,6 +5154,27 @@ if __name__ == '__main__':
     _ks = konfigurationen(_fs, huber_aspects(_fs), cusps=_c)
     assert [s['zeichen'] for s in _ks['stellium_zeichen']] == ['Krebs'], _ks
     assert [s['haus'] for s in _ks['stellium_haus']] == [4], _ks
+    # 2026-09-25 (T4): Haus-Stellium nach dem fuehrenden Haus — Mars 1° vor
+    # Spitze 5 zaehlt zu Haus 5; Haus 4 behaelt zwei Faktoren, kein Stellium.
+    _fs2 = [{'name': 'Sonne', 'lon': 100.0}, {'name': 'Venus', 'lon': 105.0},
+            {'name': 'Mars', 'lon': 119.0}, {'name': 'Merkur', 'lon': 122.0},
+            {'name': 'Jupiter', 'lon': 125.0}]
+    _ks2 = konfigurationen(_fs2, huber_aspects(_fs2), cusps=_c)
+    assert [(s['haus'], s['faktoren']) for s in _ks2['stellium_haus']] == \
+        [(5, ['Jupiter', 'Mars', 'Merkur'])], _ks2['stellium_haus']
+    # T5: Gegenpunkt der Jod-Spitze mit Zeichen, Haus und Besetzung
+    _fj = [{'name': 'Venus', 'lon': 0.0}, {'name': 'Mars', 'lon': 60.0},
+           {'name': 'Pluto', 'lon': 210.0}, {'name': 'Mond', 'lon': 32.0}]
+    _kj = konfigurationen(_fj, huber_aspects(_fj), cusps=_c)
+    assert [j['apex'] for j in _kj['jod']] == ['Pluto'], _kj['jod']
+    _gpj = _kj['jod_gegenpunkt']['Pluto']
+    assert _gpj['zeichen'] == 'Stier' and _gpj['haus_spalte'] == '2', _gpj
+    assert [b['name'] for b in _gpj['besetzt']] == ['Mond'], _gpj
+    # T6: Abstand mit vier Nachkommastellen, selektor rundet wie label
+    _hg6 = haus_und_grenzlage(25.091667, _c)
+    assert _hg6['abstand_spitze'] == 4.9083 and '4°54′' in _hg6['label'], _hg6
+    _hg7 = haus_und_grenzlage(30.0 - 3.891656, _c)   # label aus demselben Wert
+    assert _hg7['abstand_spitze'] == 3.8917 and '3°54′' in _hg7['label'], _hg7
 
     # Mondphase: alle acht Stufen, dann Finsternisnaehe
     for _w, _erw in ((10, 'Neumond'), (50, 'zunehmende Sichel'),
@@ -5495,6 +5540,11 @@ if __name__ == '__main__':
     else:
         raise AssertionError('Jod-Testfall liefert %d Jods statt 2: %r'
                              % (len(_kjd.get('jod', [])), _kjd.get('jod')))
+
+    # 2026-09-25 (T5): Gegenpunkt der Jod-Spitze steht in der Jod-Zeile.
+    _tj = strukturbild_text(strukturbild(_fj + _ax(160.0, 75.0), _c))
+    assert 'Spitze Pluto — Gegenpunkt der Spitze 0°00′ Stier, Haus 2; dort: ' \
+        'Mond (2°00′)' in _tj, _tj.split('### 6')[1][:900]
 
     # L9: zwei Grosstrigone mit zwei gemeinsamen Ecken, dritte Ecken 6°30′
     # auseinander (nicht konjunkt) -> EIN Befund, die engere Figur fuehrt.

@@ -2207,6 +2207,58 @@ def verify_visual(pdf_path: str, pages=None, dpi: int = 80,
     return sorted(set(paths))
 
 
+def pruef_teilmenge(pdf_pfad: str, out: str = None) -> dict:
+    """Die Pruef-Teilmenge fuer verify(): das PDF ohne Inhaltsseite und ohne
+    Anhang (Design-Render-Modul, „Pruefung — welche Seiten ausgeklammert
+    werden").
+
+    Die Seiten kommen aus den Ankern, die WeasyPrint als benannte Ziele ins PDF
+    schreibt: `PG_inhalt` bis vor den naechsten Anker, `PG_anh…` bis zum
+    Dokumentende. Ohne Anhang (Geburtshoroskop, HD/Gene Keys) faellt nur die
+    Inhaltsseite weg. Fehlt `PG_inhalt`, bricht die Funktion ab — das PDF kommt
+    dann nicht aus chartdoc. Braucht `pypdf`.
+
+    out  Zielpfad; Vorgabe `<pdf ohne .pdf>_pruef.pdf` daneben.
+    Rueckgabe: {'pfad', 'seiten' (Original), 'teilmenge' (Seitenzahl der
+    Teilmenge), 'inhalt', 'anhang'} — die beiden Listen mit den weggelassenen
+    Seiten, 1-basiert wie im PDF-Betrachter.
+    """
+    try:
+        import pypdf
+    except ImportError as e:
+        raise BuildError("pruef_teilmenge() braucht pypdf: "
+                         "pip install pypdf --break-system-packages") from e
+    leser = pypdf.PdfReader(pdf_pfad)
+    n = len(leser.pages)
+    anker = {}
+    for name, ziel in leser.named_destinations.items():
+        try:
+            anker[str(name)] = leser.get_destination_page_number(ziel)
+        except Exception:                               # noqa: BLE001
+            continue
+    if "PG_inhalt" not in anker:
+        raise BuildError("pruef_teilmenge(): %s traegt keinen Anker PG_inhalt "
+                         "— das PDF kommt nicht aus chartdoc.render_mit_inhalt()."
+                         % pdf_pfad)
+    p0 = anker["PG_inhalt"]
+    danach = [p for p in anker.values() if p > p0]
+    inhalt = list(range(p0, min(danach) if danach else p0 + 1))
+    anh = [p for k, p in anker.items() if k.startswith("PG_anh")]
+    anhang = list(range(min(anh), n)) if anh else []
+    weg = set(inhalt) | set(anhang)
+    schreiber = pypdf.PdfWriter()
+    for i, seite in enumerate(leser.pages):
+        if i not in weg:
+            schreiber.add_page(seite)
+    if out is None:
+        stamm = pdf_pfad[:-4] if pdf_pfad.lower().endswith(".pdf") else pdf_pfad
+        out = stamm + "_pruef.pdf"
+    with open(out, "wb") as fh:
+        schreiber.write(fh)
+    return {"pfad": out, "seiten": n, "teilmenge": n - len(weg),
+            "inhalt": [p + 1 for p in inhalt], "anhang": [p + 1 for p in anhang]}
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -2780,6 +2832,127 @@ def kontakt_heimat_bericht(chart_data_pfad: str, events_json_pfad: str,
     return "\n".join(L)
 
 
+def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
+                    analyse_pfad: str = None, tage_min: int = 30) -> dict:
+    """Die `dicht=`-Zeilen des @@ZEITLEISTE-Blocks (Transit), gerechnet.
+
+    Mass: Ein Thema ist in einem Quartal dicht, wenn einer seiner Kontakte dort
+    EXAKT wird oder seine Kontakte zusammen mindestens `tage_min` Tage im
+    Wirkorb stehen — gezaehlt je Thema, ein Tag zaehlt einmal, auch wenn ihn
+    zwei Kontakte tragen. Die Kontakte eines Themas stehen in `fuehrt=` und
+    `aspekte=` der Themenliste (`klingt=` nicht). Es zaehlen Kontakte an einem
+    primaeren Ziel und Selbst-Transite an jedem Ziel, Spiegelziele nie.
+    Quartale, Exaktdaten und Wirkorb kommen aus der events.json
+    (`quarter_bounds`, `exakt`, `wirkorb_perioden`).
+
+    Nummern: Mit `analyse_pfad` wird jedes Thema ueber `titel=` dem Kapitel
+    `## Kapitel <n> · <Titel>` zugeordnet (Gross-/Kleinschreibung und
+    Leerraum egal); ohne gilt die THEMA-Nummer.
+
+    Rueckgabe: {'zeilen': ['Q1 | dicht=1,3 | marke=', …] — fertig fuer den
+    Block, die `marke=` setzt der Lauf; 'quartale': {1: {<Kapitel>: {'exakt':
+    [...], 'tage': n}}, …}; 'ohne_kapitel': [(THEMA, titel)] — Titel ohne
+    Kapitel, fehlt in den Zeilen; 'unbekannt': [(THEMA, Kontakt)] — Kontakt
+    nicht in der events.json; 'ohne_zaehlkontakt': [THEMA] — weder primaeres
+    Ziel noch Selbst-Transit, nie dicht}. Die drei Listen sind vor dem
+    Einfuegen zu klaeren.
+    """
+    import json as _json
+    from datetime import date as _date
+
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+    daten = _json.load(open(events_json_pfad, encoding="utf-8"))
+    if not daten.get("quarter_bounds"):
+        raise ValueError("dichte_quartale(): %s traegt keine quarter_bounds — "
+                         "events.json aus transit.py --json nehmen."
+                         % events_json_pfad)
+    qb = [_date.fromisoformat(x[:10]).toordinal() for x in daten["quarter_bounds"]]
+
+    def _norm(n):
+        n = n.lower()
+        for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+            n = n.replace(a, b)
+        return n
+
+    def _tnorm(s):
+        return re.sub(r"\s+", " ", s.replace("\u00ad", "")).strip().casefold()
+
+    ev, tnamen, znamen = {}, {}, {}
+    for e in daten.get("events", []):
+        if e.get("spiegel"):
+            continue
+        ev.setdefault((e["transit"], e["aspekt"], e["ziel"]), []).append(e)
+        tnamen.setdefault(_norm(e["transit"]), e["transit"])
+        znamen.setdefault(_norm(e["ziel"]), e["ziel"])
+    tnamen.setdefault("mondknoten", "Knoten")
+
+    themen, unbekannt = [], []
+    m0 = re.search(r"THEMA \d+ \|", txt)
+    if m0:
+        tl = "\n" + txt[m0.start():]
+        m1 = re.search(_AH_SCHNITT, tl)
+        if m1:
+            tl = tl[:m1.start()]
+        for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:",
+                        "SAMMELKAPITEL:"):
+            tl = tl.split(schluss)[0]
+        teile = re.split(r"\nTHEMA (\d+) \|", tl)
+        for i in range(1, len(teile) - 1, 2):
+            nr, blk = int(teile[i]), teile[i + 1]
+            titel = (_themen_feld(blk, "titel") or "").strip()
+            felder = " ".join(f for f in (_themen_feld(blk, "fuehrt"),
+                                          _themen_feld(blk, "aspekte")) if f)
+            keys = []
+            for m in re.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
+                                 % "".join(GLYPH_ZU_ASPEKT), felder):
+                k = (tnamen.get(_norm(m.group(1)), m.group(1)),
+                     GLYPH_ZU_ASPEKT[m.group(2)],
+                     znamen.get(_norm(m.group(3)), m.group(3)))
+                if k not in ev:
+                    unbekannt.append((nr, " ".join(k)))
+                elif k not in keys:
+                    keys.append(k)
+            themen.append((nr, titel, keys))
+
+    kapitel = None
+    if analyse_pfad:
+        at = open(analyse_pfad, encoding="utf-8").read()
+        kapitel = {_tnorm(m.group(2)): int(m.group(1)) for m in re.finditer(
+            r"^##\s+Kapitel\s+(\d+)\s+·\s+(.+?)\s*$", at, re.M)}
+
+    nq = len(qb) - 1
+    quartale = {q: {} for q in range(1, nq + 1)}
+    ohne_kapitel, ohne_zaehl = [], []
+    for nr, titel, keys in themen:
+        kn = nr if kapitel is None else kapitel.get(_tnorm(titel))
+        if kn is None:
+            ohne_kapitel.append((nr, titel))
+            continue
+        zaehlend = [e for k in keys for e in ev[k]
+                    if e.get("primaer") or e.get("selbst_transit")]
+        if not zaehlend:
+            ohne_zaehl.append(nr)
+            continue
+        for q in range(1, nq + 1):
+            a, b = qb[q - 1], qb[q]                    # [a, b)
+            exakt = sorted({d[:10] for e in zaehlend for d in e.get("exakt") or []
+                            if a <= _date.fromisoformat(d[:10]).toordinal() < b})
+            tage = set()
+            for e in zaehlend:
+                for von, bis in e.get("wirkorb_perioden") or []:
+                    v = max(_date.fromisoformat(von[:10]).toordinal(), a)
+                    w = min(_date.fromisoformat(bis[:10]).toordinal(), b - 1)
+                    tage.update(range(v, w + 1))
+            if exakt or len(tage) >= tage_min:
+                quartale[q][kn] = {"exakt": exakt, "tage": len(tage)}
+    zeilen = ["Q%d | dicht=%s | marke=" % (q, ",".join(str(k) for k in
+                                                   sorted(quartale[q])))
+              for q in range(1, nq + 1)]
+    return {"zeilen": zeilen, "quartale": quartale,
+            "ohne_kapitel": ohne_kapitel, "unbekannt": unbekannt,
+            "ohne_zaehlkontakt": ohne_zaehl}
+
+
 GLYPH_ZU_ASPEKT = {"☌": "Konjunktion", "☍": "Opposition", "□": "Quadrat",
                    "△": "Trigon", "⚹": "Sextil", "⚻": "Quincunx",
                    "⚺": "Halbsextil"}
@@ -2926,7 +3099,7 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     Warum es sie gibt: `kontakt_heimat()` zählt ALLE primären Wirkorb-Kontakte
     des Rechenfensters — bei `--months 24` also über zwei Jahre. Ein
     Transit-Horoskop deutet davon nur seine Kapitel. Damit die Probe grün läuft, ohne dass etwas stillschweigend
-    verschwindet, trägt das Datenblatt hinter `GESTRICHEN:` je eine Zeile für
+    verschwindet, trägt das Datenblatt hinter dem Ressourcen-Block je eine Zeile für
     jeden Fensterkontakt OHNE Kapitel. Diese Liste ist eine reine Subtraktion
     aus Daten, die der Builder ohnehin hat, und wurde trotzdem je Lauf von Hand
     gefiltert — im Prüflauf vom 15.09. mit einem geratenen Feldnamen
@@ -3034,7 +3207,8 @@ def transit_rechenschaft_block(chart_data_pfad: str, events_json_pfad: str,
                                orb_wirk: float = 1.5, typ: str = None) -> str:
     """Der fertige Block samt Kopfzeile — 1:1 ans Ende des `chart_data`.
 
-    Gehört hinter `GESTRICHEN:`. Nach dem Einfügen läuft
+    Gehört hinter den Ressourcen-Block (Transit-Modul: Themenliste,
+    Ressourcen, dieser Block). Nach dem Einfügen läuft
     `kontakt_heimat_bericht()` grün; die Zeilen tragen den `T-`-Präfix, an dem
     die Probe seit dem 14.09. eine Transit-Zeile erkennt. Was die Zeilen sagen
     und `typ=`: s. transit_rechenschaft(). Die Kopfzeile nennt seit
@@ -3369,8 +3543,10 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
                      orb_wirk: float = None) -> str:
     """Der fertige Abschnitt `## Ressourcen` — 1:1 ins chart_data.
 
-    Gehoert hinter die Themenliste und vor den Abschnitt „Aspekte ohne
-    Deutungs-Heimat". Der Deutungsort bleibt hinter jeder Zeile leer und wird
+    Gehoert hinter die Themenliste — im Geburtshoroskop vor den Abschnitt
+    „Aspekte ohne Deutungs-Heimat", im Transit vor den Block
+    `TRANSIT-RECHENSCHAFT:`. Der Deutungsort bleibt hinter jeder Zeile
+    leer und wird
     von Hand gesetzt; ohne ihn ist der Block unfertig (Datenblatt-Modul).
     Parameter wie ressourcen_liste(): im Transit-Horoskop
     `ressourcen_block(chart_data, events_json_pfad=<events.json>)` — dann
@@ -3755,6 +3931,60 @@ def _selbsttest():
         pruefe("Gelesen wird: Heimat in fuehrt= und aspekte=" in
                kontakt_heimat_bericht(pq, evj), "W9: Lesehinweis im Bericht fehlt")
 
+        # --- T11 (2026-09-25): dicht= je Thema, ein Tag zaehlt einmal -------
+        def dev(t, a, z, exakt=(), wirk=(), **kw):
+            e = dict(transit=t, aspekt=a, ziel=z, exakt=list(exakt),
+                     wirkorb_perioden=[list(p) for p in wirk], primaer=True,
+                     spiegel=False, selbst_transit=False)
+            e.update(kw)
+            return e
+        dj = datei("d_events.json", json.dumps({"quarter_bounds": [
+            "2031-01-01", "2031-04-01", "2031-07-01", "2031-10-01",
+            "2032-01-01", "2032-04-01"], "events": [
+            dev("Saturn", "Quadrat", "Sonne", exakt=["2031-03-02"]),
+            dev("Jupiter", "Trigon", "Mond", wirk=[("2031-05-01", "2031-07-20")]),
+            dev("Knoten", "Konjunktion", "Mondknoten", exakt=["2031-10-05"],
+                primaer=False, selbst_transit=True),
+            dev("Jupiter", "Sextil", "Merkur", primaer=False,
+                wirk=[("2031-01-01", "2032-03-31")]),
+            dev("Uranus", "Trigon", "Venus", wirk=[("2032-01-01", "2032-01-20")]),
+            dev("Chiron", "Konjunktion", "Venus",
+                wirk=[("2032-01-10", "2032-01-29")]),
+            dev("Saturn", "Sextil", "DC", spiegel=True, exakt=["2031-08-01"])]}))
+        dt_ = datei("d_Transit_chart_data.md", (
+            "## Themenliste\n\n"
+            "THEMA 1 | titel=Erstes Thema | fuehrt=T-Saturn □ R-Sonne | "
+            "aspekte=T-Jupiter △ R-Mond | klingt=T-Saturn ⚹ R-DC\n"
+            "THEMA 2 | titel=Zweites Thema | aspekte=T-Mondknoten ☌ "
+            "R-Mondknoten, T-Jupiter ⚹ R-Merkur\n"
+            "THEMA 3 | titel=Drittes Thema\n  | aspekte=T-Uranus △ R-Venus, "
+            "T-Chiron ☌ R-Venus\n"
+            "THEMA 4 | titel=Ohne Kapitel | aspekte=T-Pluto □ R-Mars\n\n"
+            "RECHENSCHAFT: konstruiert.\nGESTRICHEN: keine.\n"))
+        da = datei("d_Transit_analyse.md", (
+            "# Transit-Horoskop — Alex Muster\n\n"
+            "## Kapitel 1 · Zweites Thema\n\nText.\n\n"
+            "## Kapitel 2 · Erstes  thema\n\nText.\n\n"
+            "## Kapitel 3 · Drittes Thema\n\nText.\n"))
+        dq = dichte_quartale(dt_, dj, da)
+        pruefe(dq["zeilen"] == ["Q1 | dicht=2 | marke=", "Q2 | dicht=2 | marke=",
+                                "Q3 | dicht= | marke=", "Q4 | dicht=1 | marke=",
+                                "Q5 | dicht= | marke="]
+               and dq["quartale"][2][2]["tage"] == 61,
+               "T11: Zeilen: %r" % dq["zeilen"])
+        pruefe(dq["ohne_kapitel"] == [(4, "Ohne Kapitel")]
+               and dq["unbekannt"] == [(4, "Pluto Quadrat Mars")]
+               and not dq["ohne_zaehlkontakt"], "T11: Listen: %r" % dq)
+        pruefe(dichte_quartale(dt_, dj, da, tage_min=29)["zeilen"][4]
+               == "Q5 | dicht=3 | marke=", "T11: Tage je Thema nicht vereinigt")
+        dq = dichte_quartale(dt_, dj)
+        pruefe(dq["zeilen"][:4] == ["Q1 | dicht=1 | marke=",
+                                    "Q2 | dicht=1 | marke=",
+                                    "Q3 | dicht= | marke=",
+                                    "Q4 | dicht=2 | marke="]
+               and dq["ohne_zaehlkontakt"] == [4],
+               "T11: ohne analyse: %r" % dq)
+
         # --- F18: Achsen-Spiegel im Ressourcen-Block (Radix) ----------------
         rtab = "\n".join([
             "### Volle Aspekte (3)", "",
@@ -3830,7 +4060,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61)")
+          "L16, F18, F2, W47, W61, T11, T12)")
 
 
 def _selbsttest_verify(tmp, pruefe):
@@ -3898,6 +4128,33 @@ def _selbsttest_verify(tmp, pruefe):
         pruefe(False, "W47: vertauschte Kapitel nicht erkannt")
     except VerifyError as e:
         pruefe("REIHENFOLGE" in str(e), "W47: Reihenfolge-Meldung: %s" % e)
+
+    # T12 (2026-09-25): Pruef-Teilmenge ohne Inhaltsseite und ohne Anhang
+    try:
+        import pypdf  # noqa: F401
+    except ImportError:
+        print("  (T12: pypdf fehlt — pruef_teilmenge uebersprungen)")
+        return
+
+    def sek(anker, text):
+        return '<section id="%s"><p>%s</p></section>' % (anker, text)
+    tm = pruef_teilmenge(pdf("t12.pdf", sek("PG_cover", "Cover"),
+                             sek("PG_inhalt", "Inhalt"), sek("CH_0", "Eins."),
+                             sek("CH_1", "Zwei."), sek("PG_anh1", "A1"),
+                             sek("PG_anh2", "A2")))
+    pruefe(tm["inhalt"] == [2] and tm["anhang"] == [5, 6] and tm["seiten"] == 6
+           and tm["teilmenge"] == 3 and os.path.isfile(tm["pfad"]),
+           "T12: Teilmenge falsch: %r" % tm)
+    tm = pruef_teilmenge(pdf("t12b.pdf", sek("PG_inhalt", "Inhalt"),
+                             sek("CH_0", "Eins.")),
+                         out=os.path.join(tmp, "t12b_x.pdf"))
+    pruefe(tm["inhalt"] == [1] and tm["anhang"] == [] and tm["teilmenge"] == 1,
+           "T12: ohne Anhang: %r" % tm)
+    try:
+        pruef_teilmenge(pdf("t12c.pdf", sek("CH_0", "Eins.")))
+        pruefe(False, "T12: PDF ohne PG_inhalt nicht abgebrochen")
+    except BuildError:
+        pass
 
 
 # ---------------------------------------------------------------------------
