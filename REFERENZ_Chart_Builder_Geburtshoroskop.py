@@ -396,7 +396,7 @@ def konst_zeilen():
             continue
         if n not in _BY:
             raise SystemExit(f'konst_zeilen(): Faktor {n!r} fehlt in chartdata.factors '
-                             '— der chartdata.py-Vertrag (Datenblatt-Modul) verlangt '
+                             '— der chartdata.py-Vertrag (Design-Render-Modul) verlangt '
                              'ihn; in Schritt 3 melden, nicht ueberspringen.')
         f = _BY[n]
         lauf = 'rückläufig' if f['retro'] else 'direkt'

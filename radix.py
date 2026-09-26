@@ -131,7 +131,7 @@ Verwendung als Modul (Schritt 3/4, Design-Konversation):
 WICHTIG: matplotlib wird bei Bedarf automatisch nachinstalliert. Der Container
 wird zwischen Sessions zurückgesetzt — diese Datei liegt darum im Projektwissen.
 Braucht KEIN pyswisseph (bekommt fertige Positionen); die Ephemeride-Rechnung
-(Pholus, True Node) passiert in Schritt 1, s. Datenblatt-Modul. Einzige
+(Pholus, True Node) passiert in Schritt 1, s. Modul Radixrechnung. Einzige
 Ausnahmen: `pluto_quadrat_alter()` und `kippminuten()` rechnen selbst mit
 pyswisseph, wenn es da ist — sonst geben sie None zurück, und
 `strukturbild_text()` sagt das ausdrücklich.
@@ -146,8 +146,8 @@ import sys
 SIGN_GLYPHS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓']
 _ELEM_OF_SIGN = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]  # Feuer, Erde, Luft, Wasser
 
-# Das 'glyph'-Feld je Faktor, wie der chartdata.py-Vertrag (Datenblatt-Modul)
-# und die Pruefliste des Design-Moduls es verlangen: EIN font-gedecktes
+# Das 'glyph'-Feld je Faktor, wie der chartdata.py-Vertrag (Design-Render-
+# Modul) es verlangt: EIN font-gedecktes
 # Zeichen oder ein Kuerzel — 'Pho' fuer Pholus, 'AC'/'MC'/'DC'/'IC' fuer die
 # Achsen. Neu 2026-09-19 (F24): Im Transit-Prueflauf vom 18.09. trugen die
 # Achsen im factors-Block eine LEERE Glyphe; ein leerer String macht einen
@@ -178,7 +178,7 @@ DEFAULT_PALETTE = {
     'grund': '#f8f4ec',   # Bildhintergrund = Papierfarbe des Dokuments
 }
 
-# Aspekt-Orbis pro Faktor (individuelle Seite; Details im Datenblatt-Modul).
+# Aspekt-Orbis pro Faktor (individuelle Seite; Details im Modul Radixrechnung).
 #
 # Stand 2026-09-15, Chris-Entscheidung nach dem Orbis-Recherchelauf
 # (BEFUND_Orbis_2026-09-15). Vorher: 8/8/8 - 6/6 - 4/4 - 3/3/3, Achsen 9,
@@ -554,7 +554,7 @@ def _gr(deg):
 
 def gr_zeichen(lon):
     """Stand im Zeichen als N°NN′ — die Vertragsfunktion `gr` der chart-eigenen
-    chartdata.py (Datenblatt-Modul, „chartdata.py — der Vertrag": ein Einzeiler
+    chartdata.py (Design-Render-Modul, „chartdata.py — der Vertrag": ein Einzeiler
     hierauf) und die Rundung der Ständetabelle. Nimmt die ekliptikale Laenge oder
     schon den Rest `lon % 30` und rundet einmal auf die Bogenminute. Was auf 30°00′
     runden wuerde, bleibt 29°59′: Der Faktor steht noch im alten Zeichen, und
@@ -668,7 +668,7 @@ def glyphen_ergaenzen(factors, melden=True):
                 # laesst `factors` unveraendert. Wer sie ohne Zuweisung rief,
                 # las eine Erfolgsmeldung und rendert mit leerem Feld weiter.
                 print("  ! GLYPHE: %r hat ein leeres 'glyph'-Feld — in der "
-                      "RUECKGABE auf %r gesetzt (Vertrag, Datenblatt-Modul). "
+                      "RUECKGABE auf %r gesetzt (Vertrag, Design-Render-Modul). "
                       "Wirkt nur mit Zuweisung: factors = "
                       "radix.glyphen_ergaenzen(factors). Im factors-Block der "
                       "chart_data nachziehen." % (g.get('name'), ersatz))

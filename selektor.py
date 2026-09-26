@@ -33,8 +33,9 @@ FAKTOR_ALIAS).
 
 FUEHRT-FELD (seit 2026-09-06): Traegt eine FAKTOR-Zeile `fuehrt=ja`, fuehrt
 dieser Faktor laut Themenliste ein Kapitel. Zwei Wirkungen: (a) bei der SONNE
-wandert das Sonnenzeichen-Kapitel in die gelesene Gruppe 'Sonnenzeichen' statt
-in die ueberspringbare 'Sonnenzeichen-Hintergrund'; (b) der Grenzlagen-Warnblock
+wandert das GANZE Sonnenzeichen-Kapitel in die gelesene Gruppe 'Sonnenzeichen'
+statt nur seiner Kernabschnitte in die ueberspringbare 'Sonnenzeichen-Hintergrund'
+(s. SONNENZEICHEN-KERN); (b) der Grenzlagen-Warnblock
 sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob beide nur angegeben
 werden (Registerzeile). Ohne das Feld verhaelt sich alles wie zuvor — das Feld
 ist optional und additiv.
@@ -61,6 +62,16 @@ Der Transit-Lauf vom 22.09.c las dort rund 120 KB, die nichts trugen. Die
 'Spezialfaktor-Methodik' bleibt — aus ihr kamen zwei gebrauchte Aspekt-Stellen —,
 und fuehrt die Sonne ein Thema (`fuehrt=ja`), bleibt das Sonnenzeichen-Kapitel in
 der gelesenen Gruppe 'Sonnenzeichen'. Im Nur-Liste-Modus gilt dasselbe.
+
+SONNENZEICHEN-KERN (seit 2026-09-26, Aufraeumlauf Ladekosten II, Block D;
+Chris-Freigabe 26.09.): Fuehrt die Sonne im Geburtshoroskop KEIN Thema, zieht
+der Selektor aus ihrem Sonnenzeichen-Kapitel nur die Abschnitte aus
+SONNENZEICHEN_KERN — das Material fuer den Sonnen-Block des Instrument-Kapitels.
+Psychologie, Lernaufgabe, Lebensziel und das Symbol-Kapitel tragen Muster, Wurzel
+und Entwicklung; die braucht nur ein Themenkapitel, und dafuer zieht `fuehrt=ja`
+das ganze Kapitel. Kopf der referenz.md und Auswahl-Protokoll nennen, was nicht
+gezogen ist. Lassen sich die Abschnitte nicht eindeutig erkennen, kommt das ganze
+Kapitel (wie beim Zeichenschnitt).
 
 FEHLSTELLEN (eindeutig seit 2026-09-19, W36): Ein angeforderter Aspekt, fuer den
 die Bibliothek keinen Block fuehrt (Spezialfaktor mit Spezialfaktor, Achse mit
@@ -714,7 +725,9 @@ GRUPPEN = ['Planet-in-Zeichen', 'Planet-in-Haus', 'Haus-Allgemein', 'Achsen',
 # und in jedem Lauf mit demselben Sonnenzeichen identisch; die chart-spezifische
 # Stellung traegt der getrennte Block SONNE_IN_<Zeichen>. Fuehrt die Sonne ein
 # Thema (`fuehrt=ja`), bleibt das Kapitel in der normal zu lesenden Gruppe
-# `Sonnenzeichen` — dort traegt es die Deutung tatsaechlich mit.
+# `Sonnenzeichen` — dort traegt es die Deutung tatsaechlich mit. Seit dem
+# 2026-09-26 steht in `Sonnenzeichen-Hintergrund` nur noch der Kern (s.
+# SONNENZEICHEN_KERN).
 UEBERSPRINGBAR = ('Sonnenzeichen-Hintergrund', 'Grundlagen',
                   'Spezialfaktor-Methodik')
 
@@ -723,6 +736,17 @@ UEBERSPRINGBAR = ('Sonnenzeichen-Hintergrund', 'Grundlagen',
 # referenz.md standen rund 120 KB, die nichts trugen. Die Spezialfaktor-Methodik
 # fehlt hier absichtlich — aus ihr kamen zwei gebrauchte Aspekt-Stellen.
 NICHT_IM_TRANSIT = ('Sonnenzeichen-Hintergrund', 'Grundlagen')
+
+# Kernabschnitte des Sonnenzeichen-Kapitels bei nicht fuehrender Sonne
+# (2026-09-26, Aufraeumlauf Ladekosten II, Block D; Chris-Freigabe 26.09.).
+# Anfaenge der Abschnittstitel zwischen den ─-Linien der Bibliothek. Behalten:
+# Schluesselsatz (nur Fische), Eigenschaften samt Schattenseite, Thema, Antrieb —
+# das braucht der Sonnen-Block des Instrument-Kapitels (Kern, Koennen, Schatten in
+# je einem Satz). Weg: Psychologie, Lernaufgabe, Lebensziel, Symbol. Der
+# Pruefbericht Geburtshoroskop 1+2 vom 26.09. las 100 Zeilen und brauchte wenige
+# Saetze; gespart werden je Zeichen rund 9 bis 17 KB.
+SONNENZEICHEN_KERN = ('BOTSCHAFT', 'CHARAKTERISTIKA', 'THEMA', 'MOTIVATION')
+_SZ_LINIE = re.compile(r'^\s*─{10,}\s*$')
 
 
 # Zeichen-Tabellen, aus denen nur die eigene Zeile gebraucht wird.
@@ -775,6 +799,39 @@ def _zeichenschnitt(text, praefix_muster, zeichen):
     return '\n'.join(behalten).rstrip() + '\n', gespart
 
 
+def _sonnenzeichen_kern(text):
+    """Kopf + Kernabschnitte (SONNENZEICHEN_KERN) eines Sonnenzeichen-Kapitels.
+
+    Ein Abschnitt beginnt mit einer Titelzeile zwischen zwei ─-Linien und reicht
+    bis zur naechsten. Rueckgabe (neuer_text, gespart_zeilen, behalten, weg) —
+    behalten/weg sind die Abschnittstitel. Findet sich kein Abschnitt, kein
+    Kernabschnitt oder nichts zum Weglassen, kommt der Text unveraendert zurueck
+    (gespart 0): ein Schnitt, der nicht sicher ist, findet nicht statt.
+    """
+    zeilen = text.split('\n')
+    koepfe = [i - 1 for i in range(1, len(zeilen) - 1)
+              if _SZ_LINIE.match(zeilen[i - 1]) and _SZ_LINIE.match(zeilen[i + 1])
+              and zeilen[i].strip() and not _SZ_LINIE.match(zeilen[i])]
+    if not koepfe:
+        return text, 0, [], []
+    neu, behalten, weg = zeilen[:koepfe[0]], [], []
+    for n, start in enumerate(koepfe):
+        ende = koepfe[n + 1] if n + 1 < len(koepfe) else len(zeilen)
+        titel = zeilen[start + 1].strip()
+        kurz = titel.split(' (')[0]
+        if titel.upper().startswith(SONNENZEICHEN_KERN):
+            neu.extend(zeilen[start:ende])
+            behalten.append(kurz)
+        else:
+            weg.append(kurz)
+    if not behalten or not weg:
+        return text, 0, [], []
+    gespart = len(zeilen) - len(neu)
+    neu_text = ('\n'.join(neu).rstrip() + '\n\n[Sonnenzeichen-Kern — die Sonne fuehrt '
+                'kein Thema; nicht gezogen: %s]\n' % ' · '.join(weg))
+    return neu_text, gespart, behalten, weg
+
+
 def select(chart_text, blocks_ref, typ=None):
     """blocks_ref = Verzeichnis blocks/ ODER Bündeldatei blocks_bundle.txt.
     typ: None oder 'transit' — s. build_requests() und NICHT_IM_TRANSIT."""
@@ -819,6 +876,17 @@ def select(chart_text, blocks_ref, typ=None):
                 else:
                     prot.append('ZEICHENSCHNITT %s -> nicht geschnitten '
                                 '(Zeile nicht eindeutig), ganzer Block' % key)
+            if (gruppe == 'Sonnenzeichen-Hintergrund'
+                    and key.startswith('SONNENZEICHEN_')):
+                _txt, _gespart, _beh, _weg = _sonnenzeichen_kern(_txt)
+                if _gespart:
+                    chart['sonnenzeichen_kern'] = (key, _beh, _weg)
+                    prot.append('SONNENZEICHEN-KERN %s -> %d Zeilen gespart '
+                                '(nicht gezogen: %s)'
+                                % (key, _gespart, ' · '.join(_weg)))
+                else:
+                    prot.append('SONNENZEICHEN-KERN %s -> nicht geschnitten '
+                                '(Abschnitte nicht eindeutig), ganzes Kapitel' % key)
             ordered.append((gruppe, src, key, note, _txt))
     return chart, req, prot, ordered, missing, grenz
 
@@ -881,6 +949,13 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
         out.append('> TRANSIT: Grundlagen und ein nicht fuehrendes '
                    'Sonnenzeichen-Kapitel sind nicht gezogen —')
         out.append('> sie trugen im Transit nichts (s. selektor.NICHT_IM_TRANSIT).')
+    if chart.get('sonnenzeichen_kern'):
+        _k, _beh, _weg = chart['sonnenzeichen_kern']
+        out.append('>')
+        out.append('> SONNENZEICHEN-KERN: Die Sonne fuehrt kein Thema — aus %s sind nur '
+                   '%s gezogen,' % (_k, ' · '.join(_beh)))
+        out.append('> nicht gezogen: %s. Fuer den Sonnen-Block des Instrument-Kapitels '
+                   'wird der Kern gelesen.' % ' · '.join(_weg))
     _skip = [(g, _z[g]) for g in UEBERSPRINGBAR if _z.get(g)]
     if _skip:
         out.append('>')
@@ -1204,6 +1279,47 @@ def _selbsttest():
     assert 'TRANSIT: Grundlagen' in md_tk and 'TRANSIT: Grundlagen' not in md
     # Ausserhalb des Transits unveraendert
     assert build_requests(parse_chart(blk))[0] == req
+    # Block D II (2026-09-26): Sonnenzeichen-Kern bei nicht fuehrender Sonne.
+    # Konstruiertes Kapitel — Platzhaltertext, kein Bibliothekstext.
+    _L = '─' * 64
+    def _abschnitt(titel, inhalt):
+        return '\n'.join(['', _L, titel, _L, '', inhalt, ''])
+    _kap = '\n'.join(['WIDDER ♈ – SONNENZEICHEN', '=' * 25, '', 'HINWEIS: Muster.'])
+    for _ti, _in in (('CHARAKTERISTIKA (Auszug – Beginn fehlt)', 'kkk'),
+                     ('THEMA', 'ttt'), ('MOTIVATION', 'mmm'),
+                     ('PSYCHOLOGIE', 'ppp'), ('LERNAUFGABE', 'lll'),
+                     ('LEBENSZIEL', 'zzz'), ('DAS WIDDER-SYMBOL', 'sss')):
+        _kap += _abschnitt(_ti, _in)
+    _neu, _gesp, _beh, _weg = _sonnenzeichen_kern(_kap)
+    assert _beh == ['CHARAKTERISTIKA', 'THEMA', 'MOTIVATION'], _beh
+    assert _weg == ['PSYCHOLOGIE', 'LERNAUFGABE', 'LEBENSZIEL', 'DAS WIDDER-SYMBOL'], _weg
+    assert _gesp > 0 and 'HINWEIS: Muster.' in _neu
+    assert all(x in _neu for x in ('kkk', 'ttt', 'mmm'))
+    assert not any(x in _neu for x in ('ppp', 'lll', 'zzz', 'sss'))
+    assert _sonnenzeichen_kern('ohne Abschnitte\nnur Text') == \
+        ('ohne Abschnitte\nnur Text', 0, [], [])
+    _nur_kern = _abschnitt('THEMA', 'ttt') + _abschnitt('MOTIVATION', 'mmm')
+    assert _sonnenzeichen_kern(_nur_kern)[1] == 0     # nichts wegzulassen
+    import tempfile
+    with tempfile.TemporaryDirectory() as _td:
+        _bpfad = os.path.join(_td, 'bundle.txt')
+        with open(_bpfad, 'w', encoding='utf-8') as _f:
+            _f.write('@@FILE=Widder_Sonnenzeichen.txt@@\n'
+                     '@@BLOCK key=SONNENZEICHEN_WIDDER@@\n' + _kap + '\n')
+        def _sz_text(chart_text, typ=None):
+            _c, _r, _p, _o, _m, _g = select(chart_text, _bpfad, typ)
+            _t = [o[4] for o in _o if o[2] == 'SONNENZEICHEN_WIDDER']
+            return (_t[0] if _t else None), _p, _c
+        _tx, _p, _c = _sz_text(blk_h)                 # Sonne fuehrt nicht
+        assert 'ttt' in _tx and 'ppp' not in _tx, _tx
+        assert sum(x.startswith('SONNENZEICHEN-KERN') for x in _p) == 1
+        _md = assemble_md(_c, [], _p, [], [])
+        assert 'SONNENZEICHEN-KERN: Die Sonne fuehrt kein Thema' in _md
+        _tx, _p, _c = _sz_text(blk)                   # Sonne fuehrt: ganzes Kapitel
+        assert 'ppp' in _tx and 'sss' in _tx and 'sonnenzeichen_kern' not in _c
+        assert 'SONNENZEICHEN-KERN' not in assemble_md(_c, [], _p, [], [])
+        _tx, _p, _c = _sz_text(blk_h, 'transit')      # Transit: gar nicht gezogen
+        assert _tx is None
     # W40: Nur-Liste-Modus ohne Bibliothek
     r = referenzliste(blk)
     assert r['fehlt'] is None and 'Sonne_Aspekte.txt' in r['dateien']
@@ -1212,7 +1328,7 @@ def _selbsttest():
     print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
           'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
-          'Transit-Schnitt (Block D)]')
+          'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II)]')
 
 
 def main():

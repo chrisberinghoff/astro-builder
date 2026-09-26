@@ -27,8 +27,8 @@ Kontakte werden im WEITEN Orb erfasst und mit `im_wirkorb` markiert
 Jetzt-Teil darf die weiteren als Anmarsch/Ausklang nennen.
 
 Transit-Chiron wird automatisch mitgerechnet, WENN die Asteroiden-Ephemeride
-(seas_*.se1) verfuegbar ist; sonst sauber ausgeklammert (Radix-Chiron bleibt
-immer Ziel). Hauptplaneten laufen ueber die Moshier-Ephemeride — ohne externe
+(seas_*.se1) verfuegbar ist; sonst bricht der Lauf ab (seit 2026-09-06; bewusst
+ohne Chiron: --ohne-chiron). Radix-Chiron bleibt immer Ziel. Hauptplaneten laufen ueber die Moshier-Ephemeride — ohne externe
 Dateien, bogenminutengenau.
 
 SEIT 30.07.2026 (Fehlerkorrektur): Der Ephemeriden-Suchpfad wird beim Import
@@ -196,7 +196,7 @@ NACHWIRK = {'Mars':21,'Jupiter':60,'Knoten':90,'Saturn':120}
 # REPARATUR 2026-09-18 (Pruefbericht Transit Schritt 1+2 2026-09-17, Klasse 1
 # Nr. 1.1; Betreiber-Entscheidung 18.09.: `Mondknoten` ist der Zielname).
 # Vorher: {'Knoten':'Nordknoten'} — die Abbildung ging vom ALTEN factors-Namen
-# `Knoten` aus. Der chartdata.py-Vertrag des Datenblatt-Moduls schreibt seit der
+# `Knoten` aus. Der chartdata.py-Vertrag (Design-Render-Modul) schreibt seit der
 # Vertragsnamen-Umstellung `Mondknoten` vor; bei einem vertragskonformen Block
 # lief NAME_MAP deshalb leer, das Ziel hiess `Mondknoten`, und `--primary
 # Nordknoten` brach hart ab, obwohl Transit-Modul und Fehlermeldung genau
@@ -849,7 +849,7 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
             "unbekannte primaere Ziele: %s\n"
             "  Erlaubt sind die Namen der Radix-Punkte: %s\n"
             "  Haeufige Verwechslung: der Mondknoten heisst hier `Mondknoten` "
-            "(Vertragsname des Datenblatt-Moduls); `Knoten` und `Nordknoten` "
+            "(Vertragsname, chartdata.py-Vertrag im Design-Render-Modul); `Knoten` und `Nordknoten` "
             "werden still darauf abgebildet." % (", ".join(unbekannt),
                                                  ", ".join(sorted(radix))))
     primary = set(PERSONAL) | set(primary_extra or [])

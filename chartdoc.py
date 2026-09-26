@@ -182,7 +182,7 @@ def name_of(n):
     """Ausgeschriebener Faktorname fuer Tabellen — die per konfiguriere(name_of=
     cd.name_of) gesetzte Funktion der chart-eigenen chartdata.py. In einer
     englischen Fassung geht der Name danach durch anzeige() (seit 2026-09-26):
-    Die chartdata.py bleibt deutsch, wie der Vertrag im Datenblatt-Modul sie
+    Die chartdata.py bleibt deutsch, wie der Vertrag im Design-Render-Modul sie
     beschreibt; uebersetzt wird erst beim Anzeigen."""
     return anzeige(_CFG['name_of'](n))
 
@@ -821,7 +821,7 @@ ORBIS_ZEILE = ('Orbis nach Faktor: Sonne, Mond 8° · Merkur, Venus, Jupiter 6°
                'enger, auf beide Faktor-Orbis gedeckelt.')
 
 # Aspektarten AUSSERHALB des Huber-Systems, die ein Chart bewusst in die
-# Tabelle haengen kann (Datenblatt-Modul, „Zusatzebene"). Sie stehen nicht im
+# Tabelle haengen kann (Modul Radixrechnung, „Zusatzebene"). Sie stehen nicht im
 # Rad und tragen darum keine der vier Radfarben. Erklaert werden sie
 # trotzdem — der Klartext-Standard verlangt, dass jedes sichtbare Zeichen im
 # Dokument einmal benannt wird (Befund 2026-09-06).
@@ -2008,7 +2008,7 @@ def _fac(name):
     Name, kein Symbol. Vorher rutschte jede andere nicht-symbolische Glyphe
     wortlos durch — `{'name':'Pholus','glyph':'Pholus'}` haette in jeder
     Aspektzeile „Pholus Pholus" gesetzt (Pruefbericht EA 2026-09-08, 1.3
-    und 4.2). Der Vertrag im Datenblatt-Modul verlangt weiterhin 'Pho'; diese
+    und 4.2). Der Vertrag im Design-Render-Modul verlangt weiterhin 'Pho'; diese
     Pruefung ist das Netz darunter, nicht ihr Ersatz.
     """
     if name in ('AC', 'MC', 'DC', 'IC'):
