@@ -45,6 +45,15 @@ SECHS DINGE, DIE HIER BEWUSST SO STEHEN:
     rendern am KAPITELENDE. Fehlt der Aufruf, bricht render_mit_inhalt() hart
     ab — sonst verschwaenden Signatur und Beleg lautlos aus dem Dokument.
 
+ENGLISCHE FASSUNG (seit 2026-09-26): SPRACHE = 'en' setzen, SIGNATUR_EN
+fuellen (je Kapitel die Signatur, deutsch -> englisch) und, wo der Beleg nicht
+mechanisch uebersetzbar ist, BELEG_EN. Seitenlabels, Verzeichnis, Uhr,
+Zeitleiste, Anhang, Fussnoten, Namen und Daten sowie Signatur und Beleg stehen
+dann englisch; die analyse.md behaelt Signatur und Beleg deutsch. Die
+Kapitelkicker duerfen deutsch oder englisch sein (Zur Lesart / On Reading
+This, Kapitel n / Chapter n, Schlusswort / Closing Word). Verfahren: Modul
+Sprachfassung.
+
 Aufruf:  python3 <klient>_builder.py
 Geprueft wird beim Rendern automatisch: build.PFLICHT_BAUSTEINE fuer den
 uebergebenen doctype (hier 'transit').
@@ -76,10 +85,18 @@ OUT = '/home/claude/<klient>_Transit_Horoskop.pdf'
 JD_GEBURT = None          # <<JD (UT) aus dem Kopf der chart_data>>
 LAT, LON = None, None     # <<Breite, Laenge aus dem Kopf der chart_data>>
 # Weitere Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
-# (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag.
+# (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag; in einer
+# englischen Fassung der Satz englisch (von Hand, sinngleich).
 FUSSNOTEN_EXTRA = []
 # Geburtszeile des Covers — Platzhalter mit Abbruch in __main__.
-GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …)
+GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …); englisch Monat englisch, '<D> <MONTH> <YYYY> · …'
+# Sprache des PDFs (2026-09-26): 'de' oder 'en' (Modul Sprachfassung). Bei 'en'
+# SIGNATUR_EN fuellen — Schluessel ist die deutsche Signatur der analyse.md,
+# Wert die englische; BELEG_EN nur fuer einen Beleg, den die mechanische
+# Uebersetzung nicht schafft, Schluessel ist der GANZE deutsche Beleg.
+SPRACHE = 'de'
+SIGNATUR_EN = {}
+BELEG_EN = {}
 
 tdat.setze_quelle(CHARTDATA)
 from build import BASE_CSS                     # noqa: E402
@@ -99,8 +116,10 @@ ORNAMENT = DECKBLATT['GLYPHEN']             # Teiler-Seiten + Inhaltsverzeichnis
 
 PART_KICKER = set()       # Transit: keine Teiler-Kapitel
 # Eigene Seite (kein Teiler-Layout); das Schlusswort bewusst NICHT. Der
-# Auftakt des Transits heisst `Zur Lesart`.
-OPEN_PAGE = {'Zur Lesart'}
+# Auftakt des Transits heisst `Zur Lesart` (englisch `On Reading This`).
+OPEN_PAGE = {'Zur Lesart', 'On Reading This'}
+# Vor dem Schlusswort steht die Zeitleiste (Design-Zeitebene-Modul).
+SCHLUSS_KICKER = ('Schlusswort', 'Closing Word')
 
 # Breitenleiter fuer die Einmessung von Radseite und Transit-Uhr: 15,6 cm
 # abwaerts in 0,2-cm-Schritten.
@@ -137,9 +156,13 @@ PAL = {'night': NIGHT, 'petrol': PETROL, 'petrol_l': PETROL_L, 'deep': DEEP,
 GLYPH_OF = {f['name']: f['glyph'] for f in cd.factors}
 GLYPH_OF.update({'Suedknoten': '☋'})
 
+# sprache= VOR tdat.parse() weiter unten: parse() baut die Monatsspannen der
+# Zeitleiste beim Lesen, in der Sprache, die dann gilt.
 chartdoc.konfiguriere(pal=PAL, part_kicker=PART_KICKER, glyphen=GLYPH_OF,
                       gr=cd.gr, name_of=cd.name_of, kopfzeile=VORNAME.upper(),
-                      aspektfarben=RAD_PALETTE, part_ornament=ORNAMENT)
+                      aspektfarben=RAD_PALETTE, part_ornament=ORNAMENT,
+                      sprache=SPRACHE, signaturen_en=SIGNATUR_EN,
+                      belege_en=BELEG_EN)
 esc = chartdoc.esc
 
 COVER_CSS = f"""
@@ -351,12 +374,20 @@ for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
         _BY[_a] = _BY[_b]
 
 # Datum und Zone wie GEBURTSZEILE (Tag ohne fuehrende Null), hier in Normalschrift.
-RAD_NOTE = (f'{VORNAME} · <T. Monat JJJJ, HH:MM ZONE> · <Ort> · '
-            'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
-            'nach Huber-Orbis')
-KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
-              'Hausspitze und wird in beiden Häusern gedeutet — das führende '
-              'Haus steht vorn.')
+RAD_NOTE = {
+    'de': (f'{VORNAME} · <T. Monat JJJJ, HH:MM ZONE> · <Ort> · '
+           'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
+           'nach Huber-Orbis'),
+    'en': (f'{VORNAME} · <D Month YYYY, HH:MM ZONE> · <Place> · '
+           'Koch houses · true lunar node · true Lilith · aspects by '
+           'Huber orbs')}[SPRACHE]
+KONST_NOTE = {
+    'de': ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
+           'Hausspitze und wird in beiden Häusern gedeutet — das führende '
+           'Haus steht vorn.'),
+    'en': ('Double house entry: the factor stands up to 5° before the next '
+           'house cusp and is read in both houses — the leading house comes '
+           'first.')}[SPRACHE]
 
 
 def konst_note(zeilen):
@@ -418,12 +449,19 @@ def achsen_zeilen():
 ELEMENTE, MODI = chartdoc.verteilung(
     [(cd.name_of(_BY[n]['name']), _BY[n]['lon']) for n in KLASSISCH])
 
-UHR_STICHTAG = TD['fenster']['stichtag'].strftime('%d.%m.%Y')
-UHR_NOTE = (f"Fenster {TD['fenster']['start'].strftime('%d.%m.%Y')} bis "
-            f"{TD['fenster']['ende'].strftime('%d.%m.%Y')} — acht "
-            f"Kalenderquartale ab dem Quartal des Stichtags · Rückblick ab "
-            f"{TD['fenster']['rueckblick'].strftime('%d.%m.%Y')} · "
-            f"Wirk-Orb 1,5° · Snapshot-Orb 3,0°")
+# Daten ueber tdat.datum_lang(): deutsch TT.MM.JJJJ, englisch „1 Mar 2030".
+UHR_STICHTAG = tdat.datum_lang(TD['fenster']['stichtag'])
+UHR_NOTE = {
+    'de': (f"Fenster {tdat.datum_lang(TD['fenster']['start'])} bis "
+           f"{tdat.datum_lang(TD['fenster']['ende'])} — acht "
+           f"Kalenderquartale ab dem Quartal des Stichtags · Rückblick ab "
+           f"{tdat.datum_lang(TD['fenster']['rueckblick'])} · "
+           f"Wirk-Orb 1,5° · Snapshot-Orb 3,0°"),
+    'en': (f"Window {tdat.datum_lang(TD['fenster']['start'])} to "
+           f"{tdat.datum_lang(TD['fenster']['ende'])} — eight calendar "
+           f"quarters from the quarter of the reference date · look-back from "
+           f"{tdat.datum_lang(TD['fenster']['rueckblick'])} · "
+           f"working orb 1.5° · snapshot orb 3.0°")}[SPRACHE]
 
 # Dreiteiliger Vorspann der Uhr. chartdoc.uhr_lead() liefert eine einteilige
 # Fassung; die Themenuhr braucht mehr Erklaerung, darum hier ausgeschrieben.
@@ -452,6 +490,32 @@ UHR_LEAD = [
     f'farbige Punkte die Stationen: die Tage, an denen ein langsamer Planet '
     f'die Richtung wechselt. Sie erklären, warum dieselbe Linie oft zwei- oder '
     f'dreimal exakt wird statt nur einmal.']
+if SPRACHE == 'en':
+    UHR_LEAD = [
+        'Each line is a long line: a planet moving in the sky now touches a '
+        'point of your birth chart over weeks or months. The lines do not '
+        'stand side by side one by one but in theme blocks — each block '
+        'carries at the top the name under which the text later deals with '
+        'it, and beneath it a thick arc over the whole running time of the '
+        'theme. So one reads the large periods first and then goes into '
+        'detail.',
+
+        'The label at the start of each line names both sides in this order '
+        '— first the moving planet, then the angle it forms, then the point '
+        'of your birth chart that it meets. The bar beside it shows when this '
+        'happens: pale for the full time of contact, strong for the stretch '
+        'in which the line is really at work, and the small white dots for '
+        'the single days on which the angle is exact. Lines set in pale type '
+        '— where there are any — are side lines: they touch none of the '
+        'points this document follows throughout, and they stand here because '
+        'the chapter of their block tells of them.',
+
+        f'The eight quarters are calendar quarters; Q1 is the quarter in '
+        f'which this horoscope was drawn up. Whatever lies to the left of the '
+        f'vertical mark was already running before {UHR_STICHTAG}. Below the '
+        f'time axis, the coloured dots are the stations: the days on which a '
+        f'slow planet changes direction. They explain why the same line is '
+        f'often exact two or three times instead of once.']
 
 
 # --- Fussnoten der Konstellationsseite --------------------------------------
@@ -468,7 +532,7 @@ def konst_fussnoten():
     from lade import ephemeriden
     ephemeriden(still=True)
     return list(FUSSNOTEN_EXTRA) + radix.konstellations_fussnoten(
-        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON)
+        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON, sprache=SPRACHE)
 
 
 KONST_FUSSNOTEN = konst_fussnoten()
@@ -491,7 +555,77 @@ def chartbild(rad_breite, uhr_breite, skala, konst_skala=1.0):
 # ===========================================================================
 
 def dt(d, kurz=False):
-    return d.strftime('%d.%m.%y' if kurz else '%d.%m.%Y')
+    # 2026-09-26: ueber transitdata — deutsch TT.MM.JJ / TT.MM.JJJJ wie bisher,
+    # englisch „14 Jun 27" / „14 Jun 2027"
+    return tdat.datum_kurz(d) if kurz else tdat.datum_lang(d)
+
+
+# Texte des Anhangs je Sprache (2026-09-26). Die deutschen Werte sind
+# zeichengleich die bisherigen Wortlaute.
+_ANH = {
+    'de': {
+        'lang_lead': ('Alle {n} Langläufer des Fensters mit\nSpanne, Dauer, '
+                      'sämtlichen Exaktdaten und den Stationen des laufenden '
+                      'Planeten.\nGrau gesetzt sind die sekundären Linien — sie '
+                      'berühren keinen der primären\nZielpunkte; im Text kommen '
+                      'sie nur vor, wo ein Kapitel sie zu seinem Thema zählt.'),
+        'lang_kopf': ('Transit', 'Aspekt', 'Ziel', 'Spanne', 'Mon.', 'exakt',
+                      'Stationen'),
+        'lang_note': ('Dauer in Monaten über die volle Berührung\n(Snapshot-Orb '
+                      '3,0°). Datumsangaben TT.MM.JJ. <span class="mk">←</span> '
+                      'vor der\nSpanne heißt: die Linie lief schon vor Beginn des '
+                      'Fensters; <span class="mk">→</span>\ndahinter: sie reicht '
+                      'über das Fenster hinaus.'),
+        'jetzt_lead': ('Die Momentaufnahme vom {datum}: was an diesem Tag\nan '
+                       'deinem Geburtsbild arbeitet, mit Orb und Laufrichtung. '
+                       'Zulaufend heißt, die\nBerührung wird enger; auslaufend, '
+                       'sie löst sich — kann aber rückläufig\nzurückkehren.'),
+        'stand': 'Transit-Stände', 'haus': 'Haus',
+        'jetzt_kopf': ('Transit', 'Aspekt', 'Ziel', 'Orb', 'Richtung', 'exakt',
+                       'bis'),
+        'nachhall': 'Nachhall — kürzlich exakt',
+        'anmarsch': 'Anmarsch — exakt in den nächsten 90 Tagen',
+        'stationen': 'Stationen im Umfeld des Stichtags',
+        'jetzt_note': ('Snapshot-Orb 3,0°; was im Wirk-Orb von 1,5° an einem '
+                       'primären\nZiel steht, deuten die Themenkapitel oder '
+                       'nennt das Kapitel „Mitlaufendes“.'),
+        'kehrt': ', kehrt zurück', 'tage': '{n} Tage', 'komma': True},
+    'en': {
+        'lang_lead': ('All {n} long-running lines of the window with\ntheir '
+                      'span, duration, every exact date and the stations of the '
+                      'moving planet.\nSecondary lines are set in grey — they '
+                      'touch none of the primary\ntarget points; the text '
+                      'mentions them only where a chapter counts them as part '
+                      'of its theme.'),
+        'lang_kopf': ('Transit', 'Aspect', 'Target', 'Span', 'Mo.', 'exact',
+                      'Stations'),
+        'lang_note': ('Duration in months over the full contact\n(snapshot orb '
+                      '3.0°). Dates as D Mon YY. <span class="mk">←</span> '
+                      'before the\nspan means: the line was already running '
+                      'before the window began; <span class="mk">→</span>\n'
+                      'after it: it reaches beyond the window.'),
+        'jetzt_lead': ('The snapshot of {datum}: what is at work on your birth '
+                       'chart on this day,\nwith orb and direction. Applying '
+                       'means the contact is\ntightening; separating, it is '
+                       'loosening — but it can return\nin retrograde motion.'),
+        'stand': 'Transit positions', 'haus': 'house',
+        'jetzt_kopf': ('Transit', 'Aspect', 'Target', 'Orb', 'Direction',
+                       'exact', 'until'),
+        'nachhall': 'Echo — recently exact',
+        'anmarsch': 'Approach — exact within the next 90 days',
+        'stationen': 'Stations around the reference date',
+        'jetzt_note': ('Snapshot orb 3.0°; whatever stands within the working '
+                       'orb of 1.5° of a primary\ntarget is interpreted in the '
+                       'theme chapters or named in the chapter “Also '
+                       'Running”.'),
+        'kehrt': ', returns', 'tage': '{n} days', 'komma': False},
+}
+ANH = _ANH[SPRACHE]
+
+
+def _zahl(x):
+    """Dezimalzahl in der Schreibweise der Sprache (deutsch mit Komma)."""
+    return str(x).replace('.', ',') if ANH['komma'] else str(x)
 
 
 # Der §11-Report ist ASCII: freie Textfelder (Transit-Staende,
@@ -503,7 +637,9 @@ _UM = {'Loewe': 'Löwe', 'Schuetze': 'Schütze', 'Glueckspunkt': 'Glückspunkt',
 
 
 def um(s):
-    s = str(s)
+    # 2026-09-26: englisch zuerst Faktor- und Zeichennamen uebersetzen
+    # (deutsch unveraendert), dann wie bisher die Umlaute
+    s = tdat.anzeige_text(s)
     for a, b in _UM.items():
         s = s.replace(a, b)
     return s
@@ -526,39 +662,34 @@ def anhang_langlaeufer():
         nach = (' <span class="mk">→</span>'
                 if 'ueber das Fenster hinaus' in r['flags'] else '')
         trc = '' if r['primaer'] else ' class="sec"'
-        mon = str(r['monate']).replace('.', ',')
+        mon = _zahl(r['monate'])
         exl = ', '.join(dt(x, True) for x in r['exakt'])
         rows.append(
             f'<tr{trc}>'
             f'<td class="tg">{tdat.GLYPH.get(r["transiter"], "")}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(r["transiter"]))}</td>'
-            f'<td class="ta">{esc(r["aspekt"])}</td>'
+            f'<td class="ta">{esc(tdat.aspekt_label(r["aspekt"]))}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(r["ziel"]))}</td>'
             f'<td class="ts">{vor}{dt(r["start"], True)} – '
             f'{dt(r["ende"], True)}{nach}</td>'
             f'<td class="td_">{mon}</td>'
             f'<td class="te">{exl}</td>'
             f'<td class="tst">{st}</td></tr>')
+    k = ANH['lang_kopf']
     return f"""<section class="anhang" id="PG_anh1">
-<div class="fm-kicker">Anhang</div>
-<h2 class="fm-title">Die langen Linien im Überblick</h2>
+<div class="fm-kicker">{esc(chartdoc.ANHANG_KICKER)}</div>
+<h2 class="fm-title">{esc(chartdoc.ANH_LANG_TITEL)}</h2>
 <div class="fm-rule"></div>
-<p class="fm-lead">Alle {len(TD['langlaeufer'])} Langläufer des Fensters mit
-Spanne, Dauer, sämtlichen Exaktdaten und den Stationen des laufenden Planeten.
-Grau gesetzt sind die sekundären Linien — sie berühren keinen der primären
-Zielpunkte; im Text kommen sie nur vor, wo ein Kapitel sie zu seinem Thema zählt.</p>
+<p class="fm-lead">{ANH['lang_lead'].format(n=len(TD['langlaeufer']))}</p>
 <table class="anh">
 <colgroup><col style="width:0.5cm"><col style="width:1.6cm">
 <col style="width:1.5cm"><col style="width:1.55cm"><col style="width:2.85cm">
 <col style="width:1.0cm"><col style="width:4.9cm"><col style="width:3.25cm">
 </colgroup>
-<thead><tr><th></th><th>Transit</th><th>Aspekt</th>
-<th>Ziel</th><th>Spanne</th><th>Mon.</th><th>exakt</th>
-<th>Stationen</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
-<div class="anh-note">Dauer in Monaten über die volle Berührung
-(Snapshot-Orb 3,0°). Datumsangaben TT.MM.JJ. <span class="mk">←</span> vor der
-Spanne heißt: die Linie lief schon vor Beginn des Fensters; <span class="mk">→</span>
-dahinter: sie reicht über das Fenster hinaus.</div>
+<thead><tr><th></th><th>{k[0]}</th><th>{k[1]}</th>
+<th>{k[2]}</th><th>{k[3]}</th><th>{k[4]}</th><th>{k[5]}</th>
+<th>{k[6]}</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
+<div class="anh-note">{ANH['lang_note']}</div>
 </section>"""
 
 
@@ -566,23 +697,22 @@ def anhang_jetzt():
     f = TD['fenster']
     stand = ' · '.join(
         f'{tdat.GLYPH.get(x["planet"], "")} {um(x["planet"])} '
-        f'{um(x["zeichen"])} {um(x["pos"])} (Haus {x["haus"]})'
+        f'{um(x["zeichen"])} {um(x["pos"])} ({ANH["haus"]} {x["haus"]})'
         for x in TD['stand'])
     rows = []
     for r in TD['im_orb']:
-        ex = r['exakt_txt'].replace('exakt war ', 'zuletzt ').replace('exakt ', '')
-        ex = re.sub(r'(\d{4})-(\d\d)-(\d\d)', lambda m:
-                    f'{m.group(3)}.{m.group(2)}.{m.group(1)[2:]}', ex)
-        ex = re.sub(r'\b1 T\)', '1 Tag)', ex.replace(' T)', ' Tagen)'))
-        richtung = r['richtung'] + (', kehrt zurück' if r['kehrt'] else '')
+        # 2026-09-26: die Umformung steht in transitdata (deutsch unveraendert)
+        ex = tdat.exakt_anzeige(r['exakt_txt'])
+        richtung = (tdat.richtung_label(r['richtung'])
+                    + (ANH['kehrt'] if r['kehrt'] else ''))
         trc = '' if r['primaer'] else ' class="sec"'
-        orb = str(r['orb']).replace('.', ',')
+        orb = _zahl(r['orb'])
         bis = dt(tdat._d(r['bis']), True) if r['bis'] else ''
         rows.append(
             f'<tr{trc}>'
             f'<td class="tg">{tdat.GLYPH.get(r["transiter"], "")}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(r["transiter"]))}</td>'
-            f'<td class="ta">{esc(r["aspekt"])}</td>'
+            f'<td class="ta">{esc(tdat.aspekt_label(r["aspekt"]))}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(r["ziel"]))}</td>'
             f'<td class="tor">{orb}°</td>'
             f'<td class="tri">{esc(richtung)}</td>'
@@ -596,10 +726,11 @@ def anhang_jetzt():
         z = ''.join(
             f'<tr><td class="tg">{tdat.GLYPH.get(x["transiter"], "")}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(x["transiter"]))}</td>'
-            f'<td class="ta">{esc(x["aspekt"])}</td>'
+            f'<td class="ta">{esc(tdat.aspekt_label(x["aspekt"]))}</td>'
             f'<td class="tz">{esc(tdat.ziel_label(x["ziel"]))}</td>'
             f'<td class="te">{dt(x["exakt"])}</td>'
-            f'<td class="tri">{x["tage"]} Tage</td></tr>' for x in xs)
+            f'<td class="tri">{ANH["tage"].format(n=x["tage"])}</td></tr>'
+            for x in xs)
         return (f'<div class="anh-sub">{titel}</div>'
                 f'<table class="anh"><colgroup>'
                 f'<col style="width:0.5cm"><col style="width:1.6cm">'
@@ -611,40 +742,37 @@ def anhang_jetzt():
         f'<tr><td class="ts">{dt(x["datum"])}</td>'
         f'<td class="tg">{tdat.GLYPH.get(x["planet"], "")}</td>'
         f'<td class="tz">{esc(um(x["planet"]))}</td>'
-        f'<td class="tri">{esc(x["richtung"])}</td>'
+        f'<td class="tri">{esc(tdat.richtung_label(x["richtung"]))}</td>'
         f'<td class="tz">{esc(um(x["pos"]))}</td>'
         f'<td class="te">{esc(um(x["ziele"]))}</td></tr>'
         for x in TD['stationen'])
 
+    k = ANH['jetzt_kopf']
     return f"""<section class="anhang flow" id="PG_anh2">
 <div class="anh-kopf">
-<div class="fm-kicker">Anhang</div>
-<h2 class="fm-title">Der Stichtag im Überblick</h2>
+<div class="fm-kicker">{esc(chartdoc.ANHANG_KICKER)}</div>
+<h2 class="fm-title">{esc(chartdoc.ANH_JETZT_TITEL)}</h2>
 <div class="fm-rule"></div>
-<p class="fm-lead">Die Momentaufnahme vom {dt(f['stichtag'])}: was an diesem Tag
-an deinem Geburtsbild arbeitet, mit Orb und Laufrichtung. Zulaufend heißt, die
-Berührung wird enger; auslaufend, sie löst sich — kann aber rückläufig
-zurückkehren.</p>
-<div class="anh-note" style="margin:0 0 0.4cm 0">Transit-Stände: {stand}</div>
+<p class="fm-lead">{ANH['jetzt_lead'].format(datum=dt(f['stichtag']))}</p>
+<div class="anh-note" style="margin:0 0 0.4cm 0">{ANH['stand']}: {stand}</div>
 </div>
 <table class="anh">
 <colgroup><col style="width:0.5cm"><col style="width:1.6cm">
 <col style="width:1.6cm"><col style="width:1.55cm"><col style="width:1.1cm">
 <col style="width:2.5cm"><col style="width:6.9cm"><col style="width:1.45cm">
 </colgroup>
-<thead><tr><th></th><th>Transit</th><th>Aspekt</th>
-<th>Ziel</th><th>Orb</th><th>Richtung</th><th>exakt</th>
-<th>bis</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
-{liste('nachhall', 'Nachhall — kürzlich exakt')}
-{liste('anmarsch', 'Anmarsch — exakt in den nächsten 90 Tagen')}
-<div class="anh-sub">Stationen im Umfeld des Stichtags</div>
+<thead><tr><th></th><th>{k[0]}</th><th>{k[1]}</th>
+<th>{k[2]}</th><th>{k[3]}</th><th>{k[4]}</th><th>{k[5]}</th>
+<th>{k[6]}</th></tr></thead><tbody>{''.join(rows)}</tbody></table>
+{liste('nachhall', ANH['nachhall'])}
+{liste('anmarsch', ANH['anmarsch'])}
+<div class="anh-sub">{ANH['stationen']}</div>
 <table class="anh">
 <colgroup><col style="width:1.45cm"><col style="width:0.5cm">
 <col style="width:1.6cm"><col style="width:1.75cm"><col style="width:2.5cm">
 <col style="width:9.4cm"></colgroup>
 <tbody>{stat}</tbody></table>
-<div class="anh-note">Snapshot-Orb 3,0°; was im Wirk-Orb von 1,5° an einem primären
-Ziel steht, deuten die Themenkapitel oder nennt das Kapitel „Mitlaufendes“.</div>
+<div class="anh-note">{ANH['jetzt_note']}</div>
 </section>"""
 
 
@@ -660,8 +788,9 @@ ANHANG = anhang_langlaeufer() + anhang_jetzt()
 # Zeitleisten-Seite (Design-Zeitebene-Modul): der @@ZEITLEISTE-Block der
 # chart_data, gelesen mit chartdoc.lies_zeitleiste(titel=...) — Titel sind
 # WORTGLEICH die Kapiteltitel.
+# 2026-09-26: auch englische Nummernkicker (`Chapter n`)
 TITEL = {int(it['kicker'].split()[1]): it['title'] for it in items
-         if it.get('kicker', '').startswith('Kapitel ')
+         if it.get('kicker', '').startswith(('Kapitel ', 'Chapter '))
          and it['kicker'].split()[1].isdigit()}
 ZL = chartdoc.lies_zeitleiste(CHARTDATA, titel=TITEL)
 ZL_ZEILEN = []
@@ -676,15 +805,17 @@ def zeitleiste(skala=1.0):
 
 
 # Gruppentitel wie der Standardaufruf des Design-Moduls („Das Chartbild").
-TOC_VORNE = [('Das Chartbild', [
-    ('Die Radix', 'PG_rad'),
-    ('Die Konstellationen', 'PG_konst'),
+# Titel aus chartdoc (folgen SPRACHE); deutsch zeichengleich die bisherigen.
+TOC_VORNE = [(chartdoc.CHARTBILD_TITEL, [
+    (chartdoc.RADIX_TITEL, 'PG_rad'),
+    (chartdoc.KONST_TITEL, 'PG_konst'),
     (chartdoc.ASPEKT_TITEL, 'PG_asp'),
-    ('Die Transit-Uhr', 'PG_uhr')])]
-TOC_HINTEN = [('Zeit im Überblick', [(chartdoc.ZEITLEISTE_TITEL, 'PG_zeit')]),
-              ('Anhang', [
-    ('Die langen Linien im Überblick', 'PG_anh1'),
-    ('Der Stichtag im Überblick', 'PG_anh2')])]
+    (chartdoc.UHR_TITEL_KURZ, 'PG_uhr')])]
+TOC_HINTEN = [(chartdoc.ZEITLEISTE_KICKER,
+               [(chartdoc.ZEITLEISTE_TITEL, 'PG_zeit')]),
+              (chartdoc.ANHANG_KICKER, [
+    (chartdoc.ANH_LANG_TITEL, 'PG_anh1'),
+    (chartdoc.ANH_JETZT_TITEL, 'PG_anh2')])]
 
 # Seitenzahlen fuers Inhaltsverzeichnis: erster Durchlauf leer, danach aus dem
 # gerenderten Dokument gefuellt (chartdoc.render_mit_inhalt).
@@ -696,11 +827,14 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
     """Das ganze Dokument — oder mit nur_frontmatter=True nur Cover, Inhalt,
     Chartbild-Strecke und Zeitleiste (fuer die Einmessung; s. Docstring der
     Datei)."""
-    parts = ['<!doctype html><html lang="de"><head><meta charset="utf-8">'
+    # lang= folgt SPRACHE: die Silbentrennung laeuft nach den Mustern der
+    # Sprache des Dokuments.
+    parts = [f'<!doctype html><html lang="{SPRACHE}"><head><meta charset="utf-8">'
              '<style>', BASE_CSS, chartdoc.struktur_css(), COVER_CSS,
              '</style></head><body>',
              cover_html(),
-             chartdoc.inhalt_page(items, SEITEN, f'Horoskop für {VORNAME}',
+             chartdoc.inhalt_page(items, SEITEN,
+                                  chartdoc.INHALT_KOPF.format(name=VORNAME),
                                   vorne=TOC_VORNE, hinten=TOC_HINTEN,
                                   ornament=ORNAMENT),
              chartbild(rad_breite, uhr_breite, skala, konst_skala)]
@@ -710,7 +844,7 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
         return '\n'.join(parts)
     first_chapter = True
     for i, it in enumerate(items):
-        if it.get('kicker') == 'Schlusswort':
+        if it.get('kicker') in SCHLUSS_KICKER:
             # Die Zeitleiste steht hinten, vor Schlusswort und Anhang
             # (Design-Zeitebene-Modul, „Wo sie steht").
             parts.append(zeitleiste(zl_skala))
@@ -739,7 +873,7 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
             inner = f'<div class="part-inner">{inner}</div>'
         parts.append(f'<section class="{" ".join(cls)}" id="CH_{i}">'
                      f'{inner}</section>')
-    if not any(it.get('kicker') == 'Schlusswort' for it in items):
+    if not any(it.get('kicker') in SCHLUSS_KICKER for it in items):
         parts.append(zeitleiste(zl_skala))     # Rueckfall: ohne Schlusswort vor den Anhang
     parts.append(ANHANG)
     parts.append('</body></html>')

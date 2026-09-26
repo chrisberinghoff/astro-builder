@@ -477,10 +477,11 @@ _KICKER_ALIAS = {"auftakt": ("prelude", "zur lesart", "on reading this"),
                  "der stand heute": ("where things stand", "as things stand"),
                  # 2026-09-22 (W57-Nachzug): `Getriebe` hatte keinen englischen Namen —
                  # eine englische Analyse verlor damit THEMA 1 (P3), und P14 prueste den
-                 # Kopfblock des Getriebe-Kapitels nicht. `gearing` ist der Name fuer eine
-                 # NEUE englische Fassung (einwortig wie Auftakt/Rechenschaft/Instrument),
-                 # die drei uebrigen stehen fuer schon geschriebene Faelle.
-                 "getriebe": ("gearing", "the gearing", "the mechanism", "mechanism")}
+                 # Kopfblock des Getriebe-Kapitels nicht. Seit 2026-09-26
+                 # (Chris-Entscheidung) ist `Inner Workings` der Name fuer eine NEUE
+                 # englische Fassung; die uebrigen stehen fuer schon geschriebene Faelle.
+                 "getriebe": ("inner workings", "the inner workings", "gearing",
+                              "the gearing", "the mechanism", "mechanism")}
 # 2026-09-22: `on reading this` (Auftakt), `also running` (Register) und `as things
 # stand` (Lagebild) sind die Wortlaute des ersten englischen Transits; die schon
 # hinterlegten `prelude` / `running alongside` / `where things stand` gelten weiter.
@@ -6236,6 +6237,99 @@ STRUKTURBILD §3 (chart_data) — P12.
 """
 
 
+# 2026-09-26 (Pruefberichte vom 26.09.: die englischen 1+2-Laeufe holten die
+# englischen Wortlaute mit 5 bis 15 Aufrufen aus dem Quelltext, bis 76 KB):
+# `inhaltsprobe.hilfe('ENGLISCH')` druckt sie in EINEM Aufruf. Der Text wird beim
+# Import aus den Konstanten gebaut, nach denen die Proben lesen — er kann nicht
+# veralten. Die Kicker einer NEUEN englischen Fassung stehen in KICKER_EN.
+KICKER_EN = (("Auftakt (Geburtshoroskop)", "Prelude"),
+             ("Zur Lesart (Transit)", "On Reading This"),
+             ("Getriebe", "Inner Workings"), ("Instrument", "Instrument"),
+             ("Kapitel <n>", "Chapter <n>"), ("Zugang <Bereich>", "Access <area>"),
+             ("Der Stand heute", "As Things Stand"),
+             ("Mitlaufendes", "Also Running"), ("Rechenschaft", "Account"),
+             ("Hauptthemen", "Core Themes"),
+             ("Konfliktfelder", "Fields of Conflict"),
+             ("Lebensaufgaben", "Life Tasks"), ("Schlusswort", "Closing Word"))
+
+
+def _alternativen(muster):
+    """Die Alternativen der OBERSTEN Ebene eines Regex-Musters (Klammern
+    zaehlen mit) — fuer ENGLISCH."""
+    teile, tiefe, cur, i = [], 0, "", 0
+    while i < len(muster):
+        c = muster[i]
+        if c == "\\" and i + 1 < len(muster):
+            cur += muster[i:i + 2]
+            i += 2
+            continue
+        if c == "(":
+            tiefe += 1
+        elif c == ")":
+            tiefe -= 1
+        if c == "|" and tiefe == 0:
+            teile.append(cur)
+            cur = ""
+        else:
+            cur += c
+        i += 1
+    teile.append(cur)
+    return teile
+
+
+def _englisch_text():
+    L = ["Englische Fassung: die Wortlaute, nach denen die Proben lesen "
+         "(Stand 2026-09-26; gebaut aus den Konstanten dieser Datei).", "",
+         "KICKER einer neuen englischen Fassung (`## <Kicker> · <Titel>`):"]
+    for de, en in KICKER_EN:
+        L.append("  %-26s -> %s" % (de, en))
+    L.append("  Weitere, die die Proben auch lesen: " + "; ".join(
+        "%s: %s" % (k, ", ".join(v)) for k, v in sorted(_KICKER_ALIAS.items())))
+    L.append("")
+    L.append("BEWEGUNGEN (`### <Wortlaut>`, in dieser Reihenfolge):")
+    for typ, folge in WORTLAUTE.items():
+        L.append("  %s:" % typ)
+        for w in folge:
+            if isinstance(w, tuple):
+                L.append("    %s  ->  %s" % (w[0], w[1]))
+    L.append("")
+    L.append("PFLICHTTEIL „Was trägt\": der Kopf im Transit, die Inline-Form im "
+             "Geburtshoroskop — erkannt werden:")
+    L.append("  Kopf:   " + _WAS_TRAEGT_KOPF_RE.pattern)
+    L.append("  Inline: " + _WAS_TRAEGT_INLINE_RE.pattern
+             + "   (Form: „What carries you: …\")")
+    L.append("")
+    L.append("NICHTWISSEN (Satz, den P9 verlangt) — englische Muster:")
+    L.append("  " + " | ".join(t for t in _alternativen(NICHTWISSEN_RE.pattern)
+                               if not re.search(r"[äöüß]|wei|steht|keinem", t)))
+    L.append("VERWERFUNGS-ERLAUBNIS — englische Muster:")
+    L.append("  " + " | ".join(t for t in _alternativen(VERWERF_RE.pattern)
+                               if not re.search(r"[äöüÄÖÜß]|verw|darf|kann|Kapitel",
+                                                t)))
+    L.append("")
+    L.append("FAKTORNAMEN, englisch erkannt: " + ", ".join(
+        s for s, _k in _FAKTOR_SCHREIBWEISEN
+        if re.fullmatch(r"[A-Za-z ]+", s) and s not in (
+            "AC", "MC", "DC", "IC", "Venus", "Mars", "Jupiter", "Saturn",
+            "Uranus", "Pluto", "Chiron", "Lilith", "Pholus")
+        and not re.search(r"knoten|Knoten|punkt|Coeli|Himmel|zendent|Fortunae|"
+                          r"Sonne|Mond|Merkur|Neptun$", s)))
+    L.append("ASPEKT-ANKER im Fliesstext: square, trine, opposition, conjunction, "
+             "sextile, quincunx, semisextile oder semi-sextile, semi-square, "
+             "sesquiquadrate.")
+    L.append("")
+    L.append("SIGNATUR UND BELEG bleiben in der analyse.md DEUTSCH, samt Inhalt "
+             "(Kopfzeilen **Signatur:** / **Beleg:**, Zeichen-, Aspekt- und "
+             "Faktornamen, TT.MM.JJJJ) — P1, P2, P7 und P13 lesen sie dort. Das "
+             "PDF zeigt sie englisch (chartdoc, Modul Sprachfassung).")
+    L.append("P17 (Subjekt-Probe) liest nur deutsch: in einer englischen Fassung "
+             "die Subjekt-Regel von Hand pruefen.")
+    return "\n".join(L)
+
+
+ENGLISCH = _englisch_text()
+
+
 def hilfe(name=None, datei=None):
     """Schnittstellen-Auskunft dieses Builders — statt den Quelltext zu lesen.
 
@@ -6249,6 +6343,9 @@ def hilfe(name=None, datei=None):
     hilfe(datei='<pfad>') schreibt statt zu drucken (fuer lange Uebersichten).
     hilfe('LESEFORMATE')  woran die Proben den Text erkennen — Themenliste,
                           Beleg-Segmente, Register, Deutungsort, P13-Schnitte.
+    hilfe('ENGLISCH')     die englischen Wortlaute (Kicker, Bewegungen,
+                          Pflichtteil, Nichtwissen, Verwerfung, Faktornamen)
+                          in einem Aufruf — seit 2026-09-26.
     Kommandozeile:        python3 <builder>.py --hilfe [<name>]
     Rueckgabe: None (gedruckt) bzw. der Pfad der geschriebenen Datei.
     """

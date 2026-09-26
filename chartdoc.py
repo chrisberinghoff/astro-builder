@@ -180,8 +180,11 @@ def gr(x):
 
 def name_of(n):
     """Ausgeschriebener Faktorname fuer Tabellen — die per konfiguriere(name_of=
-    cd.name_of) gesetzte Funktion der chart-eigenen chartdata.py."""
-    return _CFG['name_of'](n)
+    cd.name_of) gesetzte Funktion der chart-eigenen chartdata.py. In einer
+    englischen Fassung geht der Name danach durch anzeige() (seit 2026-09-26):
+    Die chartdata.py bleibt deutsch, wie der Vertrag im Datenblatt-Modul sie
+    beschreibt; uebersetzt wird erst beim Anzeigen."""
+    return anzeige(_CFG['name_of'](n))
 
 
 def _orb_text(x):
@@ -206,7 +209,7 @@ _CFG = {'gr': _orb_text, 'name_of': lambda n: n}
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  name_of=None, kopfzeile=None, aspektfarben=None,
                  balken=None, part_ornament=None, beleg_platz=None,
-                 sprache=None):
+                 sprache=None, signaturen_en=None, belege_en=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
     pal           Palette (Schluessel s. PAL oben)
@@ -228,13 +231,32 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                   die therapeutische Wirkform — s. BELEG_PLATZ.
     sprache       'de' (Standard) oder 'en' — Sprache ALLER sichtbaren Labels
                   (Seitentitel, Kolumnen, Aspekt-Legende, Orbis-Zeile,
-                  Zeitleisten-Texte). Zieht build.PFLICHT_BAUSTEINE mit nach,
-                  s. setze_sprache(). Die Kopfzeilen `**Signatur:**` und
-                  `**Beleg:**` der Analyse bleiben in JEDER Sprache deutsch
-                  (Werkzeuge-Modul A3).
+                  Zeitleisten-Texte, seit 2026-09-26 auch Linien-Kasten,
+                  Fusslabel, Kolumnentitel, Verteilungsbalken, Uhr-Titel und
+                  die Faktor-, Zeichen-, Aspekt- und Laufnamen). Zieht
+                  build.PFLICHT_BAUSTEINE mit nach, s. setze_sprache(). Die
+                  Kopfzeilen `**Signatur:**` und `**Beleg:**` der Analyse
+                  bleiben in JEDER Sprache deutsch (Modul Sprachfassung).
+    signaturen_en {deutscher Signatur-Wortlaut: englischer} — nur in einer
+                  englischen Fassung (seit 2026-09-26, Chris-Entscheidung):
+                  Die analyse.md behaelt Signatur und Beleg deutsch, weil die
+                  Proben sie dort lesen; das PDF zeigt beide englisch. Die
+                  Signatur uebersetzt Schritt 3 von Hand, ein Eintrag je
+                  Kapitel. Fehlt einer, bricht render_mit_inhalt() ab und
+                  nennt alle fehlenden auf einmal (pruefe_sprachfassung()).
+    belege_en     {deutscher Beleg: englischer} — nur fuer einen Beleg, den die
+                  mechanische Uebersetzung (beleg_segment_en()) nicht schafft,
+                  typisch der Getriebe-Beleg im Struktur-Format. Schluessel
+                  ist der GANZE deutsche Beleg des Kapitels.
     """
     if sprache is not None:
         setze_sprache(sprache)
+    if signaturen_en is not None:
+        SIGNATUREN_EN.clear()
+        SIGNATUREN_EN.update({_ws(k): v for k, v in dict(signaturen_en).items()})
+    if belege_en is not None:
+        BELEGE_EN.clear()
+        BELEGE_EN.update({_ws(k): v for k, v in dict(belege_en).items()})
     global PART_KICKER, GLYPH_OF, KOPFZEILE, PART_ORNAMENT, BELEG_PLATZ
     if part_ornament is not None:
         PART_ORNAMENT = part_ornament
@@ -270,6 +292,9 @@ def struktur_css():
     STONE = PAL['stone']; PAPER = PAL['paper']; INK = PAL['ink']
     BELEG_BG = PAL['beleg_bg']; BELEG_BD = PAL['beleg_bd']
     KOPF = KOPFZEILE
+    # 2026-09-26: die Kolumnentitel der benannten Seiten folgen der Sprache
+    KOL_FRONT = KOLUMNEN['front']; KOL_INHALT = KOLUMNEN['inhalt']
+    KOL_ANHANG = KOLUMNEN['anhang']; KOL_ZEIT = KOLUMNEN['zeit']
     A_ROT = ASPEKTFARBE['rot']; A_BLAU = ASPEKTFARBE['blau']
     A_GRUEN = ASPEKTFARBE['gruen']; A_KONJ = ASPEKTFARBE['konj']
     balken_css = '\n'.join(
@@ -322,19 +347,19 @@ def struktur_css():
    struktur_css() geladen wird. */
 section.cover {{ margin: -8px 0 0 -8px; }}
 @page front {{
-  @top-right {{ content: "DAS CHARTBILD"; font-family:"EB Garamond";
+  @top-right {{ content: "{KOL_FRONT}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
 }}
 @page inhalt {{
-  @top-right {{ content: "INHALT"; font-family:"EB Garamond";
+  @top-right {{ content: "{KOL_INHALT}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
 }}
 @page anhang {{
-  @top-right {{ content: "ANHANG"; font-family:"EB Garamond";
+  @top-right {{ content: "{KOL_ANHANG}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
 }}
 @page zeit {{
-  @top-right {{ content: "ZEITLEISTE"; font-family:"EB Garamond";
+  @top-right {{ content: "{KOL_ZEIT}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
 }}
 
@@ -877,12 +902,15 @@ def aspekt_legende(spalten=1, titel=None, stil='', zusatz=False,
             f'<p><span class="a-sym a-{k}">{ASPEKT_GLYPH[n]}</span> '
             f'<b class="a-{k}">{n}</b> ({w}) — {t}</p>')
     for n in (AKTIVE_ZUSATZ if zusatz else ()):
-        w, t = ZUSATZ_LEGENDE[n]
+        w, _t = ZUSATZ_LEGENDE[n]
+        # 2026-09-26: Name und Erklaerung aus der Labeltafel (englisch:
+        # Semi-square / Sesquiquadrate); der Schluessel bleibt der deutsche.
+        nm, t = ZUSATZ_TEXT.get(n, (n, _t))
         sym = ZUSATZ_GLYPH.get(n)
         vor = f'<span class="a-sym a-konj">{sym}</span> ' if sym else ''
         rows.append(f'<p>{vor}'
-                    f'<b class="a-konj">{esc(n)}</b> ({w}) — {t} '
-                    f'Steht nicht im Rad.</p>')
+                    f'<b class="a-konj">{esc(nm)}</b> ({w}) — {t} '
+                    f'{ZUSATZ_NICHT_IM_RAD}</p>')
     if orbis:
         rows.append(f'<p class="lgn">{esc(ORBIS_ZEILE)}</p>')
     cls = 'lbox zwei' if spalten == 2 else 'lbox'
@@ -907,31 +935,25 @@ def linien_legende(gerechnet=None):
     sichtbare Zeichen im Dokument einmal benannt wird.
     """
     A = ASPEKTFARBE
+    # 2026-09-26: Die Texte stehen in der Labeltafel (LINIEN_LEGENDE) — bis
+    # heute standen sie hier fest und blieben in einer englischen Fassung
+    # deutsch. Die deutschen Werte sind zeichengleich die alten.
+    L = LINIEN_LEGENDE
     # Gerechnete Punkte (radix.radix(marken=…)) MUESSEN hier benannt werden.
     ger = ''
     if gerechnet:
         # Das Zeichen im Kasten ist dasselbe, das im Rad steht: ein offener
         # Kreis (`.stroke.kreis`), nicht der Balken der Positionsmarke.
         ger = ('<p><span class="stroke kreis"></span>'
-               f'offener Kreis — {esc(gerechnet)}: ein GERECHNETER '
-               'Punkt, keine Stellung am Himmel; er bildet deshalb keine '
-               'Aspektlinien.</p>')
-    return f"""<div class="lbox"><h5>Die Linien im Rad</h5>
-<p><span class="swatch" style="background:{A['rot']}"></span>rot — Spannung
-(Opposition, Quadrat)</p>
-<p><span class="swatch" style="background:{A['blau']}"></span>blau —
-harmonischer Fluss (Trigon, Sextil)</p>
-<p><span class="swatch" style="background:{A['gruen']}"></span>grün —
-Wahrnehmung (Quincunx, Halbsextil)</p>
-<p><span class="stroke voll"></span>durchgezogen — voller Aspekt (beide Orbis
-erfüllt)</p>
-<p><span class="stroke gestr"></span>gestrichelt — einseitig (nur der weitere
-Orbis trägt)</p>
-<p><span class="stroke marke"></span>kräftiger Strich am Zeichenring — der
-genaue Grad des Faktors; die feine Linie führt zu seiner Glyphe</p>
-{ger}<p class="lgn">Die Konjunktion (gemeinsamer Punkt) wird nicht als Linie
-gezeigt. Der äußere Ring ist nach den vier Elementen eingefärbt; die kleinen
-grauen Striche darin sind die 5°-Teilung.</p></div>"""
+               + L['kreis'].format(name=esc(gerechnet)) + '</p>')
+    return f"""<div class="lbox"><h5>{L['titel']}</h5>
+<p><span class="swatch" style="background:{A['rot']}"></span>{L['rot']}</p>
+<p><span class="swatch" style="background:{A['blau']}"></span>{L['blau']}</p>
+<p><span class="swatch" style="background:{A['gruen']}"></span>{L['gruen']}</p>
+<p><span class="stroke voll"></span>{L['voll']}</p>
+<p><span class="stroke gestr"></span>{L['gestr']}</p>
+<p><span class="stroke marke"></span>{L['marke']}</p>
+{ger}<p class="lgn">{L['note']}</p></div>"""
 
 
 # --- Seite: das Rad ---------------------------------------------------------
@@ -974,6 +996,23 @@ def radix_page(bild, unterzeile, kicker=None, titel=None,
 
 # --- Seite: Transit-Uhr -----------------------------------------------------
 
+# 2026-09-26: der Vorspann als Label (englische Fassung s. _LABELS['en']);
+# der deutsche Wortlaut ist zeichengleich der bisherige.
+UHR_LEAD_TEXT = (
+    'Jede Zeile ist eine lange Linie: ein Planet, der gerade am Himmel '
+    'läuft, berührt über Wochen oder Monate hinweg eine Stelle deines '
+    'Geburtsbildes. Die Beschriftung am Zeilenanfang nennt beide in dieser '
+    'Reihenfolge — zuerst den laufenden Planeten, dann den Winkel, den er '
+    'bildet, dann die Stelle deines Geburtsbildes, die er trifft. Der '
+    'Balken rechts daneben zeigt, wann das geschieht: blass die volle '
+    'Berührungszeit, kräftig die Strecke, in der die Linie wirklich '
+    'arbeitet, und die kleinen weißen Punkte die einzelnen Tage, an '
+    'denen der '
+    'Winkel exakt steht. Was links der senkrechten Marke beginnt, lief '
+    'schon vor dem {stichtag}; ein Pfeil am Rand heißt, die Linie reicht '
+    'über das Fenster hinaus.')
+
+
 def uhr_lead(stichtag):
     """Erklaertext ueber der Transit-Uhr.
 
@@ -983,25 +1022,16 @@ def uhr_lead(stichtag):
     gezeichneten Marker. Jetzt getrennt in: was eine Zeile ist, wie ihre
     Beschriftung zu lesen ist, und was der Balken zeigt.
     """
-    return (
-        'Jede Zeile ist eine lange Linie: ein Planet, der gerade am Himmel '
-        'läuft, berührt über Wochen oder Monate hinweg eine Stelle deines '
-        'Geburtsbildes. Die Beschriftung am Zeilenanfang nennt beide in dieser '
-        'Reihenfolge — zuerst den laufenden Planeten, dann den Winkel, den er '
-        'bildet, dann die Stelle deines Geburtsbildes, die er trifft. Der '
-        'Balken rechts daneben zeigt, wann das geschieht: blass die volle '
-        'Berührungszeit, kräftig die Strecke, in der die Linie wirklich '
-        'arbeitet, und die kleinen weißen Punkte die einzelnen Tage, an '
-        'denen der '
-        f'Winkel exakt steht. Was links der senkrechten Marke beginnt, lief '
-        f'schon vor dem {stichtag}; ein Pfeil am Rand heißt, die Linie reicht '
-        'über das Fenster hinaus.')
+    return UHR_LEAD_TEXT.format(stichtag=stichtag)
 
 
-_JAHRWORT = {2: 'zwei', 3: 'drei', 4: 'vier', 5: 'fünf', 6: 'sechs'}
+JAHRWORT = {2: 'zwei', 3: 'drei', 4: 'vier', 5: 'fünf', 6: 'sechs'}
+# 2026-09-26: Seitentitel der Uhr als Labels (englisch: „The Transit Clock …")
+UHR_TITEL_JAHR = 'Die Transit-Uhr — das kommende Jahr'
+UHR_TITEL_JAHRE = 'Die Transit-Uhr — {wort} Jahre auf einen Blick'
 
 
-def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
+def transituhr_page(bild, stichtag, unterzeile, kicker=None,
                     titel=None, anker='PG_uhr', lead=None, bild_breite=None,
                     jahre=2):
     """Transit-Uhr-Seite (Transit- und Themen-Modus).
@@ -1020,12 +1050,15 @@ def transituhr_page(bild, stichtag, unterzeile, kicker='Das Chart im Bild',
                   eine falsche Ueberschrift. `titel=` setzt den Text weiterhin
                   vollstaendig selbst und schlaegt `jahre`.
     """
+    # 2026-09-26: kicker=None statt des Labels als Standardwert — ein
+    # Standardwert wird beim Import gebunden und folgt setze_sprache() nicht.
+    kicker = RADIX_KICKER if kicker is None else kicker
     if titel is None:
         if int(jahre) <= 1:
-            titel = 'Die Transit-Uhr — das kommende Jahr'
+            titel = UHR_TITEL_JAHR
         else:
-            wort = _JAHRWORT.get(int(jahre), str(int(jahre)))
-            titel = f'Die Transit-Uhr — {wort} Jahre auf einen Blick'
+            wort = JAHRWORT.get(int(jahre), str(int(jahre)))
+            titel = UHR_TITEL_JAHRE.format(wort=wort)
     txt = lead if lead is not None else uhr_lead(stichtag)
     if isinstance(txt, str):
         txt = [txt]
@@ -1069,6 +1102,12 @@ ZL_LEAD = (
 ZL_NOTE = ('Die Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
            'dieses Horoskop entstanden ist. Spannen und Zahlen sind '
            'unverändert aus der Rechnung übernommen.')
+
+# 2026-09-26: Kicker, Spaltenkoepfe und Leertext der Zeitleiste als Labels —
+# sie standen fest im Code und blieben in einer englischen Fassung deutsch.
+ZEITLEISTE_KICKER = 'Zeit im Überblick'
+ZL_KOPF = ('Zeitraum', 'Dicht', 'Ruht', 'Dichte je Monat')
+ZL_LEER = 'nichts im Wirkorb'
 
 
 def _zl_liste(x, leer='—'):
@@ -1296,7 +1335,7 @@ def lies_zeitleiste(pfad_oder_text, titel=None):
     return {'lead': lead, 'quartale': quartale}
 
 
-def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
+def zeitleiste_page(zeilen, kicker=None, titel=None,
                     anker='PG_zeit', lead=None, note=None, skala=1.0):
     """Zeitleisten-Seite (Transit) — EINE Seite, kein Fließtext.
 
@@ -1357,6 +1396,7 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
             ist keine.
     """
     titel = titel or ZEITLEISTE_TITEL
+    kicker = ZEITLEISTE_KICKER if kicker is None else kicker   # 2026-09-26
     rows = []
     for nr, z in enumerate(zeilen, 1):
         # 2026-09-19 (W12): optionales sechstes Feld `marke`
@@ -1367,7 +1407,7 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
                 '(quartal, spanne, dicht, ruht, dichte, marke).')
         q, spanne, dicht, ruht, dichte = z[:5]
         marke = z[5] if len(z) == 6 else ''
-        zd = _zl_liste(dicht, "nichts im Wirkorb")
+        zd = _zl_liste(dicht, ZL_LEER)
         if marke:
             zd += f' · <span class="zl-marke">{esc(str(marke))}</span>'
         rows.append(
@@ -1391,8 +1431,8 @@ def zeitleiste_page(zeilen, kicker='Zeit im Überblick', titel=None,
 <colgroup><col style="width:1.0cm"><col style="width:2.35cm">
 <col style="width:5.85cm"><col style="width:4.85cm">
 <col style="width:3.15cm"></colgroup>
-<thead><tr><th>&nbsp;</th><th>Zeitraum</th><th>Dicht</th><th>Ruht</th>
-<th>Dichte je Monat</th></tr></thead>
+<thead><tr><th>&nbsp;</th><th>{ZL_KOPF[0]}</th><th>{ZL_KOPF[1]}</th><th>{ZL_KOPF[2]}</th>
+<th>{ZL_KOPF[3]}</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table>
 <div class="anh-note">{esc(nt)}</div>
 </section>"""
@@ -1428,9 +1468,12 @@ def _balken(reihen):
     for lab, n, pl in reihen:
         # 88 %: der laengste Balken endet vor der Zahl, sie bleibt lesbar.
         breite = 0 if n == 0 else max(3.5, n / hoch * 88.0)
-        namen = ' · '.join(pl) if pl else '—'
+        namen = ' · '.join(anzeige(x) for x in pl) if pl else '—'
+        # 2026-09-26: angezeigt wird das Label der gesetzten Sprache; die
+        # CSS-Klasse (Balkenfarbe) haengt weiter am deutschen Schluessel.
         out.append(
-            f'<div class="vrow"><div class="vlab">{esc(lab)}</div>'
+            f'<div class="vrow"><div class="vlab">'
+            f'{esc(VERTEILUNG_ANZEIGE.get(lab, lab))}</div>'
             f'<div class="track"><div class="fill b-{_slug(lab)}" '
             f'style="width:{breite:.1f}%"></div>'
             f'<span class="vnum">{n}</span></div>'
@@ -1521,13 +1564,15 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
             rows.append('<tr class="sep"><td colspan="6" '
                         'style="height:0.16cm;border-bottom:none"></td></tr>')
             continue
+        # 2026-09-26: Name, Zeichen und Lauf in der Sprache des Dokuments
+        # (anzeige(); im Deutschen unveraendert)
         rows.append(
-            f'<tr><td class="g">{gl}</td><td class="nm">{esc(nm)}</td>'
-            f'<td class="zn">{esc(zn)}</td><td class="gd">{gd}</td>'
-            f'<td class="hs">{esc(hs)}</td><td class="lf">{esc(lf)}</td></tr>')
+            f'<tr><td class="g">{gl}</td><td class="nm">{esc(anzeige(nm))}</td>'
+            f'<td class="zn">{esc(anzeige(zn))}</td><td class="gd">{gd}</td>'
+            f'<td class="hs">{esc(hs)}</td><td class="lf">{esc(anzeige(lf))}</td></tr>')
     ach = ''.join(
-        f'<tr><td class="ak">{esc(k)}</td><td class="an_">{esc(n)}</td>'
-        f'<td class="az">{esc(z)}</td><td class="ag">{g}</td></tr>'
+        f'<tr><td class="ak">{esc(k)}</td><td class="an_">{esc(anzeige(n))}</td>'
+        f'<td class="az">{esc(anzeige(z))}</td><td class="ag">{g}</td></tr>'
         for k, n, z, g in achsen)
     ld = f'<p class="fm-lead">{esc(lead)}</p>' if lead else ''
     nt = f'<div class="tabnote">{esc(note)}</div>' if note else ''
@@ -1590,11 +1635,63 @@ ASPEKT_TITEL = 'Die Aspekte im Einzelnen'
 # steht (`def f(titel=LEGEND_TITEL)`), wird beim Import gebunden und aendert
 # sich durch einen Sprachwechsel NICHT mehr. Deshalb heissen diese Parameter
 # `None` und holen den Wert im Rumpf. Wer ein Label ergaenzt, haelt sich daran.
+# ---------------------------------------------------------------------------
+# 2026-09-26 (Wartungslauf zu den Pruefberichten vom 26.09., Klasse 1 in beiden
+# Schritt-3+4-Laeufen): Sprachfassung, zweiter Teil. Diese Labels standen bis
+# heute fest im Code und blieben in einer englischen Fassung deutsch — der
+# Linien-Kasten der Radseite, das Fusslabel, die Einseitig-Marke, die
+# Zusatz-Legende, die Kolumnentitel der benannten Seiten, die Titel, die die
+# Vorlagen fuer Verzeichnis und Anhang brauchen, und die Anzeigenamen
+# (ANZEIGE). Die deutschen Werte sind zeichengleich die bisherigen Wortlaute;
+# Uhr- und Zeitleisten-Labels stehen bei ihren Funktionen weiter oben.
+# ---------------------------------------------------------------------------
+LINIEN_LEGENDE = {
+    'titel': 'Die Linien im Rad',
+    'rot': 'rot — Spannung\n(Opposition, Quadrat)',
+    'blau': 'blau —\nharmonischer Fluss (Trigon, Sextil)',
+    'gruen': 'grün —\nWahrnehmung (Quincunx, Halbsextil)',
+    'voll': 'durchgezogen — voller Aspekt (beide Orbis\nerfüllt)',
+    'gestr': 'gestrichelt — einseitig (nur der weitere\nOrbis trägt)',
+    'marke': ('kräftiger Strich am Zeichenring — der\ngenaue Grad des '
+              'Faktors; die feine Linie führt zu seiner Glyphe'),
+    'kreis': ('offener Kreis — {name}: ein GERECHNETER Punkt, keine Stellung '
+              'am Himmel; er bildet deshalb keine Aspektlinien.'),
+    'note': ('Die Konjunktion (gemeinsamer Punkt) wird nicht als Linie\n'
+             'gezeigt. Der äußere Ring ist nach den vier Elementen eingefärbt; '
+             'die kleinen\ngrauen Striche darin sind die 5°-Teilung.'),
+}
+FUSS_LABEL = 'Beleg:'
+ASP_EINSEITIG = 'e.'
+ZUSATZ_TEXT = {n: (n, t) for n, (_w, t) in ZUSATZ_LEGENDE.items()}
+ZUSATZ_NICHT_IM_RAD = 'Steht nicht im Rad.'
+KOLUMNEN = {'front': 'DAS CHARTBILD', 'inhalt': 'INHALT', 'anhang': 'ANHANG',
+            'zeit': 'ZEITLEISTE'}
+# Titel, die die beiden Vorlagen fuer Verzeichnis und Anhang brauchen — hier,
+# damit sie mit der Sprache wechseln und nicht in jedem Chart-Builder stehen.
+CHARTBILD_TITEL = 'Das Chartbild'
+INHALT_KOPF = 'Horoskop für {name}'
+UHR_TITEL_KURZ = 'Die Transit-Uhr'
+ANHANG_KICKER = 'Anhang'
+ANH_LANG_TITEL = 'Die langen Linien im Überblick'
+ANH_JETZT_TITEL = 'Der Stichtag im Überblick'
+# Anzeigenamen: im Deutschen leer (= unveraendert), im Englischen die Tafel
+# _ANZEIGE_EN unten. Uebersetzt wird ein GANZER Eintrag, nie ein Wortteil.
+ANZEIGE = {}
+VERTEILUNG_ANZEIGE = {}
+
 SPRACHE = 'de'
 _LABEL_NAMEN = ('LEGEND_ROWS', 'LEGEND_TITEL', 'ORBIS_ZEILE', 'ZEITLEISTE_TITEL',
                 'ZL_SPALTE', 'ZL_LEAD', 'ZL_NOTE', 'ASPEKT_TITEL',
                 'INHALT_TITEL', 'RADIX_TITEL', 'RADIX_KICKER', 'KONST_TITEL',
-                'KONST_KICKER', 'KONST_KOPF', 'ASP_GRUPPEN', 'ASP_LEAD')
+                'KONST_KICKER', 'KONST_KOPF', 'ASP_GRUPPEN', 'ASP_LEAD',
+                # 2026-09-26
+                'LINIEN_LEGENDE', 'FUSS_LABEL', 'ASP_EINSEITIG', 'ZUSATZ_TEXT',
+                'ZUSATZ_NICHT_IM_RAD', 'KOLUMNEN', 'CHARTBILD_TITEL',
+                'INHALT_KOPF', 'UHR_TITEL_KURZ', 'UHR_TITEL_JAHR',
+                'UHR_TITEL_JAHRE', 'JAHRWORT', 'UHR_LEAD_TEXT',
+                'ZEITLEISTE_KICKER', 'ZL_KOPF', 'ZL_LEER', 'ANHANG_KICKER',
+                'ANH_LANG_TITEL', 'ANH_JETZT_TITEL', 'ANZEIGE',
+                'VERTEILUNG_ANZEIGE')
 
 _LEGEND_ROWS_EN = [
     ("Conjunction", "0°", "two forces at the same point — they merge, amplify "
@@ -1630,8 +1727,94 @@ _ZL_NOTE_EN = ('The quarters are calendar quarters; Q1 is the quarter in which '
                'this horoscope was drawn up. Spans and figures are taken from '
                'the calculation unchanged.')
 
+_ANZEIGE_EN = {
+    # Faktoren — Anzeigenamen mit Umlaut und die ASCII-Vertragsnamen
+    'Sonne': 'Sun', 'Mond': 'Moon', 'Merkur': 'Mercury', 'Venus': 'Venus',
+    'Mars': 'Mars', 'Jupiter': 'Jupiter', 'Saturn': 'Saturn',
+    'Uranus': 'Uranus', 'Neptun': 'Neptune', 'Pluto': 'Pluto',
+    'Chiron': 'Chiron', 'Lilith': 'Lilith', 'Pholus': 'Pholus',
+    'Mondknoten': 'Lunar Node', 'Knoten': 'Lunar Node',
+    'Nordknoten': 'Lunar Node', 'Südknoten': 'South Node',
+    'Suedknoten': 'South Node', 'Glückspunkt': 'Part of Fortune',
+    'Glueckspunkt': 'Part of Fortune',
+    'Aszendent': 'Ascendant', 'Deszendent': 'Descendant',
+    'Medium Coeli': 'Midheaven', 'Himmelsmitte': 'Midheaven',
+    'Imum Coeli': 'Imum Coeli', 'Himmelstiefe': 'Imum Coeli',
+    # Zeichen
+    'Widder': 'Aries', 'Stier': 'Taurus', 'Zwillinge': 'Gemini',
+    'Krebs': 'Cancer', 'Löwe': 'Leo', 'Loewe': 'Leo', 'Jungfrau': 'Virgo',
+    'Waage': 'Libra', 'Skorpion': 'Scorpio', 'Schütze': 'Sagittarius',
+    'Schuetze': 'Sagittarius', 'Steinbock': 'Capricorn',
+    'Wassermann': 'Aquarius', 'Fische': 'Pisces',
+    # Aspekte — Schreibweise der gedruckten Legende (_LEGEND_ROWS_EN)
+    'Konjunktion': 'Conjunction', 'Opposition': 'Opposition',
+    'Quadrat': 'Square', 'Trigon': 'Trine', 'Sextil': 'Sextile',
+    'Quincunx': 'Quincunx', 'Halbsextil': 'Semisextile',
+    'Halbquadrat': 'Semi-square', 'Anderthalbquadrat': 'Sesquiquadrate',
+    'Zusatzebene': 'additional layer',
+    # Lauf
+    'rückläufig': 'retrograde', 'direkt': 'direct', 'stationär': 'stationary',
+}
+
 _LABELS = {
     'en': {
+        # 2026-09-26
+        'LINIEN_LEGENDE': {
+            'titel': 'The Lines in the Wheel',
+            'rot': 'red — tension\n(opposition, square)',
+            'blau': 'blue —\nharmonious flow (trine, sextile)',
+            'gruen': 'green —\nperception (quincunx, semisextile)',
+            'voll': 'solid — full aspect (both orbs\nmet)',
+            'gestr': 'dashed — one-sided (only the wider\norb holds)',
+            'marke': ('bold stroke on the sign ring — the\nexact degree of the '
+                      'factor; the fine line leads to its glyph'),
+            'kreis': ('open circle — {name}: a CALCULATED point, not a position '
+                      'in the sky; it therefore forms no aspect lines.'),
+            'note': ('The conjunction (a shared point) is not shown as a line.\n'
+                     'The outer ring is coloured by the four elements; the small\n'
+                     'grey marks within it are the 5° divisions.'),
+        },
+        'FUSS_LABEL': 'Evidence:',
+        'ASP_EINSEITIG': 'o.',
+        'ZUSATZ_TEXT': {
+            'Halbquadrat': ('Semi-square', 'half the friction — a point of '
+                            'tension beneath the surface, quieter than a '
+                            'square and more lasting.'),
+            'Anderthalbquadrat': ('Sesquiquadrate', 'the same friction from '
+                                  'the opposite direction — it shows up '
+                                  'later and in an unfamiliar guise.'),
+        },
+        'ZUSATZ_NICHT_IM_RAD': 'Not drawn in the wheel.',
+        'KOLUMNEN': {'front': 'THE CHART IN PICTURES', 'inhalt': 'CONTENTS',
+                     'anhang': 'APPENDIX', 'zeit': 'TIMELINE'},
+        'CHARTBILD_TITEL': 'The Chart in Pictures',
+        'INHALT_KOPF': 'Horoscope for {name}',
+        'UHR_TITEL_KURZ': 'The Transit Clock',
+        'UHR_TITEL_JAHR': 'The Transit Clock — the coming year',
+        'UHR_TITEL_JAHRE': 'The Transit Clock — {wort} years at a glance',
+        'JAHRWORT': {2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six'},
+        'UHR_LEAD_TEXT': (
+            'Each line is a long line: a planet moving in the sky now touches '
+            'a point of your birth chart over weeks or months. The label at '
+            'the start of the line names both in this order — first the '
+            'moving planet, then the angle it forms, then the point of your '
+            'birth chart that it meets. The bar beside it shows when this '
+            'happens: pale for the full time of contact, strong for the '
+            'stretch in which the line is really at work, and the small white '
+            'dots for the single days on which the angle is exact. Whatever '
+            'begins to the left of the vertical mark was already running '
+            'before {stichtag}; an arrow at the edge means the line reaches '
+            'beyond the window.'),
+        'ZEITLEISTE_KICKER': 'Time at a Glance',
+        'ZL_KOPF': ('Period', 'Dense', 'Quiet', 'Contacts per month'),
+        'ZL_LEER': 'nothing in orb',
+        'ANHANG_KICKER': 'Appendix',
+        'ANH_LANG_TITEL': 'The Long Lines at a Glance',
+        'ANH_JETZT_TITEL': 'The Reference Date at a Glance',
+        'ANZEIGE': _ANZEIGE_EN,
+        'VERTEILUNG_ANZEIGE': {'Feuer': 'Fire', 'Erde': 'Earth', 'Luft': 'Air',
+                               'Wasser': 'Water', 'kardinal': 'cardinal',
+                               'fix': 'fixed', 'veränderlich': 'mutable'},
         'LEGEND_ROWS': _LEGEND_ROWS_EN,
         'LEGEND_TITEL': 'The Aspects and What They Mean',
         'ORBIS_ZEILE': _ORBIS_ZEILE_EN,
@@ -1685,14 +1868,21 @@ def setze_sprache(code='de'):
     """Sprache aller sichtbaren Labels setzen ('de' oder 'en').
 
     Wirkt auf Seitentitel, Kolumnenzeilen, Aspekt-Legende, Orbis-Zeile und die
-    Texte der Zeitleisten-Seite — und zieht `build.PFLICHT_BAUSTEINE` nach,
+    Texte der Zeitleisten-Seite, seit 2026-09-26 auch auf Linien-Kasten,
+    Fusslabel, Einseitig-Marke, Zusatz-Legende, Kolumnentitel der benannten
+    Seiten, Verteilungsbalken, Uhr-Titel und -Vorspann, die Anhang- und
+    Verzeichnistitel der Vorlagen und die Anzeige von Faktor-, Zeichen-,
+    Aspekt- und Laufnamen (anzeige()); dazu setzt es transitdata und die Uhr
+    um. Signatur und Beleg stehen im englischen PDF englisch: die Signatur aus
+    konfiguriere(signaturen_en=…), der Beleg mechanisch (beleg_segment_en) oder
+    aus konfiguriere(belege_en=…). Es zieht `build.PFLICHT_BAUSTEINE` nach,
     damit `build.verify()` den Titel erwartet, der wirklich gedruckt wird.
     Einmal vor dem ersten Seitenaufbau aufrufen, am einfachsten ueber
     `konfiguriere(sprache='en')`.
 
     NICHT betroffen (und mit Absicht): die Kopfzeilen `**Signatur:**` und
     `**Beleg:**` der Analyse — `build.parse_analyse()` erkennt genau diese
-    beiden Woerter (Werkzeuge-Modul A3).
+    beiden Woerter (Modul Sprachfassung).
     """
     global SPRACHE
     code = (code or 'de').strip().lower()[:2]
@@ -1709,6 +1899,24 @@ def setze_sprache(code='de'):
         _tuf.setze_sprache(code)
     except Exception:
         pass
+    # 2026-09-26: dasselbe fuer transitdata (Monatskuerzel der Zeitleiste,
+    # Anzeigenamen in Uhr und Anhang). Es muss VOR transitdata.parse() laufen,
+    # weil parse() die Monatsspannen beim Lesen baut — die Vorlagen rufen
+    # konfiguriere(sprache=…) deshalb vor parse().
+    try:
+        import transitdata as _td
+    except ImportError:
+        _td = None
+    if _td is not None:
+        if not hasattr(_td, 'setze_sprache'):
+            raise RuntimeError(
+                'chartdoc: transitdata.py ist aelter als chartdoc.py '
+                '(setze_sprache fehlt) — beide aus demselben Stand laden '
+                '(lade_schritt), sonst bleiben Monate und Namen deutsch.')
+        _td.setze_sprache(code)
+    # build.fuss_signaturen() liefert damit die GERENDERTE Signatur — verify()
+    # sucht den Kapitelfuss am Wortlaut, der wirklich im PDF steht.
+    build.FUSS_ANZEIGE = signatur_anzeige if code == 'en' else None
     return code
 
 
@@ -1812,7 +2020,7 @@ def _fac(name):
     return f'<span class="gy">{g}</span> {disp}'
 
 
-def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
+def aspekt_page(aspekte, skala=1.0, kicker=None,
                 titel=None, anker='PG_asp'):
     """Aspektseite im Hausstil — Tabelle UND Legende auf EINER Seite.
 
@@ -1825,7 +2033,12 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
     build.orb_text() — dieselbe Funktion wie die Aspekttabelle des
     Datenblatts, damit Seite, Tabelle und Belege dieselbe Bogenminute zeigen.
     Das konfigurierte `gr` greift hier nicht mehr.
+
+    Sprache (2026-09-26): Kicker (kicker=None -> RADIX_KICKER), Aspektname,
+    Spiegel-Klammer und Einseitig-Marke folgen setze_sprache(); die Liste aus
+    radix.aspektliste() bleibt deutsch.
     """
+    kicker = RADIX_KICKER if kicker is None else kicker
     titel = titel or ASPEKT_TITEL
     setze_zusatzaspekte(aspekte)
     unerklaert = sorted({a['name'] for a in aspekte
@@ -1848,12 +2061,13 @@ def aspekt_page(aspekte, skala=1.0, kicker='Das Chart im Bild',
         rows = []
         for a in grp:
             k = ASPEKT_KLASSE.get(a['name'], 'konj')
-            mir = (f' <span class="mir">({esc(a["spiegel"])})</span>'
+            mir = (f' <span class="mir">({esc(_spiegel_anzeige(a["spiegel"]))})</span>'
                    if a.get('spiegel') else '')
-            e = '<span class="eins">e.</span>' if key == 'einseitig' else ''
+            e = (f'<span class="eins">{ASP_EINSEITIG}</span>'
+                 if key == 'einseitig' else '')
             rows.append(
                 f'<tr><td class="ax">{_fac(a["a"])} '
-                f'<span class="an a-{k}">{a["name"]}</span> '
+                f'<span class="an a-{k}">{anzeige(a["name"])}</span> '
                 f'{_fac(a["b"])}{mir}</td>'
                 f'<td class="ao">{_orb_text(a["orb"])}{e}</td></tr>')
         blocks.append(f'<div class="{cls}">{esc(label)}</div>'
@@ -1933,6 +2147,7 @@ def _anker_seiten(doc):
 
 ASPEKT_WORT = re.compile(
     r'Konjunktion|Opposition|Quadrat|Trigon|Sextil|Quincunx|Halbsextil|'
+    r'Conjunction|Square|Trine|Semi-?sextile|'          # 2026-09-26 (BELEGE_EN)
     r'\bOrb\b|[☌☍□△⚹⚻⚺]')
 
 
@@ -1946,6 +2161,271 @@ ASPEKT_WORT = re.compile(
 # beiden Faellen direkt unter der Kapitel-H2, weil build.parse_analyse() sie
 # nur dort erkennt. Die Verlagerung passiert ausschliesslich beim Rendern.
 BELEG_PLATZ = 'fuss'
+
+
+# ---------------------------------------------------------------------------
+# Englische Fassung: Anzeigenamen, Signatur und Beleg (neu 2026-09-26,
+# Chris-Entscheidung zu den Pruefberichten vom 26.09.). Die analyse.md behaelt
+# Signatur und Beleg DEUTSCH — build.parse_analyse() und die Proben P1, P2, P7
+# und P13 lesen sie dort. Uebersetzt wird erst beim Rendern: die Signatur von
+# Hand (konfiguriere(signaturen_en=…)), der Beleg mechanisch Segment fuer
+# Segment; was die Mechanik nicht kennt, bricht ab und gehoert ganz in
+# konfiguriere(belege_en=…). Im Deutschen tut keine dieser Funktionen etwas.
+# ---------------------------------------------------------------------------
+SIGNATUREN_EN = {}
+BELEGE_EN = {}
+
+
+class SprachfassungError(RuntimeError):
+    """Englische Fassung: eine Signatur ohne Uebersetzung oder ein Beleg mit
+    Woertern, die die mechanische Uebersetzung nicht kennt (s.
+    pruefe_sprachfassung)."""
+
+
+def _ws(s):
+    """Leerraum auf ein Leerzeichen — Schluessel fuer signaturen_en/belege_en."""
+    return re.sub(r'\s+', ' ', str(s or '')).strip()
+
+
+def anzeige(wort):
+    """Anzeigename in der gesetzten Sprache (neu 2026-09-26).
+
+    Im Deutschen unveraendert. Im Englischen aus ANZEIGE — Faktor-, Zeichen-,
+    Aspekt-, Lauf- und Achsennamen, jeweils der GANZE Eintrag ('Mondknoten' ->
+    'Lunar Node', 'Löwe' -> 'Leo', 'rückläufig' -> 'retrograde'); ein Wort
+    ohne Eintrag bleibt stehen. Gerufen von name_of(), Konstellations- und
+    Aspektseite und den Verteilungsbalken.
+    """
+    if not wort or not ANZEIGE:
+        return wort
+    return ANZEIGE.get(wort, ANZEIGE.get(str(wort).strip(), wort))
+
+
+def _spiegel_anzeige(s):
+    """Spiegel-Klammer der Aspektseite ('Quadrat DC', 'Zusatzebene') in der
+    gesetzten Sprache — das erste Wort geht durch anzeige()."""
+    if not s or not ANZEIGE:
+        return s
+    kopf, _, rest = str(s).partition(' ')
+    return anzeige(kopf) + (' ' + rest if rest else '')
+
+
+def signatur_anzeige(txt):
+    """Die Signatur, wie sie im PDF steht (neu 2026-09-26).
+
+    Im Deutschen der Text unveraendert. Im Englischen der Eintrag aus
+    konfiguriere(signaturen_en=…) — Schluessel ist der deutsche Wortlaut der
+    analyse.md (Leerraum egal). Fehlt er, SprachfassungError: Eine deutsche
+    Zeile im englischen PDF waere genau der Fehler, der verhindert werden
+    soll.
+    """
+    if SPRACHE != 'en' or not (txt or '').strip():
+        return txt
+    k = _ws(txt)
+    if k in SIGNATUREN_EN:
+        return SIGNATUREN_EN[k]
+    raise SprachfassungError(
+        'Englische Fassung: keine Uebersetzung fuer die Signatur '
+        f'{k!r}. Im Chart-Builder in SIGNATUR_EN eintragen (deutscher '
+        'Wortlaut der analyse.md -> englischer); chartdoc.pruefe_sprachfassung('
+        'items) nennt alle fehlenden auf einmal.')
+
+
+def _beleg_ersatz(txt):
+    """Ganzer englischer Beleg aus BELEGE_EN oder None (auch im Deutschen)."""
+    if SPRACHE != 'en':
+        return None
+    return BELEGE_EN.get(_ws(txt))
+
+
+_MON_EN = ('', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep',
+           'Oct', 'Nov', 'Dec')
+
+
+def _ordinal_en(n):
+    n = int(n)
+    if 10 <= n % 100 <= 20:
+        return f'{n}th'
+    return f'{n}' + {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')
+
+
+# Wendungen des Belegs (Klartext-Modul, Transit-Modul, Getriebe- und
+# Instrument-Format des Typmoduls). Reihenfolge zaehlt: laengere Wendungen vor
+# ihren Teilen. Die Namen (Faktor, Zeichen, Aspekt, Lauf) kommen aus ANZEIGE.
+_BELEG_WENDUNGEN_EN = (
+    (r'\bnicht exakt\b', 'not exact'),
+    (r'\bam Stichtag Orb\b', 'orb on the reference date'),
+    (r'\bAnnäherung bis\b', 'closest approach'),
+    (r'\bexakt\b', 'exact'),
+    (r'\bprogressiver Mond\b', 'progressed Moon'),
+    (r'\bSonnenbogen-', 'solar-arc '),
+    (r'\bFinsternis auf\b', 'eclipse on'),
+    (r'\bFinsternis\b', 'eclipse'),
+    (r'\bschwächstes Element\b', 'weakest element'),
+    (r'\bstärkstes Element\b', 'strongest element'),
+    (r'\bim eigenen Zeichen\b', 'in its own sign'),
+    (r'\bohne Zulauf\b', 'with no inflow'),
+    (r'\bohne Aspekt\b', 'no aspect'),
+    (r'\bvor Spitze\b', 'before cusp'),
+    (r'\bElemente\b', 'Elements'),
+    (r'\bPlaneten\b', 'planets'),
+    (r'\bModi\b', 'Modes'),
+    (r'\bgewichtet\b', 'weighted'),
+    (r'\bHerrscherkreis\b', 'rulership circle'),
+    (r'\bHerrscher\b', 'ruler'),
+    (r'\bAspektdichte\b', 'aspect density'),
+    (r'\bdicht\b', 'dense'),
+    (r'\bdünn\b', 'sparse'),
+    (r'\bGrenzlage\b', 'near the cusp'),
+    (r'\bSchwellenlage\b', 'at the threshold'),
+    (r'\bFeuer\b', 'Fire'), (r'\bErde\b', 'Earth'), (r'\bLuft\b', 'Air'),
+    (r'\bWasser\b', 'Water'), (r'\bkardinal\b', 'cardinal'),
+    (r'\bfix\b', 'fixed'), (r'\bveränderlich\b', 'mutable'),
+    (r'\bund\b', 'and'),
+    (r'\bam\b', 'on'),
+)
+# Woerter, die ein uebersetzter Beleg tragen darf, ausser den Namen aus
+# _ANZEIGE_EN und den Wendungen oben. Alles andere bricht ab.
+_BELEG_ERLAUBT_EN = {
+    'house', 'houses', 'Orb', 'orb', 'T', 'R', 'AC', 'MC', 'DC', 'IC', 'Pho',
+    'st', 'nd', 'rd', 'th', 'of', 'the', 'to', 'in', 'on', 'with', 'no', 'and',
+    'or', 'at', 'from', 'by', 'all', 'element', 'elements', 'Node', 'Lunar',
+    'South', 'solar', 'arc'} | set(_MON_EN[1:])
+
+
+def _beleg_woerter_en():
+    w = set(_BELEG_ERLAUBT_EN)
+    for v in _ANZEIGE_EN.values():
+        w.update(re.findall(r'[^\W\d_]+', v))
+    for _m, v in _BELEG_WENDUNGEN_EN:
+        w.update(re.findall(r'[^\W\d_]+', v))
+    return w
+
+
+_NAMEN_RE_EN = re.compile(
+    r'(?<![\w])(' + '|'.join(re.escape(k) for k in sorted(
+        _ANZEIGE_EN, key=len, reverse=True)) + r')(?![\w])')
+
+
+def beleg_segment_en(seg, streng=True):
+    """Ein Beleg-Segment mechanisch ins Englische (neu 2026-09-26).
+
+    Namen aus ANZEIGE (Faktor, Zeichen, Aspekt, Lauf), die Wendungen des
+    Belegs („nicht exakt", „Annäherung bis … am", „am Stichtag Orb",
+    „9. Haus" -> „9th house", „8./7. Haus"), Datum TT.MM.JJJJ -> „1 Mar 2030"
+    (dieselbe Form wie die Uhr; ein Datum mit Punkten liest ein englischer
+    Leser als Monat-vor-Tag) und Dezimalkomma -> Punkt. Glyphen, Grade,
+    Orben und die Praefixe T-/R- bleiben.
+
+    streng=True: Traegt das Ergebnis ein Wort, das die Uebersetzung nicht
+    kennt, SprachfassungError mit den Woertern — dann den GANZEN Beleg des
+    Kapitels in konfiguriere(belege_en=…) eintragen. Mit streng=False kommt
+    das Ergebnis trotzdem zurueck (fuer pruefe_sprachfassung()).
+    """
+    s = str(seg)
+    s = re.sub(r'\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b',
+               lambda m: f'{int(m.group(1))} {_MON_EN[int(m.group(2))]} '
+                         f'{m.group(3)}', s)
+    s = re.sub(r'(\d),(\d)', r'\1.\2', s)
+    s = re.sub(r'\b(\d{1,2})\./(\d{1,2})\. Haus\b',
+               lambda m: f'{_ordinal_en(m.group(1))}/{_ordinal_en(m.group(2))} '
+                         'house', s)
+    s = re.sub(r'\b(\d{1,2})\. Haus\b',
+               lambda m: f'{_ordinal_en(m.group(1))} house', s)
+    s = re.sub(r'\bHaus (\d{1,2}(?:/\d{1,2})?)\b', r'house \1', s)
+    s = re.sub(r'\bHäuser\b', 'houses', s)
+    for muster, ersatz in _BELEG_WENDUNGEN_EN:
+        s = re.sub(muster, ersatz, s)
+    s = _NAMEN_RE_EN.sub(lambda m: _ANZEIGE_EN[m.group(1)], s)
+    if streng:
+        fremd = beleg_fremdwoerter(s)
+        if fremd:
+            raise SprachfassungError(
+                'Englische Fassung: Beleg-Segment nicht mechanisch '
+                f'uebersetzbar — unbekannt: {", ".join(fremd)}. Segment: '
+                f'{seg!r}. Den GANZEN Beleg des Kapitels in BELEG_EN des '
+                'Chart-Builders eintragen (deutsch -> englisch).')
+    return s
+
+
+def beleg_fremdwoerter(text):
+    """Woerter eines uebersetzten Belegs, die nicht zur englischen Fassung
+    gehoeren — sortiert, ohne Doppel (leer = sauber)."""
+    erlaubt = _beleg_woerter_en()
+    return sorted({w for w in re.findall(r'[^\W\d_]+', str(text))
+                   if w not in erlaubt})
+
+
+def pruefe_sprachfassung(items):
+    """Harte Gegenprobe vor dem Rendern einer ENGLISCHEN Fassung (neu
+    2026-09-26): Hat jede Signatur ihre Uebersetzung, und laesst sich jeder
+    Beleg mechanisch uebersetzen (oder steht er ganz in belege_en)? Meldet
+    ALLE Luecken auf einmal. Im Deutschen kehrt sie sofort zurueck.
+    render_mit_inhalt() ruft sie selbst.
+    """
+    if SPRACHE != 'en':
+        return
+    if isinstance(items, dict):
+        items = items['chapters'] if 'chapters' in items else [items]
+    luecken = []
+    for it in items:
+        name = it.get('kicker') or it.get('title') or '?'
+        sig = (it.get('signatur') or '').strip()
+        if sig and _ws(sig) not in SIGNATUREN_EN:
+            luecken.append(f'  Signatur fehlt ({name}): {_ws(sig)!r}')
+        bel = (it.get('beleg') or '').strip()
+        if bel and _ws(bel) not in BELEGE_EN:
+            fremd = set()
+            for s in re.split(r'\s+·\s+', bel):
+                if s.strip():
+                    fremd.update(beleg_fremdwoerter(
+                        beleg_segment_en(s, streng=False)))
+            if fremd:
+                luecken.append(f'  Beleg nicht mechanisch uebersetzbar '
+                               f'({name}), unbekannt: {", ".join(sorted(fremd))}')
+    if luecken:
+        raise SprachfassungError(
+            'Englische Fassung — fehlende Uebersetzungen:\n' + '\n'.join(luecken)
+            + '\nIm Chart-Builder eintragen: SIGNATUR_EN = {deutscher Wortlaut: '
+              'englischer} und fuer einen nicht uebersetzbaren Beleg BELEG_EN = '
+              '{ganzer deutscher Beleg: englischer}; beide gehen per '
+              'chartdoc.konfiguriere(signaturen_en=…, belege_en=…) hinein.')
+
+
+# Woerter, an denen ein deutscher Rest im englischen Text auffaellt — Funktions-
+# woerter und die Labelwoerter, die bis zum 2026-09-26 fest im Code standen.
+_DEUTSCH_MARKER = {
+    'der', 'die', 'das', 'und', 'ist', 'nicht', 'ein', 'eine', 'mit', 'im',
+    'am', 'zum', 'zur', 'vom', 'bis', 'auf', 'für', 'über', 'unter', 'wird',
+    'werden', 'sind', 'dein', 'deine', 'deiner', 'deinem', 'deinen', 'Haus',
+    'Häuser', 'Beleg', 'Signatur', 'Kapitel', 'Zeichen', 'Seite', 'Rad',
+    'Aspekte', 'Aspekt', 'Achse', 'Grad', 'Lauf', 'Faktor', 'Quadrat',
+    'Trigon', 'Sextil', 'Konjunktion', 'Halbsextil', 'Sonne', 'Mond', 'Merkur',
+    'Neptun', 'Widder', 'Stier', 'Zwillinge', 'Krebs', 'Jungfrau', 'Waage',
+    'Skorpion', 'Steinbock', 'Wassermann', 'Fische', 'direkt', 'Quartal',
+    'Stichtag', 'Anhang', 'Inhalt', 'Zeitleiste', 'Dicht', 'Ruht', 'Linien',
+    'Horoskop', 'Mondknoten', 'Südknoten', 'Feuer', 'Erde', 'Luft', 'Wasser',
+    'kardinal', 'veränderlich', 'Zeitraum', 'Tage', 'Tagen'}
+
+
+def sprachprobe(html_str):
+    """Moegliche deutsche Reste im sichtbaren Text eines ENGLISCHEN Dokuments
+    (neu 2026-09-26): Woerter mit Umlaut oder ß und die Woerter aus
+    _DEUTSCH_MARKER, je mit Anzahl, haeufigste zuerst — eine Liste von
+    Strings wie 'Beleg (3)'. Ein Hinweis, kein Urteil: ein deutscher Ortsname
+    in der Geburtszeile ist kein Fehler. render_mit_inhalt() druckt die
+    Treffer der englischen Fassung selbst.
+    """
+    import html as _h
+    t = re.sub(r'(?is)<(style|script)\b.*?</\1>', ' ', str(html_str))
+    t = re.sub(r'(?s)<[^>]+>', ' ', t)
+    t = _h.unescape(t)
+    zahl = {}
+    for w in re.findall(r'[^\W\d_]+', t):
+        if w in _DEUTSCH_MARKER or re.search('[äöüÄÖÜß]', w):
+            zahl[w] = zahl.get(w, 0) + 1
+    return [f'{w} ({n})' for w, n in sorted(zahl.items(),
+                                             key=lambda x: (-x[1], x[0]))]
 
 
 def _beleg_streifen(it, sig_html=''):
@@ -1966,7 +2446,13 @@ def _beleg_streifen(it, sig_html=''):
         return ''
     kopf, zeilen, rest = '', '', []
     if bel_txt:
-        segs = [s.strip() for s in re.split(r'\s+·\s+', bel_txt) if s.strip()]
+        # Englische Fassung (seit 2026-09-26): Ein ganzer Beleg aus BELEGE_EN
+        # ersetzt den deutschen. Sonst werden die DEUTSCHEN Segmente erst
+        # eingeteilt (Stand oder Beziehung, an den deutschen Aspektwoertern)
+        # und danach einzeln uebersetzt (beleg_segment_en).
+        ersatz = _beleg_ersatz(bel_txt)
+        quelle = ersatz if ersatz is not None else bel_txt
+        segs = [s.strip() for s in re.split(r'\s+·\s+', quelle) if s.strip()]
         stand, seen_rel = [], False
         for s in segs:
             if not seen_rel and not ASPEKT_WORT.search(s):
@@ -1976,7 +2462,10 @@ def _beleg_streifen(it, sig_html=''):
                 rest.append(s)
         if not stand and rest:
             stand, rest = [rest[0]], rest[1:]
-        kopf = (f'<div class="beleg-stand"><span class="lbl">Beleg:</span> '
+        if SPRACHE == 'en' and ersatz is None:
+            stand = [beleg_segment_en(s) for s in stand]
+            rest = [beleg_segment_en(s) for s in rest]
+        kopf = (f'<div class="beleg-stand"><span class="lbl">{FUSS_LABEL}</span> '
                 f'{esc(" · ".join(stand))}</div>') if stand else ''
         zeilen = ''.join(f'<div class="beleg-asp"><span class="mk">–</span>'
                          f'{esc(r)}</div>' for r in rest)
@@ -1997,7 +2486,7 @@ def build_head(it):
             if it.get('kicker') else '')
     sig = bel = ''
     if BELEG_PLATZ == 'kopf':
-        sig = (f'<div class="signatur">{esc(it["signatur"])}</div>'
+        sig = (f'<div class="signatur">{esc(signatur_anzeige(it["signatur"]))}</div>'
                if it.get('signatur') else '')
         bel = _beleg_streifen(it)
     return (f'<div class="chapter-head">{kick}'
@@ -2056,7 +2545,7 @@ def build_fuss(it):
     """
     if BELEG_PLATZ != 'fuss' or not _hat_fuss(it):
         return ''
-    sig_txt = (it.get('signatur') or '').strip()
+    sig_txt = signatur_anzeige((it.get('signatur') or '').strip())
     sig = f'<div class="fuss-sig">{esc(sig_txt)}</div>' if sig_txt else ''
     streifen = _beleg_streifen(it, sig_html=sig)
     return f'<div class="kapitel-fuss">{streifen}</div>' if streifen else ''
@@ -2560,7 +3049,12 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     # Die Signatur steht seit dem 2026-09-05 im Kapitelfuss. Sie hier in die
     # Volltext-Probe zu haengen kostet nichts und faengt den Fall ab, dass ein
     # Fuss zwar gebaut, aber der falschen Quelle entnommen wurde.
-    must += [(it['signatur'], f"{it.get('kicker') or 'Kapitel'} Signatur")
+    # 2026-09-26: In der englischen Fassung zuerst ALLE fehlenden
+    # Uebersetzungen auf einmal melden — signatur_anzeige() braeche sonst am
+    # ersten fehlenden Eintrag ab. Im Deutschen kehrt die Probe sofort zurueck.
+    pruefe_sprachfassung(items)
+    must += [(signatur_anzeige(it['signatur']),
+              f"{it.get('kicker') or 'Kapitel'} Signatur")
              for it in items if (it.get('signatur') or '').strip()]
     must += list(extra_must)
     # Vor dem ersten Render: sitzt der Fuss ueberhaupt im Dokument? Ein
@@ -2570,6 +3064,13 @@ def render_mit_inhalt(build_html, out_pfad, items, colon_pairs, seiten_dict,
     _erstes_html = build_html(set())
     pruefe_kapitelfuss(_erstes_html, items)
     pruefe_orbis_zeile(_erstes_html)
+    if SPRACHE == 'en':
+        # 2026-09-26: Hinweis, kein Abbruch — ein deutscher Ortsname in der
+        # Geburtszeile ist kein Fehler. Jeder andere Treffer ist einer.
+        _reste = sprachprobe(_erstes_html)
+        if _reste and verbose:
+            print('  !! Sprachprobe (englische Fassung), moegliche deutsche '
+                  'Reste im sichtbaren Text: ' + ', '.join(_reste[:25]))
     letzte = None
     for runde in range(1, max_pass + 1):
         doc, breaks, unfix = build.render_sentence_safe(
@@ -2690,9 +3191,63 @@ def _selbsttest():
         _CFG['gr'] = vorher
     assert '0°30′' in seite and '0°29′' not in seite and 'FALSCH' not in seite
     assert gr(0.4917) == '0°30′' and gr(29.9999) == '30°00′'
+    # 2026-09-26: Sprachfassung, zweiter Teil — deutsch zeichengleich vor und
+    # nach einem Wechsel, englisch ohne deutsche Reste an den Stellen, die bis
+    # heute fest standen; Beleg mechanisch, Signatur aus signaturen_en.
+    asp2 = asp + [{'a': 'Mond', 'b': 'Sonne', 'name': 'Halbquadrat', 'orb': 0.7,
+                   'strength': 'neben', 'color': 'neutral',
+                   'spiegel': 'Zusatzebene'},
+                  {'a': 'Sonne', 'b': 'AC', 'name': 'Quadrat', 'orb': 2.0,
+                   'strength': 'einseitig', 'color': 'rot',
+                   'spiegel': 'Quadrat DC'}]
+    kap = {'kicker': 'Kapitel 1', 'title': 'T', 'signatur': 'Eine Signatur.',
+           'beleg': ('Sonne ☉ 0°35′ Jungfrau ♍, 9. Haus · Sonne ☉ Quadrat □ '
+                     'Aszendent (AC), 0°15′ Schütze ♐, Orb 0°20′'),
+           'blocks': []}
+
+    def _seiten():
+        setze_zusatzaspekte(asp2)
+        return (linien_legende(gerechnet='x'), aspekt_page(asp2),
+                transituhr_page('u.png', '1', 'n'), zeitleiste_page(zeilen),
+                struktur_css(), build_fuss(kap),
+                konstellationen_page([('☉', 'Sonne', 'Löwe', '1°00′', '5',
+                                       'rückläufig')],
+                                     [('AC', 'Aszendent', 'Krebs', '2°00′')],
+                                     *verteilung([('Sonne', 1.0)] * 10)))
+    de_vorher = _seiten()
+    try:
+        konfiguriere(sprache='en', signaturen_en={'Eine Signatur.': 'A signature.'})
+        en = _seiten()
+        txt = ' '.join(en[:4]) + ' ' + en[5] + ' ' + en[6]
+        reste = sprachprobe(txt)
+        assert not reste, reste
+        assert 'The Lines in the Wheel' in en[0] and '>o.<' in en[1] \
+            and 'Square' in en[1] and '(Square DC)' in en[1] \
+            and '(additional layer)' in en[1] and 'Semi-square' in en[1] \
+            and 'Not drawn in the wheel.' in en[1], en[1]
+        assert 'The Transit Clock — two years at a glance' in en[2]
+        assert 'Time at a Glance' in en[3] and '<th>Period</th>' in en[3]
+        assert 'content: "CONTENTS"' in en[4] and 'content: "APPENDIX"' in en[4]
+        assert 'Evidence:' in en[5] and 'A signature.' in en[5] \
+            and '9th house' in en[5] and 'Sun' in en[5], en[5]
+        assert 'Leo' in en[6] and 'retrograde' in en[6] and 'Ascendant' in en[6] \
+            and 'Fire' in en[6], en[6]
+        assert build.fuss_signaturen({'chapters': [kap]}) == ['A signature.']
+        try:
+            pruefe_sprachfassung([dict(kap, signatur='Fehlt.')])
+            raise AssertionError('fehlende Signatur nicht gemeldet')
+        except SprachfassungError as e:
+            assert 'Signatur fehlt' in str(e), e
+        assert beleg_segment_en('T-Saturn ♄ Quadrat □ R-Sonne ☉ — exakt '
+                                '14.03.2027') == \
+            'T-Saturn ♄ Square □ R-Sun ☉ — exact 14 Mar 2027'
+    finally:
+        konfiguriere(sprache='de', signaturen_en={}, belege_en={})
+    assert _seiten() == de_vorher, 'deutsche Ausgabe nach dem Wechsel anders'
+    assert build.fuss_signaturen({'chapters': [kap]}) == ['Eine Signatur.']
     print('[chartdoc-Selbsttest bestanden: lies_zeitleiste(), Marke der '
           'Zeitleiste (W12), kopf-Pruefung von inhalt_page() (W61), '
-          'Orb der Aspektseite (W2)]')
+          'Orb der Aspektseite (W2), Sprachfassung (2026-09-26)]')
 
 
 # ---------------------------------------------------------------------------

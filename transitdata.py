@@ -94,6 +94,129 @@ ASP_GLYPH = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□',
 MON_KURZ = ['', 'Jan', 'Feb', 'Mrz', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep',
             'Okt', 'Nov', 'Dez']
 
+# --- Englische Fassung (neu 2026-09-26) -------------------------------------
+# Pruefbericht Transit 3+4 vom 26.09., K1-5: Monatskuerzel der Zeitleiste und
+# der Dichte-Spalte, Anzeigenamen in Uhr und Anhang, Aspekt- und Richtungs-
+# woerter standen fest deutsch; jeder englische Lauf ueberschrieb MON_KURZ und
+# ZIELNAME von Hand. setze_sprache('en') tauscht sie — chartdoc.setze_sprache()
+# ruft es mit, und die Vorlage ruft chartdoc.konfiguriere(sprache=…) VOR
+# parse(), weil parse() die Monatsspannen beim Lesen baut. Die INTERNEN Namen
+# (Themenzuordnung, events.json) bleiben deutsch; getauscht wird nur, was
+# angezeigt wird. Im Deutschen aendert sich nichts.
+SPRACHE = 'de'
+_MON_KURZ_DE = list(MON_KURZ)
+_MON_KURZ_EN = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug',
+                'Sep', 'Oct', 'Nov', 'Dec']
+_ZIELNAME_DE = dict(ZIELNAME)
+_NAMEN_EN = {
+    'Sonne': 'Sun', 'Mond': 'Moon', 'Merkur': 'Mercury', 'Venus': 'Venus',
+    'Mars': 'Mars', 'Jupiter': 'Jupiter', 'Saturn': 'Saturn',
+    'Uranus': 'Uranus', 'Neptun': 'Neptune', 'Pluto': 'Pluto',
+    'Chiron': 'Chiron', 'Lilith': 'Lilith', 'Pholus': 'Pholus',
+    'Mondknoten': 'Lunar Node', 'Knoten': 'Lunar Node',
+    'Südknoten': 'South Node', 'Suedknoten': 'South Node',
+    'Glückspunkt': 'Part of Fortune', 'Glueckspunkt': 'Part of Fortune',
+    'Widder': 'Aries', 'Stier': 'Taurus', 'Zwillinge': 'Gemini',
+    'Krebs': 'Cancer', 'Löwe': 'Leo', 'Loewe': 'Leo', 'Jungfrau': 'Virgo',
+    'Waage': 'Libra', 'Skorpion': 'Scorpio', 'Schütze': 'Sagittarius',
+    'Schuetze': 'Sagittarius', 'Steinbock': 'Capricorn',
+    'Wassermann': 'Aquarius', 'Fische': 'Pisces'}
+_ASPEKT_EN = {'Konjunktion': 'Conjunction', 'Opposition': 'Opposition',
+              'Quadrat': 'Square', 'Trigon': 'Trine', 'Sextil': 'Sextile',
+              'Quincunx': 'Quincunx', 'Halbsextil': 'Semisextile'}
+_RICHTUNG_EN = {'zulaufend': 'applying', 'auslaufend': 'separating',
+                'stehend': 'stationary', 'direkt': 'direct',
+                'rückläufig': 'retrograde'}
+# Freitext (Stand, Station, Zielaufzaehlung): Namen UND Aspektwoerter
+_TEXT_EN = dict(_NAMEN_EN, **_ASPEKT_EN)
+_NAMEN_RE = re.compile(r'(?<![\w])(' + '|'.join(
+    re.escape(k) for k in sorted(_TEXT_EN, key=len, reverse=True)) + r')(?![\w])')
+
+
+def setze_sprache(code='de'):
+    """Sprache der ANZEIGE setzen ('de' oder 'en', neu 2026-09-26).
+
+    Tauscht die Monatskuerzel (MON_KURZ — Quartalsspannen und Dichte-Spalte
+    der Zeitleiste) und die Anzeigenamen (ZIELNAME, damit ziel_label() und
+    kurz(), also auch die Zeilen der Transit-Uhr). VOR parse() aufrufen; am
+    einfachsten ueber chartdoc.konfiguriere(sprache=…), das es mitzieht.
+    Aspekt, Richtung, Datum und Exakt-Text des Anhangs liefern aspekt_label(),
+    richtung_label(), datum_kurz()/datum_lang() und exakt_anzeige().
+    """
+    global SPRACHE
+    code = (code or 'de').strip().lower()[:2]
+    if code not in ('de', 'en'):
+        raise ValueError("sprache: 'de' oder 'en', nicht %r" % code)
+    MON_KURZ[:] = _MON_KURZ_EN if code == 'en' else _MON_KURZ_DE
+    ZIELNAME.clear()
+    ZIELNAME.update(_NAMEN_EN if code == 'en' else _ZIELNAME_DE)
+    SPRACHE = code
+    return code
+
+
+def aspekt_label(a):
+    """Aspektname fuer die Anzeige — deutsch unveraendert, englisch uebersetzt."""
+    return _ASPEKT_EN.get(a, a) if SPRACHE == 'en' else a
+
+
+def richtung_label(r):
+    """Laufrichtung fuer die Anzeige (zulaufend/auslaufend/stehend, direkt/
+    rückläufig) — deutsch unveraendert, englisch uebersetzt."""
+    return _RICHTUNG_EN.get(r, r) if SPRACHE == 'en' else r
+
+
+def anzeige_text(s):
+    """Freitext des Reports (Stand, Station, Zielaufzaehlung) fuer die
+    Anzeige: deutsch unveraendert; englisch werden Faktor-, Zeichen- und
+    Aspektnamen ersetzt ('12°34' Loewe' -> '12°34' Leo', 'Trigon Mars' ->
+    'Trine Mars')."""
+    s = str(s)
+    if SPRACHE != 'en':
+        return s
+    return _NAMEN_RE.sub(lambda m: _TEXT_EN[m.group(1)], s)
+
+
+def datum_kurz(d):
+    """Datum fuer Tabellen: '14.06.27' / '14 Jun 27'."""
+    if SPRACHE == 'en':
+        return '%d %s %02d' % (d.day, _MON_KURZ_EN[d.month], d.year % 100)
+    return d.strftime('%d.%m.%y')
+
+
+def datum_lang(d):
+    """Datum fuer Fliesstext und Fussnoten: '14.06.2027' / '14 Jun 2027'."""
+    if SPRACHE == 'en':
+        return '%d %s %d' % (d.day, _MON_KURZ_EN[d.month], d.year)
+    return d.strftime('%d.%m.%Y')
+
+
+def exakt_anzeige(txt):
+    """Exakt-Spalte der Stichtagstabelle (im_orb[…]['exakt_txt']) fuer die
+    Anzeige. Deutsch genau die Umformung, die die Transit-Vorlage bis zum
+    2026-09-26 selbst schrieb ('exakt war' -> 'zuletzt', Daten TT.MM.JJ,
+    'T)' -> 'Tagen)'); englisch dieselbe Aussage englisch."""
+    ex = str(txt)
+    if SPRACHE != 'en':
+        ex = ex.replace('exakt war ', 'zuletzt ').replace('exakt ', '')
+        ex = re.sub(r'(\d{4})-(\d\d)-(\d\d)', lambda m:
+                    f'{m.group(3)}.{m.group(2)}.{m.group(1)[2:]}', ex)
+        # 2026-09-26: „1 T)" VOR dem allgemeinen Ersatz — in der Vorlage lief
+        # er danach und traf nie („in 1 Tagen").
+        return re.sub(r'\b1 T\)', '1 Tag)', ex).replace(' T)', ' Tagen)')
+    ex = re.sub(r'\bexakt war (\S+) \(vor (\d+) T\)', r'last exact \1 (\2 days ago)', ex)
+    ex = re.sub(r'\bexakt (\S+) \(in (\d+) T\)', r'exact \1 (in \2 days)', ex)
+    ex = ex.replace(' nach dem Fenster', ' after the window')
+    ex = ex.replace(' vor dem Rueckblick', ' before the look-back')
+    ex = ex.replace('kein Exaktkontakt, Annaeherung bis ',
+                    'no exact contact, closest approach ')
+    ex = ex.replace('kein Exaktkontakt (engster Orb ab Stichtag ',
+                    'no exact contact (closest orb from the reference date ')
+    ex = re.sub(r'\bam (\d{4}-\d\d-\d\d)', r'on \1', ex)
+    ex = re.sub(r'\((1) days ago\)', r'(\1 day ago)', ex)
+    ex = re.sub(r'\(in (1) days\)', r'(in \1 day)', ex)
+    return re.sub(r'(\d{4})-(\d\d)-(\d\d)', lambda m: datum_kurz(
+        date(int(m.group(1)), int(m.group(2)), int(m.group(3)))), ex)
+
 
 def _d(s):
     y, m, dd = s.split('-')
@@ -115,7 +238,8 @@ def kurz(transiter, aspekt, ziel):
     Zeichen in keiner verfuegbaren Font gedeckt sind.
     """
     tg = GLYPH.get(transiter, '')
-    ag = ASP_GLYPH.get(aspekt, aspekt)
+    # 2026-09-26: ohne Glyphe das Wort in der gesetzten Sprache
+    ag = ASP_GLYPH.get(aspekt) or aspekt_label(aspekt)
     zg = GLYPH.get(ziel, '')
     teile = [t for t in (tg, ziel_label(transiter), ag, zg, ziel_label(ziel))
              if t]

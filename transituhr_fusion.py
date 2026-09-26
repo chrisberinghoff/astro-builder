@@ -90,6 +90,17 @@ def achse_text(d):
     return d.strftime('%m/%y')
 
 
+def stations_text(d):
+    """Datum einer Station unter der Zeitachse: „14.06.27" / „14 Jun 27".
+
+    Neu 2026-09-26 (Pruefbericht Transit 3+4 vom 26.09., K1-6): Hier stand
+    `%d.%m.%y` fest, auch nach setze_sprache('en') — im englischen PDF las
+    sich jedes Stationsdatum als Monat-vor-Tag."""
+    if SPRACHE == 'en':
+        return '%d %s %02d' % (d.day, _MONAT_KURZ_EN[d.month], d.year % 100)
+    return d.strftime('%d.%m.%y')
+
+
 def setze_sprache(code='de'):
     """Sprache der Uhr-Beschriftungen und des Datumsformats setzen.
 
@@ -343,7 +354,7 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
         ax.plot([X], [yy], marker='o', ms=4.4 * sk, color=col,
                 markeredgecolor=PAPER, markeredgewidth=0.8, zorder=6)
         ax.text(X, yy - 0.42, td.GLYPH.get(s['planet'], '') + ' '
-                + s['datum'].strftime('%d.%m.%y'), ha='center', va='center',
+                + stations_text(s['datum']), ha='center', va='center',
                 fontsize=6.2 * sk, color=STONE, zorder=6)
 
     fig.tight_layout(pad=0.4)

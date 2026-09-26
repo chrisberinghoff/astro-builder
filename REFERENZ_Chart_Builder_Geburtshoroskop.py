@@ -41,6 +41,14 @@ FUENF DINGE, DIE HIER BEWUSST SO STEHEN:
     Aspekte, dann die Kapitel. Beim Geburtshoroskop gibt es keine
     Teiler-Kapitel (PART_KICKER leer) und keine typ-eigenen Grafikseiten.
 
+ENGLISCHE FASSUNG (seit 2026-09-26): SPRACHE = 'en' setzen, SIGNATUR_EN
+fuellen (je Kapitel die Signatur, deutsch -> englisch) und, wo der Beleg nicht
+mechanisch uebersetzbar ist, BELEG_EN. Alle Seitenlabels, Verzeichnis,
+Fussnoten, Namen auf Konstellations- und Aspektseite sowie Signatur und Beleg
+stehen dann englisch; die analyse.md behaelt Signatur und Beleg deutsch.
+Fehlt eine Uebersetzung, bricht der Render ab und nennt alle fehlenden
+(chartdoc.pruefe_sprachfassung). Verfahren: Modul Sprachfassung.
+
 Aufruf:  python3 <klient>_builder.py
 Geprueft wird beim Rendern automatisch: build.PFLICHT_BAUSTEINE fuer DOCTYPE.
 """
@@ -60,7 +68,15 @@ ANALYSE = '/home/claude/<klient>_analyse.md'
 RADPNG = '<klient>_radix.png'
 OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
 DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
-GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …)
+GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …); englisch Monat englisch, '<D> <MONTH> <YYYY> · …'
+# Sprache des PDFs (2026-09-26): 'de' oder 'en' (Modul Sprachfassung). Bei 'en'
+# SIGNATUR_EN fuellen — Schluessel ist die deutsche Signatur der analyse.md,
+# Wert die englische; BELEG_EN nur fuer einen Beleg, den die mechanische
+# Uebersetzung nicht schafft (typisch der Getriebe-Beleg), Schluessel ist der
+# GANZE deutsche Beleg des Kapitels.
+SPRACHE = 'de'
+SIGNATUR_EN = {}
+BELEG_EN = {}
 
 # Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
 # Hauswechsel) — aus dem KOPF der chart_data uebernommen,
@@ -69,7 +85,8 @@ GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Cover, letzte Zeile �
 JD_GEBURT = None          # <<JD (UT) aus dem Kopf der chart_data>>
 LAT, LON = None, None     # <<Breite, Laenge aus dem Kopf der chart_data>>
 # Weitere Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
-# (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag.
+# (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag; in einer
+# englischen Fassung der Satz englisch (von Hand, sinngleich).
 FUSSNOTEN_EXTRA = []
 
 from build import BASE_CSS                     # noqa: E402
@@ -86,7 +103,7 @@ PALETTE_VORGABE = DECKBLATT['PALETTE']      # steuert die Farbwahl unten
 ORNAMENT = DECKBLATT['GLYPHEN']             # Inhaltsverzeichnis
 
 PART_KICKER = set()       # Geburtshoroskop: keine Teiler-Kapitel
-OPEN_PAGE = {'Auftakt'}   # eigene Seite; das Schlusswort bewusst NICHT
+OPEN_PAGE = {'Auftakt', 'Prelude'}   # eigene Seite; das Schlusswort bewusst NICHT
 
 # Breitenleiter fuer die Einmessung der Radseite: 15,6 cm abwaerts in
 # 0,2-cm-Schritten.
@@ -131,7 +148,9 @@ GLYPH_OF.update({'Suedknoten': '☋'})
 
 chartdoc.konfiguriere(pal=PAL, part_kicker=PART_KICKER, glyphen=GLYPH_OF,
                       gr=cd.gr, name_of=cd.name_of, kopfzeile=VORNAME.upper(),
-                      aspektfarben=RAD_PALETTE, part_ornament=ORNAMENT)
+                      aspektfarben=RAD_PALETTE, part_ornament=ORNAMENT,
+                      sprache=SPRACHE, signaturen_en=SIGNATUR_EN,
+                      belege_en=BELEG_EN)
 esc = chartdoc.esc
 
 COVER_CSS = f"""
@@ -328,12 +347,20 @@ for _a, _b in (('Suedknoten', 'Südknoten'), ('Glueckspunkt', 'Glückspunkt')):
         _BY[_a] = _BY[_b]
 
 # Datum und Zone wie GEBURTSZEILE (Tag ohne fuehrende Null), hier in Normalschrift.
-RAD_NOTE = (f'{VORNAME} · <T. Monat JJJJ, HH:MM ZONE> · <Ort> · '
-            'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
-            'nach Huber-Orbis')
-KONST_NOTE = ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
-              'Hausspitze und wird in beiden Häusern gedeutet — das führende '
-              'Haus steht vorn.')
+RAD_NOTE = {
+    'de': (f'{VORNAME} · <T. Monat JJJJ, HH:MM ZONE> · <Ort> · '
+           'Häuser nach Koch · wahrer Mondknoten · wahre Lilith · Aspekte '
+           'nach Huber-Orbis'),
+    'en': (f'{VORNAME} · <D Month YYYY, HH:MM ZONE> · <Place> · '
+           'Koch houses · true lunar node · true Lilith · aspects by '
+           'Huber orbs')}[SPRACHE]
+KONST_NOTE = {
+    'de': ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
+           'Hausspitze und wird in beiden Häusern gedeutet — das führende '
+           'Haus steht vorn.'),
+    'en': ('Double house entry: the factor stands up to 5° before the next '
+           'house cusp and is read in both houses — the leading house comes '
+           'first.')}[SPRACHE]
 
 
 def konst_note(zeilen):
@@ -409,7 +436,7 @@ def konst_fussnoten():
     from lade import ephemeriden
     ephemeriden(still=True)
     return list(FUSSNOTEN_EXTRA) + radix.konstellations_fussnoten(
-        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON)
+        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON, sprache=SPRACHE)
 
 
 KONST_FUSSNOTEN = konst_fussnoten()
@@ -434,9 +461,10 @@ items = build.prepare_chapters(parsed)
 colon_pairs = build.make_colon_pairs(items)
 KICKER = parsed['doctype'].upper()          # Cover-Kickerzeile = Dokumenttyp der H1
 
-TOC_VORNE = [('Das Chartbild', [
-    ('Die Radix', 'PG_rad'),
-    ('Die Konstellationen', 'PG_konst'),
+# Titel aus chartdoc (folgen SPRACHE); deutsch: Das Chartbild, Die Radix, …
+TOC_VORNE = [(chartdoc.CHARTBILD_TITEL, [
+    (chartdoc.RADIX_TITEL, 'PG_rad'),
+    (chartdoc.KONST_TITEL, 'PG_konst'),
     (chartdoc.ASPEKT_TITEL, 'PG_asp')])]
 
 # Seitenzahlen fuers Inhaltsverzeichnis: erster Durchlauf leer, danach aus dem
@@ -448,11 +476,14 @@ def build_html(breaks=(), skala=1.0, rad_breite=None, konst_skala=1.0,
                nur_frontmatter=False):
     """Das ganze Dokument — oder mit nur_frontmatter=True nur Cover, Inhalt und
     Chartbild-Strecke (fuer die Einmessung; s. Docstring der Datei)."""
-    parts = ['<!doctype html><html lang="de"><head><meta charset="utf-8">'
+    # lang= folgt SPRACHE: die Silbentrennung laeuft nach den Mustern der
+    # Sprache des Dokuments.
+    parts = [f'<!doctype html><html lang="{SPRACHE}"><head><meta charset="utf-8">'
              '<style>', BASE_CSS, chartdoc.struktur_css(), COVER_CSS,
              '</style></head><body>',
              cover_html(KICKER),
-             chartdoc.inhalt_page(items, SEITEN, f'Horoskop für {VORNAME}',
+             chartdoc.inhalt_page(items, SEITEN,
+                                  chartdoc.INHALT_KOPF.format(name=VORNAME),
                                   vorne=TOC_VORNE, ornament=ORNAMENT),
              chartbild(rad_breite, skala, konst_skala)]
     if not nur_frontmatter:

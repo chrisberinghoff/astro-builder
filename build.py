@@ -1742,7 +1742,14 @@ _FUSS_ASPEKT_RE = re.compile(r'^\s*[–—]\s')
 _FUSS_ZEILE_RE = re.compile(
     r'^\s*[–—]\s|\d{1,3}\s*°\s*\d{1,2}\s*[′\']|\bOrb\b|·|'
     r'Konjunktion|Opposition|Quadrat|Trigon|Sextil|Quincunx|Halbsextil|'
+    r'Conjunction|Square|Trine|Semi-?sextile|'   # 2026-09-26: englischer Beleg
     r'[☉☽☿♀♂♃♄♅♆♇☊☋⚷⚸⊗♈♉♊♋♌♍♎♏♐♑♒♓]')
+# 2026-09-26: In einer englischen Fassung steht die Signatur im PDF englisch
+# (Chris-Entscheidung; die analyse.md bleibt deutsch). chartdoc.setze_sprache()
+# setzt hier die Funktion, die den deutschen Wortlaut auf den gerenderten
+# abbildet — fuss_signaturen() liefert damit, was verify() im PDF findet. Im
+# Deutschen None: unveraendert.
+FUSS_ANZEIGE = None
 # Eine Zeile, die NUR eine Zahl traegt, ist die Seitenzahl — nie Prosa.
 _NUR_ZIFFERN_RE = re.compile(r'\s*\d{1,3}\s*')
 
@@ -1797,8 +1804,10 @@ def fuss_signaturen(parsed) -> list:
     Nimmt das Ergebnis von parse_analyse() oder prepare_chapters().
     """
     kap = parsed.get('chapters', parsed) if hasattr(parsed, 'get') else parsed
-    return [it['signatur'] for it in kap
+    sigs = [it['signatur'] for it in kap
             if isinstance(it, dict) and (it.get('signatur') or '').strip()]
+    # 2026-09-26: englische Fassung -> der Wortlaut, der im PDF steht
+    return [FUSS_ANZEIGE(s) for s in sigs] if FUSS_ANZEIGE else sigs
 
 
 def _sig_anfang(plines, i, sigs, max_zeilen=6):
@@ -2840,14 +2849,21 @@ def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
     EXAKT wird oder seine Kontakte zusammen mindestens `tage_min` Tage im
     Wirkorb stehen — gezaehlt je Thema, ein Tag zaehlt einmal, auch wenn ihn
     zwei Kontakte tragen. Die Kontakte eines Themas stehen in `fuehrt=` und
-    `aspekte=` der Themenliste (`klingt=` nicht). Es zaehlen Kontakte an einem
-    primaeren Ziel und Selbst-Transite an jedem Ziel, Spiegelziele nie.
+    `aspekte=` der Themenliste (`klingt=` nicht). Es zaehlen der FUEHRENDE
+    Kontakt (`fuehrt=`) immer, auch an einem sekundaeren Ziel, und aus
+    `aspekte=` die Kontakte an einem primaeren Ziel und Selbst-Transite an
+    jedem Ziel; Spiegelziele nie. (Seit 2026-09-26, Chris-Entscheidung: Vorher
+    zaehlte auch der Fuehrer nur an einem primaeren Ziel, und ein Thema, das
+    ein Kontakt an einem sekundaeren Ziel fuehrt, stand in der Zeitleiste als
+    ruhig, waehrend Lagebild und Kapitel es als aktiv beschrieben —
+    Pruefbericht Transit 1+2 vom 26.09.)
     Quartale, Exaktdaten und Wirkorb kommen aus der events.json
     (`quarter_bounds`, `exakt`, `wirkorb_perioden`).
 
     Nummern: Mit `analyse_pfad` wird jedes Thema ueber `titel=` dem Kapitel
-    `## Kapitel <n> · <Titel>` zugeordnet (Gross-/Kleinschreibung und
-    Leerraum egal); ohne gilt die THEMA-Nummer.
+    `## Kapitel <n> · <Titel>` — in einer englischen Analyse
+    `## Chapter <n> · <Titel>` (seit 2026-09-26) — zugeordnet (Gross-/
+    Kleinschreibung und Leerraum egal); ohne gilt die THEMA-Nummer.
 
     Rueckgabe: {'zeilen': ['Q1 | dicht=1,3 | marke=', …] — fertig fuer den
     Block, die `marke=` setzt der Lauf; 'quartale': {1: {<Kapitel>: {'exakt':
@@ -2900,36 +2916,41 @@ def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
         for i in range(1, len(teile) - 1, 2):
             nr, blk = int(teile[i]), teile[i + 1]
             titel = (_themen_feld(blk, "titel") or "").strip()
-            felder = " ".join(f for f in (_themen_feld(blk, "fuehrt"),
-                                          _themen_feld(blk, "aspekte")) if f)
-            keys = []
-            for m in re.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
-                                 % "".join(GLYPH_ZU_ASPEKT), felder):
-                k = (tnamen.get(_norm(m.group(1)), m.group(1)),
-                     GLYPH_ZU_ASPEKT[m.group(2)],
-                     znamen.get(_norm(m.group(3)), m.group(3)))
-                if k not in ev:
-                    unbekannt.append((nr, " ".join(k)))
-                elif k not in keys:
-                    keys.append(k)
-            themen.append((nr, titel, keys))
+            keys, fkeys = [], set()
+            for feld in ("fuehrt", "aspekte"):
+                for m in re.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
+                                     % "".join(GLYPH_ZU_ASPEKT),
+                                     _themen_feld(blk, feld) or ""):
+                    k = (tnamen.get(_norm(m.group(1)), m.group(1)),
+                         GLYPH_ZU_ASPEKT[m.group(2)],
+                         znamen.get(_norm(m.group(3)), m.group(3)))
+                    if k not in ev:
+                        if (nr, " ".join(k)) not in unbekannt:
+                            unbekannt.append((nr, " ".join(k)))
+                        continue
+                    if feld == "fuehrt":
+                        fkeys.add(k)          # 2026-09-26: Fuehrer zaehlt immer
+                    if k not in keys:
+                        keys.append(k)
+            themen.append((nr, titel, keys, fkeys))
 
     kapitel = None
     if analyse_pfad:
         at = open(analyse_pfad, encoding="utf-8").read()
         kapitel = {_tnorm(m.group(2)): int(m.group(1)) for m in re.finditer(
-            r"^##\s+Kapitel\s+(\d+)\s+·\s+(.+?)\s*$", at, re.M)}
+            r"^##\s+(?:Kapitel|Chapter)\s+(\d+)\s+·\s+(.+?)\s*$", at,
+            re.M | re.I)}
 
     nq = len(qb) - 1
     quartale = {q: {} for q in range(1, nq + 1)}
     ohne_kapitel, ohne_zaehl = [], []
-    for nr, titel, keys in themen:
+    for nr, titel, keys, fkeys in themen:
         kn = nr if kapitel is None else kapitel.get(_tnorm(titel))
         if kn is None:
             ohne_kapitel.append((nr, titel))
             continue
         zaehlend = [e for k in keys for e in ev[k]
-                    if e.get("primaer") or e.get("selbst_transit")]
+                    if k in fkeys or e.get("primaer") or e.get("selbst_transit")]
         if not zaehlend:
             ohne_zaehl.append(nr)
             continue
@@ -3984,6 +4005,28 @@ def _selbsttest():
                                     "Q4 | dicht=2 | marke="]
                and dq["ohne_zaehlkontakt"] == [4],
                "T11: ohne analyse: %r" % dq)
+
+        # --- 2026-09-26: Fuehrer an einem sekundaeren Ziel zaehlt; englische
+        #     Kapitelkoepfe werden zugeordnet ---------------------------------
+        dj2 = datei("d2_events.json", json.dumps({"quarter_bounds": [
+            "2031-01-01", "2031-04-01", "2031-07-01"], "events": [
+            dev("Neptun", "Quadrat", "Saturn", primaer=False,
+                exakt=["2031-02-10"]),
+            dev("Jupiter", "Sextil", "Merkur", primaer=False,
+                exakt=["2031-05-10"])]}))
+        dt2 = datei("d2_Transit_chart_data.md", (
+            "## Themenliste\n\n"
+            "THEMA 1 | titel=Nebenziel fuehrt | fuehrt=T-Neptun □ R-Saturn\n"
+            "THEMA 2 | titel=Nebenziel klingt | aspekte=T-Jupiter ⚹ R-Merkur\n\n"
+            "RECHENSCHAFT: konstruiert.\nGESTRICHEN: keine.\n"))
+        da2 = datei("d2_Transit_analyse.md", (
+            "# Transit Horoscope — Alex Muster\n\n"
+            "## Chapter 1 · Nebenziel fuehrt\n\nText.\n\n"
+            "## Chapter 2 · Nebenziel klingt\n\nText.\n"))
+        dq = dichte_quartale(dt2, dj2, da2)
+        pruefe(dq["zeilen"] == ["Q1 | dicht=1 | marke=", "Q2 | dicht= | marke="]
+               and not dq["ohne_kapitel"] and dq["ohne_zaehlkontakt"] == [2],
+               "2026-09-26: Fuehrer/Chapter: %r" % dq)
 
         # --- F18: Achsen-Spiegel im Ressourcen-Block (Radix) ----------------
         rtab = "\n".join([
