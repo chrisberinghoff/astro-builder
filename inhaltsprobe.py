@@ -19,7 +19,7 @@ null Token je Lauf und laeuft in Schritt 2 (nach dem Schreiben) und in Schritt 3
 
 Sprachfassung (2026-09-16d, Reparatur nach dem Pruefbericht Geburtshoroskop
 Schritt 3+4 vom selben Tag, Klasse 1 Nr. 1.2): Die Probe liest seither auch die
-ENGLISCHE Analyse nach Werkzeuge-Modul A3 — englische Faktor- und Zeichennamen,
+ENGLISCHE Analyse (Modul Sprachfassung) — englische Faktor- und Zeichennamen,
 Aspektwoerter (beide Schreibweisen: semi-sextile/semisextile), Hausangaben
 ("4th house", "fourth house", "11th/10th house"), die Kicker Prelude / Account /
 Closing Word / Core Themes / Fields of Conflict / Life Tasks, den Typ aus einer
@@ -129,7 +129,7 @@ P3  Kapitel/Themen   die nummerierten Themenkapitel in Dokumentreihenfolge
                      das Kapitel-Skelett der anderen Typen ist hier nicht hinterlegt.)
 P4  Bewegungsfolge   je Themenkapitel die ###-Zwischentitel gegen WORTLAUTE[typ]:
                      volle Folge sieben in fester Reihenfolge; Kurzform (form=kurz,
-                     Ressourcen-Bauform, Zugang) ohne Wurzel und Widerstand.
+                     Zugang) ohne Wurzel und Widerstand; form=ressource: beides.
 P5  Rechenschaft     jeder Faktor des @@SELEKTOR-Blocks, der kein Thema fuehrt,
                      braucht eine Zeile im Kapitel `Rechenschaft`, die mit seinem
                      Namen beginnt; eine Zeile fuer einen Fuehrer: PRUEFEN. Achsen
@@ -290,7 +290,7 @@ _B2 = "Was da arbeitet"
 _B4 = "Der Teil von dir, der das nicht aufgeben will"
 _B5 = "Die zwei Formen und das Dazwischen"
 _B6 = "Womit du arbeiten kannst"
-# Englische Sprachfassung (Werkzeuge-Modul A3; Klartext-Modul, Aktivierung): die
+# Englische Sprachfassung (Modul Sprachfassung; Klartext-Modul, Aktivierung): die
 # Wortlaute der englischen Analyse des Pruefflaufs vom 2026-09-16d; fuer den
 # Transit seit dem 2026-09-22 (W57).
 _E1 = "How you notice it"
@@ -385,7 +385,7 @@ ASPEKTE = (("Anderthalbquadrat", "⚼"), ("Halbquadrat", "∠"), ("Halbsextil", 
            ("Konjunktion", "☌"), ("Opposition", "☍"), ("Quadrat", "□"),
            ("Trigon", "△"), ("Sextil", "⚹"), ("Quincunx", "⚻"))
 _ASP_WORT = {w: w for w, _ in ASPEKTE}
-# englische Aspektwoerter (Sprachfassung, 2026-09-16d): Werkzeuge-Modul A3 nennt
+# englische Aspektwoerter (Sprachfassung, 2026-09-16d): der Anker hiess anfangs
 # `semisextile`, die englische Analyse schreibt `semi-sextile` — beide gelten,
 # ebenso beide Schreibweisen von semi-square und sesquiquadrate/sesquisquare.
 _ASP_WORT_EN = {"conjunction": "Konjunktion", "opposition": "Opposition",
@@ -472,7 +472,7 @@ _KICKER_ALIAS = {"auftakt": ("prelude", "zur lesart", "on reading this"),
                  "konfliktfelder": ("fields of conflict",), "lebensaufgaben": ("life tasks",),
                  "zugang": ("access",),
                  # 2026-09-19 (W43, W10): Register und Lagebild des Transits; die
-                 # englischen Namen aus T12-18 (Werkzeuge A3 traegt sie noch nicht).
+                 # englischen Namen aus T12-18 (heute in hilfe('ENGLISCH')).
                  "mitlaufendes": ("running alongside", "also running"),
                  "der stand heute": ("where things stand", "as things stand"),
                  # 2026-09-22 (W57-Nachzug): `Getriebe` hatte keinen englischen Namen —
@@ -620,11 +620,11 @@ def _tabellen_lesen(txt, unlesbar=None):
     STILL vorbei: Mit `∡` statt `⚼` in der Untergrund-Tabelle meldete P1 zwei
     FEHLER auf einen korrekten Beleg (G12-18, Klasse 1 Nr. 1.1). Gelesen werden
     in der Aspektspalte die Glyphen aus ASPEKTE — darunter ∠ Halbquadrat und
-    ⚼ Anderthalbquadrat — und der Wort-Trenner des Datenblatt-Moduls
+    ⚼ Anderthalbquadrat — und der Wort-Trenner des Moduls Radixrechnung
     (`–Anderthalbquadrat–`, Halbgeviertstriche).
 
     Zeilenregex woertlich aus `build._ressourcen_zeilen()` (sechsspaltige Form des
-    Datenblatt-Moduls, Spalte 6 "zugleich" seit 15.09.2026 optional):
+    Moduls Radixrechnung, Spalte 6 "zugleich" seit 15.09.2026 optional):
         | Faktor | ☌ Konjunktion | Faktor | 0°41′ | konj | … |
     — dort nur mit den harmonischen Glyphen (`_HARMONISCH`); hier mit ALLEN
     Aspektglyphen und dem Aspektwort als Alternative, dazu die Spalten 5 und 6.
@@ -635,7 +635,7 @@ def _tabellen_lesen(txt, unlesbar=None):
     """
     glyphen = "".join(g for _, g in ASPEKTE)
     # 2026-09-19 (F2): Wort-Trenner `–Wort–` (U+2013) in der Aspektspalte
-    # zugelassen, wie ihn das Datenblatt-Modul fuer die Untergrund-Tabelle nennt.
+    # zugelassen, wie ihn das Modul Radixrechnung fuer die Untergrund-Tabelle nennt.
     zeile = re.compile(
         r"\|\s*(%s)\s*\|\s*([%s])?\s*[–—-]?\s*([A-Za-zÄÖÜäöüß]*)\s*[–—-]?\s*\|\s*(%s)\s*\|"
         r"\s*(\d{1,3}°\d{2}′)\s*\|(?:\s*([^|]*)\|)?(?:\s*([^|]*)\|)?"
@@ -4570,6 +4570,17 @@ _P17_SUBJEKT_PRONOMEN = frozenset(("du", "ich", "wir", "man", "er"))
 _P17_HABEN = frozenset(("hat", "haben", "hatte", "hatten", "hätte", "hätten"))
 _P17_WERDEN = frozenset(("wird", "werden", "wurde", "wurden", "würde", "würden"))
 _P17_REL = frozenset(("der", "die", "das", "welcher", "welche", "welches"))
+# 2026-09-27 (Klasse-2-Entscheidungslauf, E4, Chris-Freigabe): Die Aspektbilder der
+# Uebersetzungstabelle des Klartext-Moduls fuer Konjunktion, Quadrat und Trigon
+# („verschmilzt mit", „reibt sich an", „fließt mühelos mit") verorten — sie nennen die
+# Beziehung zweier Faktoren, kein Handeln am Leser. Vorher meldete P17 genau die Saetze,
+# die die Tabelle vorschreibt, als Handeln (Geburtshoroskop 1+2 vom 25.09. und 26.09.b).
+# Gemeldet bleiben die Bilder, die auf den Leser wirken („setzt dich unter Druck",
+# „drängt gegen", „zwingt zu", „bietet dir").
+_P17_ANKERVERBEN = _P17_ANKERVERBEN | frozenset((
+    "verschmilzt", "verschmelzen", "verschmolz", "verschmolzen",
+    "reibt", "reiben", "rieb", "rieben", "gerieben",
+    "fließt", "fließen", "floss", "flossen", "geflossen"))
 # Die Vergleiche laufen ueber casefold(), und casefold() macht aus „ß" „ss": „heißt"
 # traf „heisst" nie, „außerhalb" nie „ausserhalb" (2026-09-25 — „der Deszendent
 # heißt" kam deshalb als Handelnder). Alle Vergleichslisten werden ebenso gefaltet.
@@ -5815,6 +5826,13 @@ def _selbsttest(still=False):
                       ("Saturn, der die Verantwortung trägt, steht im Quadrat zum Mond.", True)):
         _k, _t = _p17_kandidaten(_s)
         assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Grundfassung: %r" % _s
+    # 2026-09-27 (Klasse-2-Entscheidungslauf, E4): Aspektbilder der Klartext-Tabelle verorten
+    for _s, _soll in (("Deine Venus verschmilzt mit Merkur.", False),
+                      ("Saturn reibt sich an deiner Sonne.", False),
+                      ("Dein Mond fließt mühelos mit Jupiter.", False),
+                      ("Saturn setzt dich unter Druck.", True)):
+        _k, _t = _p17_kandidaten(_s)
+        assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Aspektbild: %r" % _s
     assert not _p17_kandidaten("Du hast deine Venus am Aszendenten.")[0], "P17: Objekt hinter „Du hast“"
     assert not _p17_kandidaten("Es gehört zu der Sonne, die du bist.")[0], "P17: Relativsatz mit „du“"
     berichte.append("P16 und P17 als Einzelproben")

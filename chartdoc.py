@@ -1520,6 +1520,14 @@ def _konst_skala_css(anker, s):
 </style>"""
 
 
+# Langnamen der Achsen auf der Konstellationsseite — fest wie im Beleg
+# (Klartext-Modul: „Medium Coeli (MC)"), nicht aus chartdata.ACHSEN: vorher frei
+# gewaehlt und von Lauf zu Lauf verschieden (Klasse-2-Entscheidungslauf 2026-09-27,
+# K2). Englisch ueber anzeige().
+ACHSEN_LANG = {'AC': 'Aszendent', 'MC': 'Medium Coeli', 'DC': 'Deszendent',
+               'IC': 'Imum Coeli'}
+
+
 def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
                          kicker=None,
                          titel=None, anker='PG_konst',
@@ -1571,7 +1579,7 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
             f'<td class="zn">{esc(anzeige(zn))}</td><td class="gd">{gd}</td>'
             f'<td class="hs">{esc(hs)}</td><td class="lf">{esc(anzeige(lf))}</td></tr>')
     ach = ''.join(
-        f'<tr><td class="ak">{esc(k)}</td><td class="an_">{esc(anzeige(n))}</td>'
+        f'<tr><td class="ak">{esc(k)}</td><td class="an_">{esc(anzeige(ACHSEN_LANG.get(k, n)))}</td>'
         f'<td class="az">{esc(anzeige(z))}</td><td class="ag">{g}</td></tr>'
         for k, n, z, g in achsen)
     ld = f'<p class="fm-lead">{esc(lead)}</p>' if lead else ''
@@ -3214,6 +3222,10 @@ def _selbsttest():
                                        'rückläufig')],
                                      [('AC', 'Aszendent', 'Krebs', '2°00′')],
                                      *verteilung([('Sonne', 1.0)] * 10)))
+    # 2026-09-27 (K2): der Achsen-Langname kommt aus dem Kuerzel, nicht aus ACHSEN
+    _k2 = konstellationen_page([], [('MC', 'Himmelsmitte', 'Widder', '1°00′')],
+                               *verteilung([('Sonne', 1.0)] * 10))
+    assert 'Medium Coeli' in _k2 and 'Himmelsmitte' not in _k2, 'K2: Achsen-Langname'
     de_vorher = _seiten()
     try:
         konfiguriere(sprache='en', signaturen_en={'Eine Signatur.': 'A signature.'})

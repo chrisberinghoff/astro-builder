@@ -487,8 +487,8 @@ UHR_LEAD = [
     f'Die acht Quartale sind Kalenderquartale; Q1 ist das Quartal, in dem '
     f'dieses Horoskop entstanden ist. Was links der senkrechten Marke liegt, '
     f'lief schon vor dem {UHR_STICHTAG}. Unter der Zeitachse stehen als '
-    f'farbige Punkte die Stationen: die Tage, an denen ein langsamer Planet '
-    f'die Richtung wechselt. Sie erklären, warum dieselbe Linie oft zwei- oder '
+    f'farbige Punkte die Stationen rund um den Stichtag: die Tage, an denen '
+    f'ein langsamer Planet die Richtung wechselt. Sie erklären, warum dieselbe Linie oft zwei- oder '
     f'dreimal exakt wird statt nur einmal.']
 if SPRACHE == 'en':
     UHR_LEAD = [
@@ -513,8 +513,8 @@ if SPRACHE == 'en':
         f'The eight quarters are calendar quarters; Q1 is the quarter in '
         f'which this horoscope was drawn up. Whatever lies to the left of the '
         f'vertical mark was already running before {UHR_STICHTAG}. Below the '
-        f'time axis, the coloured dots are the stations: the days on which a '
-        f'slow planet changes direction. They explain why the same line is '
+        f'time axis, the coloured dots are the stations around the reference '
+        f'date: the days on which a slow planet changes direction. They explain why the same line is '
         f'often exact two or three times instead of once.']
 
 
