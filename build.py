@@ -2655,7 +2655,11 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     ist genau die Menge, für die das Typmodul Rechenschaft verlangt.
 
     Rückgabe: {'kontakte', 'in_themen', 'rechenschaft', 'ohne_heimat',
-               'doppelt', 'unbekannt', 'ok'}
+               'doppelt', 'unbekannt', 'ok'}; dazu 'soll_keys', 'heimat_keys'
+    und seit 2026-09-27 'fuehrend_nr' / 'mitklingend_nr' — Listen von
+    (Kontakt, THEMA-Nummer), gelesen wie inhaltsprobe P5 (fuehrend: erster
+    Kontakt in fuehrt=; mitklingend: jeder weitere Kontakt des Themas, der
+    nirgends fuehrt). Grundlage von mitlaufendes_zeilen().
     """
     import json as _json
     import re as _re2
@@ -2706,6 +2710,22 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     #    der ersten THEMA-Zeile (wie in aspekt_heimat()) und endet an der
     #    naechsten Ueberschrift oder dem naechsten @@-Block.
     heimat, doppelt, unbekannt = {}, [], []
+    # 2026-09-27 (Wartungslauf, Pruefbericht Transit 1+2 vom 27.09., Klasse 1):
+    # Themennummer je fuehrendem und mitklingendem Kontakt, dieselbe Lesart wie
+    # inhaltsprobe P5 — die THEMA-Nummer ist die Kapitelnummer, die P5 in der
+    # Registerzeile sucht. Rein additiv: ok, ohne_heimat und doppelt bleiben,
+    # wie sie waren.
+    fuehrend_nr, mitklingend_nr = {}, {}
+
+    def _kh_schluessel(feld):
+        out = []
+        for m in _re2.finditer(r"T-(\w+)\s*([%s])\s*R-([\wÄÖÜäöüß]+)"
+                               % "".join(GLYPH), feld or ""):
+            out.append((tnamen.get(_norm(m.group(1)), m.group(1)),
+                        GLYPH[m.group(2)],
+                        znamen.get(_norm(m.group(3)), m.group(3))))
+        return out
+
     _erste = _re2.search(r"THEMA \d+ \|", txt)
     if _erste:
         tl = "\n" + txt[_erste.start():]
@@ -2715,7 +2735,16 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:",
                         "SAMMELKAPITEL:"):
             tl = tl.split(schluss)[0]
-        for blk in _re2.split(r"\nTHEMA \d+ \|", tl):
+        _nrn = [int(x) for x in _re2.findall(r"\nTHEMA (\d+) \|", tl)]
+        for _i, blk in enumerate(_re2.split(r"\nTHEMA \d+ \|", tl)):
+            _nr = _nrn[_i - 1] if 0 < _i <= len(_nrn) else None
+            if _nr is not None:
+                _fk = _kh_schluessel(_themen_feld(blk, "fuehrt"))
+                if _fk and _fk[0] in soll:
+                    fuehrend_nr.setdefault(_fk[0], _nr)
+                for _k in _fk[1:] + _kh_schluessel(_themen_feld(blk, "aspekte")):
+                    if _k in soll and _k not in fuehrend_nr:
+                        mitklingend_nr.setdefault(_k, _nr)
             felder = [f for f in (_themen_feld(blk, "fuehrt"),
                                   _themen_feld(blk, "aspekte")) if f]
             if not felder:
@@ -2805,6 +2834,9 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         # Themenliste ein zweites Mal zu parsen. Rein additiv.
         "soll_keys": sorted(soll),
         "heimat_keys": sorted(heimat),
+        # 2026-09-27: s. o. — (Kontakt, THEMA-Nummer), rein additiv.
+        "fuehrend_nr": sorted(fuehrend_nr.items()),
+        "mitklingend_nr": sorted(mitklingend_nr.items()),
     }
 
 
@@ -3110,7 +3142,8 @@ def _vertragsname(n: str) -> str:
 
 def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
                          stichtag: str = None, orb_wirk: float = 1.5,
-                         typ: str = None) -> dict:
+                         typ: str = None,
+                         mit_mitklingenden: bool = False) -> dict:
     """Die fertigen Zeilen des Blocks `TRANSIT-RECHENSCHAFT:` — neu 2026-09-15.
 
     Gebaut nach dem Prüfbericht EA Schritt 1+2 vom 15.09., Rubrik 2
@@ -3150,8 +3183,14 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
         typ: 'transit' oder None (gleichbedeutend); 'ea' und 'ultimativ'
         sind seit dem 2026-09-23 ausgemustert und brechen ab.
 
-    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'stichtag', 'typ',
-               'fenster'}
+    `mit_mitklingenden=True` (seit 2026-09-27, nur fuer
+    mitlaufendes_zeilen()): dazu je eine Zeile fuer jeden Kontakt, der in einem
+    Kapitel mitklingt, ohne es zu fuehren — Grund „klingt mit in Kapitel n".
+    Der Block TRANSIT-RECHENSCHAFT ruft ohne den Schalter und bleibt, wie er ist.
+
+    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'mitklingend',
+               'fuehrend', 'stichtag', 'typ', 'fenster'} — 'offen' zaehlt die
+    Zeilen ohne Kapitel, 'mitklingend' die mit Kapitelangabe (0 ohne Schalter).
     """
     import json as _json
 
@@ -3159,6 +3198,14 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     soll = set(tuple(k) for k in r["soll_keys"])
     heimat = set(tuple(k) for k in r["heimat_keys"])
     rest = soll - heimat
+    offen = len(rest)
+    # 2026-09-27 (Pruefbericht Transit 1+2 vom 27.09., Klasse 1): das Register
+    # verlangt auch die mitklingenden Kontakte mit Kapitelangabe (Transit-Modul,
+    # Struktur 5; inhaltsprobe P5) — bisher von Hand nachgeschrieben.
+    fuehr = {tuple(k) for k, _n in r.get("fuehrend_nr", [])}
+    mitkl = ({tuple(k): n for k, n in r.get("mitklingend_nr", [])
+              if tuple(k) not in fuehr} if mit_mitklingenden else {})
+    rest = rest | set(mitkl)
 
     daten = _json.load(open(events_json_pfad, encoding="utf-8"))
     if not stichtag:
@@ -3186,8 +3233,10 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
         z = _passagen_zeitangaben(sel, start, end)
         alt_format = alt_format or not z["neu_format"]
         orb_f = ("%s°" % z["orb_f"]) if z["orb_f"] is not None else "?"
-        grund = (_kontakt_zeit_text(z, start, end)
-                 + " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
+        grund = _kontakt_zeit_text(z, start, end) + (
+            " — klingt mit in Kapitel %d, Zeile in „Mitlaufendes“ mit "
+            "Kapitelangabe" % mitkl[k] if k in mitkl
+            else " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
         zeile = "- T-%s %s R-%s — %s" % (_vertragsname(k[0]),
                                             ASPEKT_ZU_GLYPH.get(k[1], k[1]),
                                          k[2], grund)
@@ -3201,7 +3250,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     sortier.sort()
     zeilen = [z for _, z in sortier]
     return {"zeilen": zeilen, "kontakte": r["kontakte"],
-            "in_themen": r["in_themen"], "offen": len(zeilen),
+            "in_themen": r["in_themen"], "offen": offen,
+            "mitklingend": len(mitkl), "fuehrend": len(fuehr & soll),
             "stichtag": stichtag, "typ": typ, "fenster": (start, end)}
 
 
@@ -3242,6 +3292,40 @@ def transit_rechenschaft_block(chart_data_pfad: str, events_json_pfad: str,
             "benannt (Stichtag %s)."
             % (r["kontakte"], _datum_de(r["fenster"][0]),
                _datum_de(r["fenster"][1]), r["in_themen"], r["offen"],
+               _datum_de(r["stichtag"])))
+    return "\n".join([kopf, ""] + r["zeilen"])
+
+
+def mitlaufendes_zeilen(chart_data_pfad: str, events_json_pfad: str,
+                        stichtag: str = None, orb_wirk: float = 1.5) -> str:
+    """Die Zeilen des Registers `Mitlaufendes` fuer Schritt 2 — vollstaendig.
+
+    Neu 2026-09-27 (Wartungslauf nach dem Pruefbericht Transit Schritt 1+2 vom
+    27.09., Klasse 1): Der Block `TRANSIT-RECHENSCHAFT:` aus
+    transit_rechenschaft_block() traegt nur die Kontakte OHNE Kapitel. Das
+    Register verlangt jede Zeile — auch die der Kontakte, die in einem Kapitel
+    mitklingen, ohne es zu fuehren, dann mit der Kapitelangabe (Transit-Modul,
+    Struktur 5; inhaltsprobe P5). Im Prueflauf standen im Block 17 Zeilen, das
+    Register brauchte 42; die 25 fehlenden wurden von Hand nachgeschrieben,
+    nachdem P5 FEHLER meldete.
+
+    Liefert Text zum Schreiben des Kapitels, NICHT fuer die chart_data: Der
+    Block TRANSIT-RECHENSCHAFT bleibt, wie er ist (die Heimat-Probe liest ihn).
+    Je Zeile Transiter, Aspekt, Ziel und dieselben Zeitangaben wie im Block,
+    dahinter „ohne eigenes Kapitel" oder „klingt mit in Kapitel n" — n ist die
+    THEMA-Nummer, genau die Zahl, die P5 in der Registerzeile sucht. Fuehrende
+    Kontakte (erster Kontakt in fuehrt=) bekommen keine Zeile. Sortiert nach dem
+    ersten Exaktdatum wie der Block. Den Wortlaut der Registerzeilen schreibt
+    der Lauf (Transit-Modul, Struktur 5: knapp, nicht abschaetzig).
+    """
+    r = transit_rechenschaft(chart_data_pfad, events_json_pfad, stichtag,
+                             orb_wirk, mit_mitklingenden=True)
+    kopf = ("MITLAUFENDES (Grundlage des Registers in Schritt 2, nicht in die "
+            "chart_data): %d Zeilen — %d ohne eigenes Kapitel, %d klingen in "
+            "einem Kapitel mit und nennen es; die %d fuehrenden Kontakte stehen "
+            "nicht im Register. Fenster %s–%s, Stichtag %s."
+            % (len(r["zeilen"]), r["offen"], r["mitklingend"], r["fuehrend"],
+               _datum_de(r["fenster"][0]), _datum_de(r["fenster"][1]),
                _datum_de(r["stichtag"])))
     return "\n".join([kopf, ""] + r["zeilen"])
 
@@ -3890,6 +3974,22 @@ def _selbsttest():
         pruefe(block.startswith("TRANSIT-RECHENSCHAFT: 8 primaere Wirkorb-Kontakte "
                                 "im Fenster 01.01.2031–31.12.2032, 3 tragen"),
                "W7: Kopfzeile: %s" % block[:120])
+        # 2026-09-27 (Transit 1+2 vom 27.09., Klasse 1): das Register
+        # vollstaendig — mitklingende mit Kapitelangabe, der Fuehrer ohne Zeile,
+        # der Block ohne Schalter unveraendert.
+        ml, _ = still(mitlaufendes_zeilen, t1, evj)
+        mz = [x for x in ml.splitlines() if x.startswith("- T-")]
+        pruefe(len(mz) == 7 and ml.startswith("MITLAUFENDES (")
+               and "7 Zeilen — 5 ohne eigenes Kapitel, 2 klingen" in ml
+               and "die 1 fuehrenden" in ml
+               and not any(x.startswith("- T-Saturn □ R-Sonne") for x in mz)
+               and any(x.startswith("- T-Jupiter △ R-Mond") and "Kapitel 1," in x
+                       for x in mz)
+               and any(" ☌ R-Mondknoten" in x and "Kapitel 2," in x for x in mz)
+               and sum("ohne eigenes Kapitel" in x for x in mz) == 5,
+               "T12-27: mitlaufendes_zeilen(): %s" % ml[:500])
+        pruefe(block.count("\n- T-") == 5 and "klingt mit" not in block,
+               "T12-27: Block TRANSIT-RECHENSCHAFT veraendert: %s" % block[:300])
 
         # W22 / L16: Ressourcen-Zaehlmenge des Transits
         rr = ressourcen_liste(t1, events_json_pfad=evj)
