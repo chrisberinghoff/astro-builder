@@ -2881,14 +2881,14 @@ def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
     EXAKT wird oder seine Kontakte zusammen mindestens `tage_min` Tage im
     Wirkorb stehen — gezaehlt je Thema, ein Tag zaehlt einmal, auch wenn ihn
     zwei Kontakte tragen. Die Kontakte eines Themas stehen in `fuehrt=` und
-    `aspekte=` der Themenliste (`klingt=` nicht). Es zaehlen der FUEHRENDE
-    Kontakt (`fuehrt=`) immer, auch an einem sekundaeren Ziel, und aus
-    `aspekte=` die Kontakte an einem primaeren Ziel und Selbst-Transite an
-    jedem Ziel; Spiegelziele nie. (Seit 2026-09-26, Chris-Entscheidung: Vorher
-    zaehlte auch der Fuehrer nur an einem primaeren Ziel, und ein Thema, das
-    ein Kontakt an einem sekundaeren Ziel fuehrt, stand in der Zeitleiste als
-    ruhig, waehrend Lagebild und Kapitel es als aktiv beschrieben —
-    Pruefbericht Transit 1+2 vom 26.09.)
+    `aspekte=` der Themenliste (`klingt=` nicht). Es zaehlen ALLE diese
+    Kontakte, an jedem Ziel; Spiegelziele nie. (Seit 2026-09-28,
+    Chris-Entscheidung „alle Kontakte sollen zaehlen": Bis dahin zaehlten aus
+    `aspekte=` nur Kontakte an einem primaeren Ziel und Selbst-Transite, dazu
+    seit 2026-09-26 der Fuehrer an jedem Ziel. Ein Kapitel, das ein Kontakt an
+    einem sekundaeren Ziel am Stichtag heiss machte, fehlte deshalb im Quartal
+    des Stichtags, waehrend das Lagebild es als heiss beschrieb —
+    Pruefbericht Transit 1+2 vom 28.09., Klasse 1.)
     Quartale, Exaktdaten und Wirkorb kommen aus der events.json
     (`quarter_bounds`, `exakt`, `wirkorb_perioden`).
 
@@ -2901,8 +2901,8 @@ def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
     Block, die `marke=` setzt der Lauf; 'quartale': {1: {<Kapitel>: {'exakt':
     [...], 'tage': n}}, …}; 'ohne_kapitel': [(THEMA, titel)] — Titel ohne
     Kapitel, fehlt in den Zeilen; 'unbekannt': [(THEMA, Kontakt)] — Kontakt
-    nicht in der events.json; 'ohne_zaehlkontakt': [THEMA] — weder primaeres
-    Ziel noch Selbst-Transit, nie dicht}. Die drei Listen sind vor dem
+    nicht in der events.json; 'ohne_zaehlkontakt': [THEMA] — kein Kontakt
+    des Themas in der events.json, nie dicht}. Die drei Listen sind vor dem
     Einfuegen zu klaeren.
     """
     import json as _json
@@ -2981,8 +2981,7 @@ def dichte_quartale(chart_data_pfad: str, events_json_pfad: str,
         if kn is None:
             ohne_kapitel.append((nr, titel))
             continue
-        zaehlend = [e for k in keys for e in ev[k]
-                    if k in fkeys or e.get("primaer") or e.get("selbst_transit")]
+        zaehlend = [e for k in keys for e in ev[k]]    # 2026-09-28: alle Kontakte
         if not zaehlend:
             ohne_zaehl.append(nr)
             continue
@@ -4088,26 +4087,31 @@ def _selbsttest():
             "## Kapitel 2 · Erstes  thema\n\nText.\n\n"
             "## Kapitel 3 · Drittes Thema\n\nText.\n"))
         dq = dichte_quartale(dt_, dj, da)
-        pruefe(dq["zeilen"] == ["Q1 | dicht=2 | marke=", "Q2 | dicht=2 | marke=",
-                                "Q3 | dicht= | marke=", "Q4 | dicht=1 | marke=",
-                                "Q5 | dicht= | marke="]
+        # 2026-09-28: Jupiter ⚹ Merkur (sekundaeres Ziel, aspekte= von Thema 2 =
+        # Kapitel 1) zaehlt jetzt — Kapitel 1 ist in jedem Quartal dicht; Q3 ohne
+        # Kapitel 2 prueft weiter, dass Spiegelziel und klingt= nicht zaehlen
+        pruefe(dq["zeilen"] == ["Q1 | dicht=1,2 | marke=", "Q2 | dicht=1,2 | marke=",
+                                "Q3 | dicht=1 | marke=", "Q4 | dicht=1 | marke=",
+                                "Q5 | dicht=1 | marke="]
                and dq["quartale"][2][2]["tage"] == 61,
                "T11: Zeilen: %r" % dq["zeilen"])
         pruefe(dq["ohne_kapitel"] == [(4, "Ohne Kapitel")]
                and dq["unbekannt"] == [(4, "Pluto Quadrat Mars")]
                and not dq["ohne_zaehlkontakt"], "T11: Listen: %r" % dq)
         pruefe(dichte_quartale(dt_, dj, da, tage_min=29)["zeilen"][4]
-               == "Q5 | dicht=3 | marke=", "T11: Tage je Thema nicht vereinigt")
+               == "Q5 | dicht=1,3 | marke=", "T11: Tage je Thema nicht vereinigt")
         dq = dichte_quartale(dt_, dj)
-        pruefe(dq["zeilen"][:4] == ["Q1 | dicht=1 | marke=",
-                                    "Q2 | dicht=1 | marke=",
-                                    "Q3 | dicht= | marke=",
+        pruefe(dq["zeilen"][:4] == ["Q1 | dicht=1,2 | marke=",
+                                    "Q2 | dicht=1,2 | marke=",
+                                    "Q3 | dicht=2 | marke=",
                                     "Q4 | dicht=2 | marke="]
                and dq["ohne_zaehlkontakt"] == [4],
                "T11: ohne analyse: %r" % dq)
 
         # --- 2026-09-26: Fuehrer an einem sekundaeren Ziel zaehlt; englische
         #     Kapitelkoepfe werden zugeordnet ---------------------------------
+        # 2026-09-28: auch der Kontakt aus aspekte= an einem sekundaeren Ziel
+        #     zaehlt (Thema 2), ohne_zaehlkontakt bleibt leer
         dj2 = datei("d2_events.json", json.dumps({"quarter_bounds": [
             "2031-01-01", "2031-04-01", "2031-07-01"], "events": [
             dev("Neptun", "Quadrat", "Saturn", primaer=False,
@@ -4124,9 +4128,9 @@ def _selbsttest():
             "## Chapter 1 · Nebenziel fuehrt\n\nText.\n\n"
             "## Chapter 2 · Nebenziel klingt\n\nText.\n"))
         dq = dichte_quartale(dt2, dj2, da2)
-        pruefe(dq["zeilen"] == ["Q1 | dicht=1 | marke=", "Q2 | dicht= | marke="]
-               and not dq["ohne_kapitel"] and dq["ohne_zaehlkontakt"] == [2],
-               "2026-09-26: Fuehrer/Chapter: %r" % dq)
+        pruefe(dq["zeilen"] == ["Q1 | dicht=1 | marke=", "Q2 | dicht=2 | marke="]
+               and not dq["ohne_kapitel"] and not dq["ohne_zaehlkontakt"],
+               "2026-09-28: Nebenziel/Chapter: %r" % dq)
 
         # --- F18: Achsen-Spiegel im Ressourcen-Block (Radix) ----------------
         rtab = "\n".join([
