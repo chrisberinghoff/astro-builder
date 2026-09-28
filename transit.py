@@ -1796,11 +1796,14 @@ def format_report(res):
 # es gibt. Alles vier optional — sie brauchen das Geburtsdatum, das die
 # blosse Radix-Laengenliste nicht enthaelt (--geburt).
 # ---------------------------------------------------------------------------
+# Jahresherr der Profektion: der TRADITIONELLE Herrscher (2026-09-28). Die
+# Technik stammt aus der hellenistischen Astrologie; Uranus, Neptun und Pluto
+# sind nie Jahresherr. Wo der moderne abweicht, steht er als 'modern' daneben.
 HERRSCHER = {'Widder':'Mars','Stier':'Venus','Zwillinge':'Merkur','Krebs':'Mond',
              'Loewe':'Sonne','Jungfrau':'Merkur','Waage':'Venus',
-             'Skorpion':'Pluto','Schuetze':'Jupiter','Steinbock':'Saturn',
-             'Wassermann':'Uranus','Fische':'Neptun'}
-KLASSISCH = {'Skorpion':'Mars','Wassermann':'Saturn','Fische':'Jupiter'}
+             'Skorpion':'Mars','Schuetze':'Jupiter','Steinbock':'Saturn',
+             'Wassermann':'Saturn','Fische':'Jupiter'}
+MODERN = {'Skorpion':'Pluto','Wassermann':'Uranus','Fische':'Neptun'}
 
 
 def zusatzzeitmasse(radix, jd_geburt, start, end, cusps=None, orb=1.0):
@@ -1809,7 +1812,8 @@ def zusatzzeitmasse(radix, jd_geburt, start, end, cusps=None, orb=1.0):
     radix       {Name: ekl. Laenge} wie fuer run()
     jd_geburt   julianisches Datum der Geburt in UT
     start, end  date-Objekte des Rechenfensters
-    cusps       12 Koch-Spitzen (fuer die Profektion noetig)
+    cusps       12 Koch-Spitzen (Profektion: Spitze 1 = AC gibt das Ausgangszeichen,
+                ohne Spitzen radix['AC']; das Haus des Jahresherrn bleibt Koch)
     orb         Orb der Sonnenbogen-Kontakte in Grad (Vorgabe 1,0)
 
     Rueckgabe: dict mit 'prog_mond', 'sonnenbogen', 'profektion', 'finsternisse'.
@@ -1820,6 +1824,13 @@ def zusatzzeitmasse(radix, jd_geburt, start, end, cusps=None, orb=1.0):
     Ortstag in der gesetzten Zeitzone, beim Jahresherrscher das FUEHRENDE Haus
     nach der Grenzlagen-Regel ('herrscher_haus_fuehrend', '..._spalte',
     '..._grenzlage', '..._abstand_spitze'; 'herrscher_haus' bleibt rechnerisch).
+
+    2026-09-28 (Klasse-2-Nachtrag): Profektion in Ganzzeichen — 'zeichen' ist das
+    Zeichen des AC plus ein Zeichen je vollendetem Lebensjahr (vorher das Zeichen
+    der Koch-Spitze), 'herrscher' der traditionelle, 'modern' der moderne, wo er
+    abweicht (ersetzt 'klassisch'). Das Jahr beginnt am Geburtstag 'alter'; ein
+    Kalenderdatum steht bewusst nicht dabei — der Ortstag der Geburt ist hier
+    nicht bekannt (--geburt ist UT).
     """
     aus = {}
     jahr = 365.2422
@@ -1919,25 +1930,27 @@ def zusatzzeitmasse(radix, jd_geburt, start, end, cusps=None, orb=1.0):
         e.pop('_tag', None)
     aus['sonnenbogen'] = sorted(eng.values(), key=lambda e: e['monat'])
 
-    # --- 3) Jahresprofektion: Alter mod 12 -> Haus, dessen Spitzenzeichen ----
+    # --- 3) Jahresprofektion in Ganzzeichen: Zeichen des AC + Alter mod 12 ----
     prof = []
-    if cusps:
+    ac_lon = cusps[0] if cusps else radix.get('AC')     # Spitze 1 = AC
+    if ac_lon is not None:
         j0 = int(alter(start))
+        ac_idx = int(ac_lon // 30) % 12
         for k in (0, 1, 2):
             a = j0 + k
             h = a % 12                                  # 0 = 1. Haus
-            zeichen = ZODIAC[int(cusps[h] // 30) % 12]
+            zeichen = ZODIAC[(ac_idx + h) % 12]
             herr = HERRSCHER.get(zeichen)
             herr_lon = radix.get(herr)
+            mit_haus = herr_lon is not None and bool(cusps)
             # 2026-09-19 (F20): fuehrendes Haus nach der Grenzlagen-Regel
-            hf = haus_fuehrung(herr_lon, cusps) if herr_lon is not None else None
+            hf = haus_fuehrung(herr_lon, cusps) if mit_haus else None
             prof.append(dict(alter=a, haus=h + 1, zeichen=zeichen,
-                             herrscher=herr,
+                             herrscher=herr, modern=MODERN.get(zeichen),
                              herrscher_stand=(deg2sign(herr_lon)
                                               if herr_lon is not None else None),
                              herrscher_haus=(house_of(herr_lon, cusps)
-                                             if herr_lon is not None else None),
-                             klassisch=KLASSISCH.get(zeichen),
+                                             if mit_haus else None),
                              herrscher_haus_fuehrend=(hf['fuehrend'] if hf else None),
                              herrscher_haus_spalte=(hf['spalte'] if hf else None),
                              herrscher_grenzlage=(hf['stufe'] if hf else None),
@@ -2009,7 +2022,10 @@ def format_zusatz(z):
                                          else " (nach dem Fenster)"))
         out.append("     %s  %-12s %-12s %-12s Orb %.2f°%s"
                    % (e['monat'], e['punkt'], e['aspekt'], e['ziel'], e['orb'], ex))
-    out.append("\n  -- Jahresprofektion --")
+    out.append("\n  -- Jahresprofektion (Ganzzeichen ab dem AC-Zeichen, traditionelle "
+               "Herrscher; Haus des Herrschers: Koch) --")
+    if not z.get('profektion'):
+        out.append("     keine (AC fehlt)")
 
     def _haus(e):
         # 2026-09-19 (F20): fuehrendes Haus vorn (Grenzlagen-Regel), wie in der
@@ -2027,6 +2043,10 @@ def format_zusatz(z):
                    % (e['alter'], e['haus'], e['zeichen'], e['herrscher'],
                       (" in %s" % e['herrscher_stand']) if e['herrscher_stand'] else "",
                       _haus(e)))
+        # 2026-09-28: eigene Folgezeile — transitdata._zusatz() liest die Zeile
+        # darueber per Muster und uebergeht diese.
+        if e.get('modern'):
+            out.append("        modern: %s" % e['modern'])
     out.append("\n  -- Finsternisse auf Radixpunkten (Orb <= 2°) --")
     if not z.get('finsternisse'):
         out.append("     keine im Fenster")
@@ -2243,6 +2263,39 @@ def _selbsttest(still=False):
                "F20: fuehrendes Haus des Jahresherrschers falsch: %s" % p0)
         pruefe('Haus 3/2 (Schwellenlage, 1°00′ vor Spitze 3 — Haus 3 fuehrt)' in format_zusatz(z2),
                "F20: Report nennt das fuehrende Haus nicht vorn")
+        # 2026-09-28: Ganzzeichen statt Koch-Spitze, traditioneller Jahresherr.
+        # Ungleiche Spitzen, AC 17° Loewe: Das Zeichen folgt der Zaehlung ab dem
+        # AC-Zeichen, nicht der Spitze; das Haus des Jahresherrn bleibt Koch.
+        cz3 = [(137.0 + x) % 360.0 for x in (0, 45, 70, 90, 110, 140, 180, 225, 250, 270, 290, 320)]
+        for jz in range(12):                     # zwoelf Startjahre: jedes Alter mod 12
+            s3 = date(start.year + jz, start.month, start.day)
+            z3 = zusatzzeitmasse(rad, jg, s3, s3 + timedelta(days=30), cusps=cz3)
+            for e in z3['profektion']:
+                pruefe(e['zeichen'] == ZODIAC[(4 + e['alter']) % 12] and e['haus'] == e['alter'] % 12 + 1,
+                       "Profektion: Zeichen nicht in Ganzzeichen ab dem AC gezaehlt: %s" % e)
+                pruefe(e['herrscher'] == HERRSCHER[e['zeichen']] and e['modern'] == MODERN.get(e['zeichen'])
+                       and e['herrscher'] not in ('Uranus', 'Neptun', 'Pluto'),
+                       "Profektion: Jahresherr nicht traditionell: %s" % e)
+                pruefe(e['herrscher_haus'] == house_of(rad[e['herrscher']], cz3)
+                       if e['herrscher'] in rad else e['herrscher_haus'] is None,
+                       "Profektion: Haus des Jahresherrn nicht Koch: %s" % e)
+            if jz == 0:
+                _rep = format_zusatz(z3)
+        pruefe(ZODIAC[(4 + 0) % 12] == 'Loewe', "Profektion: Testaufbau AC nicht im Loewen")
+        pruefe(any(ZODIAC[int(cz3[h] // 30) % 12] != ZODIAC[(4 + h) % 12] for h in range(12)),
+               "Profektion: Testaufbau trennt Ganzzeichen und Koch-Spitze nicht")
+        pruefe(all(n in HERRSCHER for n in ZODIAC) and set(HERRSCHER.values()) <=
+               {'Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn'},
+               "Profektion: Herrschertafel unvollstaendig oder nicht traditionell")
+        pruefe('Ganzzeichen' in _rep and 'Haus des Herrschers: Koch' in _rep,
+               "Profektion: Report nennt die Methode nicht")
+        # ohne Spitzen: Zeichen aus radix['AC'], kein Haus des Jahresherrn
+        z4 = zusatzzeitmasse(dict(rad, AC=137.0), jg, start, end, cusps=None)
+        pruefe(len(z4['profektion']) == 3 and all(e['herrscher_haus'] is None for e in z4['profektion'])
+               and all(e['zeichen'] == ZODIAC[(4 + e['alter']) % 12] for e in z4['profektion']),
+               "Profektion: ohne Spitzen nicht aus dem AC gerechnet: %s" % z4['profektion'])
+        pruefe('keine (AC fehlt)' in format_zusatz(zusatzzeitmasse(rad, jg, start, end, cusps=None)),
+               "Profektion: fehlender AC nicht gemeldet")
         hf = haus_fuehrung(56.5, cz)
         pruefe(hf['spalte'] == '2/3' and hf['stufe'] == 'Grenzlage' and haus_fuehrung(40.0, cz)['spalte'] == '2',
                "F20: Grenzlage 2°–5° falsch")

@@ -114,8 +114,8 @@ P1  Beleg-Aspekte    jedes Aspekt-Segment eines Normal-Belegs (Faktor A, Aspekta
                      der Stationen des Transiters (sonst PRUEFEN). Im Lagebild
                      („Der Stand heute") traegt jedes Kontakt-Segment den Orb am
                      Stichtag in Dezimalgrad statt der Pflicht zum Exaktdatum.
-                     Sonnenbogen, progressiver Mond, Finsternis gegen `zusatz`
-                     (nur PRUEFEN).
+                     Sonnenbogen, progressiver Mond, Finsternis gegen `zusatz`,
+                     Profektion mit ihrem Geburtstag (nur PRUEFEN).
 P2  Beleg-Staende    Segment 1 jedes Normal-Belegs und jedes Instrument-Segment:
                      Zeichen und Haus gegen den @@SELEKTOR-Block (bei Grenzlage das
                      fuehrende Haus vorn), Gradminute gegen die Staendetabelle.
@@ -916,7 +916,12 @@ _ZUSATZ_SEG_RE = re.compile(r"Sonnenbogen|solar[\s-]*arc|progressiv\w*|progresse
 # LESEFORMATE). `_TRANSIT_KONTAKT_RE` sah darin einen Transitkontakt, das Segment
 # lief als Normalsegment und meldete „kein Aspekt im Segment" (2 PRUEFEN, 0
 # zutreffend). Ein Segment, das mit dem Zeitmass BEGINNT, ist ein Zusatz-Segment.
-_ZUSATZ_SEG_ANFANG_RE = re.compile(r"^\W*(?:Sonnenbogen|solar[\s-]*arc|progressiv\w*|progressed|Finsternis|eclipse)", re.I)
+_ZUSATZ_SEG_ANFANG_RE = re.compile(r"^\W*(?:Sonnenbogen|solar[\s-]*arc|progressiv\w*|progressed|Finsternis|eclipse"
+                                   r"|(?:Jahres)?profektion|(?:annual\s+)?profection)", re.I)
+# 2026-09-28 (Klasse-2-Nachtrag): Jahresprofektion als viertes Zusatz-Segment
+# („Jahresprofektion → Zwillinge ♊, Jahresherr Merkur ☿ — ab dem 37. Geburtstag"),
+# erkannt nur am Segmentanfang; der Geburtstag gegen zusatz.profektion[].alter.
+_PROFEKTION_ALTER_RE = re.compile(r"(\d{1,3})\.\s*Geburtstag|(\d{1,3})(?:st|nd|rd|th)\s+birthday", re.I)
 
 def _datum_iso(s):
     """'TT.MM.JJJJ' / 'TT.MM.JJ' / 'JJJJ-MM-TT' -> 'JJJJ-MM-TT' (None, wenn keines)."""
@@ -1348,9 +1353,21 @@ def _p1_beleg_aspekte(chapters, typ, tabelle, events=None, unlesbar=None):
     def pruefe_zusatz_segment(stelle, seg):
         """Sonnenbogen, progressiver Mond, Finsternis im Transit-Beleg (W24/W46):
         jedes Datum gegen `zusatz` der events.json. Das Beleg-Format dieser Masse
-        setzt der Textlauf; deshalb nur PRUEFEN."""
+        setzt der Textlauf; deshalb nur PRUEFEN. Die Profektion (2026-09-28)
+        traegt statt eines Datums den Geburtstag, mit dem ihr Jahr beginnt."""
         p.geprueft += 1
         transit_gesehen.append(stelle)
+        if re.match(r"^\W*(?:Jahres)?profektion|^\W*(?:annual\s+)?profection", seg, re.I):
+            jahre = [int(m.group(1) or m.group(2)) for m in _PROFEKTION_ALTER_RE.finditer(seg)]
+            if events is None or not jahre:
+                return
+            z = events.get("zusatz") or {}
+            soll = {x.get("alter") for x in z.get("profektion", [])}
+            for j in jahre:
+                if j not in soll:
+                    p.pruefen.append("%s — %d. Geburtstag nicht in zusatz.profektion[].alter "
+                                     "der events.json" % (stelle, j))
+            return
         daten = [_datum_iso(m.group(0)) for m in _TAIL_RE.finditer(seg) if m.group("datum")]
         if events is None or not daten:
             return
@@ -5743,7 +5760,10 @@ def _selbsttest(still=False):
         berichte.append("radix.py nicht importierbar — §3-Vergleich übersprungen")
     assert _ZUSATZ_SEG_ANFANG_RE.match("Finsternis auf R-Mond ☽ — 12.08.2026") and \
         _ZUSATZ_SEG_ANFANG_RE.match("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027") \
-        and not _ZUSATZ_SEG_ANFANG_RE.match("T-Saturn ♄ Quadrat □ R-Mond ☽ — exakt 01.03.2027"), \
+        and not _ZUSATZ_SEG_ANFANG_RE.match("T-Saturn ♄ Quadrat □ R-Mond ☽ — exakt 01.03.2027") \
+        and _ZUSATZ_SEG_ANFANG_RE.match("Jahresprofektion → Zwillinge ♊, Jahresherr Merkur ☿ — ab dem 37. Geburtstag") \
+        and _ZUSATZ_SEG_ANFANG_RE.match("Annual profection → Gemini ♊, lord of the year Mercury ☿ — from the 37th birthday") \
+        and not _ZUSATZ_SEG_ANFANG_RE.match("Merkur ☿ Quadrat □ Saturn ♄ 2°10′ (Jahresherr der Profektion)"), \
         "P1 Zusatz-Segment am Anfang"
     _z = _ZUSATZ_KONTAKT_RE.search("Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆ — exakt 01.03.2027")
     assert _z and kanon(_z.group("t")) == "MERKUR" and kanon(_z.group("r")) == "NEPTUN", \
@@ -5990,6 +6010,17 @@ def _selbsttest(still=False):
     assert r4["proben"]["P1"]["geprueft"] == 5 and r4["proben"]["P5"]["geprueft"] == 3 and \
         r4["proben"]["P14"]["geprueft"] == 6, "Lauf 4: Zählung P1/P5/P14 %s" % (
             [r4["proben"][n]["geprueft"] for n in ("P1", "P5", "P14")])
+    # 4e) 2026-09-28: Profektions-Segment im Beleg — Geburtstag gegen zusatz.profektion[].alter
+    _alt4e = "T-Saturn ♄ Quadrat □ R-Merkur ☿ — exakt %s, %s" % (w["e75"], w["e190"])
+    ta4e = ersetze(ta, _alt4e, _alt4e + " · Jahresprofektion → Zwillinge ♊, Jahresherr "
+                   "Merkur ☿ — ab dem 36. Geburtstag")
+    _pr4e = {"alter": 36, "haus": 3, "zeichen": "Zwillinge", "herrscher": "Merkur", "modern": None}
+    r4e = lauf(tc, ta4e, dict(tev, zusatz={"profektion": [_pr4e]}))
+    assert r4e["fehler"] == 0 and r4e["pruefen"] == 0 and r4e["proben"]["P1"]["geprueft"] == 6, \
+        "Lauf 4e: Profektions-Segment nicht still: %s" % befunde(r4e)
+    p4e = lauf(tc, ta4e, dict(tev, zusatz={"profektion": [dict(_pr4e, alter=35)]}))["proben"]["P1"]
+    assert len(p4e["pruefen"]) == 1 and "zusatz.profektion[].alter" in p4e["pruefen"][0], \
+        "Lauf 4e: falscher Profektions-Geburtstag nicht gemeldet: %s" % p4e["pruefen"]
     # 4c) 2026-09-25 (T20): Registerzeile in Pflichtform und wiederholende
     #     Apposition bleiben still; ein echtes Selbstpaar ohne Kontakt nicht.
     ta4c = ersetze(ersetze(ta, "2. Neptun im Sextil zu deinem Mars",
@@ -6224,7 +6255,8 @@ BELEG (analyse) — P1, P2, P13, P14.
   Transit: `T-X Glyphe Aspekt Glyphe R-Y — exakt TT.MM.JJJJ, …` bzw. `— nicht exakt,
   Annäherung bis x′ am TT.MM.JJJJ`; im Lagebild `— am Stichtag Orb 0,57°`.
   Zusatz-Segmente: `Sonnenbogen-X … R-Y — exakt TT.MM.JJJJ`, `Finsternis auf R-Y —
-  TT.MM.JJJJ`, `progressiver Mond → Haus n — TT.MM.JJJJ`. Datum IMMER TT.MM.JJJJ,
+  TT.MM.JJJJ`, `progressiver Mond → Haus n — TT.MM.JJJJ`, `Jahresprofektion →
+  Zeichen, Jahresherr X — ab dem N. Geburtstag`. Datum IMMER TT.MM.JJJJ,
   auch in einer englischen Fassung.
 
 REGISTER im Transit (`Mitlaufendes`) — P5.
