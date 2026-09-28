@@ -1257,6 +1257,10 @@ KIPP_SCHWELLE = 2               # Minuten: eine Spitze oder ein Faktor, die
                                 #   in einer Stichprobe in rund zwei Dritteln der
                                 #   Horoskope an (Chris-Entscheidung 2026-09-23).
 KIPP_MAX = 180                  # Minuten: weiter wird nicht gesucht
+ACHSE_GRENZE = 1.0              # Grad: AC oder MC naeher an einer Zeichengrenze
+                                #   -> Warnung auch ueber KIPP_SCHWELLE (Gegenprobe
+                                #   g, 1°-Regel; Chris-Entscheidung 2026-09-28:
+                                #   beide Grenzen gelten, der Builder schreibt beide)
 
 
 def haus_kreise(factors, cusps, klassisch=False):
@@ -1606,14 +1610,24 @@ def kippminuten(jd, lat, lon, hsys=b"K", max_min=KIPP_MAX):
     return out
 
 
-def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
+def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE, achse_grad=ACHSE_GRENZE):
     """Die Spitzen unter der Schwelle (Gegenprobe g), als Paare 1/7 .. 6/12.
     Seit 2026-09-23 zaehlt der UNGERUNDETE Wert ('min_genau'; fehlt er, die
     ganze Minute).
 
+    Seit 2026-09-28 (Klasse-2-Entscheidungslauf, K2) zusaetzlich AC und MC,
+    die weniger als `achse_grad` (Vorgabe ACHSE_GRENZE = 1°) vor oder hinter
+    einer Zeichengrenze stehen, auch wenn ihre Kippminute ueber der Schwelle
+    liegt — die 1°-Regel der Gegenprobe g; vorher schrieb der Lauf diesen
+    Hinweis von Hand (Pruefbericht Geburtshoroskop 1+2 vom 28.09.b: ein MC
+    knapp unter 1° vor der Grenze, Kippminute ueber zwei Minuten). `achse_grad=0` schaltet das ab.
+
     -> [{'paar': (n, n+6), 'minuten', 'minuten_genau', 'richtung',
-         'von': (zeichen_n, zeichen_n6), 'nach': (…, …)}], die knappste zuerst.
-        Leer, wenn nichts unter der Schwelle liegt; None, wenn kipp None ist.
+         'von': (zeichen_n, zeichen_n6), 'nach': (…, …), 'grund'}], die
+        knappste zuerst; 'grund' ist 'kippminute' (unter der Schwelle) oder
+        'achse' (nur die 1°-Regel; dann dazu 'achse' = 'AC'/'MC',
+        'abstand_grenze' in Grad und 'lage' = 'vor'/'hinter').
+        Leer, wenn nichts faellig ist; None, wenn kipp None ist.
     """
     if kipp is None:
         return None
@@ -1621,15 +1635,28 @@ def kipp_warnungen(kipp, schwelle=KIPP_SCHWELLE):
     for i in range(6):
         a, b = kipp[i], kipp[i + 6]
         g = a.get('min_genau', a['min'])
-        if g is None or g >= schwelle:
+        if g is None:
             continue
+        zusatz = {'grund': 'kippminute'}
+        if g >= schwelle:
+            # AC ist Spitze 1 (Paar 1/7), MC Spitze 10 (Paar 4/10).
+            if not achse_grad or i not in (0, 3):
+                continue
+            achse = kipp[0] if i == 0 else kipp[9]
+            rest = achse['lon'] % 30.0
+            abstand = min(rest, 30.0 - rest)
+            if abstand >= achse_grad:
+                continue
+            zusatz = {'grund': 'achse', 'achse': 'AC' if i == 0 else 'MC',
+                      'abstand_grenze': round(abstand, 4),
+                      'lage': 'vor' if rest >= 15.0 else 'hinter'}
         nach_a = a['zeichen_frueher'] if a['richtung'] == 'früher' else a['zeichen_spaeter']
         nach_b = b['zeichen_frueher'] if a['richtung'] == 'früher' else b['zeichen_spaeter']
         out.append({'paar': (a['haus'], b['haus']), 'minuten': a['min'],
                     'minuten_genau': g, 'richtung': a['richtung'],
                     'von': (a['zeichen'], b['zeichen']),
                     'nach': (nach_a, nach_b),
-                    'grad_je_minute': a['grad_je_minute']})
+                    'grad_je_minute': a['grad_je_minute'], **zusatz})
     out.sort(key=lambda w: w['minuten_genau'])
     return out
 
@@ -2894,7 +2921,9 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     alle Faktoren, die in einer der Meldungen dort stehen (Winkel zuerst).
 
     Grosstrigon, hart: alle drei Ecken paarweise identisch oder konjunkt.
-    Kandidaten gibt es dort nicht. Zwei Grosstrigone mit zwei gemeinsamen
+    Kandidaten gibt es dort nicht. Seit 2026-09-28 traegt 'ecken' dann die
+    ENGERE Meldung (kleinste Orbsumme), dazu 'orbsumme' und 'konj_ecke' (die
+    doppelt besetzten Ecken als Paare). Zwei Grosstrigone mit zwei gemeinsamen
     (identischen oder konjunkten) Ecken, deren dritte Ecken NICHT konjunkt
     sind, sind seit 2026-09-19 EIN Befund (L9, Chris-Entscheidung Frage 19):
     Die engere Figur fuehrt (kleinste Summe ihrer drei Trigon-Orben, bei
@@ -2907,7 +2936,7 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'jod_figuren': [{'basis','apex','meldungen','basen','konj_basis',
                          'konj_spitze'}],
         'jod_kandidaten': [[i, j, ...]], 'jod_meldungen': n, 'jod_anzahl': m,
-        'grosstrigon_figuren': [{'ecken','meldungen'}],
+        'grosstrigon_figuren': [{'ecken','meldungen'[,'orbsumme','konj_ecke']}],
         'grosstrigon_meldungen': n, 'grosstrigon_anzahl': m,
         'grosstrigon_nebenlesarten': [{'fuehrt': i, 'neben': [j, ...],
                                        'orbsummen': [s_i, s_j, ...]}],
@@ -3088,6 +3117,29 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     def _orbsumme(ecken):
         return sum(tri_orb.get(frozenset((x, y)), 0.0)
                    for i, x in enumerate(ecken) for y in ecken[i + 1:])
+
+    # HART ZUSAMMENGEFASST — welche Fassung fuehrt? (2026-09-28,
+    # Klasse-2-Entscheidungslauf T3; Pruefbericht Geburtshoroskop 1+2 vom
+    # 28.09.): Stehen an einer Ecke konjunkte Faktoren, meldet
+    # konfigurationen() die Figur je Faktor einmal. Bis dahin trug 'ecken' die
+    # ERSTE Meldung (alphabetisch), im Prueffall die weite statt der engen
+    # Fassung. Jetzt fuehrt die engere wie
+    # bei den Nebenlesarten (kleinste Orbsumme, bei Gleichstand die zuerst
+    # gemeldete); 'konj_ecke' nennt die doppelt besetzten Ecken.
+    for f in gt_figuren:
+        if len(f['meldungen']) > 1:
+            _ms = f['meldungen']
+            f['ecken'] = min(_ms, key=lambda e: (_orbsumme(e), _ms.index(e)))
+            f['orbsumme'] = _orbsumme(f['ecken'])
+            _paare = []
+            for m in _ms:
+                for y in m:
+                    if y in f['ecken']:
+                        continue
+                    for x in f['ecken']:
+                        if x not in m and gleich(x, y) and [x, y] not in _paare:
+                            _paare.append([x, y])
+            f['konj_ecke'] = _paare
 
     gruppe_von = list(range(len(gt_figuren)))
 
@@ -4249,6 +4301,16 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"bevor sie verwendet werden.")
         for w in (sb.get('kipp_warnungen') or []):
             _g = w.get('minuten_genau', w['minuten'])
+            if w.get('grund') == 'achse':      # 2026-09-28 (K2): 1°-Regel
+                L.append(f"- ⚠ {w['achse']} unter {ACHSE_GRENZE:g}° an einer "
+                         f"Zeichengrenze ({_gr(w['abstand_grenze'])} {w['lage']} "
+                         f"der Grenze): Spitzen {w['paar'][0]}/{w['paar'][1]} "
+                         f"wechseln bei {_min_dez(_g)} Minuten {w['richtung']}er "
+                         f"Geburt das Zeichen ({w['von'][0]} → {w['nach'][0]}, "
+                         f"{w['von'][1]} → {w['nach'][1]}; "
+                         f"{_gr(w['grad_je_minute'])} je Minute); im Text "
+                         f"„{_min_wort(_g)} {w['richtung']}\". " + _KIPP_WOHIN)
+                continue
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: Spitzen "
                      f"{w['paar'][0]}/{w['paar'][1]} wechseln bei "
                      f"{_min_dez(_g)} Minuten {w['richtung']}er Geburt das "
@@ -4259,7 +4321,8 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      + ('' if transit else
                         " Ein Sonderfall an dieser Spitze führt ein Thema nur "
                         "mit Begründung (Typmodul, Gewichtungsrang 2)."))
-        if not sb.get('kipp_warnungen'):
+        if not any(w.get('grund') != 'achse'
+                   for w in (sb.get('kipp_warnungen') or [])):
             L.append(f'- Keine Spitze unter {KIPP_SCHWELLE} Kippminuten.')
     else:
         L.append('- Kippminuten: nicht gerechnet — strukturbild() braucht dafür '
@@ -4538,9 +4601,22 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                  'chart_data.' % (' ⚹ '.join(a['basis']), a['apex'],
                                   ' ⚹ '.join(b['basis']), b['apex']))
     if fg and fg.get('grosstrigon_meldungen', 0) > fg.get('grosstrigon_anzahl', 0):
-        L.append('- Achsen-Doppelung: %d Großtrigon-Meldungen entsprechen %d '
-                 'Figuren.' % (fg['grosstrigon_meldungen'],
-                               fg['grosstrigon_anzahl']))
+        # 2026-09-28 (T3): Singular, Grund der Doppelung und die fuehrende Fassung.
+        _gtn = fg['grosstrigon_anzahl']
+        L.append('- Achsen-Doppelung: %d Großtrigon-Meldungen entsprechen %d %s '
+                 '(die übrigen sind dieselbe Figur über eine Konjunktion an '
+                 'einer Ecke).' % (fg['grosstrigon_meldungen'], _gtn,
+                                   'Figur' if _gtn == 1 else 'Figuren'))
+        for f in fg['grosstrigon_figuren']:
+            if len(f['meldungen']) > 1:
+                L.append('  · Großtrigon %s — %d Meldungen, EIN Befund. Die Ecke '
+                         'ist doppelt besetzt (%s). Geführt wird mit der engeren '
+                         'Fassung (Orbsumme %s); die übrigen Meldungen sind '
+                         'dieselbe Figur.'
+                         % (', '.join(f['ecken']), len(f['meldungen']),
+                            ', '.join('%s ☌ %s' % tuple(p)
+                                      for p in f.get('konj_ecke', [])) or '—',
+                            _gr(f.get('orbsumme', 0.0))))
     # MYSTISCHES RECHTECK, neu am 15.09.2026 (Pruefbericht 5.3).
     if fg and fg.get('rechteck_meldungen', 0) > fg.get('rechteck_anzahl', 0):
         L.append('- Achsen-Doppelung: %d Rechteck-Meldungen entsprechen %d '
@@ -5564,10 +5640,10 @@ if __name__ == '__main__':
                 assert zeichen_name(_c_vor[i]) == _k['zeichen'], (i, key, _k)
                 assert zeichen_name(_c_nach[i]) != _k['zeichen'], (i, key, _k)
         assert all(w['minuten_genau'] < KIPP_SCHWELLE
-                   for w in kipp_warnungen(_kp))
+                   for w in kipp_warnungen(_kp) if w['grund'] == 'kippminute')
         _kw = kipp_warnungen(_kp, schwelle=KIPP_MAX + 1)
         assert len(_kw) == 6 and _kw == sorted(_kw, key=lambda w: w['minuten'])
-        assert kipp_warnungen(_kp, schwelle=0) == []
+        assert kipp_warnungen(_kp, schwelle=0, achse_grad=0) == []
         assert kipp_warnungen(None) is None
         # 2026-09-23c: konstellations_fussnoten() — Liste mit Ephemeride, Abbruch
         # bei einem Faktor, dessen Laenge nicht zum JD passt (statt still None)
@@ -5790,6 +5866,53 @@ if __name__ == '__main__':
     _tl9 = strukturbild_text(strukturbild(_fl9 + _ax(45.0, 315.0), _c))
     assert 'EIN Befund: geführt von Jupiter, Mond, Sonne (die engere Figur, ' \
            'Orbsumme 6°00′); Mond, Saturn, Sonne ist die Nebenlesart' in _tl9
+
+    # 2026-09-28 (T3): Ecke doppelt besetzt (Saturn ☌ Jupiter, 3°); die weite
+    # Fassung wird zuerst gemeldet, die engere fuehrt.
+    _ft3 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+            {'name': 'Saturn', 'lon': 240.0}, {'name': 'Jupiter', 'lon': 243.0}]
+    _at3 = huber_aspects(_ft3)
+    _kt3 = konfigurationen(_ft3, _at3)
+    assert _kt3['grosstrigon'][0] == ['Jupiter', 'Mond', 'Sonne'], _kt3['grosstrigon']
+    _gt3 = gruppiere_figuren(_kt3, _at3)
+    assert _gt3['grosstrigon_anzahl'] == 1 and _gt3['grosstrigon_meldungen'] == 2, _gt3
+    _ff3 = _gt3['grosstrigon_figuren'][0]
+    assert _ff3['ecken'] == ['Mond', 'Saturn', 'Sonne'] and \
+        abs(_ff3['orbsumme']) < 1e-9 and _ff3['konj_ecke'] == [['Saturn', 'Jupiter']], _ff3
+    _tt3 = strukturbild_text(strukturbild(_ft3 + _ax(45.0, 315.0), _c))
+    assert 'Großtrigon-Meldungen entsprechen 1 Figur (' in _tt3 and \
+        '· Großtrigon Mond, Saturn, Sonne — 2 Meldungen, EIN Befund. Die Ecke ist ' \
+        'doppelt besetzt (Saturn ☌ Jupiter). Geführt wird mit der engeren ' \
+        'Fassung (Orbsumme 0°00′)' in _tt3, _tt3.split('### 6')[1][:900]
+
+    # 2026-09-28 (K2): AC/MC unter 1° an der Zeichengrenze auch ueber der
+    # Kippminuten-Schwelle; konstruiert, ohne Ephemeride.
+    def _kp_k2(ac_lon, mc_lon, ac_min, mc_min):
+        _l = []
+        for _h in range(1, 13):
+            _lon = {1: ac_lon, 7: (ac_lon + 180) % 360, 10: mc_lon,
+                    4: (mc_lon + 180) % 360}.get(_h, (_h * 30.0 + 15.0) % 360)
+            _m = {1: ac_min, 7: ac_min, 4: mc_min, 10: mc_min}.get(_h, 60.0)
+            _l.append({'haus': _h, 'lon': _lon, 'zeichen': zeichen_name(_lon),
+                       'frueher': None, 'spaeter': int(_m) + 1, 'min': int(_m) + 1,
+                       'richtung': 'später', 'frueher_genau': None,
+                       'spaeter_genau': _m, 'min_genau': _m, 'zeichen_frueher': None,
+                       'zeichen_spaeter': zeichen_name(_lon + 1.0),
+                       'grad_je_minute': 0.27})
+        return _l
+    _k2a = kipp_warnungen(_kp_k2(100.0, 59.4, 40.0, 2.6))     # MC 0°36′ vor der Zwillinge-Grenze
+    assert [(w['grund'], w.get('achse'), w['paar']) for w in _k2a] == \
+        [('achse', 'MC', (4, 10))], _k2a
+    assert abs(_k2a[0]['abstand_grenze'] - 0.6) < 1e-9 and _k2a[0]['lage'] == 'vor'
+    assert kipp_warnungen(_kp_k2(100.0, 59.4, 40.0, 2.6), achse_grad=0) == []
+    _k2b = kipp_warnungen(_kp_k2(90.4, 75.0, 1.5, 40.0))      # AC 0°24′ hinter der Krebs-Grenze
+    assert [(w['grund'], w.get('achse')) for w in _k2b] == [('kippminute', None)], _k2b
+    _k2c = kipp_warnungen(_kp_k2(90.4, 75.0, 2.5, 40.0))
+    assert [(w['grund'], w.get('achse'), w['lage']) for w in _k2c] == \
+        [('achse', 'AC', 'hinter')], _k2c
+    _sb_k2 = {'kippminuten': _kp_k2(100.0, 59.4, 40.0, 2.6), 'kipp_warnungen': _k2a}
+    _fn_k2 = zeichengrenze_fussnote(_sb_k2['kippminuten'])
+    assert _fn_k2 and 'knapp 3 Minuten' in _fn_k2, _fn_k2
 
     # L8: zwei Nebenlesarten -> strikt vor grenzwertig, dann das engere Muster.
     _v8 = verteilungsmuster(_synth([0, 20, 40, 60, 80, 100, 120, 140, 150, 184]),

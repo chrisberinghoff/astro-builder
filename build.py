@@ -2216,6 +2216,90 @@ def verify_visual(pdf_path: str, pages=None, dpi: int = 80,
     return sorted(set(paths))
 
 
+def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
+                 spalten: int = 4, out_prefix: str = None) -> dict:
+    """Die Bildkontrolle nach dem Render in EINEM Aufruf (Design-Render-Modul,
+    Schritt 3, „Bildkontrolle"; neu 2026-09-28, Klasse-2-Entscheidungslauf T4).
+
+    Liefert Bilder, keinen Text — den Inhalt prueft verify():
+    - den BOGEN: Cover bis Aspektseite, im Transit bis zur Transit-Uhr, zu
+      EINEM Bild montiert (`dpi`, Vorgabe 60; `spalten` je Zeile) — Anordnung,
+      Umbrueche, Pflichtelemente, Leitsatz und Motiv vollstaendig;
+    - die RADSEITE einzeln in `rad_dpi` (Vorgabe 110): Positionsmarken und
+      Haarlinien des Rads sind im Bogen nicht zu erkennen (Pruefberichte vom
+      27./28.09.; der Bildblick verkleinert die Montage noch einmal);
+    - `extra`: weitere Seiten (1-basiert) einzeln in `rad_dpi` — in einer
+      englischen Fassung eine Kapitelseite.
+
+    Die Grenzen kommen aus den Ankern, die chartdoc ins PDF schreibt: Ende des
+    Bogens `PG_uhr`, sonst `PG_asp`; Radseite `PG_rad`. Fehlt einer davon,
+    bricht die Funktion ab — das PDF kommt dann nicht aus
+    `chartdoc.render_mit_inhalt()`. Braucht pypdf, Pillow und pdftoppm.
+
+    out_prefix  Vorgabe `<pdf ohne .pdf>_bogen` daneben.
+    -> {'bogen': Pfad, 'rad': Pfad, 'extra': [Pfade], 'seiten': [1, …, n]
+        (die Seiten im Bogen), 'rad_seite': n} — alle Bilder PNG.
+    """
+    try:
+        import pypdf
+        from PIL import Image
+    except ImportError as e:
+        raise BuildError("kontaktbogen() braucht pypdf und Pillow: pip install "
+                         "pypdf pillow --break-system-packages") from e
+    import glob as _glob
+    pdf_pfad = os.path.abspath(pdf_pfad)
+    leser = pypdf.PdfReader(pdf_pfad)
+    anker = {}
+    for name, ziel in leser.named_destinations.items():
+        try:
+            anker[str(name)] = leser.get_destination_page_number(ziel)
+        except Exception:                               # noqa: BLE001
+            continue
+    ende = anker.get("PG_uhr", anker.get("PG_asp"))
+    if ende is None or "PG_rad" not in anker:
+        raise BuildError("kontaktbogen(): %s traegt die Anker PG_asp/PG_uhr oder "
+                         "PG_rad nicht — das PDF kommt nicht aus "
+                         "chartdoc.render_mit_inhalt()." % pdf_pfad)
+    if out_prefix is None:
+        stamm = pdf_pfad[:-4] if pdf_pfad.lower().endswith(".pdf") else pdf_pfad
+        out_prefix = stamm + "_bogen"
+    ordner = os.path.dirname(out_prefix) or "."
+    teil = out_prefix + "_teil"
+    for alt in _glob.glob(teil + "-*.png"):
+        os.remove(alt)
+    subprocess.run(["pdftoppm", "-png", "-r", str(dpi), "-f", "1", "-l",
+                    str(ende + 1), pdf_pfad, teil], check=True)
+    teile = sorted(_glob.glob(teil + "-*.png"),
+                   key=lambda q: int(re.search(r"-(\d+)\.png$", q).group(1)))
+    bilder = [Image.open(q).convert("RGB") for q in teile]
+    w = max(b.width for b in bilder)
+    h = max(b.height for b in bilder)
+    spalten = max(1, min(spalten, len(bilder)))
+    zeilen = -(-len(bilder) // spalten)
+    luft = 12
+    bogen = Image.new("RGB", (spalten * w + (spalten + 1) * luft,
+                              zeilen * h + (zeilen + 1) * luft), "white")
+    for i, b in enumerate(bilder):
+        bogen.paste(b, (luft + (i % spalten) * (w + luft),
+                        luft + (i // spalten) * (h + luft)))
+    for b in bilder:
+        b.close()
+    for q in teile:
+        os.remove(q)
+    bogen_pfad = out_prefix + ".png"
+    bogen.save(bogen_pfad)
+
+    def _einzeln(seite, name):
+        ziel = os.path.join(ordner, os.path.basename(out_prefix) + name)
+        subprocess.run(["pdftoppm", "-png", "-r", str(rad_dpi), "-f", str(seite),
+                        "-l", str(seite), "-singlefile", pdf_pfad, ziel], check=True)
+        return ziel + ".png"
+    rad_seite = anker["PG_rad"] + 1
+    return {"bogen": bogen_pfad, "rad": _einzeln(rad_seite, "_rad"),
+            "extra": [_einzeln(int(s), "_s%d" % int(s)) for s in extra],
+            "seiten": list(range(1, ende + 2)), "rad_seite": rad_seite}
+
+
 def pruef_teilmenge(pdf_pfad: str, out: str = None) -> dict:
     """Die Pruef-Teilmenge fuer verify(): das PDF ohne Inhaltsseite und ohne
     Anhang (Design-Render-Modul, „Pruefung — welche Seiten ausgeklammert
@@ -4200,6 +4284,54 @@ def _selbsttest():
     if _pflicht_kandidaten('Bodygraph') != ('Bodygraph',):
         fehler.append("W57: Titel ohne Paar bekommt Kandidaten dazu")
 
+    # --- T4 2026-09-28: kontaktbogen() an einem PDF mit Ankern -------------
+    try:
+        import pypdf as _pypdf
+        from PIL import Image as _Image          # noqa: F401
+        _pdftoppm = shutil.which("pdftoppm")
+    except ImportError:
+        _pypdf = _pdftoppm = None
+    if _pypdf and _pdftoppm:
+        _kb_tmp = tempfile.mkdtemp(prefix="build_kontaktbogen_")
+        try:
+            def _kb_pdf(namen):
+                _w = _pypdf.PdfWriter()
+                for _ in range(8):
+                    _w.add_blank_page(width=298, height=420)
+                for _i, _n in enumerate(namen):
+                    if _n:
+                        _w.add_named_destination(_n, _i)
+                _p = os.path.join(_kb_tmp, "k%d.pdf" % len([x for x in namen if x]))
+                with open(_p, "wb") as _fh:
+                    _w.write(_fh)
+                return _p
+            _kb = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "PG_rad",
+                                        "PG_konst", "PG_asp", "PG_uhr", "", "PG_anh"]),
+                               extra=[7])
+            pruefe(_kb["seiten"] == [1, 2, 3, 4, 5, 6] and _kb["rad_seite"] == 3,
+                   "T4: Transit-Bogen %r" % _kb)
+            pruefe(all(os.path.exists(q) for q in [_kb["bogen"], _kb["rad"]]
+                       + _kb["extra"]), "T4: Bilder fehlen %r" % _kb)
+            with _Image.open(_kb["bogen"]) as _b, _Image.open(_kb["rad"]) as _r:
+                pruefe(_b.width > _b.height and _r.width > 400,
+                       "T4: Bogen %dx%d, Rad %dx%d" % (_b.width, _b.height,
+                                                      _r.width, _r.height))
+            pruefe(not [q for q in os.listdir(_kb_tmp) if "_teil" in q],
+                   "T4: Einzelseiten bleiben liegen")
+            _kg = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "PG_rad",
+                                        "PG_konst", "PG_asp", "", "", ""]))
+            pruefe(_kg["seiten"] == [1, 2, 3, 4, 5], "T4: Geburts-Bogen %r" % _kg)
+            try:
+                kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "", "", "", "",
+                                      "", ""]))
+                fehler.append("T4: PDF ohne Anker nicht abgewiesen")
+            except BuildError:
+                pass
+        finally:
+            shutil.rmtree(_kb_tmp, ignore_errors=True)
+    else:
+        print("  (T4: pypdf/Pillow/pdftoppm fehlt — kontaktbogen-Teil uebersprungen)")
+
     if fehler:
         print("Selbsttest build.py: %d Fehler" % len(fehler))
         for f_ in fehler:
@@ -4207,7 +4339,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12)")
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen)")
 
 
 def _selbsttest_verify(tmp, pruefe):

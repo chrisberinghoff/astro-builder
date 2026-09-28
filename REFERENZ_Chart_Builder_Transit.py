@@ -76,7 +76,8 @@ CHARTDATA = '/home/claude/<klient>_Transit_chart_data.md'
 ANALYSE = '/home/claude/<klient>_Transit_analyse.md'
 RADPNG = '<klient>_radix.png'
 UHRPNG = '<klient>_transituhr.png'
-OUT = '/home/claude/<klient>_Transit_Horoskop.pdf'
+from datetime import datetime as _dt; from zoneinfo import ZoneInfo as _Zone  # noqa: E402,E702
+OUT = f"/home/claude/Transit_<klient>_{_dt.now(_Zone('Europe/Berlin')):%Y-%m-%d}.pdf"  # = Name im Klientenordner (Chris 2026-09-28)
 
 # Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
 # Hauswechsel) — aus dem KOPF der chart_data uebernommen,

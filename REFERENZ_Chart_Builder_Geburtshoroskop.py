@@ -66,7 +66,8 @@ VORNAME = '<Vorname>'
 CHARTDATA = '/home/claude/<klient>_chart_data.md'
 ANALYSE = '/home/claude/<klient>_analyse.md'
 RADPNG = '<klient>_radix.png'
-OUT = '/home/claude/<klient>_Geburtshoroskop.pdf'
+from datetime import datetime as _dt; from zoneinfo import ZoneInfo as _Zone  # noqa: E402,E702
+OUT = f"/home/claude/Geburtshoroskop_<klient>_{_dt.now(_Zone('Europe/Berlin')):%Y-%m-%d}.pdf"  # = Name im Klientenordner (Chris 2026-09-28)
 DOCTYPE = None            # Geburtshoroskop: None (build.PFLICHT_BAUSTEINE)
 GEBURTSZEILE = '<T. MONAT JJJJ · HH:MM ZONE · ORT>'   # Cover, letzte Zeile — Tag ohne fuehrende Null, Monat und Ort in VERSALIEN, Ort ohne Land, Zonenkuerzel wie in der Quelle (MEZ, MESZ, GMT …); englisch Monat englisch, '<D> <MONTH> <YYYY> · …'
 # Sprache des PDFs (2026-09-26): 'de' oder 'en' (Modul Sprachfassung). Bei 'en'

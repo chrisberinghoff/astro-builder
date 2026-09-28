@@ -150,10 +150,12 @@ def _passt(r, ziele):
 
 
 def stationen(daten):
-    """Stationen der langsamen Planeten im Fenster.
+    """Stationen der langsamen Planeten im Umfeld des Stichtags — nicht alle
+    Stationen des Fensters (so auch der Uhr-Vorspann der Vorlage).
 
-    Kommen aus dem §11-Block (transitdata.parse -> 'stationen'); gerechnet wird
-    hier nichts. Faellt der Block aus, bleibt die Leiste einfach leer.
+    Kommen aus dem §11-Block „Stationen im Umfeld des Stichtags"
+    (transitdata.parse -> 'stationen'); gerechnet wird hier nichts. Faellt
+    der Block aus, bleibt die Leiste einfach leer.
     """
     out = []
     for s in daten.get('stationen', []):
