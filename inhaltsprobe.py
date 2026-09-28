@@ -4590,6 +4590,32 @@ _P17_ANKERVERBEN = _P17_ANKERVERBEN | frozenset((
         _P17_PRAEP, _P17_OBLIQ, _P17_NOM, _P17_PRONOMEN, _P17_BINDER, _P17_ANKERVERBEN,
         _P17_ADVERB, _P17_ZAHL, _P17_OBJEKT, _P17_SUBJEKT_PRONOMEN, _P17_HABEN, _P17_WERDEN,
         _P17_REL))
+# 2026-09-28 (Pruefberichte vom 28.09.: Geburtshoroskop 1+2 Klasse 1, Transit 1+2
+# Klasse 2 — gleiche Ursache): P17 nahm ein Wort, das kein Verb sein kann, als Verb.
+# „steht zusätzlich Uranus" — das Adverb fehlte in der Liste; „die Jungfrau Merkurs
+# eigenes Zeichen ist" — das Beiwort hinter dem Genitiv galt als Verb (nicht das „ist"
+# am Satzende, wie der Bericht vermutete). Adverbien erkennt die Probe jetzt auch an
+# der Endung (auf -lich, -weise, -mals, -falls, -dings, -wärts endet kein finites
+# Verb), und ein Beiwort hinter einem Namen im Genitiv („Merkurs", „Mondes") gehoert
+# zum folgenden Nomen.
+_P17_ADVERB = _P17_ADVERB | frozenset(w.casefold() for w in (
+    "zusätzlich", "erneut", "weiterhin", "inzwischen", "mittlerweile", "zunächst",
+    "überdies", "ferner", "anfangs", "sofort", "zwischendurch", "vorübergehend",
+    "anschließend", "kurzzeitig", "zeitweilig"))
+_P17_ADVERB_ENDUNG = ("lich", "weise", "mals", "falls", "dings", "wärts")
+
+def _p17_ist_adverb(t):
+    """Adverb aus der Liste oder an der Endung erkennbar (2026-09-28)."""
+    tl = t.casefold()
+    return tl in _P17_ADVERB or (t[:1].islower() and len(tl) > 5
+                                 and tl.endswith(_P17_ADVERB_ENDUNG))
+
+def _p17_genitiv(t):
+    """Name im Genitiv („Merkurs", „Saturns", „Mondes", „Krebses") — ein Beiwort
+    dahinter gehoert zum folgenden Nomen (2026-09-28)."""
+    return (t[:1].isupper() and len(t) > 3 and t.endswith("s")
+            and (t[:-1] in _P17_NAMEN or (t.endswith("es") and t[:-2] in _P17_NAMEN)))
+
 _P17_TOKEN_RE = re.compile(r"\d{1,2}\.(?=\s+Haus\b)|[A-Za-zÄÖÜäöüß]+(?:-[A-Za-zÄÖÜäöüß]+)*"
                            r"|[;:—–,(„“\"»«]")
 
@@ -4607,7 +4633,7 @@ def _p17_ist_adjektiv(tok):
 
 def _p17_ohne_adverb(tok, j):
     """Index des ersten Worts ab j rueckwaerts, das kein Adverb ist (2026-09-25)."""
-    while j >= 0 and tok[j].casefold() in _P17_ADVERB:
+    while j >= 0 and _p17_ist_adverb(tok[j]):
         j -= 1
     return j
 
@@ -4617,7 +4643,7 @@ def _p17_ist_verbwort(t):
     tl = t.casefold()
     return (t[:1].islower() and t.isalpha() and len(t) > 1 and tl not in _P17_PRAEP
             and tl not in _P17_OBLIQ and tl not in _P17_NOM and tl not in _P17_PRONOMEN
-            and tl not in _P17_BINDER and tl not in _P17_ADVERB and tl not in _P17_ZAHL
+            and tl not in _P17_BINDER and not _p17_ist_adverb(t) and tl not in _P17_ZAHL
             and not _P17_ORDINAL_RE.match(t))
 
 def _p17_subjekt_davor(tok, i):
@@ -4758,9 +4784,10 @@ def _p17_folgeverb(tok, i):
         vl = tok[k - 1].casefold()
         adjektiv = _p17_ist_adjektiv(t) and (vl in _P17_NOM or vl in _P17_OBLIQ
                                              or vl in _P17_PRAEP or vl in _P17_ZAHL
-                                             or _p17_ist_adjektiv(tok[k - 1]))
+                                             or _p17_ist_adjektiv(tok[k - 1])
+                                             or _p17_genitiv(tok[k - 1]))
         if (tl in _P17_PRAEP or tl in _P17_OBLIQ or tl in _P17_NOM or t[:1].isupper()
-                or tl in ("und", "oder", "sowie") or tl in _P17_ADVERB
+                or tl in ("und", "oder", "sowie") or _p17_ist_adverb(t)
                 or tl in _P17_ZAHL or tl in _P17_OBJEKT
                 or _P17_ORDINAL_RE.match(t) or adjektiv):
             k, n = k + 1, n + 1
@@ -5833,6 +5860,14 @@ def _selbsttest(still=False):
                       ("Saturn setzt dich unter Druck.", True)):
         _k, _t = _p17_kandidaten(_s)
         assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Aspektbild: %r" % _s
+    # 2026-09-28: Adverb an der Endung, Beiwort hinter Genitiv (konstruierte Saetze)
+    for _s, _soll in (("Ab Ende Oktober steht zusätzlich Uranus im Quadrat zu ihm.", False),
+                      ("Im Winter steht vorübergehend Mars im Trigon zu ihr.", False),
+                      ("Weil die Jungfrau Merkurs eigenes Zeichen ist, steht er auf eigenem Boden.", False),
+                      ("Ab Ende Oktober verlangt zusätzlich Uranus Geduld.", True),
+                      ("Dann fordert unerbittlich Saturn seinen Preis.", True)):
+        _k, _t = _p17_kandidaten(_s)
+        assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Adverb/Genitiv: %r" % _s
     assert not _p17_kandidaten("Du hast deine Venus am Aszendenten.")[0], "P17: Objekt hinter „Du hast“"
     assert not _p17_kandidaten("Es gehört zu der Sonne, die du bist.")[0], "P17: Relativsatz mit „du“"
     berichte.append("P16 und P17 als Einzelproben")
