@@ -3820,9 +3820,10 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
 # Gegenprobe-Blatt zur Geburtszeit (neu 2026-09-29)
 # ---------------------------------------------------------------------------
 # Wartungslauf „Gegenprobe Geburtszeit" (Startprompt vom 2026-09-29, Block D).
-# Wechselt der AC eines Geburtshoroskops bei weniger als
-# radix.AC_GEGENPROBE_SCHWELLE Minuten frueherer oder spaeterer Geburt das
-# Zeichen, baut Schritt 2 am Ende ein zweiseitiges Blatt, mit dem der Klient
+# Wechselt der AC bei weniger als radix.AC_GEGENPROBE_SCHWELLE Minuten
+# frueherer oder spaeterer Geburt das Zeichen, baut Schritt 2 — im
+# Geburtshoroskop und, seit dem Nachtrag vom selben Tag, im Transit mit
+# Rohdaten-Start — am Ende ein zweiseitiges Blatt, mit dem der Klient
 # selbst prueft, ob der Aszendent der Urkunde zu ihm passt. Im Prueffall vom
 # 29.09. entstand es von Hand (gut 60 Aufrufe, ein falscher Wenn-dann-Satz).
 # Hier steht der Aufbau fest (Vorlage des Prueffalls, anonymisiert), und jede

@@ -2737,11 +2737,14 @@ def zeitscan_faellig(sb):
 _ZS_MODUL = '`claude/Projektanweisung_Modul_Gegenprobe_Geburtszeit.md`'
 
 
-def zeitscan_text(zs):
+def zeitscan_text(zs, typ='geburtshoroskop'):
     """Die Zeilen des Blocks „Zeitscan" fuer Strukturbild §3 (Liste von
     Strings). zeitscan_lesen() liest sie zurueck. Nebenaspekt-Zeilen an den
     Achsen stehen nur in den Daten (_zs_neben); ein Wechselpunkt, der nur aus
-    ihnen besteht, faellt im Text weg."""
+    ihnen besteht, faellt im Text weg. typ wie in strukturbild_text(): Im
+    Transit ist das Blatt nur beim Rohdaten-Start faellig (Chris-Entscheidung
+    2026-09-29, Nachtrag) — sonst kam es mit dem Geburtshoroskop —, und die
+    AC-Zeile sagt das."""
     L = []
     fe = zs['fenster']
     L.append(f"- Zeitscan (Gegenprobe g): Bild neu gerechnet für Geburtszeiten "
@@ -2755,7 +2758,11 @@ def zeitscan_text(zs):
         z = (f"- Zeitscan · AC: Zeichenwechsel bei {_dez3(ac['minuten'])} Minuten "
              f"{ac['richtung']}er Geburt ({ac['von']} → {ac['nach']}; "
              f"„{_min_wort(ac['minuten'])} {ac['richtung']}\")")
-        if zs.get('blatt_faellig'):
+        if zs.get('blatt_faellig') and typ == 'transit':
+            z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
+                  f"fällig nur beim Rohdaten-Start dieses Transits, dann am Ende "
+                  f"von Schritt 2 {_ZS_MODUL} laden.")
+        elif zs.get('blatt_faellig'):
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
                   f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden.")
         else:
@@ -2849,7 +2856,8 @@ def _selbsttest_zeitscan():
     Zeichenwechsel auf die Kippminute von kippminuten(), den Wechsel des
     Chart-Herrschers und mindestens einen Wechsel eines Haeuser-Kreises oder
     Hausherrscher-Sonderfalls; Block und Leser stimmen ueberein; strukturbild()
-    schreibt den Block nur, wenn er faellig ist, und nie im Transit."""
+    schreibt den Block nur, wenn er faellig ist, im Transit mit dem Blatt nur
+    beim Rohdaten-Start."""
     try:
         import swisseph as _swe
     except Exception:
@@ -2919,7 +2927,10 @@ def _selbsttest_zeitscan():
     t3 = strukturbild_text(sb).split('### 3')[1].split('### 4')[0]
     assert '- Zeitscan · AC: Zeichenwechsel bei 1,500 Minuten früherer Geburt' \
         in t3 and 'Gegenprobe-Blatt fällig' in t3, t3
-    assert '- Zeitscan' not in strukturbild_text(sb, typ='transit')
+    tt = strukturbild_text(sb, typ='transit')
+    assert 'fällig nur beim Rohdaten-Start dieses Transits' in tt, tt
+    assert zeitscan_lesen(tt)['blatt_faellig'] and \
+        zeitscan_lesen(tt)['ac'] == zl['ac']
     # Gegenfall: AC weit weg von der Grenze, keine ⚠-Zeile -> kein Block
     for k in range(20, 400, 7):
         f2, c2 = _bild(e + k / 1440.0)
@@ -5155,11 +5166,13 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
                      f'späterer Geburt das führende Haus.')
     # --- Zeitscan (neu 2026-09-29): Wenn-dann-Rechnung zur Geburtszeit ---------
-    # Nur im Geburtshoroskop: Der Transit bleibt unberuehrt (Startprompt vom
-    # 2026-09-29, Grenzen) — ob er Block und Blatt bekommt, entscheidet Chris.
-    _zs = None if transit else sb.get('zeitscan')
+    # Auch im Transit (Chris-Entscheidung 2026-09-29, Nachtrag): Der Block traegt
+    # dort die Wenn-dann-Saetze wie im Geburtshoroskop; das Blatt gibt es im
+    # Transit nur beim Rohdaten-Start, und die AC-Zeile sagt das.
+    _zs = sb.get('zeitscan')
     if _zs:
-        L.extend(zeitscan_text(_zs))
+        L.extend(zeitscan_text(_zs, typ='transit' if transit else
+                               'geburtshoroskop'))
     L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
              'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
              'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
