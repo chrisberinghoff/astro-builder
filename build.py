@@ -2249,6 +2249,9 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
     - die RADSEITE einzeln in `rad_dpi` (Vorgabe 110): Positionsmarken und
       Haarlinien des Rads sind im Bogen nicht zu erkennen (Pruefberichte vom
       27./28.09.; der Bildblick verkleinert die Montage noch einmal);
+    - die UHRSEITE (Transit) einzeln in `rad_dpi`, seit 2026-09-29: Ihre
+      Linien und Beschriftungen sind im Bogen ebenso wenig lesbar (Pruef-
+      bericht Transit 3+4 vom 29.09. Nr. 4); ohne Transit-Uhr None;
     - `extra`: weitere Seiten (1-basiert) einzeln in `rad_dpi` — in einer
       englischen Fassung eine Kapitelseite.
 
@@ -2258,7 +2261,8 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
     `chartdoc.render_mit_inhalt()`. Braucht pypdf, Pillow und pdftoppm.
 
     out_prefix  Vorgabe `<pdf ohne .pdf>_bogen` daneben.
-    -> {'bogen': Pfad, 'rad': Pfad, 'extra': [Pfade], 'seiten': [1, …, n]
+    -> {'bogen': Pfad, 'rad': Pfad, 'uhr': Pfad|None, 'extra': [Pfade],
+        'seiten': [1, …, n]
         (die Seiten im Bogen), 'rad_seite': n} — alle Bilder PNG.
     """
     try:
@@ -2316,9 +2320,13 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
                         "-l", str(seite), "-singlefile", pdf_pfad, ziel], check=True)
         return ziel + ".png"
     rad_seite = anker["PG_rad"] + 1
+    uhr_seite = anker["PG_uhr"] + 1 if "PG_uhr" in anker else None
     return {"bogen": bogen_pfad, "rad": _einzeln(rad_seite, "_rad"),
-            "extra": [_einzeln(int(s), "_s%d" % int(s)) for s in extra],
-            "seiten": list(range(1, ende + 2)), "rad_seite": rad_seite}
+            "uhr": _einzeln(uhr_seite, "_uhr") if uhr_seite else None,
+            "extra": [_einzeln(int(s), "_s%d" % int(s)) for s in extra
+                      if int(s) != uhr_seite],
+            "seiten": list(range(1, ende + 2)), "rad_seite": rad_seite,
+            "uhr_seite": uhr_seite}
 
 
 def pruef_teilmenge(pdf_pfad: str, out: str = None) -> dict:
@@ -2536,7 +2544,7 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
 
     Rückgabe: {'tabelle': n, 'je_tabelle': [(Tabelle, n), ...], 'mit_heimat': [...],
                'ohne_heimat': [...], 'dokumentiert': [...] (weggelassen),
-               'anderswo_gedeutet': [...] (Getriebe, Instrument), 'offen': [...],
+               'anderswo_gedeutet': [...] (Getriebe, Instrument, „Was trägt“), 'offen': [...],
                'doppelt': [...], 'unlesbar': [(abschnitt, zeile), ...], 'ok': bool}
     `offen` ist die Fehlerliste: weder Heimat noch dokumentierte Weglassung.
     `unlesbar` (neu 2026-09-19, F2): Zeilen der Aspekttabellen, die wie eine
@@ -2559,7 +2567,8 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
                     Deutungs-Heimat — ausdrückliche Weglassung` (zwei bis vier
                     #), je Zeile ein Paar (Tabellenzeile oder `Faktor Glyphe
                     Faktor`, Zusatzebene mit ∠, ⚼ oder –Wort–). Nennt die Zeile
-                    das Getriebe- oder das Instrument-Kapitel, steht das Paar in
+                    das Getriebe- oder das Instrument-Kapitel oder „Was trägt“
+                    (seit 2026-09-29), steht das Paar in
                     `anderswo_gedeutet`, sonst in `dokumentiert` (weggelassen).
                     Andere Wörter im Datenblatt — „Weglassung", „GESTRICHEN" —
                     dokumentieren nichts mehr (bis 2026-09-23 öffneten sie
@@ -2712,7 +2721,12 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
             for m in _re.finditer(r"(%s)\s*(?:[%s⚼∠]|—|%s)\s*(%s)"
                                   % (_AH_NAME, _AH_GLYPH, _AH_WORT, _AH_NAME), zeile):
                 paare.add(frozenset([m.group(1), m.group(2)]))
-            if _re.search(r"Getriebe|Instrument", zeile):
+            # 2026-09-29 (Klasse-2-Entscheidungslauf T2, Befund Geburtshoroskop
+            # 1+2 vom 29.09. Nr. 5): Auch „Was trägt“ (Pflichtteil des
+            # Hauptthemen-Kapitels) deutet ausserhalb der Themenliste. Vorher
+            # zaehlte eine solche Zeile als Weglassung. Das Wort „Hauptthemen“
+            # allein genuegt nicht — es steht auch in Weglassungsgruenden.
+            if _re.search(r"Getriebe|Instrument|Was trägt", zeile):
                 anderswo |= paare
             else:
                 dok |= paare
@@ -3244,6 +3258,196 @@ def _vertragsname(n: str) -> str:
     return _VERTRAGSNAME.get(n, n)
 
 
+# --- Beleg eines Transit-Kapitels (neu 2026-09-29, Klasse-2-Entscheidungslauf
+# T11; Befund Transit 1+2 vom 29.09. Nr. 5 und 6). Die Beleg-Segmente der
+# Transitkapitel schrieb jeder Lauf mit einem eigenen Hilfsskript. Die Form
+# steht im Transit-Modul („Signatur, Beleg und ihre Darstellung"); gelesen
+# wird sie von inhaltsprobe P1 (Kontakte gegen events.json) und P2 (Segment 1).
+_BELEG_ACHSE = {"AC": "Aszendent (AC)", "MC": "Medium Coeli (MC)",
+                "DC": "Deszendent (DC)", "IC": "Imum Coeli (IC)"}
+_BELEG_KONTAKT_RE = re.compile(r"T-(\w+)\s*([☌☍□△⚹⚻⚺])\s*R-([\wÄÖÜäöüß]+)")
+
+
+def _beleg_name(n):
+    """Faktorname mit Symbol fuer den Beleg; Achsen und Pholus ohne Symbol."""
+    import radix as _rx
+    g = _rx.FAKTOR_GLYPHE.get(n, "")
+    return "%s %s" % (n, g) if len(g) == 1 else n
+
+
+def _beleg_komma(x, stellen):
+    return ("%.*f" % (stellen, float(x))).replace(".", ",")
+
+
+def _thema_bloecke(txt):
+    """{THEMA-Nummer: Block} der Themenliste, gelesen wie kontakt_heimat()."""
+    erste = re.search(r"THEMA \d+ \|", txt)
+    if not erste:
+        return {}
+    tl = "\n" + txt[erste.start():]
+    ende = re.search(_AH_SCHNITT, tl)
+    if ende:
+        tl = tl[:ende.start()]
+    for schluss in ("RECHENSCHAFT", "REGISTER:", "GESTRICHEN:", "SAMMELKAPITEL:"):
+        tl = tl.split(schluss)[0]
+    nrn = [int(x) for x in re.findall(r"\nTHEMA (\d+) \|", tl)]
+    return dict(zip(nrn, re.split(r"\nTHEMA \d+ \|", tl)[1:]))
+
+
+def _beleg_stand(txt, name):
+    """Segment 1: „Sonne ☉ 12°34′ Stier ♉, 10. Haus". Grad und Zeichen aus der
+    Staendetabelle (`## Stände`), das Haus aus dem @@SELEKTOR-Block — bei
+    Grenzlage das fuehrende Haus vorn (selektor.beleg_notation()); eine Achse
+    ohne Haus."""
+    import radix as _rx
+    import selektor as _sel
+    m = re.search(r"\n## St[äa]nde[^\n]*", "\n" + txt)
+    teil = ("\n" + txt)[m.end():] if m else ""
+    s = re.search(r"\n## ", teil)
+    teil = teil[:s.start()] if s else teil
+    achse = name in _BELEG_ACHSE
+    schl = _sel.norm_token(name) if achse else _sel.norm_faktor(name)
+    stand = None
+    for z in teil.splitlines():
+        mm = re.match(r"^\|\s*([^|]+?)\s*\|\s*(\d{1,3})°\s*(\d{1,2})[′']\s*\|\s*([^|]+?)\s*\|", z)
+        if mm and (_sel.norm_token(mm.group(1)) if achse
+                   else _sel.norm_faktor(mm.group(1))) == schl:
+            zn = next((x for x in _rx.SIGN_NAMES if x in mm.group(4)), None)
+            if zn:
+                stand = (int(mm.group(2)), int(mm.group(3)), zn)
+            break
+    if stand is None:
+        raise ValueError("transit_beleg(): %s steht nicht lesbar in der "
+                         "Ständetabelle (`## Stände`, Zeile `| %s | NN°NN′ | "
+                         "<Zeichen> | …`) — Segment 1 braucht Grad und Zeichen"
+                         % (name, name))
+    g, mi, zn = stand
+    seg = "%s %d°%02d′ %s %s" % (_BELEG_ACHSE.get(name) or _beleg_name(name), g, mi,
+                                 zn, _rx.SIGN_GLYPHS[_rx.SIGN_NAMES.index(zn)])
+    if achse:
+        return seg
+    f = next((x for x in _sel.parse_chart(txt)["faktoren"]
+              if x["name"] == schl), None)
+    if not f or not f.get("haus"):
+        return seg                     # P2 meldet die fehlende FAKTOR-Zeile
+    if f.get("nebenhaus"):
+        stufe = _sel.grenz_stufe(f.get("abstand"))[0]
+        return seg + ", " + _sel.beleg_notation(
+            {"faktor": schl, "haus": f["haus"], "nebenhaus": f["nebenhaus"],
+             "abstand": f.get("abstand"), "stufe": stufe})
+    return seg + ", %s. Haus" % f["haus"]
+
+
+def transit_beleg(chart_data_pfad: str, events_json_pfad: str, thema: int = None,
+                  kontakte=None, lagebild: bool = False, zusatz=()) -> str:
+    """Der Beleg eines Transit-Kapitels, fertig hinter `**Beleg:**` — neu
+    2026-09-29 (Klasse-2-Entscheidungslauf T11).
+
+    thema=n    THEMA n der chart_data: der Kontakt aus `fuehrt=`, dann jeder
+               Kontakt aus `aspekte=` in seiner Reihenfolge.
+    kontakte   statt dessen eine eigene Liste („T-Saturn □ R-Sonne", …) — fuers
+               Lagebild die zwei bis drei Kontakte, die es nennt.
+    lagebild   statt der Exaktdaten der Orb am Stichtag in Dezimalgrad
+               („— am Stichtag Orb 0,57°", `orb_stichtag` der events.json).
+    zusatz     fertige Zusatz-Segmente (Sonnenbogen, Finsternis, progressiver
+               Mond, Profektion; Form im Transit-Modul), angehaengt wie
+               geschrieben.
+
+    Segment 1 sind die Staende des Radix-Ziels des ersten Kontakts (Grad und
+    Zeichen aus der Staendetabelle, Haus aus dem @@SELEKTOR-Block, Grenzlage
+    mit dem fuehrenden Haus vorn, eine Achse ohne Haus). Jedes weitere Segment
+    ist EIN Kontakt: „T-Saturn ♄ Quadrat □ R-Sonne ☉ — exakt 02.03.2031,
+    06.10.2031" mit allen Nulldurchgaengen seiner Passagen, auch vor und nach
+    dem Fenster; ohne Nulldurchgang „— nicht exakt, Annäherung bis 1,8′ am
+    06.05.2031" (die engste im Fenster, sonst die engste ueberhaupt), ohne
+    Annaeherung „— nicht exakt, engster Orb im Fenster 0,61°". Der laufende
+    Knoten steht unter dem Vertragsnamen (T-Mondknoten ☊).
+    Ein Kontakt, den events.json nicht kennt, bricht ab (ValueError) — in
+    inhaltsprobe P1 waere er ein FEHLER.
+    """
+    import json as _json
+    txt = open(chart_data_pfad, encoding="utf-8").read()
+    daten = _json.load(open(events_json_pfad, encoding="utf-8"))
+    start, end = daten.get("start") or "", daten.get("end") or "9999"
+    if kontakte is None:
+        if thema is None:
+            raise ValueError("transit_beleg(): thema=<n> oder kontakte=[…] angeben")
+        blk = _thema_bloecke(txt).get(int(thema))
+        if blk is None:
+            raise ValueError("transit_beleg(): keine Zeile THEMA %s in der "
+                             "Themenliste" % thema)
+        kontakte = [m.group(0) for f in ("fuehrt", "aspekte")
+                    for m in _BELEG_KONTAKT_RE.finditer(_themen_feld(blk, f) or "")]
+    def _n(x):
+        x = _vertragsname(x).lower()
+        for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+            x = x.replace(a, b)
+        return {"knoten": "mondknoten", "nordknoten": "mondknoten"}.get(x, x)
+    segs, gesehen = [], []
+    for k in kontakte:
+        m = _BELEG_KONTAKT_RE.search(k)
+        if not m:
+            raise ValueError("transit_beleg(): „%s“ ist kein Kontakt der Form "
+                             "`T-<Faktor> <Glyphe> R-<Faktor>`" % k)
+        schl = (_n(m.group(1)), GLYPH_ZU_ASPEKT[m.group(2)], _n(m.group(3)))
+        if schl in gesehen:
+            continue
+        gesehen.append(schl)
+        evs = [e for e in daten.get("events", [])
+               if (_n(e.get("transit") or ""), e.get("aspekt"),
+                   _n(e.get("ziel") or "")) == schl]
+        if not evs:
+            andere = sorted({e.get("aspekt") for e in daten.get("events", [])
+                             if _n(e.get("transit") or "") == schl[0]
+                             and _n(e.get("ziel") or "") == schl[2]})
+            raise ValueError("transit_beleg(): %s steht nicht in events.json%s"
+                             % (m.group(0), "; mit diesem Ziel nur: " + ", ".join(andere)
+                                if andere else ""))
+        t, z = _vertragsname(evs[0]["transit"]), _vertragsname(evs[0]["ziel"])
+        if not segs:
+            segs.append(_beleg_stand(txt, z))
+        kopf = "T-%s %s %s R-%s" % (_beleg_name(t), schl[1],
+                                    ASPEKT_ZU_GLYPH.get(schl[1], ""), _beleg_name(z))
+        if lagebild:
+            orb = next((e["orb_stichtag"] for e in evs
+                        if e.get("orb_stichtag") is not None), None)
+            if orb is None:
+                raise ValueError("transit_beleg(): %s ohne `orb_stichtag` in "
+                                 "events.json — Lagebild-Segment nicht zu "
+                                 "schreiben" % m.group(0))
+            segs.append("%s — am Stichtag Orb %s°" % (kopf, _beleg_komma(orb, 2)))
+            continue
+        exakt = set()
+        for e in evs:
+            if e.get("exakt_gesamt") is not None:
+                exakt.update(e.get("exakt_gesamt") or [])
+            else:
+                exakt.update(e.get("exakt") or [])
+                exakt.update(e.get("exakt_nach_fenster") or [])
+                exakt.update((e.get("vorlauf") or {}).get("exakt") or [])
+        if exakt:
+            segs.append("%s — exakt %s" % (kopf, ", ".join(
+                _datum_de(d[:10]) for d in sorted(exakt))))
+            continue
+        ann = sorted({(a[0], a[1]) for e in evs
+                      for q in (e, e.get("vorlauf") or {}, e.get("fortsetzung") or {})
+                      for a in (q.get("annaeherung") or [])})
+        im_f = [a for a in ann if start <= a[0] <= end] or ann
+        if im_f:
+            d, o = min(im_f, key=lambda a: a[1])
+            segs.append("%s — nicht exakt, Annäherung bis %s′ am %s"
+                        % (kopf, _beleg_komma(o * 60, 1), _datum_de(d[:10])))
+            continue
+        orbs = [e.get("min_orb_im_fenster") for e in evs
+                if e.get("min_orb_im_fenster") is not None]
+        segs.append("%s — nicht exakt%s" % (kopf, ", engster Orb im Fenster %s°"
+                                           % _beleg_komma(min(orbs), 2) if orbs else ""))
+    if not segs:
+        raise ValueError("transit_beleg(): kein Kontakt — THEMA %s trägt weder "
+                         "fuehrt= noch aspekte= in der Form `T-X □ R-Y`" % thema)
+    return " · ".join(segs + [s.strip() for s in zusatz if s and s.strip()])
+
+
 def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
                          stichtag: str = None, orb_wirk: float = 1.5,
                          typ: str = None,
@@ -3459,7 +3663,7 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
                      for k, n in r.get("je_tabelle", []))
     if r["ok"]:
         return ("Aspekt-Heimat: %d Aspekte (%s), %d mit Heimat, %d dokumentiert "
-                "weggelassen, %d im Getriebe- oder Instrument-Kapitel gedeutet, "
+                "weggelassen, %d im Getriebe-, im Instrument-Kapitel oder in „Was trägt“ gedeutet, "
                 "keine Doppelheimat, keine offenen."
                 % (r["tabelle"], tab, len(r["mit_heimat"]), len(r["dokumentiert"]),
                    len(r.get("anderswo_gedeutet", []))))
@@ -3627,7 +3831,8 @@ def _transit_ressourcen(events_json_pfad, orb_wirk=None):
     harmonische Kontakt (Trigon, Sextil, Konjunktion) eines langsamen
     Transiters an einem PRIMAEREN Ziel, im Wirkorb INNERHALB des Fensters
     (`wirkorb_im_fenster`, nicht `im_wirkorb` — das schliesst den Rueckblick
-    ein), ohne Mars und ohne Spiegelziele. Ein Kontakt ist EIN Eintrag, auch
+    ein), ohne Mars und ohne Spiegelziele; seit 2026-09-29 (K5) ohne die,
+    deren Wirkorb vor dem Stichtag endet (`vor_dem_stichtag`). Ein Kontakt ist EIN Eintrag, auch
     wenn er mehrere Passagen hat. Die Knotenrueckkehr steht getrennt unter
     `nicht_gezaehlt` (L16) — sichtbar, nicht still weggelassen."""
     import json as _json
@@ -3643,7 +3848,15 @@ def _transit_ressourcen(events_json_pfad, orb_wirk=None):
                 or not _wirkorb_im_fenster(e, orb, orb_json)):
             continue
         passagen.setdefault((e["transit"], e["aspekt"], e["ziel"]), []).append(e)
-    eintraege, nicht = [], []
+    eintraege, nicht, vorbei = [], [], []
+    # 2026-09-29 (Klasse-2-Entscheidungslauf K5, Chris: Frage 5 = a, Befund
+    # Transit 1+2 vom 29.09. Nr. 2): Das Fenster beginnt am Quartalsanfang;
+    # ein Kontakt, dessen Wirkorb vor dem Stichtag endet, traegt den Leser
+    # nicht mehr. Er steht getrennt unter `vor_dem_stichtag` — sichtbar, und
+    # seine Registerzeile bleibt (kontakt_heimat() zaehlt ihn weiter).
+    # Stichtag wie in lagebild(): jetzt.stichtag, sonst asof.
+    asof = ((daten.get("jetzt") or {}).get("stichtag")
+            or daten.get("asof") or "")
     for (t, a, z), sel in passagen.items():
         zeit = _passagen_zeitangaben(sel, start, end)
         label = "T-%s %s R-%s" % (_vertragsname(t),
@@ -3651,8 +3864,12 @@ def _transit_ressourcen(events_json_pfad, orb_wirk=None):
         eintrag = {"transit": t, "aspekt": a, "ziel": z, "label": label,
                    "orb_f": zeit["orb_f"], "zeit": zeit,
                    "text": _kontakt_zeit_text(zeit, start, end)}
+        _ende = max([e.get("wirkorb_bis_gesamt") or "" for e in sel]
+                    + [p[1] for p in zeit.get("perioden") or []])
         if any(_ist_knotenrueckkehr(e) for e in sel):
             nicht.append(eintrag)
+        elif asof and _ende and _ende < asof:
+            vorbei.append(eintrag)
         else:
             eintraege.append(eintrag)
     def _enge(x):
@@ -3661,7 +3878,9 @@ def _transit_ressourcen(events_json_pfad, orb_wirk=None):
                 per[0][0] if per else "9999", x["label"])
     eintraege.sort(key=_enge)
     nicht.sort(key=_enge)
+    vorbei.sort(key=_enge)
     return {"eintraege": eintraege, "nicht_gezaehlt": nicht,
+            "vor_dem_stichtag": vorbei, "stichtag": asof,
             "fenster": (start, end), "orb_wirk": orb,
             "primaer": list(daten.get("primary") or [])}
 
@@ -3695,7 +3914,9 @@ def ressourcen_liste(chart_data_pfad: str, faktoren=None,
     -> {'faktoren': (...), 'tabelle': n, 'zeilen': [str], 'eintraege': [dict],
         'konjunktionen': [str], 'radix': bool}
        mit events_json_pfad zusaetzlich 'transit': [dict], 'transit_zeilen',
-       'nicht_gezaehlt': [dict], 'fenster': (start, end), 'orb_wirk', 'primaer'
+       'nicht_gezaehlt': [dict], 'vor_dem_stichtag': [dict] (Wirkorb endet vor
+       dem Stichtag, seit 2026-09-29), 'stichtag', 'fenster': (start, end),
+       'orb_wirk', 'primaer'
     `zeilen` sind alle Zeilen der Menge (erst Radix, dann Transit) mit leerem
     Deutungsort. `konjunktionen` nennt die Konjunktionen der Menge — sie
     bleiben nach der Regel vom 15.09.2026 in der Liste, sind aber nicht in
@@ -3738,6 +3959,8 @@ def ressourcen_liste(chart_data_pfad: str, faktoren=None,
         t_zeilen = ["%s · %s — Deutungsort: " % (e["label"], e["text"])
                     for e in t["eintraege"]]
         out.update({"transit": t["eintraege"], "transit_zeilen": t_zeilen,
+                    "vor_dem_stichtag": t.get("vor_dem_stichtag", []),
+                    "stichtag": t.get("stichtag", ""),
                     "nicht_gezaehlt": t["nicht_gezaehlt"],
                     "fenster": t["fenster"], "orb_wirk": t["orb_wirk"],
                     "primaer": t["primaer"]})
@@ -3784,11 +4007,20 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
         L += ["Zählmenge (Transit): jeder harmonische Kontakt (Trigon, Sextil, "
               "Konjunktion) eines langsamen Transiters (Jupiter, Saturn, "
               "Uranus, Neptun, Pluto, Chiron, Mondknoten) an einem primären "
-              "Ziel (%s), im Wirkorb (%s°) innerhalb des Fensters %s–%s — ohne "
-              "Mars, ohne Spiegelziele und ohne die Knotenrückkehr (ein "
+              "Ziel (%s), im Wirkorb (%s°) innerhalb des Fensters %s–%s%s — "
+              "ohne Mars, ohne Spiegelziele und ohne die Knotenrückkehr (ein "
               "Wendepunkt, keine Gabe). Sortiert nach Enge (engster Orb im "
               "Fenster)." % (prim, r["orb_wirk"], _datum_de(r["fenster"][0]),
-                              _datum_de(r["fenster"][1])), ""]
+                              _datum_de(r["fenster"][1]),
+                              (" und am Stichtag %s noch laufend oder kommend"
+                               % _datum_de(r["stichtag"])) if r.get("stichtag")
+                              else ""), ""]
+        # 2026-09-29 (K5): ohne Stichtag sondert die Funktion nichts aus —
+        # das steht dann im Block, statt still zu fehlen.
+        if not r.get("stichtag"):
+            L += ["⚠ events.json ohne Stichtag (`asof`): Kontakte, die vor dem "
+                  "Stichtag enden, sind nicht ausgesondert (Transit-Modul, "
+                  "Zählmenge).", ""]
         L += r["transit_zeilen"] or ["— (kein Kontakt der Zählmenge im "
                                      "Fenster)"]
         if r["nicht_gezaehlt"]:
@@ -3796,6 +4028,11 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
                       "Wendepunkt, keine Gabe):"]
             L += ["- %s · %s" % (e["label"], e["text"])
                   for e in r["nicht_gezaehlt"]]
+        if r.get("vor_dem_stichtag"):
+            L += ["", "Nicht in der Zählmenge, weil vor dem Stichtag %s vorbei "
+                      "(Transit-Modul, Zählmenge):" % _datum_de(r["stichtag"])]
+            L += ["- %s · %s" % (e["label"], e["text"])
+                  for e in r["vor_dem_stichtag"]]
     if r["konjunktionen"]:
         kopf = ("Konjunktionen der Menge (bleiben in der Liste; je Zeile "
                 "Gabe: ja — oder nein mit Begründung):")
@@ -4408,8 +4645,19 @@ def _selbsttest():
         b = aspekt_heimat_bericht(os.path.join(tmp, "g4.md"))
         pruefe(r["ok"] and r["anderswo_gedeutet"] == ["Saturn — Venus"]
                and not r["dokumentiert"] and "Untergrund 2" in b
-               and "1 im Getriebe- oder Instrument-Kapitel" in b,
+               and "1 im Getriebe-, im Instrument-Kapitel oder in „Was trägt“" in b,
                "T11: Instrument-Zeile nicht getrennt gezaehlt: %r / %s" % (r, b))
+        # T2 (2026-09-29): „Was trägt“ ist ein Ort ausserhalb der Themenliste
+        r = aspekt_heimat(datei("g4b.md", tab + th1 + th2 + schluss + wegl.replace(
+            "gedeutet im Instrument-Kapitel", "gedeutet in Was trägt (Hauptthemen)")))
+        pruefe(r["ok"] and r["anderswo_gedeutet"] == ["Saturn — Venus"]
+               and not r["dokumentiert"],
+               "T2: Was-trägt-Zeile als Weglassung gezaehlt: %r" % r)
+        r = aspekt_heimat(datei("g4c.md", tab + th1 + th2 + schluss + wegl.replace(
+            "gedeutet im Instrument-Kapitel", "zu schwach für die Hauptthemen")))
+        pruefe(r["ok"] and r["dokumentiert"] == ["Saturn — Venus"]
+               and not r["anderswo_gedeutet"],
+               "T2: Weglassungsgrund mit „Hauptthemen“ als gedeutet gezaehlt: %r" % r)
         r = aspekt_heimat(datei("g5.md", tab + th1 + th2 + schluss.replace(
             "GESTRICHEN: keine.", "GESTRICHEN: Venus △ Saturn (Weglassung)")))
         b = aspekt_heimat_bericht(os.path.join(tmp, "g5.md"))
@@ -4556,21 +4804,75 @@ def _selbsttest():
         pruefe(block.count("\n- T-") == 5 and "klingt mit" not in block,
                "T12-27: Block TRANSIT-RECHENSCHAFT veraendert: %s" % block[:300])
 
+        # 2026-09-29 (T11): transit_beleg() am konstruierten Fall
+        tb = datei("tb_Transit_chart_data.md", themen + (
+            "\n## Stände\n\n| Faktor | Stand | Zeichen |\n|---|---|---|\n"
+            "| Sonne | 12°34′ | Stier |\n| Mond | 3°05′ | Krebs |\n"
+            "| Mondknoten | 20°00′ | Waage |\n| MC | 1°10′ | Wassermann |\n"
+            "\n@@SELEKTOR\nFAKTOR Sonne zeichen=Stier haus=10\n"
+            "FAKTOR Mond zeichen=Krebs haus=12 nebenhaus=1 abstand=1.5\n"
+            "FAKTOR Mondknoten zeichen=Waage haus=5\nACHSE MC zeichen=Wassermann\n"
+            "@@ENDE\n"))
+        b1 = transit_beleg(tb, evj, thema=1)
+        pruefe(b1 == "Sonne ☉ 12°34′ Stier ♉, 10. Haus · T-Saturn ♄ Quadrat □ "
+               "R-Sonne ☉ — exakt 02.03.2031 · T-Jupiter ♃ Trigon △ R-Mond ☽ — "
+               "exakt 10.06.2031", "T11: THEMA 1: %s" % b1)
+        b2 = transit_beleg(tb, evj, thema=2)
+        pruefe(b2 == "Mondknoten ☊ 20°00′ Waage ♎, 5. Haus · T-Mondknoten ☊ "
+               "Konjunktion ☌ R-Mondknoten ☊ — exakt 05.10.2031", "T11: THEMA 2: %s" % b2)
+        b3 = transit_beleg(tb, evj, kontakte=["T-Neptun ⚹ R-MC", "T-Uranus △ R-Venus",
+                                              "T-Chiron ☌ R-Venus", "T-Pluto ⚹ R-Sonne"])
+        pruefe(b3 == "Medium Coeli (MC) 1°10′ Wassermann ♒ · T-Neptun ♆ Sextil ⚹ R-MC "
+               "— exakt 11.02.2033 · T-Uranus ♅ Trigon △ R-Venus ♀ — nicht exakt, "
+               "Annäherung bis 1,8′ am 06.05.2031 · T-Chiron ⚷ Konjunktion ☌ R-Venus ♀ "
+               "— nicht exakt, engster Orb im Fenster 0,61° · T-Pluto ♇ Sextil ⚹ "
+               "R-Sonne ☉ — exakt 13.09.2030", "T11: Formen: %s" % b3)
+        b4 = transit_beleg(tb, evj, kontakte=["T-Saturn □ R-Sonne"], lagebild=True)
+        pruefe(b4 == "Sonne ☉ 12°34′ Stier ♉, 10. Haus · T-Saturn ♄ Quadrat □ "
+               "R-Sonne ☉ — am Stichtag Orb 1,00°", "T11: Lagebild: %s" % b4)
+        b5 = transit_beleg(tb, evj, kontakte=["T-Jupiter △ R-Mond"])
+        pruefe(b5.startswith("Mond ☽ 3°05′ Krebs ♋, 1./12. Haus (Schwellenlage, "
+                             "1°30′ vor Spitze 1)"), "T11: Grenzlage: %s" % b5)
+        try:
+            transit_beleg(tb, evj, kontakte=["T-Saturn △ R-Sonne"])
+            pruefe(False, "T11: unbekannter Kontakt muss abbrechen")
+        except ValueError:
+            pass
+
         # W22 / L16: Ressourcen-Zaehlmenge des Transits
         rr = ressourcen_liste(t1, events_json_pfad=evj)
+        # 2026-09-29 (K5): T-Pluto ⚹ R-Sonne endet am 10.02.2031, vor dem
+        # Stichtag 14.02.2031 — getrennt ausgewiesen, nicht gezaehlt.
         pruefe([e["label"] for e in rr["transit"]]
                == ["T-Jupiter △ R-Mond", "T-Uranus △ R-Venus", "T-Neptun ⚹ R-MC",
-                   "T-Chiron ☌ R-Venus", "T-Pluto ⚹ R-Sonne"]
+                   "T-Chiron ☌ R-Venus"]
+               and [e["label"] for e in rr["vor_dem_stichtag"]]
+               == ["T-Pluto ⚹ R-Sonne"]
                and not rr["eintraege"] and not rr["radix"],
                "W22: Zaehlmenge: %r" % [e["label"] for e in rr["transit"]])
         pruefe([e["label"] for e in rr["nicht_gezaehlt"]]
                == ["T-Mondknoten ☌ R-Mondknoten"], "L16: Knotenrueckkehr")
         pruefe(rr["konjunktionen"] == ["T-Chiron ☌ R-Venus"], "W22: Konjunktionen")
         rb = ressourcen_block(t1, events_json_pfad=evj)
+        # K5 (2026-09-29): ohne Stichtag nichts ausgesondert, aber gesagt
+        _ev0 = json.load(open(evj, encoding="utf-8"))
+        _ev0.pop("asof", None); _ev0.pop("jetzt", None)
+        _evj0 = datei("t_events_ohne_stichtag.json",
+                      json.dumps(_ev0, ensure_ascii=False))
+        _rb0 = ressourcen_block(t1, events_json_pfad=_evj0)
+        pruefe("⚠ events.json ohne Stichtag" in _rb0
+               and "weil vor dem Stichtag" not in _rb0
+               and "T-Pluto ⚹ R-Sonne · " in _rb0
+               and "noch laufend oder kommend" not in _rb0,
+               "K5: ohne Stichtag %s" % _rb0[:300])
         pruefe("Zählmenge (Transit)" in rb and "Nicht in der Zählmenge" in rb
                and "- T-Chiron ☌ R-Venus — Gabe: " in rb
                and "Saturn- oder Pluto-Konjunktion" in rb
-               and "T-Mars" not in rb and "Merkur" not in rb,
+               and "T-Mars" not in rb and "Merkur" not in rb
+               and "weil vor dem Stichtag 14.02.2031 vorbei" in rb
+               and "am Stichtag 14.02.2031 noch laufend oder kommend" in rb
+               and "ohne Stichtag" not in rb
+               and "\n- T-Pluto ⚹ R-Sonne · " in rb,
                "W22: Block: %s" % rb[:300])
 
         # W9: Block eingefuegt -> gruen; Negativkontrollen -> rot
@@ -4735,8 +5037,8 @@ def _selbsttest():
                 "Jupiter △ IC 1°20′ voll (zugleich Sextil MC) — Deutungsort: "],
                 "F18/Gegenende: %r" % rl2["zeilen"])
             beide = ressourcen_liste(rg, events_json_pfad=evj, radix=True)
-            pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 5
-                   and len(beide["zeilen"]) == 7, "W22: radix=True mit events.json")
+            pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 4
+                   and len(beide["zeilen"]) == 6, "W22: radix=True mit events.json")
         except BuildError as e:
             print("  (F18: radix nicht ladbar — uebersprungen: %s)" % e)
 
@@ -4803,6 +5105,16 @@ def _selbsttest():
             _kg = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "PG_rad",
                                         "PG_konst", "PG_asp", "", "", ""]))
             pruefe(_kg["seiten"] == [1, 2, 3, 4, 5], "T4: Geburts-Bogen %r" % _kg)
+            # T12 (2026-09-29): die Uhrseite einzeln; ohne Uhr None; extra= mit
+            # der Uhrseite erzeugt kein zweites Bild derselben Seite.
+            pruefe(_kb["uhr_seite"] == 6 and os.path.exists(_kb["uhr"]),
+                   "T12: Uhrseite %r" % _kb)
+            pruefe(_kg["uhr"] is None and _kg["uhr_seite"] is None,
+                   "T12: Geburts-Bogen mit Uhr %r" % _kg)
+            _ku = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "PG_rad",
+                                        "PG_konst", "PG_asp", "PG_uhr", "", ""]),
+                               extra=[6, 7])
+            pruefe(len(_ku["extra"]) == 1, "T12: Uhrseite doppelt %r" % _ku)
             try:
                 kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "", "", "", "",
                                       "", ""]))
@@ -4869,7 +5181,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP)")
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5)")
 
 
 def _selbsttest_verify(tmp, pruefe):

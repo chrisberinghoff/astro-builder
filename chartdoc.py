@@ -212,7 +212,29 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  sprache=None, signaturen_en=None, belege_en=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
-    pal           Palette (Schluessel s. PAL oben)
+    pal           Palette (Schluessel s. PAL oben). Rollen der Schluessel
+                  (seit 2026-09-29, Klasse-2-Entscheidungslauf T10 — vorher
+                  nur aus dem CSS zu erschliessen, wenn Schritt 3 sie aus
+                  DECKBLATT['PALETTE'] ableitet):
+                  night     Grund der Cover-Seite
+                  paper     Papiergrund aller uebrigen Seiten — fest,
+                            = radix.DEFAULT_PALETTE['grund']
+                  ink       Fliesstext und Tabellenschrift
+                  deep      Seiten-, Kapitel- und Anhangtitel, Legendenkoepfe,
+                            Glyphen, Haus- und Achsenspalte, Gruppenzeilen
+                            des Inhaltsverzeichnisses
+                  gold      Akzent: Kolumnentitel links, Seitenzahl, Kicker,
+                            Titel-Unterstrich, Tabellen- und Blockkoepfe,
+                            Initiale, Label BELEG, Strich vor den
+                            Beleg-Aspekten, Pfeile der Anhangtabelle
+                  gold_l    Glyphen-Ornament im Inhaltsverzeichnis
+                  petrol    Aspektspalte der Anhangtabellen
+                  petrol_l  Kolumnentitel rechts, Vorspann (fm-lead),
+                            Signatur, Zwischentitel (subhead)
+                  stone     Kleinschrift: Fussnoten, Legenden, Laufspalte,
+                            Tabellennotizen und Nebenwerte
+                  beleg_bg  Grund des Signatur-/Beleg-Streifens
+                  beleg_bd  dessen Randlinie links, ebenso am Legendenkasten
     part_kicker   Kicker der Teiler-Kapitel, z. B. {'Teil I', 'Teil II', ...}
     glyphen       Faktorname -> Glyphe (fuer Aspekttabelle und Konstellationen)
     gr            Funktion Gradbetrag -> 'N°NN′'. Die Orbspalte der
@@ -1526,6 +1548,10 @@ def _konst_skala_css(anker, s):
 # K2). Englisch ueber anzeige().
 ACHSEN_LANG = {'AC': 'Aszendent', 'MC': 'Medium Coeli', 'DC': 'Deszendent',
                'IC': 'Imum Coeli'}
+# Reihenfolge des Achsenkreuzes (2026-09-29, Klasse-2-Entscheidungslauf T10;
+# Befund Geburtshoroskop 3+4 vom 29.09.b Nr. 3): immer wie radix.WINKEL —
+# chartdata.ACHSEN legt keine fest, der Block stand je Lauf anders.
+ACHSEN_REIHENFOLGE = ('AC', 'MC', 'DC', 'IC')
 
 
 def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
@@ -1558,9 +1584,10 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
               Konstellationstabelle wie jeder andere — ein unaspektierter
               Faktor ist aber eine Aussage, kein Loch. Muster:
               „Lilith bildet im Huber-Orbis keinen Aspekt; naechster
-              Kandidat 4°58' ausserhalb." Der Befund steht im Strukturbild
-              des Datenblatts (Punkt 4) und wird von dort uebernommen, nicht
-              nachgerechnet. Neu 2026-09-08 (Pruefbericht EA 5b).
+              Kandidat 0°24' ausserhalb (Sextil zu Pluto)." Die Angabe
+              schreibt radix ins Strukturbild des Datenblatts (Punkt 4, seit
+              2026-09-29); sie wird von dort uebernommen, nicht nachgerechnet.
+              Neu 2026-09-08 (Pruefbericht EA 5b).
     elemente  [(Label, Anzahl, [Planeten]), ...]  — s. verteilung()
     modi      dito
     """
@@ -1578,6 +1605,8 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
             f'<tr><td class="g">{gl}</td><td class="nm">{esc(anzeige(nm))}</td>'
             f'<td class="zn">{esc(anzeige(zn))}</td><td class="gd">{gd}</td>'
             f'<td class="hs">{esc(hs)}</td><td class="lf">{esc(anzeige(lf))}</td></tr>')
+    achsen = sorted(achsen, key=lambda z: ACHSEN_REIHENFOLGE.index(z[0])
+                    if z[0] in ACHSEN_REIHENFOLGE else 9)
     ach = ''.join(
         f'<tr><td class="ak">{esc(k)}</td><td class="an_">{esc(anzeige(ACHSEN_LANG.get(k, n)))}</td>'
         f'<td class="az">{esc(anzeige(z))}</td><td class="ag">{g}</td></tr>'
@@ -2586,9 +2615,11 @@ def leitsatz_zeilen(text, zeichen=LEITSATZ_ZEICHEN, max_zeilen=LEITSATZ_ZEILEN_M
     verlangt (hoechstens `max_zeilen`), umbrochen am Gedankenstrich, sonst
     ausgewogen an Wortgrenzen; der Strich bleibt am Zeilenende, keine Zeile
     beginnt mit ihm. Liegt der Strich so weit neben der ausgewogenen Stelle,
-    dass eine Zeile um mehr als ein Viertel von `zeichen` laenger wuerde,
-    gewinnt die Ausgewogenheit („Kurz — und dann ein langer Rest …"). Gekuerzt
-    wird nie."""
+    dass die laengste Zeile um mehr als ein Viertel von `zeichen` laenger
+    wuerde als beim ausgewogenen Umbruch, gewinnt die Ausgewogenheit
+    („Kurz — und dann ein langer Rest …"); das Viertel gilt einmal, gleich
+    wie viele Striche, und bei Gleichstand gewinnt der Strich (2026-09-29).
+    Gekuerzt wird nie."""
     import itertools
     t = " ".join(str(text or "").split())
     if len(t) <= zeichen:
@@ -2602,8 +2633,10 @@ def leitsatz_zeilen(text, zeichen=LEITSATZ_ZEICHEN, max_zeilen=LEITSATZ_ZEILEN_M
         zeilen = [" ".join(w[a:b]) for a, b in zip(grenzen, grenzen[1:])]
         if any(z[:1] in ("—", "–") for z in zeilen[1:]):
             continue
-        kosten = max(len(z) for z in zeilen) - bonus * sum(
-            z.endswith(("—", "–")) for z in zeilen[:-1])
+        # 2026-09-29 (Klasse-2-Entscheidungslauf T9): der Bonus zaehlt EINMAL,
+        # nicht je Strich, und bei Gleichstand gewinnt der Strich.
+        striche = sum(z.endswith(("—", "–")) for z in zeilen[:-1])
+        kosten = (max(len(z) for z in zeilen) - (bonus if striche else 0), -striche)
         if best is None or kosten < best[0]:
             best = (kosten, zeilen)
     return best[1] if best else [t]
@@ -3384,6 +3417,21 @@ def _selbsttest_leitsatz_kapitelkopf():
             "dem Gefühl ein Gefäß geben das hält auch wenn es voll ist und überläuft")
     z3 = leitsatz_zeilen(ohne)
     assert len(z3) == 3 and " ".join(z3) == ohne and max(map(len, z3)) <= 60, z3
+    # 2026-09-29 (T9, Zweitpruefung II): die Viertel-Regel genau — bei +15 gewinnt
+    # der Strich, bei +16 die Ausgewogenheit; zwei Striche bekommen den Bonus einmal.
+    assert leitsatz_zeilen("Was dich trägt, bleibt bei dir — selbst wenn du es nicht "
+                           "mehr festhältst und die Hände öffnest.") == [
+        "Was dich trägt, bleibt bei dir —",
+        "selbst wenn du es nicht mehr festhältst und die Hände öffnest."]
+    assert leitsatz_zeilen("Was dich trägt, bleibt bei dir — auch wenn du es nicht "
+                           "mehr festhältst und die Hände weit öffnest.") == [
+        "Was dich trägt, bleibt bei dir — auch wenn du es",
+        "nicht mehr festhältst und die Hände weit öffnest."]
+    z2s = leitsatz_zeilen("Wer die eigene Tiefe kennt und das eigene Maß, auf dem sich "
+                          "gut gehen lässt — dem bleibt genug mit offenen Händen und "
+                          "mit dem Licht — leise und klar.")
+    assert max(map(len, z2s)) == 50 and not any(
+        z.endswith("—") for z in z2s[:-1]), z2s
     import tempfile
     md = ("# Geburtshoroskop — Probe\n\n## Auftakt · Wie dieses Horoskop zu lesen ist\n\n"
           "Ein Satz.\n\n## Schlusswort · Probe\n\nNoch ein Satz.\n")

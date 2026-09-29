@@ -292,7 +292,7 @@ def y2cm(y):
 # COVER_HELL schaltet Leitsatz und Geburtszeile auf helle Schrift: Die Farben in
 # COVER_CSS sind fuer einen HELLEN unteren Rand gesetzt; auf einem dunklen
 # Motiv verschwinden sie, und kein Preflight sieht das.
-COVER_BILD = None      # <<Pfad des im Lauf gerechneten Vollbild-PNG — oder None>>
+COVER_BILD = None      # <<Pfad des im Lauf gerechneten Vollbilds (PNG oder JPEG) — oder None>>
 COVER_HELL = False     # True: dunkles Motiv am unteren Rand, Leitsatz und Geburtszeile hell
 
 
@@ -309,8 +309,13 @@ def _cover_grund():
     if COVER_BILD:
         import base64
         with open(COVER_BILD, 'rb') as f:
-            daten = base64.b64encode(f.read()).decode('ascii')
-        return '<img class="cv-bild" src="data:image/png;base64,%s">' % daten
+            roh = f.read()
+        # 2026-09-29 (Klasse-2-Entscheidungslauf T8): JPEG wird erkannt statt
+        # immer als PNG ausgegeben — ein Korn- oder Verlaufsbild ist als JPEG
+        # ein Vielfaches kleiner (vorher im Lauf von Hand eingesetzt).
+        mime = 'image/jpeg' if roh[:3] == b'\xff\xd8\xff' else 'image/png'
+        daten = base64.b64encode(roh).decode('ascii')
+        return '<img class="cv-bild" src="data:%s;base64,%s">' % (mime, daten)
     return '<div class="cv-sky"></div>\n%s\n%s' % (cover_stars(), cover_svg())
 
 

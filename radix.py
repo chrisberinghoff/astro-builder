@@ -382,6 +382,59 @@ def huber_aspects(factors, orbs=None):
     return out
 
 
+def naechster_kandidat(factors, name, orbs=None, mit_zusatz=True):
+    """Der naechste Aspekt-Kandidat eines Faktors OHNE Aspekt (neu 2026-09-29,
+    Klasse-2-Entscheidungslauf T4; Datenblatt-Modul, Strukturbild §4).
+
+    Je anderem Faktor und je Aspektwinkel die Abweichung minus dem Orbis, bei
+    dem der Aspekt noch gaelte — Hauptaspekte bis zum EINSEITIGEN Orbis (dem
+    groesseren der beiden Faktor-Orben), Nebenaspekte bis zu ihrem Fixorb wie in
+    huber_aspects(); mit `mit_zusatz` auch Halb- und Anderthalbquadrat (2°,
+    nur Planet–Planet, wie zusatz_aspekte()), weil auch sie einen Faktor
+    „aspektiert" machen (aspektdichte() zaehlt sie mit). Der Mondknoten erbt
+    den Orbis des Partners (KNOTEN_ERBT).
+
+    -> {'partner', 'aspekt', 'abstand' (Abweichung vom Sollwinkel, Grad),
+        'ausserhalb' (Grad ueber dem Orbis), 'text' („4°58′ außerhalb")} —
+       der Kandidat mit dem kleinsten 'ausserhalb'; None, wenn der Faktor
+       fehlt oder doch einen Aspekt traegt (dann ist er nicht unaspektiert).
+    """
+    def orb_of(n):
+        if orbs and n in orbs:
+            return orbs[n]
+        return HUBER_ORB.get(n, 3)
+    selbst = next((f for f in factors if f['name'] == name), None)
+    if selbst is None:
+        return None
+    best = None
+    for g in factors:
+        if g['name'] == name:
+            continue
+        d = abs(selbst['lon'] - g['lon']) % 360
+        if d > 180:
+            d = 360 - d
+        o1, o2 = orb_of(name), orb_of(g['name'])
+        if name in KNOTEN_ERBT and g['name'] not in KNOTEN_ERBT:
+            o1 = o2
+        elif g['name'] in KNOTEN_ERBT and name not in KNOTEN_ERBT:
+            o2 = o1
+        kand = []
+        for angle, _color, neben in _ASPECT_DEFS:
+            erlaubt = max(o1, o2) if angle in _MAIN_ANGLES else min(neben, o1, o2)
+            kand.append((abs(d - angle) - erlaubt, abs(d - angle), _ANG_NAME[angle]))
+        if mit_zusatz and name in _PLANETEN and g['name'] in _PLANETEN:
+            for angle, nm in _ZUSATZ_ANGLES:
+                kand.append((abs(d - angle) - 2.0, abs(d - angle), nm))
+        for aus, dev, nm in kand:
+            if best is None or aus < best['ausserhalb']:
+                best = {'partner': g['name'], 'aspekt': nm, 'abstand': dev,
+                        'ausserhalb': aus}
+    if best is None or best['ausserhalb'] <= 0:
+        return None
+    best['text'] = '%s außerhalb' % _gr(best['ausserhalb'])
+    return best
+
+
 # --- Zusatzebene: Halb-/Anderthalbquadrate (Beschluss 2026-08-08) -----------
 # Huber kennt diese Aspektklasse nicht; sie läuft deshalb bewusst NICHT durch
 # huber_aspects und NICHT ins Rad (Datenblatt, Aspekttabelle und Rad bleiben
@@ -1162,9 +1215,14 @@ def aspektdichte(factors, aspects, zusatz=None):
     duenn = sorted([k for k, v in pool.items() if 0 < v <= g_duenn],
                    key=lambda k: pool[k])
     unaspektiert = sorted([k for k, v in pool.items() if v == 0])
+    # 2026-09-29 (T4): der naechste Kandidat je unaspektiertem Faktor — §4
+    # schreibt ihn, Schritt 3 uebernimmt ihn in die Fussnote.
+    kandidat = {k: naechster_kandidat(factors, k, mit_zusatz=zusatz is not None)
+                for k in unaspektiert}
     return {'gewichtet': {k: round(v, 1) for k, v in zaehl.items()},
             'anzahl': anzahl, 'dicht': dicht, 'duenn': duenn,
             'unaspektiert': unaspektiert,
+            'naechster_kandidat': {k: v for k, v in kandidat.items() if v},
             'winkel': {k: round(zaehl[k], 1) for k in WINKEL if k in zaehl}}
 
 
@@ -4023,7 +4081,58 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                             _paare.append([x, y])
             f['konj_ecke'] = _paare
 
+    # ACHSENGEOMETRIE (2026-09-29, T6): Winkel W gegen Faktor P, der am
+    # Gegenwinkel von W steht — die Opposition folgt aus der Konjunktion P–W'.
+    # Gemeldet nur, wenn JEDE Meldung der Figur so gebaut ist (sonst traegt
+    # sie eine echte Opposition), sie keinen Spiegel-Brennpunkt hat (die
+    # Doppelung steht dann schon in §6) und ihr Brennpunkt in einer ANDEREN
+    # Figur steht: Dann zaehlt die Achsengeometrie womoeglich dieselbe
+    # Spannung ein zweites Mal. Allein ist das T-Quadrat mit einem Winkel als
+    # Ecke zulaessig (Typmodul, Figur-Regel) und bleibt still.
+    def _namen(x):
+        if isinstance(x, str):
+            return {x}
+        if isinstance(x, dict):
+            return set().union(*(_namen(x.get(k_)) for k_ in ('kopf', 'trigon')))
+        if isinstance(x, (list, tuple, set, frozenset)):
+            return set().union(*(_namen(y) for y in x))
+        return set()
+
+    def _andere_figuren(i):
+        s = set()
+        for j, g in enumerate(figuren):
+            if j != i:
+                s |= _namen(g['achse']) | _namen([g['apex'], g.get('spiegel_apex') or ''])
+        for g in gk_figuren:
+            s |= _namen(g.get('achsen')) | _namen(g.get('ecken'))
+        for g in gt_figuren:
+            s |= _namen(g.get('ecken'))
+        for g in rect_figuren:
+            s |= _namen(g.get('achsen'))
+        for g in jod_figuren:
+            s |= _namen(g.get('basis')) | _namen(g.get('apex'))
+        for g in dr_figuren:
+            s |= _namen(g.get('drachen'))
+        return s - {''}
+
+    def _ag(achse):
+        a_, b_ = achse
+        for w, p in ((a_, b_), (b_, a_)):
+            if (w in WINKEL and p not in WINKEL
+                    and frozenset((p, GEGENWINKEL[w])) in konj):
+                return w, p
+        return None
+    achsengeometrie = []
+    for i, f in enumerate(figuren):
+        if f.get('spiegel_apex') or not all(_ag(x) for x in f['meldungen']):
+            continue
+        if f['apex'] not in _andere_figuren(i):
+            continue
+        w, p = _ag(f['achse'])
+        achsengeometrie.append({'figur': i, 'winkel': w, 'faktor': p,
+                                'gegenwinkel': GEGENWINKEL[w]})
     return {'figuren': figuren, 'kandidaten': kandidaten,
+            'achsengeometrie': achsengeometrie,
             'meldungen': len(tq), 'anzahl': len(figuren),
             'drachen_figuren': dr_figuren,
             'drachen_meldungen': len(dr),
@@ -4951,7 +5060,25 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
         L.append(f"- Im eigenen Zeichen ohne Zulauf (folgt keinem anderen, "
                  f"aber keine fremde Kette endet bei ihm — kein "
                  f"Enddispositor): {', '.join(k['ohne_zulauf'])}.")
-    if sb.get('enddispositor_streuung', 0) > 2:
+    # 2026-09-29 (Klasse-2-Entscheidungslauf K3, Chris: Frage 3 = a, Befund
+    # Geburtshoroskop 1+2 vom 29.09. Nr. 3): Endet mehr als die Haelfte der
+    # fremden Ketten (mindestens zwei) bei einer Endstelle, ist sie die
+    # Zentrale — „keine Zentrale“ war dann falsch. Ohne Kreis endet jede
+    # fremde Kette an einer Endstelle, `zulauf` zaehlt sie alle.
+    _zmax = max(_zl.items(), key=lambda kv: (len(kv[1]), kv[0]),
+                default=(None, []))
+    _fremd = sum(len(v) for v in _zl.values())
+    if sb.get('enddispositor_streuung', 0) > 2 and len(_zmax[1]) >= 2 \
+            and 2 * len(_zmax[1]) > _fremd:
+        L.append(f"- ⚠ {sb['enddispositor_streuung']} Planeten im eigenen "
+                 f"Zeichen (davon {len(k['enddispositoren'])} mit Zulauf) und "
+                 f"kein geschlossener Kreis — aber die meisten Ketten laufen "
+                 f"bei {_zmax[0]} zusammen ({len(_zmax[1])} der {_fremd} "
+                 f"fremden): {_zmax[0]} ist die Zentrale."
+                 + ('' if transit else
+                    ' Eigener Befund für das Getriebe-Kapitel (seit '
+                    '2026-09-14).'))
+    elif sb.get('enddispositor_streuung', 0) > 2:
         L.append(f"- ⚠ {sb['enddispositor_streuung']} Planeten im eigenen "
                  f"Zeichen (davon {len(k['enddispositoren'])} mit Zulauf) und "
                  f"kein geschlossener Kreis: Die Zuständigkeiten laufen "
@@ -5281,7 +5408,14 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                       for n in ad['duenn'])
     L.append('- Dicht verschaltet: %s.' % (dicht or '—'))
     L.append('- Dünn verschaltet: %s.' % (duenn or '—'))
-    L.append('- Unaspektiert: %s.' % (', '.join(ad['unaspektiert']) or 'keiner'))
+    # 2026-09-29 (T4): mit dem naechsten Kandidaten — die Angabe, die Befundzeile
+    # und Konstellations-Fussnote brauchen („nächster Kandidat 0°24′ außerhalb
+    # (Sextil zu Pluto)“).
+    _nk = ad.get('naechster_kandidat') or {}
+    L.append('- Unaspektiert: %s.' % ('; '.join(
+        '%s — nächster Kandidat %s (%s zu %s)' % (n, _nk[n]['text'], _nk[n]['aspekt'],
+                                                  _nk[n]['partner'])
+        if n in _nk else n for n in ad['unaspektiert']) or 'keiner'))
     if ad.get('winkel'):
         # Der Orb im Etikett kommt aus ASPEKT_ORB (2026-09-19, U2): hier stand
         # seit dem 2026-09-15 unveraendert „Orb 9°", die Achsen haben 5°.
@@ -5374,6 +5508,17 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      'die Entscheidung gehört ins chart_data.'
                      % (' ☍ '.join(a['achse']), ' ☍ '.join(b['achse']),
                         a['apex']))
+    # ACHSENGEOMETRIE (2026-09-29, T6; Befund Geburtshoroskop 1+2 vom 29.09.c):
+    # ein T-Quadrat, dessen Opposition nur aus einer Winkel-Konjunktion folgt.
+    for ag in (fg or {}).get('achsengeometrie', []):
+        f = fg['figuren'][ag['figur']]
+        L.append('- Zu prüfen: %s mit Brennpunkt %s — die Opposition ist '
+                 'Achsengeometrie (%s steht am %s, gegenüber dem %s). Ob das '
+                 'eine eigene Figur ist oder zu einer anderen gehört, '
+                 'entscheidet die Deutung; die Entscheidung gehört ins '
+                 'chart_data.'
+                 % (' ☍ '.join(f['achse']), f['apex'], ag['faktor'],
+                    ag['gegenwinkel'], ag['winkel']))
     # JOD und GROSSTRIGON, neu am 14.09.2026 (Pruefbericht 5.4): dieselbe
     # Achsen-Doppelung. Die Zeilen erscheinen nur, wenn tatsaechlich doppelt
     # gemeldet wurde — sonst schweigen sie, wie die T-Quadrat-Zeile auch.
@@ -7111,3 +7256,66 @@ if __name__ == '__main__':
               _sa['fuehrend_spaeter_genau'], 'Minuten')
     # Zeitscan (2026-09-29): synthetischer Fall ab J2000.0, keine Klientendaten
     print(_selbsttest_zeitscan())
+    # Klasse-2-Entscheidungslauf 2026-09-29: T4 naechster Kandidat, T6
+    # Achsengeometrie. Konstruierte Laengen, keine Klientendaten.
+    _k2 = [dict(name='Sonne', lon=200.0), dict(name='Mond', lon=140.0),
+           dict(name='Merkur', lon=215.0), dict(name='Venus', lon=230.0),
+           dict(name='Mars', lon=330.0), dict(name='Jupiter', lon=40.0),
+           dict(name='Saturn', lon=91.0), dict(name='Uranus', lon=160.0),
+           dict(name='Neptun', lon=250.0), dict(name='Pluto', lon=305.0),
+           dict(name='Mondknoten', lon=2.5), dict(name='AC', lon=0.0),
+           dict(name='DC', lon=180.0), dict(name='MC', lon=300.0),
+           dict(name='IC', lon=120.0)]
+    _a2 = huber_aspects(_k2)
+    _g2 = gruppiere_figuren(konfigurationen(_k2, _a2), _a2)
+    # Merkur ist Brennpunkt von „IC ☍ Pluto“ (Pluto am MC) und Ecke einer
+    # zweiten Figur, Saturn (DC ☍ Mondknoten am AC) Ecke eines Grosstrigons
+    # -> beide gemeldet.
+    assert [(x['winkel'], x['faktor']) for x in _g2['achsengeometrie']] == \
+        [('DC', 'Mondknoten'), ('IC', 'Pluto')], _g2['achsengeometrie']
+    # allein stehend -> still; Brennpunkt am Gegenwinkel (Achsenkreuz-
+    # Doppelung, steht schon in §6) -> still
+    for _sa, _mc in ((88.0, 280.0), (91.0, 275.0)):
+        _k4 = [dict(name='AC', lon=0.0), dict(name='DC', lon=180.0),
+               dict(name='MC', lon=_mc), dict(name='IC', lon=(_mc + 180) % 360),
+               dict(name='Mondknoten', lon=2.5), dict(name='Saturn', lon=_sa),
+               dict(name='Sonne', lon=20.0), dict(name='Mond', lon=47.0),
+               dict(name='Merkur', lon=33.0), dict(name='Venus', lon=150.0),
+               dict(name='Mars', lon=205.0), dict(name='Jupiter', lon=238.0),
+               dict(name='Uranus', lon=312.0), dict(name='Neptun', lon=352.0),
+               dict(name='Pluto', lon=262.0)]
+        _a4 = huber_aspects(_k4)
+        _g4 = gruppiere_figuren(konfigurationen(_k4, _a4), _a4)
+        assert len(_g4['figuren']) == 1 and not _g4['achsengeometrie'], _g4
+    _k3 = [dict(name='Sonne', lon=10.0), dict(name='Mond', lon=100.0),
+           dict(name='Merkur', lon=25.0), dict(name='Venus', lon=40.0),
+           dict(name='Mars', lon=200.0), dict(name='Jupiter', lon=250.0),
+           dict(name='Saturn', lon=280.0), dict(name='Uranus', lon=330.0),
+           dict(name='Neptun', lon=300.0), dict(name='Pluto', lon=230.0),
+           dict(name='AC', lon=5.0), dict(name='MC', lon=275.0),
+           dict(name='DC', lon=185.0), dict(name='IC', lon=95.0),
+           dict(name='Lilith', lon=166.6)]
+    _d3 = aspektdichte(_k3, huber_aspects(_k3), zusatz_aspekte(_k3))
+    _n3 = _d3['naechster_kandidat']['Lilith']
+    assert _d3['unaspektiert'] == ['Lilith'] and _n3['partner'] == 'Pluto' \
+        and _n3['aspekt'] == 'Sextil' and _n3['text'] == '0°24′ außerhalb', _n3
+    assert naechster_kandidat(_k3, 'Sonne') is None      # traegt Aspekte
+    # K3: Venus im Stier sammelt Mars, Merkur, Sonne und Mond; Uranus
+    # endet bei Neptun; Jupiter, Saturn, Pluto ohne Zulauf.
+    _kz = [dict(name='Venus', lon=45.0), dict(name='Mars', lon=190.0),
+           dict(name='Merkur', lon=50.0), dict(name='Sonne', lon=185.0),
+           dict(name='Mond', lon=35.0), dict(name='Jupiter', lon=255.0),
+           dict(name='Saturn', lon=285.0), dict(name='Pluto', lon=225.0),
+           dict(name='Neptun', lon=345.0), dict(name='Uranus', lon=335.0)
+           ] + _ax()
+    _tz = strukturbild_text(strukturbild(_kz, _c))
+    assert '⚠ 5 Planeten im eigenen Zeichen (davon 2 mit Zulauf) und kein ' \
+           'geschlossener Kreis — aber die meisten Ketten laufen bei Venus ' \
+           'zusammen (4 der 5 fremden): Venus ist die Zentrale.' in _tz, _tz
+    assert 'keine Zentrale' not in _tz, _tz
+    assert 'es gibt keine Zentrale.' in _t3f, _t3f
+    print('Klasse-2-Lauf-Test (2026-09-29): OK — T4 nächster Kandidat Lilith',
+          _n3['text'], '| T6 Achsengeometrie DC ☍ Mondknoten und IC ☍ Pluto '
+          'gemeldet, allein stehend und am Gegenwinkel still | K3 Venus als '
+          'Zentrale (4 der 5 fremden Ketten), eine einzige Kette bleibt „keine '
+          'Zentrale“')
