@@ -2060,6 +2060,92 @@ def format_zusatz(z):
 # ---------------------------------------------------------------------------
 # Selbsttest (2026-09-19) — python3 transit.py --selbsttest
 # ---------------------------------------------------------------------------
+def zwei_modell_probe(haupt, moshier, toleranz_tage=1):
+    """Zwei-Modell-Probe der Exaktdaten als EIN Aufruf (neu 2026-09-29).
+
+    Wartungslauf zu den Pruefberichten vom 29.09. (Transit 1+2, Klasse 1,
+    Z-28.09. Nr. 13): Das Transit-Modul verlangt „kein eigenes Skript", eine
+    Funktion fuer den Vergleich gab es aber nicht — jeder Lauf schrieb ihn neu.
+
+    haupt    events.json des normalen Laufs (Pfad oder das geladene dict)
+    moshier  events.json des zweiten Laufs mit `--moseph` (Pfad oder dict)
+    toleranz_tage  so viele Tage Abstand sind kein Befund (Vorgabe 1: ein
+             Nulldurchgang nahe Mitternacht faellt je Modell auf den einen
+             oder den anderen Tag).
+
+    Verglichen werden die `exakt`-Felder je Kontakt (Transit, Aspekt, Ziel;
+    Spiegelziele nicht, sie doppeln AC/MC/Knoten), ueber alle Passagen
+    zusammengefasst, der Reihe nach. Der laufende Chiron fehlt im
+    Moshier-Lauf zwangslaeufig (`--moseph` rechnet ohne ihn) — seine Kontakte
+    zaehlen nicht als Befund.
+
+    -> {'verglichen': n Exaktdaten, 'ein_tag': n, 'abweichungen': [text],
+        'nur_haupt': [kontakt], 'nur_moshier': [kontakt], 'chiron_ohne_moshier': n,
+        'hinweise': [text], 'ok': bool, 'zeile': str} — 'zeile' ist die
+        Ergebniszeile fuer das Datenblatt (Gegenprobe f)."""
+    def _lade(x):
+        if isinstance(x, dict):
+            return x
+        with open(x, encoding='utf-8') as fh:
+            return json.load(fh)
+    a, b = _lade(haupt), _lade(moshier)
+    hinweise = []
+    if a.get('moseph'):
+        hinweise.append('der erste Lauf ist selbst mit --moseph gerechnet')
+    if b.get('moseph') is False:
+        hinweise.append('der zweite Lauf ist NICHT mit --moseph gerechnet')
+
+    def _exakt(d):
+        out = {}
+        for e in d.get('events') or []:
+            if e.get('spiegel'):
+                continue
+            k = (e.get('transit'), e.get('aspekt'), e.get('ziel'))
+            out.setdefault(k, set()).update(e.get('exakt') or [])
+        return {k: sorted(v) for k, v in out.items()}
+    ea, eb = _exakt(a), _exakt(b)
+
+    def _name(k):
+        return '%s %s %s' % k
+    verglichen = ein_tag = chiron = 0
+    abw, nur_a, nur_b = [], [], []
+    for k in sorted(set(ea) | set(eb), key=lambda x: tuple(str(y) for y in x)):
+        da, db = ea.get(k), eb.get(k)
+        if da is None or db is None:
+            if da is not None and k[0] == 'Chiron':
+                chiron += 1
+            elif da is not None and da:
+                nur_a.append(_name(k))
+            elif db is not None and db:
+                nur_b.append(_name(k))
+            continue
+        if len(da) != len(db):
+            abw.append('%s: %d gegen %d Exaktdaten (%s | %s)'
+                       % (_name(k), len(da), len(db), ', '.join(da) or '—',
+                          ', '.join(db) or '—'))
+            continue
+        for x, y in zip(da, db):
+            verglichen += 1
+            t = abs((date.fromisoformat(x[:10]) - date.fromisoformat(y[:10])).days)
+            if t > toleranz_tage:
+                abw.append('%s: %s gegen %s (%d Tage)' % (_name(k), x, y, t))
+            elif t:
+                ein_tag += 1
+    ok = not abw and not nur_a and not nur_b
+    zeile = ('Zwei-Modell-Probe: %d Exaktdaten verglichen, %d mit einem Tag Abstand '
+             '(kein Befund), %d Abweichung%s'
+             % (verglichen, ein_tag, len(abw) + len(nur_a) + len(nur_b),
+                '' if len(abw) + len(nur_a) + len(nur_b) == 1 else 'en'))
+    if chiron:
+        zeile += ('; %d Kontakt%s des laufenden Chiron ohne Moshier-Gegenstück '
+                  '(erwartet)' % (chiron, '' if chiron == 1 else 'e'))
+    if hinweise:
+        zeile += ' — ACHTUNG: ' + '; '.join(hinweise)
+    return {'verglichen': verglichen, 'ein_tag': ein_tag, 'abweichungen': abw,
+            'nur_haupt': nur_a, 'nur_moshier': nur_b, 'chiron_ohne_moshier': chiron,
+            'hinweise': hinweise, 'ok': ok and not hinweise, 'zeile': zeile}
+
+
 def _selbsttest(still=False):
     """Konstruierte Faelle, KEINE Personendaten: Radix-Laengen werden aus
     Ephemeriden-Staenden an frei gewaehlten julianischen Daten gebildet, Daten
@@ -2328,6 +2414,27 @@ def _selbsttest(still=False):
            "Ausgemustert: Glueckspunkt darf kein Transitziel sein (%r)" % (_rx,))
     pruefe('ausgemustert' in _err.getvalue(),
            "Ausgemustert: der Hinweis auf stderr fehlt")
+    # 2026-09-29: Zwei-Modell-Probe als Funktion (konstruierte events, keine Personendaten)
+    _ha = {'moseph': False, 'events': [
+        {'transit': 'Saturn', 'aspekt': 'Quadrat', 'ziel': 'Sonne', 'spiegel': False,
+         'exakt': ['2027-03-01', '2027-07-10']},
+        {'transit': 'Saturn', 'aspekt': 'Quadrat', 'ziel': 'Sonne', 'spiegel': False,
+         'exakt': ['2027-11-20']},
+        {'transit': 'Chiron', 'aspekt': 'Trigon', 'ziel': 'Mond', 'spiegel': False,
+         'exakt': ['2027-05-05']},
+        {'transit': 'Jupiter', 'aspekt': 'Opposition', 'ziel': 'DC', 'spiegel': True,
+         'exakt': ['2027-01-01']}]}
+    _mo = {'moseph': True, 'events': [
+        {'transit': 'Saturn', 'aspekt': 'Quadrat', 'ziel': 'Sonne', 'spiegel': False,
+         'exakt': ['2027-03-02', '2027-07-10', '2027-11-20']}]}
+    _zm = zwei_modell_probe(_ha, _mo)
+    pruefe(_zm['ok'] and _zm['verglichen'] == 3 and _zm['ein_tag'] == 1
+           and _zm['chiron_ohne_moshier'] == 1,
+           "Zwei-Modell-Probe: %r" % (_zm,))
+    _mo['events'][0]['exakt'][2] = '2027-11-25'
+    _zm = zwei_modell_probe(_ha, _mo)
+    pruefe(not _zm['ok'] and len(_zm['abweichungen']) == 1
+           and '(5 Tage)' in _zm['abweichungen'][0], "Zwei-Modell-Probe Abweichung: %r" % (_zm,))
     if not still:
         if fehler:
             print("Selbsttest transit.py: %d FEHLER" % len(fehler))
@@ -2335,7 +2442,7 @@ def _selbsttest(still=False):
                 print("  - " + f_)
         else:
             print("Selbsttest transit.py: alle Faelle gruen (W1, W3, W45, W46, W55, F20, F21, "
-                  "Glueckspunkt ausgemustert)")
+                  "Glueckspunkt ausgemustert, Zwei-Modell-Probe)")
     return not fehler
 
 

@@ -2293,7 +2293,10 @@ def _zs_figuren(fac, asp, cusps):
             paare = sorted(' ☍ '.join(sorted(_zs_namen(p)))
                            for p in (f.get('achsen') or []))
             out.add(f"{art} {' / '.join(paare)}")
-    for f in k.get('drachen') or []:
+    # 2026-09-29: gruppiert wie in §6 — ein Drachen mit doppelt besetzter Ecke
+    # zaehlt einmal, in der fuehrenden Fassung (wie das Grosstrigon)
+    for f in [x['drachen'] for x in (g.get('drachen_figuren') or [])] \
+            or (k.get('drachen') or []):
         out.add(f"Drachen, Kopf {'/'.join(_zs_namen(f.get('kopf')))}, Trigon "
                 f"{' △ '.join(sorted(_zs_namen(f.get('trigon'))))}")
     for s in k.get('stellium_zeichen') or []:
@@ -3674,7 +3677,13 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'rechteck_figuren': [{'achsen','trigone','sextile','meldungen'}],
         'rechteck_meldungen': n, 'rechteck_anzahl': m,
         'grosskreuz_figuren': [{'achsen','ecken','meldungen'}],
-        'grosskreuz_meldungen': n, 'grosskreuz_anzahl': m}
+        'grosskreuz_meldungen': n, 'grosskreuz_anzahl': m,
+        'drachen_figuren': [{'drachen','meldungen'[,'orbsumme','konj_ecke']}],
+        'drachen_meldungen': n, 'drachen_anzahl': m}
+
+    DRACHEN, seit 2026-09-29: dieselbe Figur, wenn Kopf und alle drei
+    Trigon-Ecken paarweise identisch oder konjunkt sind; 'drachen' ist die
+    fuehrende (engere) Meldung, Orbsumme ueber Trigone, Opposition und Sextile.
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -3957,8 +3966,68 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                 ecken.append(ecke)
         f['ecken'] = ecken
 
+    # DRACHEN MIT DOPPELT BESETZTER ECKE (2026-09-29, Wartungslauf zu den
+    # Pruefberichten vom 29.09.; Geburtshoroskop 1+2 b, Klasse 1, Z-28.09.
+    # Nr. 11): Ein Drachen fuehrt sein Grosstrigon selbst, das Trigon steht dann
+    # nicht mehr in 'grosstrigon' — die Grosstrigon-Regel vom 28.09. (engere
+    # Fassung fuehrt) lief deshalb ins Leere. Im Prueffall meldete
+    # konfigurationen() zwei Drachen mit demselben Kopf, deren Trigone sich nur
+    # in einer konjunkten Ecke unterschieden (Sonne ☌ Merkur), und §6 trug keine
+    # Doppelungszeile. Dieselbe Regel wie beim Grosstrigon: dieselbe Figur, wenn
+    # Kopf identisch oder konjunkt und alle drei Trigon-Ecken paarweise
+    # identisch oder konjunkt; es fuehrt die engere Fassung — hier die kleinste
+    # Orbsumme ueber ALLE Aspekte der Figur (drei Trigone, die Opposition, zwei
+    # Sextile), weil der Kopf die Ecken verschieden eng bindet; bei Gleichstand
+    # die zuerst gemeldete. 'konj_ecke' nennt die doppelt besetzten Ecken.
+    dr = konf.get('drachen', [])
+    _dr_orb = {(frozenset((a['a'], a['b'])), a.get('angle')): a.get('orb', 0.0)
+               for a in (aspects or ())}
+
+    def _dr_orbsumme(d):
+        t = list(d.get('trigon') or ())
+        s_ = sum(_dr_orb.get((frozenset((x, y)), 120), 0.0)
+                 for i, x in enumerate(t) for y in t[i + 1:])
+        k_, e_ = (list(d.get('achse') or ()) + [None, None])[:2]
+        s_ += _dr_orb.get((frozenset((k_, e_)), 180), 0.0)
+        s_ += sum(_dr_orb.get((frozenset(tuple(p)), 60), 0.0)
+                  for p in (d.get('sextile') or ()))
+        return s_
+
+    def _dr_glieder(d):
+        return [d['kopf']] + list(d['trigon'])
+
+    dr_figuren = []
+    for d in dr:
+        for f in dr_figuren:
+            fd = f['meldungen'][0]
+            if gleich(d['kopf'], fd['kopf']) and len(d['trigon']) == len(fd['trigon']) \
+                    and all(any(gleich(x, y) for y in fd['trigon']) for x in d['trigon']):
+                f['meldungen'].append(d)
+                break
+        else:
+            dr_figuren.append({'drachen': d, 'meldungen': [d]})
+    for f in dr_figuren:
+        if len(f['meldungen']) > 1:
+            _ms = f['meldungen']
+            f['drachen'] = min(_ms, key=lambda d: (_dr_orbsumme(d), _ms.index(d)))
+            f['orbsumme'] = _dr_orbsumme(f['drachen'])
+            _fue = _dr_glieder(f['drachen'])
+            _paare = []
+            for m in _ms:
+                _mg = _dr_glieder(m)
+                for y in _mg:
+                    if y in _fue:
+                        continue
+                    for x in _fue:
+                        if x not in _mg and gleich(x, y) and [x, y] not in _paare:
+                            _paare.append([x, y])
+            f['konj_ecke'] = _paare
+
     return {'figuren': figuren, 'kandidaten': kandidaten,
             'meldungen': len(tq), 'anzahl': len(figuren),
+            'drachen_figuren': dr_figuren,
+            'drachen_meldungen': len(dr),
+            'drachen_anzahl': len(dr_figuren),
             'rechteck_figuren': rect_figuren,
             'rechteck_meldungen': len(rect),
             'rechteck_anzahl': len(rect_figuren),
@@ -4755,12 +4824,30 @@ STRUKTURBILD_TYPEN = ('geburtshoroskop', 'transit')   # EA/Ultimativ ausgemuster
 # stand in der Klammer hinter dem Hinweissatz und liess offen, ob auch die
 # Auftakt-Nennung entfaellt (Geburtshoroskop 1+2 vom 24.09., Nr. 3): sie
 # entfaellt, beide Textstellen gehen zusammen.
+# 2026-09-29 (Wartungslauf zu den Pruefberichten vom 29.09.; Transit 1+2 Klasse 1,
+# Geburtshoroskop 1+2 a und c Klasse 2; Chris-Entscheidung Frage 1 = A): „das
+# Kapitel, das die Stelle trägt" war nicht bestimmt — im Transit traegt kein
+# Kapitel einen Radixpunkt, im Geburtshoroskop blieb offen, ob ein Porträt, eine
+# mitklingende Figurecke oder ein Thema ueber Planeten im Haus traegt. Getragen
+# wird, wo der Punkt selbst gedeutet wird; der Transit hat eine eigene Fassung.
 _KIPP_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
                'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
-               'in den Handlungsblock am Ende von Schritt 1+2; im Text ein '
-               'Hinweissatz im Kapitel, das die Stelle trägt, und eine Nennung '
-               'im Auftakt — klingt die Stelle nur mit, entfallen beide '
-               '(Gegenprobe g).')
+               'in den Handlungsblock am Ende von Schritt 1+2; '
+               'im Text ein Hinweissatz in jedem Kapitel, das die Stelle trägt, '
+               'und eine Nennung im Auftakt. Die Stelle trägt, wer den Punkt '
+               'selbst deutet: als Führer eines Themas, als Porträt im Instrument, '
+               'bei einer Spitze über ihr Zeichen oder ihren Herrscher (auch das '
+               'Getriebe). Nur Mitklingen trägt nicht, ein Planet im Haus der '
+               'Spitze auch nicht; trägt kein Kapitel, entfallen Hinweissatz und '
+               'Nennung (Gegenprobe g).')
+_KIPP_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
+               'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
+               'in den Handlungsblock am Ende von Schritt 1+2; '
+               'im Text ein Hinweissatz nur im Kapitel, dessen führender Kontakt '
+               'auf diesem Punkt landet oder dessen Hausdurchgang über diese '
+               'Spitze läuft; mitklingende Kontakte tragen nicht, das Lagebild '
+               'nennt es nicht. Trägt kein Kapitel, steht es im PDF nur in der '
+               'Fußnote der Konstellationsseite (Gegenprobe g).')
 
 
 def strukturbild_text(sb, typ='geburtshoroskop'):
@@ -4786,6 +4873,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             'Kapitel und Typmodul verweisen (im Transit nicht). Fuer ein '
             'Geburtshoroskop typ weglassen.' % (typ, ', '.join(STRUKTURBILD_TYPEN)))
     transit = _typ == 'transit'
+    _kipp_wohin = _KIPP_WOHIN_TRANSIT if transit else _KIPP_WOHIN    # 2026-09-29
     L = ['## Strukturbild', '']
 
     L.append('### 1 · Elemente und Modi')
@@ -5053,7 +5141,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                          f"Geburt das Zeichen ({w['von'][0]} → {w['nach'][0]}, "
                          f"{w['von'][1]} → {w['nach'][1]}; "
                          f"{_gr(w['grad_je_minute'])} je Minute); im Text "
-                         f"„{_min_wort(_g)} {w['richtung']}\". " + _KIPP_WOHIN)
+                         f"„{_min_wort(_g)} {w['richtung']}\". " + _kipp_wohin)
                 continue
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: Spitzen "
                      f"{w['paar'][0]}/{w['paar'][1]} wechseln bei "
@@ -5061,7 +5149,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"Zeichen ({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} "
                      f"→ {w['nach'][1]}; {_gr(w['grad_je_minute'])} je "
                      f"Minute); im Text „{_min_wort(_g)} {w['richtung']}\". "
-                     + _KIPP_WOHIN
+                     + _kipp_wohin
                      + ('' if transit else
                         " Ein Sonderfall an dieser Spitze führt ein Thema nur "
                         "mit Begründung (Typmodul, Gewichtungsrang 2)."))
@@ -5105,7 +5193,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"{w['richtung']}er Geburt das Zeichen ({w['von']} → "
                      f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute); "
                      f"im Text „{_min_wort(_g)} {w['richtung']}\". "
-                     + _KIPP_WOHIN
+                     + _kipp_wohin
                      + " Fußnote: radix.zeichengrenze_fussnote(kipp, "
                        "faktoren=…).")
         if not sb.get('faktor_kipp_warnungen'):
@@ -5159,7 +5247,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"späterer Geburt in Haus {w['fuehrend_haus_neu']} "
                      f"gedeutet statt in Haus {w['haus']}; im Text "
                      f"„{_min_wort(w['fuehrend_minuten_genau'])} später\". "
-                     + _KIPP_WOHIN
+                     + _kipp_wohin
                      + " Fußnote: radix.hauswechsel_fussnote("
                        "radix.haus_kippminuten(…)).")
         if not sb.get('haus_kipp_warnungen'):
@@ -5366,6 +5454,26 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                          'Fassung (Orbsumme %s); die übrigen Meldungen sind '
                          'dieselbe Figur.'
                          % (', '.join(f['ecken']), len(f['meldungen']),
+                            ', '.join('%s ☌ %s' % tuple(p)
+                                      for p in f.get('konj_ecke', [])) or '—',
+                            _gr(f.get('orbsumme', 0.0))))
+    # DRACHEN, 2026-09-29 (Z-28.09. Nr. 11): dieselbe Doppelungszeile wie beim
+    # Grosstrigon — ein Drachen traegt sein Grosstrigon selbst.
+    if fg and fg.get('drachen_meldungen', 0) > fg.get('drachen_anzahl', 0):
+        _drn = fg['drachen_anzahl']
+        L.append('- Achsen-Doppelung: %d Drachen-Meldungen entsprechen %d %s '
+                 '(die übrigen sind dieselbe Figur über eine Konjunktion an '
+                 'einer Ecke).' % (fg['drachen_meldungen'], _drn,
+                                   'Figur' if _drn == 1 else 'Figuren'))
+        for f in fg['drachen_figuren']:
+            if len(f['meldungen']) > 1:
+                _d = f['drachen']
+                L.append('  · Drachen, Großtrigon %s, Kopf %s — %d Meldungen, EIN '
+                         'Befund. Die Ecke ist doppelt besetzt (%s). Geführt wird '
+                         'mit der engeren Fassung (Orbsumme %s über Trigone, '
+                         'Opposition und Sextile); die übrigen Meldungen sind '
+                         'dieselbe Figur.'
+                         % (', '.join(_d['trigon']), _d['kopf'], len(f['meldungen']),
                             ', '.join('%s ☌ %s' % tuple(p)
                                       for p in f.get('konj_ecke', [])) or '—',
                             _gr(f.get('orbsumme', 0.0))))
@@ -6636,6 +6744,25 @@ if __name__ == '__main__':
         '· Großtrigon Mond, Saturn, Sonne — 2 Meldungen, EIN Befund. Die Ecke ist ' \
         'doppelt besetzt (Saturn ☌ Jupiter). Geführt wird mit der engeren ' \
         'Fassung (Orbsumme 0°00′)' in _tt3, _tt3.split('### 6')[1][:900]
+
+    # 2026-09-29 (Z-28.09. Nr. 11): Drachen mit doppelt besetzter Ecke (Jupiter ☌
+    # Saturn, 3°), Kopf Venus -> EIN Befund, die engere Fassung (Jupiter) fuehrt.
+    _fd29 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+             {'name': 'Jupiter', 'lon': 240.0}, {'name': 'Saturn', 'lon': 243.0},
+             {'name': 'Venus', 'lon': 180.0}]
+    _ad29 = huber_aspects(_fd29)
+    _kd29 = konfigurationen(_fd29, _ad29)
+    assert len(_kd29['drachen']) == 2, _kd29['drachen']
+    _gd29 = gruppiere_figuren(_kd29, _ad29)
+    assert _gd29['drachen_anzahl'] == 1 and _gd29['drachen_meldungen'] == 2, _gd29
+    _fdd = _gd29['drachen_figuren'][0]
+    assert sorted(_fdd['drachen']['trigon']) == ['Jupiter', 'Mond', 'Sonne'] and \
+        _fdd['konj_ecke'] == [['Jupiter', 'Saturn']] and abs(_fdd['orbsumme']) < 1e-9, _fdd
+    _td29 = strukturbild_text(strukturbild(_fd29 + _ax(45.0, 315.0), _c))
+    assert '- Achsen-Doppelung: 2 Drachen-Meldungen entsprechen 1 Figur (' in _td29 and \
+        'Kopf Venus — 2 Meldungen, EIN Befund. Die Ecke ist doppelt besetzt ' \
+        '(Jupiter ☌ Saturn). Geführt wird mit der engeren Fassung (Orbsumme 0°00′' \
+        in _td29, _td29.split('### 6')[1][:1200]
 
     # 2026-09-28 (K2): AC/MC unter 1° an der Zeichengrenze auch ueber der
     # Kippminuten-Schwelle; konstruiert, ohne Ephemeride.

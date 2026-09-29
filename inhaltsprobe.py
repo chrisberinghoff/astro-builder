@@ -3857,17 +3857,47 @@ _ZUSATZ_KONTAKT_RE = re.compile(
     re.I | re.S)
 
 
-def _konstellationen(satz, vorher=""):
+# (11) TRANSIT-BILD „über" (2026-09-29, Wartungslauf zu den Pruefberichten vom
+#      29.09., Transit 3+4 Klasse 1): „Saturn geht über deine Sonne" ist die
+#      Konjunktion eines Transits — bis dahin erkannte P13 den Satz gar nicht als
+#      Konstellation. Marker ist „über" direkt vor „dein…"/„R-" und einem Faktor,
+#      nur im Transit (im Geburtshoroskop meint „über Uranus" eine Herrscherkette).
+#      ELLIPSE: „…, im Oktober 2027 über deinen Mars" — ein zweites „über" hinter
+#      Komma oder „und" und hoechstens einer Zeitangabe teilt das Subjekt des
+#      ersten (sonst wurde Venus Partner von Mars). Gedeckt ist ein Transit-Kontakt
+#      weiter auch durch die Rechnung (Chris-Entscheidung 2026-09-29, Frage 2 = B:
+#      ein echter Transit darf nebenbei ohne Beleg-Zeile genannt werden); die
+#      Erkennung faengt erfundene oder falsch benannte Konjunktionen.
+_UEBER_RE = re.compile(r"(?<![\wäöüÄÖÜß])über(?=\s+(?:dein\w*\s+|R-\s*)(?:[\wäöüÄÖÜß-]+\s+)?"
+                       r"(?:%s|Knoten)(?![\wäöüÄÖÜß]))" % _FAKTOR_RE)
+_ZEIT_WORT = (r"(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|"
+              r"November|Dezember|Frühjahr|Fruehjahr|Frühling|Sommer|Herbst|Winter|"
+              r"Jahresanfang|Jahresmitte|Jahresende)")
+_ELLIPSE_RE = re.compile(
+    r"(?:,|(?<![\wäöüß])(?:und|sowie|dann|danach))\s+"
+    r"(?:(?:im|am|ab|bis|seit|um|gegen|Anfang|Mitte|Ende|noch|erst|schon|später|wieder|"
+    r"einmal|erneut)\s+)*(?:%s\s+)?(?:\d{4}\s+)?"
+    r"(?:(?:noch|erst|schon|einmal|erneut|wieder)\s+)*$" % _ZEIT_WORT, re.I)
+
+
+def _konstellationen(satz, vorher="", typ=None):
     """Konstellationen eines Fliesstext-Satzes (s. Kommentar oben) ->
     [(Faktoren davor, Art, Faktoren danach, Treffer)]; Art ist bei einem Aspektwort
     die Aspektart (str), bei einem Bild das Tupel der Arten, fuer die es steht —
-    leer, wenn es fuer keine bestimmte steht."""
+    leer, wenn es fuer keine bestimmte steht. typ='transit' erkennt dazu das
+    Transit-Bild „über" (11, seit 2026-09-29)."""
     fak = _faktoren_im_satz(satz)
     marker = [(m, _art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2)))
               for m in ASPEKT_RE.finditer(satz)]
     for m in _BILD_RE.finditer(satz):
         if not any(m.start() < x.end() and x.start() < m.end() for x, _ in marker):
             marker.append((m, _bild_arten(m.group(0)) or ()))
+    ueber = set()
+    if typ == "transit":
+        for m in _UEBER_RE.finditer(satz):
+            if not any(m.start() < x.end() and x.start() < m.end() for x, _ in marker):
+                marker.append((m, ("Konjunktion",)))
+                ueber.add(m.start())
     out = []
     # 2026-09-22 (Prueflauf Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 10): Traegt
     # ein Satz ZWEI Aspektangaben, holte sich jeder Marker alle Faktoren im
@@ -3939,6 +3969,17 @@ def _konstellationen(satz, vorher=""):
             if _AUFZAEHLUNG_RE.search(satz[v_ende:m.start()]) and any(
                     a >= v_ende and e <= m.start() for a, e, _f in fak):
                 davor = list(vorige_davor or [])
+            elif m.start() in ueber or marker[_i - 1][0].start() in ueber:   # (11)
+                # Neben einem „über"-Marker traegt das Subjekt des vorigen Markers
+                # weiter („Saturn geht über deinen Mond und steht im Quadrat zu
+                # deinem Mars"): Es kommt als Kandidat dazu, die Probe wird nur
+                # leiser. Die Ellipse zwischen zwei „über" ersetzt das „davor".
+                _pf = [(a, e) for a, e, _f in fak if a >= v_ende and e <= m.start()]
+                if (m.start() in ueber and marker[_i - 1][0].start() in ueber and _pf
+                        and _ELLIPSE_RE.search(satz[_pf[-1][1]:m.start()])):
+                    davor = list(vorige_davor or [])
+                else:
+                    davor = davor + [f for f in (vorige_davor or []) if f not in davor]
         if not davor and len(danach) >= 2 and (re.match(r"\s*(?:zwischen|between)\b", satz[m.end():])
                                                or m.group(0).casefold().endswith("zwischen")):
             davor, danach = [danach[0]], danach[1:]
@@ -4031,7 +4072,8 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
         saetze = _saetze_pos(text)
         for i, (_a, _e, satz) in enumerate(saetze):
             gesehen = set()
-            for davor, art, danach, m in _konstellationen(satz, saetze[i - 1][2] if i else ""):
+            for davor, art, danach, m in _konstellationen(satz, saetze[i - 1][2] if i else "",
+                                                          typ=typ):
                 if (art, m.start()) in gesehen:
                     continue
                 gesehen.add((art, m.start()))
@@ -4620,6 +4662,22 @@ _P17_ADVERB = _P17_ADVERB | frozenset(w.casefold() for w in (
     "überdies", "ferner", "anfangs", "sofort", "zwischendurch", "vorübergehend",
     "anschließend", "kurzzeitig", "zeitweilig"))
 _P17_ADVERB_ENDUNG = ("lich", "weise", "mals", "falls", "dings", "wärts")
+# 2026-09-29 (Pruefberichte vom 29.09.: Geburtshoroskop 1+2 c Klasse 1 und 1+2 a,
+# Transit 1+2 Klasse 1 — Z-28.09. Nr. 3): zwei Luecken, dasselbe Symptom, ein
+# verortender Satz kam als Handeln. (1) „hängen" (Herrscherkette, Anbindung: „über
+# Uranus hängen Sonne, Venus und Mars am selben Kreis", „Pluto hängt an nur zwei
+# Leitungen") fehlte in der Ankerliste. (2) Im Nebensatz steht das finite Verb am
+# Gliedende; ein Beiwort ohne Adverb-Endung zwischen Name und Verb („wenn auch
+# Saturn harmonisch zu deinem Mond steht") galt als Verb. Hinter einer
+# unterordnenden Konjunktion entscheidet jetzt das Verb am Gliedende
+# (_p17_nebensatz_verb) — das faengt umgekehrt auch „weil Saturn im Stier steht und
+# dich prüft" (vorher entschied „steht").
+_P17_ANKERVERBEN = _P17_ANKERVERBEN | frozenset(w.casefold() for w in (
+    "hängt", "hängen", "hing", "hingen", "gehangen", "zusammenhängt", "zusammenhängen"))
+_P17_SUBJUNKTION = frozenset(w.casefold() for w in (
+    "weil", "wenn", "dass", "ob", "während", "obwohl", "obgleich", "sobald", "solange",
+    "bevor", "nachdem", "damit", "sodass", "wo", "wohin", "woher", "falls", "indem", "da",
+    "was", "seitdem", "sofern", "soweit", "wobei", "ehe"))
 
 def _p17_ist_adverb(t):
     """Adverb aus der Liste oder an der Endung erkennbar (2026-09-28)."""
@@ -4812,6 +4870,42 @@ def _p17_folgeverb(tok, i):
         return tl
     return None
 
+def _p17_nebensatz_verb(tok, i):
+    """Steht der Name in einem Nebensatz mit Verb am Ende („wenn auch Saturn
+    harmonisch zu deinem Mond steht", „weil dein Mond und Venus … stehen")? Dann das
+    Verb am Gliedende (bei „hat"/„wird" das Partizip bzw. der Infinitiv davor), sonst
+    None. Rueckwaerts werden Artikel, Beiwoerter, Adverbien und die Glieder einer
+    Aufzaehlung von Namen uebersprungen; das Glied endet am Satzzeichen oder an einem
+    Komma, hinter dem keine Aufzaehlung weitergeht (2026-09-29)."""
+    j = i - 1
+    while j >= 0:
+        t = tok[j]
+        tl = t.casefold()
+        if (_p17_name(t) or t == "Haus" or t == "," or tl in ("und", "oder", "sowie")
+                or tl in _P17_NOM or _p17_ist_adverb(t) or _p17_ist_adjektiv(t)
+                or _P17_ORDINAL_RE.match(t)):
+            j -= 1
+            continue
+        break
+    if j < 0 or tok[j].casefold() not in _P17_SUBJUNKTION:
+        return None
+    e = i + 1
+    while e < len(tok) and tok[e] not in _P17_BRUCH:
+        if tok[e] == ",":
+            nxt = tok[e + 1] if e + 1 < len(tok) else ""
+            if not (_p17_name(nxt) or nxt.casefold() in _P17_NOM):
+                break
+        e += 1
+    if e - 1 <= i:
+        return None
+    letzt = tok[e - 1]
+    lt = letzt.casefold()
+    if (lt in _P17_HABEN or lt in _P17_WERDEN) and e - 2 > i and _p17_ist_verbwort(tok[e - 2]):
+        return tok[e - 2].casefold()
+    if lt in _P17_ANKERVERBEN or _p17_ist_verbwort(letzt):
+        return lt
+    return None
+
 def _p17_handelt(tok, i, art):
     """Grundfassung: Handelt der Name? Ja, wenn das Verb davor (Umstellung) oder das
     erste Verb dahinter kein verortendes ist. (2026-09-25) Bei „hat"/„wird" davor
@@ -4824,7 +4918,8 @@ def _p17_handelt(tok, i, art):
         if verb in _P17_HABEN or verb in _P17_WERDEN:
             verb = _p17_nach_hilfsverb(tok, i, verb)
     else:
-        verb = _p17_folgeverb(tok, i)
+        # 2026-09-29: im Nebensatz entscheidet das Verb am Gliedende
+        verb = _p17_nebensatz_verb(tok, i) or _p17_folgeverb(tok, i)
     return bool(verb) and verb not in _P17_ANKERVERBEN
 
 def _p17_zone(bewegung, typ):
@@ -5888,6 +5983,18 @@ def _selbsttest(still=False):
                       ("Dann fordert unerbittlich Saturn seinen Preis.", True)):
         _k, _t = _p17_kandidaten(_s)
         assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Adverb/Genitiv: %r" % _s
+    # 2026-09-29: „hängen" verortet; im Nebensatz entscheidet das Verb am Gliedende
+    for _s, _soll in (("Venus, Mars und Merkur hängen an ihr.", False),
+                      ("Pluto hängt an nur zwei Leitungen.", False),
+                      ("Über Uranus hängen Sonne, Venus und Mars am selben Kreis.", False),
+                      ("Es wird ruhiger, wenn auch Saturn harmonisch zu deinem Mond und zu "
+                       "deinem Merkur steht.", False),
+                      ("Es wird ruhiger, wenn dein Saturn harmonisch zu deinem Mond steht.", False),
+                      ("Es wird still, weil Sonne und Mond harmonisch zu Jupiter stehen.", False),
+                      ("Es wird eng, wenn Saturn dir Grenzen setzt.", True),
+                      ("Es wird eng, weil Saturn im Stier steht und dich prüft.", True)):
+        _k, _t = _p17_kandidaten(_s)
+        assert any(_p17_handelt(_t, i, a) for _n, i, a in _k) == _soll, "P17 Nebensatz/hängen: %r" % _s
     assert not _p17_kandidaten("Du hast deine Venus am Aszendenten.")[0], "P17: Objekt hinter „Du hast“"
     assert not _p17_kandidaten("Es gehört zu der Sonne, die du bist.")[0], "P17: Relativsatz mit „du“"
     berichte.append("P16 und P17 als Einzelproben")
@@ -6034,6 +6141,25 @@ def _selbsttest(still=False):
                            "Saturn steht im Quadrat zu deinem Saturn."), tev)["proben"]["P13"]
     assert len(p4d["pruefen"]) == 1 and "Saturn Quadrat Saturn" in p4d["pruefen"][0], \
         "Lauf 4d: echtes Selbstpaar nicht gemeldet: %s" % p4d["pruefen"]
+
+    # 4f) 2026-09-29: Transit-Bild „über" samt Ellipse (Frage 2 = B: die Rechnung
+    #     deckt weiter). Ein berechneter Kontakt ohne Beleg bleibt still, eine
+    #     erfundene Konjunktion wird gemeldet.
+    p4f = lauf(tc, ersetze(ta, "und macht das Denken vorsichtiger.",
+                           "und macht das Denken vorsichtiger. Im Winter geht Neptun über "
+                           "deinen Mars, im Frühjahr über deine Venus."), tev)["proben"]["P13"]
+    assert len(p4f["pruefen"]) == 2 and all("Konjunktion" in x for x in p4f["pruefen"]), \
+        "Lauf 4f: erfundene Konjunktionen nicht gemeldet: %s" % p4f["pruefen"]
+    p4g = lauf(tc, ersetze(ta, "und macht das Denken vorsichtiger.",
+                           "und macht das Denken vorsichtiger. Dazu kommt Pluto im Trigon "
+                           "zu deiner Venus."), tev)["proben"]["P13"]
+    assert not p4g["pruefen"], "Lauf 4g: berechneter Kontakt gemeldet: %s" % p4g["pruefen"]
+    _k4f = [(d, n) for d, _a, n, _m in _konstellationen(
+        "Im Dezember geht der Mondknoten über deine Venus, im Oktober über deinen Mars.",
+        typ="transit")]
+    assert _k4f == [(["MONDKNOTEN"], ["VENUS"]), (["MONDKNOTEN"], ["MARS"])], _k4f
+    assert not _konstellationen("Über deinen Mars läuft die Kette.", typ="geburt"), \
+        "P13: „über“ ausserhalb des Transits als Konstellation gelesen"
 
     # 5) Transit mit eingebauten Fehlern
     a5 = ta
@@ -6293,6 +6419,10 @@ KONSTELLATION IM TEXT — P13.
   Aufzählung kein Subjekt, nimmt das zweite keinen Partner aus ihm. Die Faktoren eines
   Nebensatzes (Komma + „während", „weil", „als", „dass" …, bis zum nächsten Komma)
   zählen nicht hinter dem Aspektwort; stand dort einer, paart die Probe nicht nach vorn.
+  Im Transit ist „über" vor „dein…"/„R-" und einem Faktor das Bild der Konjunktion
+  („Saturn geht über deine Sonne"); ein zweites „über" hinter Komma oder „und" und
+  höchstens einer Zeitangabe teilt das Subjekt („…, im Oktober über deinen Mars"),
+  daneben trägt das Subjekt des vorigen Markers weiter (seit 2026-09-29).
 
 GEDEUTETE KAPITEL — P16.
   Kicker `Kapitel n` (englisch `Chapter n`), `Zugang …`, `Getriebe`, `Instrument`
@@ -6310,6 +6440,9 @@ SUBJEKT — P17.
   das Verb davor („steht deine Sonne"); ein Subjekt-Pronomen im selben Glied davor
   macht den Namen zum Objekt („Du hast deine Sonne …"); ein Relativsatz mit
   handelndem Verb („Saturn, der die Verantwortung trägt") zählt in jeder Zone.
+  Hinter einer unterordnenden Konjunktion („wenn", „weil", „dass" …) entscheidet
+  das Verb am Gliedende („wenn auch Saturn harmonisch zu deinem Mond steht" —
+  verortet; seit 2026-09-29).
 
 STRUKTURBILD §3 (chart_data) — P12.
   Die Zeilen „- Enddispositoren (im eigenen Zeichen, …): …" und „- Im eigenen Zeichen
