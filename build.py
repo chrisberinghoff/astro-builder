@@ -28,6 +28,11 @@ HÄRTUNGSSCHICHT (Fehler früh und sprechend statt kaputtes PDF):
     render()/render_sentence_safe()        # fangen WeasyPrint-WARNINGs ab
     verify()                               # prüft Text/Seiten/Aspekte, 1 Bild
 
+GEGENPROBE-BLATT ZUR GEBURTSZEIT (seit 2026-09-29):
+    gegenprobe_blatt(daten, chart_data)    # zwei Seiten, Uhrzeiten aus dem
+                                           # Zeitscan (radix), Preflight
+                                           # doctype='gegenprobe'
+
 WICHTIG ZUM DATEISYSTEM: /home/claude wird zwischen Konversationen
 zurückgesetzt. setup_fonts() muss deshalb in JEDER neuen Session einmal
 laufen (dauert ca. 5-10 Sekunden, lädt Cinzel/EB Garamond von GitHub).
@@ -1405,6 +1410,21 @@ PFLICHT_BAUSTEINE = {
                  ("Die Zeitfenster im Überblick", "Anhang: Zeitfenster-Tabelle")],
         "html": [("_uhr.png", "Transit-Uhr-Grafik (transituhr_fusion.py)")],
     },
+    # Gegenprobe-Blatt zur Geburtszeit (neu 2026-09-29, gegenprobe_blatt()):
+    # zwei Seiten fuer den Klienten, kein Geburtsbild — darum ohne die
+    # Chart-Basis, aber mit seinen vier Abschnitten, der Rueckmeldung und der
+    # Zeitleiste als HTML (die WeasyPrint-Fallen, SVG-Text voran, prueft
+    # assert_render_ready() fuer jeden doctype).
+    "gegenprobe": {
+        "basis": False,
+        "text": [("Worum es geht", "Abschnitt I"),
+                 ("Woran du den Unterschied merkst", "Abschnitt II"),
+                 ("So gehst du vor", "Abschnitt III"),
+                 ("Was daraus folgt", "Abschnitt IV"),
+                 ("DEINE RÜCKMELDUNG", "Rückmeldung")],
+        "html": [('class="zeitleiste"', "Zeitleiste als HTML (kein SVG-Text)"),
+                 ('class="vergleich"', "Vergleichstabelle")],
+    },
 }
 
 
@@ -1492,7 +1512,8 @@ def assert_render_ready(html_str: str, base_dir: str = None, must_contain=None,
       FELDER     required_fields={'Name': wert, ...} alle nicht-leer
       VOLLTEXT   must_contain=[(text,label)|text, ...]: jeder Block ist
                  wirklich im HTML gelandet (gegen still verlorene Absätze)
-      PFLICHT    doctype='transit'|'hdgk'|'themen'|None: die Pflicht-Bausteine aus
+      PFLICHT    doctype='transit'|'hdgk'|'themen'|'gegenprobe'|None: die
+                 Pflicht-Bausteine aus
                  PFLICHT_BAUSTEINE sind im Dokument vorhanden (Inhalts-
                  verzeichnis, Radix, Aspekttabelle, Legende + typ-eigene)
       REST       keine Platzhalter ({{...}}, TODO, FIXME, ???)"""
@@ -3795,6 +3816,466 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
 # events.json (Fenster ab 2031), keine Person, kein Echtfall.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Gegenprobe-Blatt zur Geburtszeit (neu 2026-09-29)
+# ---------------------------------------------------------------------------
+# Wartungslauf „Gegenprobe Geburtszeit" (Startprompt vom 2026-09-29, Block D).
+# Wechselt der AC eines Geburtshoroskops bei weniger als
+# radix.AC_GEGENPROBE_SCHWELLE Minuten frueherer oder spaeterer Geburt das
+# Zeichen, baut Schritt 2 am Ende ein zweiseitiges Blatt, mit dem der Klient
+# selbst prueft, ob der Aszendent der Urkunde zu ihm passt. Im Prueffall vom
+# 29.09. entstand es von Hand (gut 60 Aufrufe, ein falscher Wenn-dann-Satz).
+# Hier steht der Aufbau fest (Vorlage des Prueffalls, anonymisiert), und jede
+# Uhrzeit — Grenze, Zeitleiste, Leiter, Gegenrichtung — rechnet die Funktion
+# aus dem Zeitscan (radix.zeitscan() bzw. radix.zeitscan_lesen()), nie von Hand.
+# Wortlaut, Schreibregeln und Ablage: claude/Projektanweisung_Modul_
+# Gegenprobe_Geburtszeit.md.
+
+# Drei Toene des Blatts, die der Hausstil (chartdoc.PAL) nicht fuehrt: dunkles
+# Gold fuer Spaltenkopf und Urkunden-Marke, die beiden Zellgruende der
+# Vergleichstabelle. Alle uebrigen Farben kommen aus chartdoc.PAL.
+GEGENPROBE_TOENE = {'gold_d': '#8a6526', 'gold_bg': '#f3ead6',
+                    'petrol_bg': '#e6ece8'}
+GEGENPROBE_FENSTER = 14          # Minuten, die die Zeitleiste zeigt
+_GP_MONATE = ('Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
+              'August', 'September', 'Oktober', 'November', 'Dezember')
+_GP_UHR_RE = re.compile(r'\b\d{1,2}:\d{2}\b')
+_GP_FACH_RE = re.compile(r'°|\b(?:Konjunktion|Opposition|Quadrat|Trigon|Sextil|'
+                         r'Quincunx|Halbsextil|Orbis|Orb)\b')
+
+_GP_CSS = """
+@font-face { font-family: "Cinzel"; src: url("fonts/Cinzel-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "EB Garamond"; src: url("fonts/EBGaramond-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "EB Garamond Bold"; src: url("fonts/EBGaramond-Bold.ttf"); font-weight: 700; }
+@font-face { font-family: "EB Garamond Italic"; src: url("fonts/EBGaramond-Italic.ttf"); font-style: italic; }
+@page {
+  size: A4;
+  margin: 2.1cm 2.3cm 2.1cm 2.3cm;
+  background: §paper§;
+  @bottom-left  { content: "§FUSS§"; font-family: "EB Garamond";
+                  font-size: 8.5pt; color: §stone§; }
+  @bottom-right { content: counter(page) " / " counter(pages); font-family: "EB Garamond";
+                  font-size: 8.5pt; color: §stone§; }
+}
+html { font-size: 11pt; }
+body { font-family: "EB Garamond"; color: §ink§; line-height: 1.42; margin: 0; hyphens: auto; }
+p { margin: 0 0 0.55em 0; text-align: justify; }
+b, strong { font-family: "EB Garamond Bold"; font-weight: 400; }
+i, em { font-family: "EB Garamond Italic"; font-style: italic; }
+.kicker { font-family: "Cinzel"; font-size: 8.6pt; letter-spacing: 0.14em; color: §gold§;
+          margin: 0 0 0.28cm 0; }
+h1 { font-family: "Cinzel"; font-weight: 400; font-size: 24pt; color: §deep§;
+     margin: 0 0 0.18cm 0; letter-spacing: 0.02em; line-height: 1.1; }
+.lead { font-family: "EB Garamond Italic"; font-style: italic; font-size: 12.4pt; color: §petrol_l§;
+        margin: 0 0 0.2cm 0; text-align: left; }
+.daten { font-size: 9.2pt; color: §stone§; margin: 0 0 0.38cm 0; text-align: left; }
+.linie { border: none; border-top: 0.6pt solid §gold_l§; width: 3.2cm; margin: 0 0 0.3cm 0; }
+h2 { font-family: "Cinzel"; font-weight: 400; font-size: 11.6pt; color: §deep§;
+     letter-spacing: 0.06em; margin: 0.48cm 0 0.2cm 0; }
+h2 .nr { color: §gold§; margin-right: 0.18cm; }
+.zeitleiste { margin: 0.3cm 0 0.1cm 0; position: relative; height: 2.55cm; }
+.zeitleiste .bar { position: absolute; top: 0.52cm; height: 0.62cm; line-height: 0.62cm;
+                   font-family: "Cinzel"; font-size: 8.2pt; letter-spacing: 0.1em; text-align: center; }
+.zeitleiste .sk { background: §petrol§; color: §paper§; }
+.zeitleiste .sc { background: §gold_l§; color: §ink§; }
+.zeitleiste .gline { position: absolute; top: 0.36cm; height: 0.96cm; width: 0.05cm; background: §ink§; }
+.zeitleiste .glab { position: absolute; top: -0.06cm; width: 4.4cm; text-align: center;
+                    font-size: 10pt; color: §ink§; }
+.zeitleiste .tick { position: absolute; top: 1.14cm; height: 0.14cm; width: 0.02cm; background: §stone§; }
+.zeitleiste .tlab { position: absolute; top: 1.95cm; width: 1.6cm; text-align: center;
+                    font-size: 8.4pt; color: §stone§; }
+.zeitleiste .tri { position: absolute; top: 1.3cm; width: 0; height: 0;
+                   border-left: 0.15cm solid transparent; border-right: 0.15cm solid transparent;
+                   border-bottom: 0.24cm solid §gold§; }
+.zeitleiste .ulab { position: absolute; top: 1.52cm; width: 3.6cm; text-align: center;
+                    font-size: 9.6pt; color: §gold_d§; }
+.unterzeile { font-family: "EB Garamond Italic"; font-style: italic; font-size: 9.6pt;
+              color: §stone§; text-align: center; margin: 0.08cm 0 0.1cm 0; }
+table.vergleich { width: 100%; border-collapse: collapse; margin: 0.25cm 0 0.1cm 0;
+                  font-size: 10.3pt; line-height: 1.34; }
+table.vergleich th { font-family: "Cinzel"; font-weight: 400; font-size: 9.4pt; letter-spacing: 0.05em;
+                     text-align: left; padding: 0.16cm 0.3cm 0.14cm 0.3cm; width: 50%;
+                     vertical-align: bottom; }
+table.vergleich th .zeit { display: block; font-family: "EB Garamond Italic"; font-style: italic;
+                           letter-spacing: 0; font-size: 9.2pt; margin-top: 0.04cm; }
+table.vergleich th.s { color: §gold_d§; border-bottom: 1.2pt solid §gold_l§; }
+table.vergleich th.k { color: §petrol§; border-bottom: 1.2pt solid §petrol_l§; }
+table.vergleich td { vertical-align: top; padding: 0.1cm 0.3cm 0.2cm 0.3cm; text-align: left; }
+table.vergleich td.s { background: §gold_bg§; }
+table.vergleich td.k { background: §petrol_bg§; }
+table.vergleich tr.feld td { font-family: "EB Garamond Bold"; font-size: 9.6pt; color: §deep§;
+                             background: none; padding: 0.22cm 0.3cm 0.05cm 0.3cm;
+                             letter-spacing: 0.02em; }
+table.vergleich tr.feld td .n { color: §gold§; margin-right: 0.12cm; }
+tr { page-break-inside: avoid; }
+.kasten { background: §beleg_bg§; border-left: 2.2pt solid §beleg_bd§; padding: 0.3cm 0.42cm 0.2cm 0.42cm;
+          margin: 0.35cm 0 0.2cm 0; page-break-inside: avoid; }
+.kasten h3 { font-family: "Cinzel"; font-weight: 400; font-size: 9.6pt; letter-spacing: 0.06em;
+             color: §deep§; margin: 0 0 0.14cm 0; }
+.kasten p { font-size: 10.4pt; }
+.schritt { margin: 0 0 0.5em 0; }
+.schritt b { color: §deep§; }
+.antwort { border-top: 0.6pt solid §gold_l§; border-bottom: 0.6pt solid §gold_l§;
+           padding: 0.3cm 0.2cm 0.22cm 0.2cm; margin: 0.55cm 0 0 0; text-align: center;
+           page-break-inside: avoid; }
+.antwort .t { font-family: "Cinzel"; font-size: 9.4pt; letter-spacing: 0.08em; color: §gold§;
+              margin: 0 0 0.12cm 0; text-align: center; }
+.antwort p { font-family: "EB Garamond Italic"; font-style: italic; font-size: 12pt; color: §deep§;
+             text-align: center; margin: 0; }
+.seitenwechsel { page-break-before: always; }
+"""
+
+
+def _gp_sekunden(uhrzeit):
+    """'HH:MM' oder 'HH:MM:SS' -> Sekunden seit Mitternacht."""
+    m = re.fullmatch(r'\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*', str(uhrzeit))
+    if not m:
+        raise ValueError(f"Uhrzeit {uhrzeit!r}: erwartet HH:MM (Urkundenzeit).")
+    h, mi, s = int(m.group(1)), int(m.group(2)), int(m.group(3) or 0)
+    if h > 23 or mi > 59 or s > 59:
+        raise ValueError(f"Uhrzeit {uhrzeit!r} gibt es nicht.")
+    return h * 3600 + mi * 60 + s
+
+
+def _gp_uhr(sek, sekunden=True):
+    """Sekunden (auch ueber Mitternacht hinaus) -> ('HH:MM:SS', Tagesversatz)."""
+    s = int(round(sek))
+    tag, rest = divmod(s, 86400)
+    h, rest = divmod(rest, 3600)
+    mi, se = divmod(rest, 60)
+    return (f"{h:02d}:{mi:02d}:{se:02d}" if sekunden else f"{h:02d}:{mi:02d}"), tag
+
+
+def _gp_uhr_text(sek):
+    """„HH:MM:SS Uhr" — mit „am Vortag"/„am Folgetag", wenn die Zeit ueber
+    Mitternacht faellt."""
+    t, tag = _gp_uhr(sek)
+    return (t + ' Uhr' + (' am Vortag' if tag < 0 else
+                               ' am Folgetag' if tag > 0 else ''))
+
+
+def _gp_datum(datum):
+    """'JJJJ-MM-TT' oder 'TT.MM.JJJJ' -> '3. März 1990'; ein Text mit
+    Buchstaben bleibt, wie er ist."""
+    d = str(datum).strip()
+    if re.search(r'[A-Za-zÄÖÜäöü]', d):
+        return d
+    m = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})', d) or \
+        re.fullmatch(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', d)
+    if not m:
+        raise ValueError(f"Datum {datum!r}: erwartet JJJJ-MM-TT oder TT.MM.JJJJ.")
+    if '-' in d:
+        j, mo, t = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        t, mo, j = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if not (1 <= mo <= 12 and 1 <= t <= 31):
+        raise ValueError(f"Datum {datum!r} gibt es nicht.")
+    return f"{t}. {_GP_MONATE[mo - 1]} {j}"
+
+
+def _gp_zeitscan(zeitscan):
+    """dict aus radix.zeitscan() oder Pfad/Text eines chart_data.md (dann
+    radix.zeitscan_lesen())."""
+    if isinstance(zeitscan, dict):
+        return zeitscan
+    import radix
+    zs = radix.zeitscan_lesen(zeitscan)
+    if zs is None:
+        raise ValueError("Kein Block „Zeitscan\" gefunden — Strukturbild §3 mit "
+                         "radix.strukturbild(…, jd_geburt, lat, lon) neu erzeugen.")
+    return zs
+
+
+def _gp_punkt(zs, seite, minuten, feld):
+    """Die Minutenzahl muss ein Wechselpunkt des Zeitscans auf `seite` sein."""
+    for p in zs.get(seite) or []:
+        if abs(p['minuten'] - float(minuten)) < 0.0005 and p.get('text'):
+            return p
+    punkte = ', '.join(f"{p['minuten']:.3f}" for p in (zs.get(seite) or [])
+                       if p.get('text'))
+    raise ValueError(f"{feld}: {minuten} Minuten ist kein Wechselpunkt des "
+                     f"Zeitscans ({'früher' if seite == 'frueher' else 'später'}: "
+                     f"{punkte or 'keine'}). Minuten aus dem Block übernehmen, "
+                     f"nicht rechnen.")
+
+
+def gegenprobe_blatt_html(daten, zeitscan):
+    """Das HTML des Gegenprobe-Blatts (zwei Seiten A4) — ohne Render.
+
+    daten  dict, alles Klartext ohne Grade, Aspektnamen und Uhrzeiten (die
+           rechnet die Funktion; eine Uhrzeit im Text bricht ab):
+      'name'          wie der Klient im Horoskop heisst (Kicker, Fusszeile)
+      'anrede'        optional: Name im Kicker, falls anders als 'name'
+      'klient'        optional: Dateiname-Teil wie bei <klient>_chart_data.md
+      'datum'         Geburtsdatum der Urkunde, 'JJJJ-MM-TT' oder 'TT.MM.JJJJ'
+      'uhrzeit'       Urkundenzeit 'HH:MM', 'ort' Geburtsort
+      'zeilen'        vier Paare (links = Zeichen der Urkunde, rechts = das
+                      andere): erster Eindruck; wenn du neu dazukommst; woraus
+                      du Kraft schoepfst; was du beim Gegenueber suchst
+      'kasten'        Text des Kastens „Beim Vergleichen"
+      'aendert_sich'  was sich an der Grenze aendert (Satzteil nach dem
+                      Doppelpunkt, ohne Schlusspunkt)
+      'leiter'        [(minuten, satz), …]: weitere Wechsel jenseits der Grenze;
+                      minuten = ein Wechselpunkt des Zeitscans auf der Seite
+                      des AC-Wechsels, satz traegt '{zeit}' (wird zu
+                      „HH:MM:SS Uhr")
+      'bleibt'        was bleibt (ein oder zwei Saetze)
+      'gegenrichtung' (minuten, satz mit '{zeit}') — der erste tragende
+                      Wechsel auf der anderen Seite — oder ein Satz ohne Zeit,
+                      wenn dort bis zum Fensterende nichts Tragendes wechselt
+    zeitscan  dict aus radix.zeitscan() oder Pfad/Text des chart_data.md mit
+              dem Block „Zeitscan" (radix.zeitscan_lesen()).
+
+    -> (html, info) — info: 'grenzzeit', 'richtung', 'zeichen_urkunde',
+       'zeichen_anders', 'x_grenze', 'x_urkunde', 'fenster_beginn' (Minuten
+       seit Mitternacht), 'skala' [(x_cm, 'HH:MM'), …].
+    Fehler (ValueError): kein faelliges Blatt, fehlendes Feld, Uhrzeit oder
+    Fachwort im Text, Minutenzahl ohne Wechselpunkt."""
+    import html as _h
+    import chartdoc
+    zs = _gp_zeitscan(zeitscan)
+    ac = zs.get('ac')
+    if not ac or not zs.get('blatt_faellig'):
+        raise ValueError("Kein Gegenprobe-Blatt fällig: Der Zeitscan meldet keinen "
+                         "AC-Zeichenwechsel unter der Schwelle "
+                         "(radix.AC_GEGENPROBE_SCHWELLE).")
+    for k in ('name', 'datum', 'uhrzeit', 'ort', 'zeilen', 'kasten',
+              'aendert_sich', 'bleibt', 'gegenrichtung'):
+        if not daten.get(k):
+            raise ValueError(f"Gegenprobe-Blatt: Feld {k!r} fehlt oder ist leer.")
+    zeilen = list(daten['zeilen'])
+    if len(zeilen) != 4 or any(len(z) != 2 or not all(z) for z in zeilen):
+        raise ValueError("Gegenprobe-Blatt: 'zeilen' braucht genau vier Paare "
+                         "(links, rechts), keines leer.")
+    frueh = ac['richtung'] == 'früher'
+    vz = -1 if frueh else 1
+    seite, gegen = ('frueher', 'spaeter') if frueh else ('spaeter', 'frueher')
+    t_u = _gp_sekunden(daten['uhrzeit'])
+    uhr_u, _ = _gp_uhr(t_u, sekunden=False)
+    t_g = t_u + vz * ac['minuten'] * 60.0
+    grenz = _gp_uhr(t_g)[0]
+    z_u, z_a = ac['von'], ac['nach']
+
+    def _zeit_satz(eintrag, seite_, vz_, feld):
+        m, satz = eintrag
+        _gp_punkt(zs, seite_, m, feld)
+        if '{zeit}' not in satz:
+            raise ValueError(f"{feld}: der Satz braucht den Platzhalter {{zeit}}.")
+        return satz.replace('{zeit}', _gp_uhr_text(t_u + vz_ * float(m) * 60.0))
+
+    leiter = []
+    for i, e in enumerate(daten.get('leiter') or []):
+        if float(e[0]) <= ac['minuten']:
+            raise ValueError(f"leiter[{i}]: {e[0]} Minuten liegt nicht jenseits "
+                             f"der Grenze ({ac['minuten']:.3f}).")
+        leiter.append(_zeit_satz(e, seite, vz, f"leiter[{i}]"))
+    gr = daten['gegenrichtung']
+    gegen_txt = gr if isinstance(gr, str) else \
+        _zeit_satz(gr, gegen, -vz, 'gegenrichtung')
+    frei = ([daten['kasten'], daten['aendert_sich'], daten['bleibt']]
+            + [x for z in zeilen for x in z]
+            + [e[1] for e in (daten.get('leiter') or [])]
+            + ([gr] if isinstance(gr, str) else [gr[1]]))
+    for t in frei:
+        if _GP_UHR_RE.search(t):
+            raise ValueError(f"Uhrzeit von Hand im Text: {t[:70]!r} — Zeiten "
+                             f"rechnet das Blatt ({{zeit}} bzw. Wechselpunkt).")
+        if _GP_FACH_RE.search(t):
+            raise ValueError(f"Grad oder Aspektname im Text: {t[:70]!r} — das "
+                             f"Blatt ist Klartext.")
+
+    # Zeitleiste: 14 Minuten um Urkunde und Grenze, Marken alle zwei Minuten
+    tu, tg = t_u / 60.0, t_g / 60.0
+    if abs(tu - tg) > GEGENPROBE_FENSTER - 2:
+        raise ValueError("Grenze und Urkunde liegen zu weit auseinander für die "
+                         "Zeitleiste.")
+    t0 = 2 * round(((tu + tg) / 2.0 - GEGENPROBE_FENSTER / 2.0) / 2.0)
+    while min(tu, tg) < t0 + 1:
+        t0 -= 2
+    while max(tu, tg) > t0 + GEGENPROBE_FENSTER - 1:
+        t0 += 2
+    breite = 14.8 / GEGENPROBE_FENSTER
+
+    def x(t):
+        return 0.8 + (t - t0) * breite
+
+    xg, xu = x(tg), x(tu)
+    skala = [(x(t0 + k), _gp_uhr((t0 + k) * 60, sekunden=False)[0])
+             for k in range(0, GEGENPROBE_FENSTER + 1, 2)]
+    z_frueh, z_spaet = (z_a, z_u) if frueh else (z_u, z_a)
+    kl, kr = ('sk', 'sc') if frueh else ('sc', 'sk')
+
+    esc = lambda s: _h.escape(str(s), quote=False)  # noqa: E731
+    pal = dict(chartdoc.PAL, **GEGENPROBE_TOENE)
+    css = _GP_CSS
+    for k_, v_ in pal.items():
+        css = css.replace(f'§{k_}§', v_)
+    css = css.replace('§FUSS§', f"{daten['name']} · Gegenprobe zur Geburtszeit"
+                      .replace('"', "'"))
+    if '§' in css:
+        raise ValueError('Gegenprobe-Blatt: Farbe ohne Wert im CSS: '
+                         + re.search(r'§\w+§', css).group(0))
+    anrede = daten.get('anrede') or daten['name']
+    runden = (int(uhr_u[-2:]) % 5 == 0)
+    tl = [f'<div class="glab" style="left:{xg - 2.2:.3f}cm">Grenze {grenz}</div>',
+          f'<div class="bar {kl}" style="left:0.8cm; width:{xg - 0.8:.3f}cm">'
+          f'ASZENDENT {esc(z_frueh.upper())}</div>',
+          f'<div class="bar {kr}" style="left:{xg:.3f}cm; width:{15.6 - xg:.3f}cm">'
+          f'ASZENDENT {esc(z_spaet.upper())}</div>',
+          f'<div class="gline" style="left:{xg - 0.025:.3f}cm"></div>']
+    for xs, lab in skala:
+        tl.append(f'<div class="tick" style="left:{xs - 0.01:.3f}cm"></div>'
+                  f'<div class="tlab" style="left:{xs - 0.8:.3f}cm">{lab}</div>')
+    tl.append(f'<div class="tri" style="left:{xu - 0.15:.3f}cm"></div>')
+    tl.append(f'<div class="ulab" style="left:{xu - 1.8:.3f}cm">{uhr_u} · '
+              f'Urkunde</div>')
+    vor_nach = 'vor' if frueh else 'nach'
+    fr_sp = 'früher' if frueh else 'später'
+    fr_sp_e = 'frühere' if frueh else 'spätere'
+    rows = []
+    for i, (lab, (a, b)) in enumerate(zip(
+            ('Der erste Eindruck', 'Wenn du neu dazukommst',
+             'Woraus du Kraft schöpfst', 'Was du beim Gegenüber suchst'), zeilen)):
+        rows.append(f'<tr class="feld"><td colspan="2"><span class="n">{i + 1}'
+                    f'</span>{lab}</td></tr>')
+        rows.append(f'<tr><td class="s">{esc(a)}</td><td class="k">{esc(b)}</td></tr>')
+    satz_ende = lambda s: esc(s.strip()).rstrip('.')  # noqa: E731
+    rund_satz = (f' {uhr_u} ist eine glatte Fünf-Minuten-Zeit, und solche Angaben '
+                 f'sind manchmal gerundet.' if runden else '')
+    leiter_txt = (' ' + ' '.join(esc(s.strip()) for s in leiter)) if leiter else ''
+    body = f"""
+<div class="kicker">FÜR {esc(anrede.upper())} · GEGENPROBE ZUR GEBURTSZEIT</div>
+<h1>{esc(z_u)} oder {esc(z_a)}?</h1>
+<p class="lead">Ein Blatt zum Selbstprüfen: Stimmt die Uhrzeit aus deiner Geburtsurkunde auf die Minute?</p>
+<p class="daten">Laut Urkunde: {esc(_gp_datum(daten['datum']))}, {uhr_u} Uhr, {esc(daten['ort'])}</p>
+<hr class="linie">
+<h2><span class="nr">I</span>Worum es geht</h2>
+<p>Deine Geburtsurkunde nennt {uhr_u} Uhr. Mit dieser Zeit steht dein Aszendent, der Punkt, an dem
+du der Welt entgegentrittst, ganz {'am Anfang' if frueh else 'am Ende'} des Zeichens {esc(z_u)}. Wärst du
+{vor_nach} {_gp_uhr_text(t_g)} geboren, also {_gp_min_wort(ac['minuten'])} {fr_sp}, stünde er
+{'noch' if frueh else 'schon'} im Zeichen {esc(z_a)}.{rund_satz} Deine Analyse folgt der Zeit aus der Urkunde; mit diesem Blatt kannst du
+selbst prüfen, ob der {esc(z_u)}-Aszendent zu dir passt oder ob manches für einen {esc(z_a)}-Aszendenten
+spricht.</p>
+<div class="zeitleiste">
+{chr(10).join(tl)}
+</div>
+<p class="unterzeile">Jede Zeit nach {grenz} Uhr ergibt einen {esc(z_spaet)}-Aszendenten, jede frühere einen {esc(z_frueh)}-Aszendenten.</p>
+<h2><span class="nr">II</span>Woran du den Unterschied merkst</h2>
+<p>Der Aszendent zeigt sich vor allem darin, wie du ankommst. Lies jede Zeile und entscheide: links,
+rechts oder gleich – danach, was zutrifft, nicht danach, was dir besser gefällt.</p>
+<table class="vergleich">
+<thead><tr>
+<th class="s">{esc(z_u)}-Aszendent<span class="zeit">{uhr_u} · so steht es in deiner Analyse</span></th>
+<th class="k">{esc(z_a)}-Aszendent<span class="zeit">{vor_nach} {grenz}</span></th>
+</tr></thead>
+<tbody>
+{chr(10).join(rows)}
+</tbody>
+</table>
+<div class="kasten seitenwechsel"><h3>BEIM VERGLEICHEN</h3><p>{esc(daten['kasten'])}</p></div>
+<h2><span class="nr">III</span>So gehst du vor</h2>
+<p class="schritt"><b>Zuerst die Unterlagen.</b> Falls dein gelbes Kinderuntersuchungsheft noch existiert,
+schau auf die Seite der U1, der ersten Untersuchung nach der Geburt; dort kann eine Uhrzeit stehen.
+Weicht sie von {uhr_u} ab, wiegt das mehr als jede Selbsteinschätzung. Erinnerungen in der Familie
+helfen ebenfalls, sind auf die Minute aber selten verlässlich.</p>
+<p class="schritt"><b>Dann die vier Zeilen.</b> Entscheide pro Zeile: links, rechts oder gleich.</p>
+<p class="schritt"><b>Dann die Auswertung.</b> Überwiegt links oder ist es gemischt, bleibt es bei
+{uhr_u}. Überwiegt rechts deutlich, also in drei oder vier der vier Zeilen, lohnt sich ein zweiter
+Blick, besonders wenn eine Unterlage eine {fr_sp_e} Uhrzeit nennt.</p>
+<h2><span class="nr">IV</span>Was daraus folgt</h2>
+<p>Bleibt es bei {uhr_u}, ändert sich nichts. Die Urkunde bleibt die Grundlage, und deine Analyse folgt ihr.</p>
+<p>Spricht mehr für eine {fr_sp_e} Zeit, melde dich; dann klären wir, ob deine Analyse mit
+einem {esc(z_a)}-Aszendenten nachgerechnet wird, mit der Uhrzeit aus der Unterlage, falls es eine
+gibt. Nachgerechnet ändern sich die Teile, die am Aszendenten hängen: {satz_ende(daten['aendert_sich'])}.{leiter_txt}</p>
+<p>{esc(daten['bleibt'].strip())} {esc(gegen_txt.strip())}</p>
+<div class="antwort">
+<div class="t">DEINE RÜCKMELDUNG</div>
+<p>Ein Satz genügt: links, rechts oder gemischt – und ob eine Unterlage eine andere Uhrzeit nennt.</p>
+</div>
+"""
+    html_str = (f'<!DOCTYPE html>\n<html lang="de"><head><meta charset="utf-8">'
+                f'<title>{esc(daten["name"])} · Gegenprobe zur Geburtszeit</title>'
+                f'<style>{css}</style></head><body>{body}</body></html>\n')
+    info = {'grenzzeit': grenz, 'richtung': ac['richtung'],
+            'zeichen_urkunde': z_u, 'zeichen_anders': z_a,
+            'x_grenze': round(xg, 3), 'x_urkunde': round(xu, 3),
+            'fenster_beginn': t0, 'skala': [(round(a, 3), b) for a, b in skala]}
+    return html_str, info
+
+
+def _gp_min_wort(x):
+    """radix._min_wort() — dieselbe Rundung wie die ⚠-Zeilen (knapp/gut)."""
+    import radix
+    return radix._min_wort(x)
+
+
+def gegenprobe_blatt(daten, zeitscan, pdf_pfad=None, bilder=True):
+    """Das Gegenprobe-Blatt zur Geburtszeit bauen, rendern und pruefen
+    (neu 2026-09-29; Wortlaut und Ablage: Modul Gegenprobe_Geburtszeit).
+
+    daten, zeitscan  wie gegenprobe_blatt_html().
+    pdf_pfad  Vorgabe /home/claude/<klient>_Gegenprobe_Geburtszeit.pdf
+              (<klient> aus daten['klient'], sonst aus 'name').
+    bilder    beide Seiten als PNG (90 dpi) daneben legen, dazu 'bogen':
+              beide nebeneinander in EINEM Bild — das eine wird angesehen.
+
+    Render ueber render() mit doctype='gegenprobe': Preflight mit den
+    WeasyPrint-Fallen (SVG-Text, Entities, Assets …) ohne die Pflichtbausteine
+    des Horoskops, WeasyPrint-Warnungen als Fehler (kein Filter). Danach hart
+    geprueft: genau zwei Seiten, Seite 1 endet mit der Vergleichstabelle
+    (alle vier Zeilen), Seite 2 beginnt mit dem Kasten und traegt die
+    Rueckmeldung — sonst RenderReadyError mit dem Befund (Text kuerzen).
+
+    -> {'pdf', 'html', 'seiten', 'bilder', 'bogen', 'grenzzeit', 'info'}"""
+    html_str, info = gegenprobe_blatt_html(daten, zeitscan)
+    klient = daten.get('klient') or re.sub(r'\s+', '_', daten['name'].strip())
+    if pdf_pfad is None:
+        pdf_pfad = os.path.join(BASE_DIR, f"{klient}_Gegenprobe_Geburtszeit.pdf")
+    html_pfad = os.path.splitext(pdf_pfad)[0] + '.html'
+    with open(html_pfad, 'w', encoding='utf-8') as fh:
+        fh.write(html_str)
+    render(html_pfad, pdf_pfad, doctype='gegenprobe')
+    seiten = int(pdf_info(pdf_pfad)['Pages'])
+    txt = [_nrm(_dehyph(s)) for s in _pdf_pages_text(pdf_pfad)]
+    befund = []
+    if seiten != 2:
+        befund.append(f"{seiten} Seiten statt zwei")
+    else:
+        for lab in ('Der erste Eindruck', 'Wenn du neu dazukommst',
+                    'Woraus du Kraft schöpfst', 'Was du beim Gegenüber suchst'):
+            if not _find_marker(lab, txt[0]):
+                befund.append(f"Tabellenzeile „{lab}\" nicht auf Seite 1")
+        if not (_find_marker('BEIM VERGLEICHEN', txt[1])
+                and _find_marker('DEINE RÜCKMELDUNG', txt[1])):
+            befund.append("Seite 2 trägt nicht Kasten bis Rückmeldung")
+    if befund:
+        raise RenderReadyError("Gegenprobe-Blatt: " + '; '.join(befund)
+                               + " — Texte kürzen (Tabelle, Kasten oder IV).")
+    pngs, bogen = [], None
+    if bilder:
+        stamm = os.path.splitext(pdf_pfad)[0]
+        subprocess.run(['pdftoppm', '-png', '-r', '90', pdf_pfad, stamm],
+                       check=True, capture_output=True)
+        pngs = sorted(p for p in (f"{stamm}-{i}.png" for i in (1, 2))
+                      if os.path.isfile(p))
+        try:                    # beide Seiten nebeneinander: EIN Bild ansehen
+            from PIL import Image as _Img
+            ims = [_Img.open(p) for p in pngs]
+            b = _Img.new('RGB', (sum(i.width for i in ims) + 12,
+                                 max(i.height for i in ims)), (120, 120, 120))
+            x_ = 0
+            for i in ims:
+                b.paste(i, (x_, 0))
+                x_ += i.width + 12
+            bogen = stamm + '_bogen.png'
+            b.save(bogen)
+        except ImportError:
+            bogen = None
+    return {'pdf': pdf_pfad, 'html': html_pfad, 'seiten': seiten,
+            'bilder': pngs, 'bogen': bogen, 'grenzzeit': info['grenzzeit'],
+            'info': info}
+
+
 def _selbsttest():
     import contextlib
     import io
@@ -4332,6 +4813,54 @@ def _selbsttest():
     else:
         print("  (T4: pypdf/Pillow/pdftoppm fehlt — kontaktbogen-Teil uebersprungen)")
 
+    # --- GP (2026-09-29): Gegenprobe-Blatt, HTML ohne Render ----------------
+    # Synthetischer Zeitscan, keine Klientendaten: AC 1,5 Minuten hinter der
+    # Grenze, Urkunde 10:00 — Zeitleiste, Uhrzeiten und die Abbrueche.
+    try:
+        import chartdoc as _cd  # noqa: F401
+        import radix as _rx     # noqa: F401
+        _gz = {'ac': {'minuten': 1.5, 'richtung': 'früher', 'von': 'Löwe',
+                      'nach': 'Krebs'}, 'blatt_faellig': True,
+               'frueher': [{'minuten': 1.5, 'text': 'a'},
+                           {'minuten': 4.25, 'text': 'b'}],
+               'spaeter': [{'minuten': 2.0, 'text': 'c'}]}
+        _gd = {'name': 'Probe', 'datum': '2000-01-01', 'uhrzeit': '10:00',
+               'ort': 'Probeort', 'zeilen': [('l', 'r')] * 4, 'kasten': 'k',
+               'aendert_sich': 'a', 'leiter': [(4.25, 'Vor {zeit} b.')],
+               'bleibt': 'b', 'gegenrichtung': (2.0, 'Ab {zeit} c.')}
+        _gh, _gi = gegenprobe_blatt_html(_gd, _gz)
+        pruefe(_gi['grenzzeit'] == '09:58:30' and _gi['fenster_beginn'] == 592
+               and abs(_gi['x_urkunde'] - (0.8 + 8 * 14.8 / 14)) < 0.001
+               and abs(_gi['x_grenze'] - (0.8 + 6.5 * 14.8 / 14)) < 0.001
+               and [b for _a, b in _gi['skala']][::7] == ['09:52', '10:06'],
+               "GP: Zeitleiste %r" % _gi)
+        pruefe('Vor 09:55:45\u00a0Uhr b.' in _gh and 'Ab 10:02:00\u00a0Uhr c.' in _gh
+               and 'glatte Fünf-Minuten-Zeit' in _gh
+               and 'ganz am Anfang des Zeichens Löwe' in _gh
+               and 'bar sk" style="left:0.8cm' in _gh, "GP: Uhrzeiten im Text")
+        _gd2 = dict(_gd, uhrzeit='10:03')
+        pruefe('glatte Fünf-Minuten-Zeit' not in gegenprobe_blatt_html(
+            _gd2, _gz)[0], "GP: Rundungssatz bei 10:03")
+        for _feld, _wert in (('kasten', 'um 10:05 geboren'),
+                             ('bleibt', 'Venus im Quadrat'),
+                             ('leiter', [(4.0, 'Vor {zeit} b.')]),
+                             ('gegenrichtung', (2.0, 'ohne Platzhalter'))):
+            try:
+                gegenprobe_blatt_html(dict(_gd, **{_feld: _wert}), _gz)
+                fehler.append("GP: %s=%r nicht abgewiesen" % (_feld, _wert))
+            except ValueError:
+                pass
+        try:
+            gegenprobe_blatt_html(_gd, dict(_gz, blatt_faellig=False))
+            fehler.append("GP: nicht faelliges Blatt nicht abgewiesen")
+        except ValueError:
+            pass
+        if _already_set_up():
+            assert_render_ready(_gh, doctype='gegenprobe')
+    except ImportError as _e:
+        print("  (GP: chartdoc/radix fehlt — Gegenprobe-Teil uebersprungen: %s)"
+              % _e)
+
     if fehler:
         print("Selbsttest build.py: %d Fehler" % len(fehler))
         for f_ in fehler:
@@ -4339,7 +4868,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen)")
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP)")
 
 
 def _selbsttest_verify(tmp, pruefe):

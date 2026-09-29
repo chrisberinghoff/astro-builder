@@ -80,6 +80,17 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         nach dem Wechsel steht der Faktor in Schwellenlage vor derselben Spitze,
         und das alte Haus führt weiter (fuehrendes_haus()).
 
+    zeitscan(jd, factors, lat, lon, cusps=None, fenster=15) -> dict | None
+    zeitscan_text(zs) -> list            zeitscan_lesen(chart_data) -> dict | None
+        Seit 2026-09-29: das Bild für Geburtszeiten bis ±15 Minuten neu
+        gerechnet, jeder Wechselpunkt auf die Sekunde — Zeichen, Häuser samt
+        führendem Haus, Achsen-Aspekte, Herrscher, Häuser-Kreise, Sonderfälle,
+        Figuren. strukturbild() rechnet ihn, sobald §3 eine ⚠-Zeile der
+        Gegenprobe g trägt oder der AC unter AC_GEGENPROBE_SCHWELLE (3) Minuten
+        das Zeichen wechselt; der Block „Zeitscan" in §3 ist die einzige Quelle
+        der Wenn-dann-Sätze zur Geburtszeit und speist das Gegenprobe-Blatt
+        (build.gegenprobe_blatt()).
+
     konstellations_fussnoten(jd, factors, cusps, lat, lon, sprache='de') -> list
         Seit 2026-09-23c: beide Fußnoten zur Geburtszeit (Zeichengrenze,
         Hauswechsel) für die Konstellationsseite in EINEM Aufruf. Setzt den
@@ -2216,6 +2227,715 @@ def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de'):
                '. Die Hausdeutung hängt damit an der Geburtszeit.'))
 
 
+# --- Zeitscan (neu 2026-09-29) -----------------------------------------------
+# Wartungslauf „Gegenprobe Geburtszeit" (Startprompt vom 2026-09-29, Block A).
+# Anlass: Im Prueffall vom 29.09. stand in der schon ausgelieferten Analyse ein
+# falscher Wenn-dann-Satz zur Geburtszeit („der Haeuser-Kreis braeche") —
+# nachgerechnet blieben vier Glieder stehen. Solche Saetze entstanden bis dahin
+# von Hand: keine Funktion rechnete das Bild auf der Kippzeit, keine Probe hielt
+# sie dagegen. zeitscan() rechnet das Bild fuer Geburtszeiten bis ±fenster
+# Minuten neu und gibt jede Aenderung mit ihrem Minutenabstand zurueck. Der
+# Block „Zeitscan" in Strukturbild §3 ist seitdem die einzige Quelle solcher
+# Saetze (Datenblatt-Modul, Gegenprobe g), und dieselbe Rechnung speist das
+# Gegenprobe-Blatt (build.gegenprobe_blatt()).
+ZEITSCAN_FENSTER = 15           # Minuten je Richtung (Vorschlag des Startprompts)
+ZEITSCAN_SCHRITT = 0.05         # Minuten (3 Sekunden): Rasterweite des Scans
+ZEITSCAN_BISEKTION = 12         # Bisektionsschritte je Wechselpunkt: 0,05/2**12
+                                #   Minuten, also unter einer Millisekunde
+AC_GEGENPROBE_SCHWELLE = 3      # Minuten: wechselt der AC bei weniger als so
+                                #   viel frueherer ODER spaeterer Geburt das
+                                #   Zeichen, ist das Gegenprobe-Blatt faellig
+                                #   (Chris-Entscheidung 2026-09-29: Ausloeser
+                                #   nur der AC, drei Minuten, beide Richtungen).
+                                #   Steht NEBEN KIPP_SCHWELLE (⚠, alle Spitzen)
+                                #   und aendert sie nicht — Begruendung im
+                                #   Aenderungsstand vom 2026-09-29.
+_ZS_GLYPHE = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□',
+              'Trigon': '△', 'Sextil': '⚹', 'Quincunx': '⚻',
+              'Halbsextil': '⚺'}
+_ZS_PAAR_NAME = {1: ' (AC/DC)', 4: ' (IC/MC)'}
+# Reihenfolge der Wechsel innerhalb eines Wechselpunkts: die tragenden zuerst.
+_ZS_FOLGE = ('spitze', 'chartherrscher', 'zeichen', 'haus', 'sonderfall',
+             'kreise', 'ketten', 'rezeption', 'figuren', 'verteilung',
+             'nur_achsen', 'achsenaspekt', 'engster')
+
+
+def _zs_namen(x):
+    """Faktornamen aus einem beliebig verschachtelten Figuren-Feld."""
+    if isinstance(x, str):
+        return [x]
+    out = []
+    for y in (x or []):
+        out.extend(_zs_namen(y))
+    return out
+
+
+def _zs_figuren(fac, asp, cusps):
+    """Die Figuren als Menge lesbarer Schluessel — gruppiert wie in §6
+    (gruppiere_figuren), Drachen und Stellien aus konfigurationen()."""
+    k = konfigurationen(fac, asp, cusps=cusps)
+    g = gruppiere_figuren(k, asp)
+    out = set()
+    for f in g.get('figuren') or []:
+        a = sorted(_zs_namen(f.get('achse')))
+        sp = f.get('spiegel_apex')
+        out.add(f"T-Quadrat {' ☍ '.join(a)}, Brennpunkt "
+                f"{'/'.join(_zs_namen(f.get('apex')))}"
+                + (f"/{'/'.join(_zs_namen(sp))}" if sp else ''))
+    for f in g.get('jod_figuren') or []:
+        out.add(f"Jod {' ⚹ '.join(sorted(_zs_namen(f.get('basis'))))} → "
+                f"{'/'.join(_zs_namen(f.get('apex')))}")
+    for f in g.get('grosstrigon_figuren') or []:
+        out.add(f"Großtrigon {' △ '.join(sorted(_zs_namen(f.get('ecken'))))}")
+    for art, feld in (('Großkreuz', 'grosskreuz_figuren'),
+                      ('Mystisches Rechteck', 'rechteck_figuren')):
+        for f in g.get(feld) or []:
+            paare = sorted(' ☍ '.join(sorted(_zs_namen(p)))
+                           for p in (f.get('achsen') or []))
+            out.add(f"{art} {' / '.join(paare)}")
+    for f in k.get('drachen') or []:
+        out.add(f"Drachen, Kopf {'/'.join(_zs_namen(f.get('kopf')))}, Trigon "
+                f"{' △ '.join(sorted(_zs_namen(f.get('trigon'))))}")
+    for s in k.get('stellium_zeichen') or []:
+        out.add(f"Stellium {s['zeichen']}: "
+                f"{', '.join(sorted(_zs_namen(s['faktoren'])))}")
+    for s in k.get('stellium_haus') or []:
+        out.add(f"Stellium Haus {s['haus']}: "
+                f"{', '.join(sorted(_zs_namen(s['faktoren'])))}")
+    return frozenset(out)
+
+
+def _zs_merkmale(fac, cusps):
+    """Das Bild zu EINEM Zeitpunkt: {schluessel: wert}, alle Werte hashbar.
+
+    Schluessel (Art, Objekt): ('spitze', n) Zeichenpaar der Spitzen n/n+6 ·
+    ('zeichen', faktor) · ('haus', faktor) als haus_spalte() — Grenzlage und
+    FUEHRENDES Haus (erste Zahl, fuehrendes_haus()) inklusive ·
+    ('achsenaspekt', (a, aspekt, b)) -> (Stufe, Spiegel) aus den Zeilen der
+    Aspektseite (aspektliste()-Logik) · ('engster',) der engste Aspekt in der
+    Zaehlmenge von RANG engste-aspekte (ungerundeter Orb) ·
+    ('chartherrscher', 'modern'|'klassisch') · ('kreise', 'modern'|'klassisch')
+    aus haus_kreise() samt haelt_bei_schwellenlage · ('sonderfall', n) die
+    Sonderfaelle 1–3 aus hausherrscher() (der vierte, wechselseitig, steht in
+    den Kreisen) · ('ketten',) · ('rezeption',) · ('verteilung',) gewichtet ·
+    ('nur_achsen',) · ('figuren',)."""
+    B = {}
+    for i in range(6):
+        B[('spitze', i + 1)] = (zeichen_index(cusps[i]),
+                                zeichen_index(cusps[i + 6]))
+    for f in fac:
+        nm = f['name']
+        if nm in WINKEL:
+            continue
+        B[('zeichen', nm)] = zeichen_index(f['lon'])
+        B[('haus', nm)] = haus_spalte(f['lon'], cusps)
+    asp = huber_aspects(fac)
+    roh = [dict(a) for a in asp if not (ist_achse(a['a']) and ist_achse(a['b']))]
+    zeilen = _zeilen_zusammenziehen(roh, fac)
+    for z in zeilen:
+        if ist_achse(z['a']) or ist_achse(z['b']):
+            B[('achsenaspekt', (z['a'], z['name'], z['b']))] = (
+                z['strength'], z.get('spiegel'))
+    if zeilen:
+        e = min(zeilen, key=lambda z: (z['orb'], z['a'], z['b']))
+        B[('engster',)] = (e['a'], e['name'], e['b'], e.get('spiegel'))
+    ac = next((f['lon'] for f in fac if f['name'] == 'AC'), cusps[0])
+    zac = SIGN_NAMES[zeichen_index(ac)]
+    B[('chartherrscher', 'modern')] = HERRSCHER.get(zac)
+    B[('chartherrscher', 'klassisch')] = HERRSCHER_KLASSISCH.get(zac)
+    for kl, tag in ((False, 'modern'), (True, 'klassisch')):
+        hk = haus_kreise(fac, cusps, klassisch=kl)
+        B[('kreise', tag)] = frozenset(
+            (tuple(k['haeuser']), bool(k['haelt_bei_schwellenlage']))
+            for k in hk['kreise'])
+    for h in hausherrscher(fac, cusps, asp):
+        m = set()
+        if h['im_eigenen_haus']:
+            m.add('im eigenen Haus')
+        if h['auf_winkel']:
+            m.add(f"auf {h['auf_winkel']}")
+        if h.get('spannung_zur_spitze'):
+            m.add('in Spannung zur eigenen Spitze: '
+                  + h['spannung_zur_spitze'].split(', Orb')[0])
+        B[('sonderfall', h['haus'])] = frozenset(m)
+    kt = herrscherketten(fac)
+    B[('ketten',)] = (tuple(tuple(x) for x in kt['kreise']),
+                      tuple(kt['enddispositoren']))
+    B[('rezeption',)] = frozenset(tuple(sorted(p))
+                                  for p in rezeptionen(fac)['gegenseitig'])
+    vg = verteilung(fac, gewichtet=True)
+    B[('verteilung',)] = (tuple(sorted(vg['elemente'].items())),
+                          tuple(sorted(vg['modi'].items())))
+    vp, va = verteilung(fac, nur_planeten=True), verteilung(fac)
+    B[('nur_achsen',)] = frozenset(
+        e for e in vp['elemente']
+        if vp['elemente'][e] == 0 and va['elemente'].get(e, 0) > 0)
+    B[('figuren',)] = _zs_figuren(fac, asp, cusps)
+    return B
+
+
+def _zs_bewegung(jd, factors, lat, lon, cusps, hsys):
+    """Stand aller Faktoren und Spitzen zur Zeit jd + t Minuten, an die
+    uebergebenen Werte angelegt (wie haus_kippminuten()): Spitzen und Achsen
+    laufen um die Bewegung aus houses_ex(), jeder Faktor um seine Bewegung aus
+    der Ephemeride, NEU GERECHNET an der verschobenen Zeit (kein Tempo-Ansatz;
+    Genauigkeit vor Tempo). Der Suedknoten laeuft mit dem Mondknoten.
+    -> (stand(t) -> (factors_t, cusps_t), fehler, abweichung_spitzen)"""
+    import swisseph as swe
+    flag = swe.FLG_SWIEPH | swe.FLG_SPEED
+    c0, a0 = swe.houses_ex(jd, lat, lon, hsys)
+    c0 = list(c0[:12])
+    if cusps is None:
+        cusps = c0
+
+    def _d(neu, alt):
+        return ((neu - alt + 180.0) % 360.0) - 180.0
+
+    abw = max(abs(_d(cusps[i], c0[i])) for i in range(12))
+    koerper, fehler = {}, []
+    for f in factors:
+        nm = f['name']
+        if nm in WINKEL or nm not in _KIPP_KOERPER:
+            continue
+        try:
+            b = getattr(swe, _KIPP_KOERPER[nm])
+            x0 = swe.calc_ut(jd, b, flag)[0][0]
+        except Exception as ex:
+            fehler.append(f"{_faktor_anzeige(nm)}: Ephemeride meldet „{ex}\" — "
+                          f"steht im Scan fest (vorher "
+                          f"swe.set_ephe_path(lade.ephemeriden()) setzen)")
+            continue
+        if _winkelabstand(x0, f['lon']) > 0.05:
+            fehler.append(f"{_faktor_anzeige(nm)}: Ephemeride "
+                          f"{_gr_s(_winkelabstand(x0, f['lon']))} von der "
+                          f"Länge in factors entfernt — steht im Scan fest")
+            continue
+        koerper[nm] = (b, x0)
+    knoten = next((n for n in ('Mondknoten', 'Knoten', 'Nordknoten')
+                   if n in koerper), None)
+    cache = {}
+
+    def stand(t):
+        k = round(t, 9)
+        if k in cache:
+            return cache[k]
+        jt = jd + t / 1440.0
+        ct, at = swe.houses_ex(jt, lat, lon, hsys)
+        cu = [(cusps[i] + _d(ct[i], c0[i])) % 360.0 for i in range(12)]
+        dac, dmc = _d(at[0], a0[0]), _d(at[1], a0[1])
+        dk = {nm: _d(swe.calc_ut(jt, b, flag)[0][0], x0)
+              for nm, (b, x0) in koerper.items()}
+        fac = []
+        for f in factors:
+            g, nm = dict(f), f['name']
+            if nm in ('AC', 'DC'):
+                g['lon'] = (f['lon'] + dac) % 360.0
+            elif nm in ('MC', 'IC'):
+                g['lon'] = (f['lon'] + dmc) % 360.0
+            elif nm in dk:
+                g['lon'] = (f['lon'] + dk[nm]) % 360.0
+            elif nm in ('Südknoten', 'Suedknoten') and knoten:
+                g['lon'] = (f['lon'] + dk[knoten]) % 360.0
+            fac.append(g)
+        cache[k] = (fac, cu)
+        return cache[k]
+
+    return stand, fehler, round(abw, 4)
+
+
+def _zs_zahl(x):
+    return f"{x:g}".replace('.', ',')
+
+
+def _zs_zeichen(i):
+    return SIGN_NAMES[i] if i is not None else '—'
+
+
+def _zs_zeile(t):
+    """(a, aspekt, b[, spiegel]) -> „Mars □ AC (zugleich □ DC)"."""
+    a, nm, b = t[0], t[1], t[2]
+    sp = t[3] if len(t) > 3 else None
+    return (f"{_faktor_anzeige(a)} {_ZS_GLYPHE.get(nm, nm)} {_faktor_anzeige(b)}"
+            + (f" (zugleich {sp})" if sp else ''))
+
+
+def _zs_kreis(h):
+    return ' → '.join(str(x) for x in h) + f' → {h[0]}'
+
+
+def _zs_text(key, von, nach):
+    """Ein Wechsel in der Schreibweise des Datenblatts."""
+    art = key[0]
+    if art == 'spitze':
+        n = key[1]
+        zv = f"{_zs_zeichen(von[0])}/{_zs_zeichen(von[1])}"
+        zn = f"{_zs_zeichen(nach[0])}/{_zs_zeichen(nach[1])}"
+        hv = '/'.join(HERRSCHER.get(_zs_zeichen(x), '—') for x in von)
+        hn = '/'.join(HERRSCHER.get(_zs_zeichen(x), '—') for x in nach)
+        return (f"Spitzen {n}/{n + 6}{_ZS_PAAR_NAME.get(n, '')} {zv} → {zn} "
+                f"(Herrscher {hv} → {hn})")
+    if art == 'zeichen':
+        return (f"{_faktor_anzeige(key[1])} {_zs_zeichen(von)} → "
+                f"{_zs_zeichen(nach)}")
+    if art == 'haus':
+        fv = str(von).split('/')[0] if von else None
+        fn = str(nach).split('/')[0] if nach else None
+        return (f"{_faktor_anzeige(key[1])} Haus {von} → {nach}"
+                + (f" (führendes Haus {fv} → {fn})" if fv != fn else ''))
+    if art == 'chartherrscher':
+        return (f"Chart-Herrscher{' klassisch' if key[1] == 'klassisch' else ''} "
+                f"{von} → {nach}")
+    if art == 'sonderfall':
+        teile = ([f"neu „{m}\"" for m in sorted((nach or set()) - (von or set()))]
+                 + [f"entfällt „{m}\"" for m in
+                    sorted((von or set()) - (nach or set()))])
+        return f"Haus {key[1]}, Sonderfall: {'; '.join(teile)}"
+    if art == 'kreise':
+        tag = ' (klassisch)' if key[1] == 'klassisch' else ''
+        v, n_ = dict(von or ()), dict(nach or ())
+        teile = []
+        for h in sorted(set(v) | set(n_)):
+            art_ = 'wechselseitig, Sonderfall 4' if len(h) == 2 \
+                else f'{len(h)} Glieder'
+            if h in v and h not in n_:
+                teile.append(f"Häuser-Kreis{tag} {_zs_kreis(h)} ({art_}) "
+                             f"fällt weg")
+            elif h in n_ and h not in v:
+                teile.append(f"Häuser-Kreis{tag} {_zs_kreis(h)} ({art_}) "
+                             f"entsteht"
+                             + ('' if n_[h] else
+                                ', hält aber bei Schwellenlage nicht'))
+            elif v[h] != n_[h]:
+                teile.append(f"Häuser-Kreis{tag} {_zs_kreis(h)} hält bei "
+                             f"Schwellenlage "
+                             + ('wieder' if n_[h] else 'nicht mehr'))
+        return '; '.join(teile)
+    if art == 'ketten':
+        kv = '; '.join(_zs_kreis(x) for x in von[0]) or 'keiner'
+        kn = '; '.join(_zs_kreis(x) for x in nach[0]) or 'keiner'
+        return (f"Herrscherketten: Kreis {kv} → {kn}, Enddispositoren "
+                f"{', '.join(von[1]) or 'keine'} → "
+                f"{', '.join(nach[1]) or 'keine'}")
+    if art == 'rezeption':
+        teile = ([f"Rezeption {a}↔{b} entsteht" for a, b in
+                  sorted((nach or set()) - (von or set()))]
+                 + [f"Rezeption {a}↔{b} entfällt" for a, b in
+                    sorted((von or set()) - (nach or set()))])
+        return '; '.join(teile)
+    if art == 'verteilung':
+        teile = []
+        for i in range(2):
+            dv, dn = dict(von[i]), dict(nach[i])
+            for k_ in sorted(set(dv) | set(dn)):
+                if dv.get(k_) != dn.get(k_):
+                    teile.append(f"{k_} {_zs_zahl(dv.get(k_, 0))} → "
+                                 f"{_zs_zahl(dn.get(k_, 0))}")
+        return 'Verteilung gewichtet: ' + ', '.join(teile)
+    if art == 'nur_achsen':
+        return (f"Element nur über Achsen (⚠-Zeile §1): "
+                f"{', '.join(sorted(von)) or 'keines'} → "
+                f"{', '.join(sorted(nach)) or 'keines'}")
+    if art == 'figuren':
+        teile = ([f"entsteht: {x}" for x in sorted((nach or set()) - (von or set()))]
+                 + [f"fällt weg: {x}" for x in
+                    sorted((von or set()) - (nach or set()))])
+        return 'Figur ' + '; Figur '.join(teile)
+    if art == 'achsenaspekt':
+        a, nm, b = key[1]
+        zeile = _zs_zeile((a, nm, b, (nach or von)[1]))
+        if von is None:
+            return f"{zeile} neu ({nach[0]})"
+        if nach is None:
+            return f"{zeile} fällt weg (war {von[0]})"
+        if von[0] != nach[0]:
+            return f"{zeile} {von[0]} → {nach[0]}"
+        return f"{_zs_zeile((a, nm, b))}: Spiegel {von[1]} → {nach[1]}"
+    if art == 'engster':
+        return (f"engster Aspekt {_zs_zeile(von) if von else '—'} → "
+                f"{_zs_zeile(nach) if nach else '—'}")
+    return f"{key}: {von} → {nach}"
+
+
+def _zs_neben(w):
+    """Ein Wechsel, der nur eine Nebenaspekt-Zeile an einer Achse betrifft —
+    steht in den Daten, nicht im Text des Blocks (das Gegenprobe-Blatt nennt
+    keine Nebenaspekte, und eine Achsen-Nebenzeile traegt keinen
+    Wenn-dann-Satz)."""
+    if w['schluessel'][0] != 'achsenaspekt':
+        return False
+    return all(x is None or x[0] == 'neben' for x in (w['von'], w['nach']))
+
+
+def _zs_gruppieren(ev, vz, ersatz):
+    """Wechsel desselben Zeitpunkts zu EINEM Wechselpunkt zusammenfassen.
+    `ersatz` {schluessel: [minuten, ...]}: die Werte der ⚠-Zeilen
+    (kippminuten() und Verwandte) — liegt ein Wechsel keine 0,01 Minuten
+    daneben, gilt deren Zahl, damit Zeitscan und ⚠-Zeile nie um eine
+    Rundungsstelle auseinanderlaufen (dort beginnt die Bisektion an der ganzen
+    Minute, hier im 3-Sekunden-Raster)."""
+    ev = sorted(ev, key=lambda e: e['minuten'])
+    gruppen = []
+    for e in ev:
+        if gruppen and e['minuten'] - gruppen[-1][-1]['minuten'] < 0.002:
+            gruppen[-1].append(e)
+        else:
+            gruppen.append([e])
+    out = []
+    for g in gruppen:
+        m = g[0]['minuten']
+        for e in g:
+            for w in ersatz.get(e['schluessel'], ()):
+                if w is not None and abs(w - e['minuten']) < 0.01:
+                    m = w
+                    break
+            else:
+                continue
+            break
+        m = round(m, 3)
+        g.sort(key=lambda e: (_ZS_FOLGE.index(e['schluessel'][0])
+                              if e['schluessel'][0] in _ZS_FOLGE else 99,
+                              str(e['schluessel'])))
+        wechsel = [dict(e, text=_zs_text(e['schluessel'], e['von'], e['nach']))
+                   for e in g]
+        # Chart-Herrscher klassisch wie modern: EIN Satzteil
+        _ch = {w['schluessel'][1]: w for w in wechsel
+               if w['schluessel'][0] == 'chartherrscher'}
+        if len(_ch) == 2 and (_ch['modern']['von'], _ch['modern']['nach']) == \
+                (_ch['klassisch']['von'], _ch['klassisch']['nach']):
+            _ch['modern']['text'] += ' (klassisch ebenso)'
+            _ch['klassisch']['text'] = ''
+        for w in wechsel:
+            w['minuten'] = m
+        out.append({'minuten': m,
+                    'im_text': f"{_min_wort(m)} {'früher' if vz < 0 else 'später'}",
+                    'wechsel': wechsel,
+                    'text': '; '.join(w['text'] for w in wechsel
+                                      if w['text'] and not _zs_neben(w))})
+    return out
+
+
+def zeitscan(jd, factors, lat, lon, cusps=None, fenster=ZEITSCAN_FENSTER,
+             schritt=ZEITSCAN_SCHRITT, hsys=b"K", kipp=None, faktor_kipp=None,
+             haus_kipp=None):
+    """Das Bild fuer Geburtszeiten bis ±`fenster` Minuten neu gerechnet — jede
+    Aenderung mit ihrem Minutenabstand (neu 2026-09-29, Gegenprobe g). Braucht
+    pyswisseph; ohne es None.
+
+    Gerechnet wird im Raster `schritt` (Vorgabe 0,05 Minuten = 3 Sekunden);
+    jeder Wechsel wird per Bisektion auf unter eine Millisekunde nachgeschaerft
+    und auf drei Nachkommastellen gerundet (die Sekunde steht damit sicher).
+    Faktoren und Spitzen werden an der verschobenen Zeit NEU GERECHNET und an
+    die uebergebenen Werte angelegt (s. _zs_bewegung) — t = 0 ist genau das
+    Datenblatt. Verfolgt wird, was eine Deutung an der Geburtsminute festmacht
+    (_zs_merkmale): Zeichen der Spitzen (paarweise, AC/DC und IC/MC darunter)
+    und der Faktoren, Haus samt Grenzlage und FUEHRENDEM Haus je Faktor, die
+    Achsen-Zeilen der Aspektseite samt Stufe, der engste Aspekt (Zaehlmenge
+    wie RANG engste-aspekte), Chart-Herrscher modern und klassisch, die
+    Haeuser-Kreise modern und klassisch samt haelt_bei_schwellenlage, die
+    Hausherrscher-Sonderfaelle, Herrscherketten, Rezeptionen, die gewichtete
+    Verteilung, das Element nur ueber Achsen und die Figuren (§6).
+
+    kipp, faktor_kipp, haus_kipp  die Rueckgaben von kippminuten(),
+        faktor_kippminuten() und haus_kippminuten() desselben Charts
+        (strukturbild() gibt sie mit): Deren ungerundete Werte gelten fuer die
+        Wechselpunkte, die sie treffen — die ⚠-Zeilen und der Zeitscan nennen
+        dann dieselbe Zahl.
+
+    -> {'fenster', 'schritt',
+        'frueher' / 'spaeter': [{'minuten', 'im_text', 'wechsel', 'text'}] in
+            zeitlicher Folge von der Geburtsminute weg — 'minuten' der Betrag
+            (drei Nachkommastellen), 'im_text' der Wortlaut fuer den Text
+            („knapp zwei Minuten frueher", _min_wort()), 'wechsel' die
+            einzelnen Aenderungen {'schluessel', 'von', 'nach', 'text'},
+            'text' alle in einer Zeile,
+        'ac': {'minuten', 'richtung' ('früher'|'später'), 'von', 'nach'} —
+            der naechste Zeichenwechsel des AC im Fenster, sonst None,
+        'blatt_faellig': ac-Minuten unter AC_GEGENPROBE_SCHWELLE,
+        'fehler': Faktoren, die im Scan fest stehen (Ephemeride),
+        'abweichung_spitzen': groesste Abweichung der uebergebenen cusps von
+            houses_ex(jd) in Grad — ueber 0,05 passen jd/lat/lon nicht}
+    """
+    try:
+        import swisseph as swe  # noqa: F401
+    except Exception:
+        return None
+    stand, fehler, abw = _zs_bewegung(jd, factors, lat, lon, cusps, hsys)
+    mcache = {}
+
+    def merk(t):
+        k = round(t, 9)
+        if k not in mcache:
+            fac, cu = stand(t)
+            mcache[k] = _zs_merkmale(fac, cu)
+        return mcache[k]
+
+    b0 = merk(0.0)
+    n = max(1, int(round(fenster / schritt)))
+    res = {'fenster': fenster, 'schritt': schritt, 'fehler': fehler,
+           'abweichung_spitzen': abw}
+    for vz, name, feld in ((-1, 'frueher', 'frueher_genau'),
+                           (1, 'spaeter', 'spaeter_genau')):
+        ersatz = {}
+        for i, e in enumerate((kipp or [])[:6]):
+            ersatz.setdefault(('spitze', i + 1), []).append(e.get(feld))
+        for e in (faktor_kipp or []):
+            if not e.get('fehler'):
+                ersatz.setdefault(('zeichen', e['name']), []).append(e.get(feld))
+        if vz > 0:
+            for e in (haus_kipp or []):
+                ersatz.setdefault(('haus', e['name']), []).extend(
+                    [e.get('spaeter_genau'), e.get('fuehrend_spaeter_genau')])
+        ev = []
+        t_alt, alt = 0.0, b0
+        for k in range(1, n + 1):
+            t = k * schritt
+            neu = merk(vz * t)
+            if neu != alt:
+                for key in sorted(set(alt) | set(neu), key=str):
+                    va = alt.get(key)
+                    if va == neu.get(key):
+                        continue
+                    tc = _genau(lambda m, _k=key, _v=va:
+                                merk(vz * m).get(_k) != _v,
+                                t_alt, t, schritte=ZEITSCAN_BISEKTION)
+                    ev.append({'minuten': tc, 'schluessel': key, 'von': va,
+                               'nach': merk(vz * tc).get(key)})
+            t_alt, alt = t, neu
+        res[name] = _zs_gruppieren(ev, vz, ersatz)
+    ac = []
+    for name, ri in (('frueher', 'früher'), ('spaeter', 'später')):
+        for p in res[name]:
+            w = next((w for w in p['wechsel'] if w['schluessel'] == ('spitze', 1)),
+                     None)
+            if w:
+                ac.append({'minuten': p['minuten'], 'richtung': ri,
+                           'von': _zs_zeichen(w['von'][0]),
+                           'nach': _zs_zeichen(w['nach'][0])})
+                break
+    res['ac'] = min(ac, key=lambda a: a['minuten']) if ac else None
+    res['blatt_faellig'] = bool(res['ac']) and \
+        res['ac']['minuten'] < AC_GEGENPROBE_SCHWELLE
+    return res
+
+
+def zeitscan_faellig(sb):
+    """Braucht §3 den Zeitscan-Block? Ja, sobald §3 eine ⚠-Zeile der
+    Gegenprobe g traegt (Spitze oder Faktor unter KIPP_SCHWELLE, AC/MC unter
+    ACHSE_GRENZE an einer Zeichengrenze, Wechsel des fuehrenden Hauses) ODER
+    der AC bei weniger als AC_GEGENPROBE_SCHWELLE Minuten das Zeichen
+    wechselt. Ohne kippminuten (kein jd/lat/lon) nie."""
+    kipp = sb.get('kippminuten')
+    if not kipp:
+        return False
+    if sb.get('kipp_warnungen') or sb.get('faktor_kipp_warnungen') \
+            or sb.get('haus_kipp_warnungen'):
+        return True
+    g = kipp[0].get('min_genau', kipp[0].get('min'))
+    return g is not None and g < AC_GEGENPROBE_SCHWELLE
+
+
+_ZS_MODUL = '`claude/Projektanweisung_Modul_Gegenprobe_Geburtszeit.md`'
+
+
+def zeitscan_text(zs):
+    """Die Zeilen des Blocks „Zeitscan" fuer Strukturbild §3 (Liste von
+    Strings). zeitscan_lesen() liest sie zurueck. Nebenaspekt-Zeilen an den
+    Achsen stehen nur in den Daten (_zs_neben); ein Wechselpunkt, der nur aus
+    ihnen besteht, faellt im Text weg."""
+    L = []
+    fe = zs['fenster']
+    L.append(f"- Zeitscan (Gegenprobe g): Bild neu gerechnet für Geburtszeiten "
+             f"bis {fe:g} Minuten früher und später, jeder Wechselpunkt auf die "
+             f"Sekunde (Minuten ungerundet; Nebenaspekte an den Achsen nicht "
+             f"aufgeführt). Nur aus diesen Zeilen kommen Wenn-dann-Sätze zur "
+             f"Geburtszeit: Kopf, ⚠-Block, Auftakt, Hinweissätze, Befund, "
+             f"Analyse.")
+    ac = zs.get('ac')
+    if ac:
+        z = (f"- Zeitscan · AC: Zeichenwechsel bei {_dez3(ac['minuten'])} Minuten "
+             f"{ac['richtung']}er Geburt ({ac['von']} → {ac['nach']}; "
+             f"„{_min_wort(ac['minuten'])} {ac['richtung']}\")")
+        if zs.get('blatt_faellig'):
+            z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
+                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden.")
+        else:
+            z += f" — nicht unter {AC_GEGENPROBE_SCHWELLE} Minuten, kein Blatt."
+        L.append(z)
+    else:
+        L.append(f"- Zeitscan · AC: kein Zeichenwechsel bis {fe:g} Minuten, kein "
+                 f"Blatt.")
+    for name, ri in (('frueher', 'früher'), ('spaeter', 'später')):
+        pk = [p for p in (zs.get(name) or []) if p.get('text')]
+        if not pk:
+            L.append(f"- Zeitscan · {ri}: bis {fe:g} Minuten kein Wechsel.")
+            continue
+        L.append(f"- Zeitscan · {ri} (Minuten; Wortlaut im Text):")
+        for p in pk:
+            L.append(f"  - {_dez3(p['minuten'])} („{_min_wort(p['minuten'])}\"): "
+                     f"{p['text']}.")
+    for f_ in (zs.get('fehler') or []):
+        L.append(f"- ⚠ Zeitscan: {f_}.")
+    if (zs.get('abweichung_spitzen') or 0) > 0.05:
+        L.append(f"- ⚠ Zeitscan: die übergebenen Spitzen weichen bis "
+                 f"{_gr(zs['abweichung_spitzen'])} von houses_ex(jd) ab — jd, lat "
+                 f"und lon passen nicht zu ihnen; Scan erst nach Klärung nutzen.")
+    L.append("- Zeitscan · Protokollzeile der Gegenproben, sobald ein "
+             "Wenn-dann-Satz zur Geburtszeit im Text steht: „Zeitscan: <n> "
+             "Wenn-dann-Sätze gegen den Block gehalten — keine Abweichung\" "
+             "bzw. je Abweichung Satz und Zeile.")
+    return L
+
+
+def _dez3(x):
+    """Minuten mit drei Nachkommastellen und deutschem Komma (1,874)."""
+    return f"{x:.3f}".replace('.', ',')
+
+
+_ZS_AC_RE = re.compile(r'^- Zeitscan · AC: Zeichenwechsel bei (\d+,\d{3}) Minuten '
+                       r'(früh|spät)erer Geburt \((\S+) → (\S+);')
+_ZS_PUNKT_RE = re.compile(r'^\s+- (\d+,\d{3}) \(„([^"]*)"\): (.*)$')
+_ZS_ABSCHNITT_RE = re.compile(r'^- Zeitscan · (früher|später)\b')
+_ZS_KOPF_RE = re.compile(r'^- Zeitscan \(Gegenprobe g\): .*? bis (\d+) Minuten')
+
+
+def zeitscan_lesen(quelle):
+    """Den Block „Zeitscan" aus einem chart_data.md zuruecklesen (Pfad oder
+    Text) — fuer das Gegenprobe-Blatt in Schritt 2, ohne den Scan neu zu
+    rechnen. -> {'fenster', 'ac', 'blatt_faellig', 'frueher', 'spaeter'} in
+    derselben Form wie zeitscan() ('frueher'/'spaeter' je {'minuten',
+    'im_text', 'text'}); None, wenn der Block fehlt."""
+    text = quelle
+    if '\n' not in str(quelle):
+        try:
+            with open(quelle, encoding='utf-8') as fh:
+                text = fh.read()
+        except OSError:
+            pass
+    res = {'fenster': None, 'ac': None, 'blatt_faellig': False,
+           'frueher': [], 'spaeter': []}
+    gefunden, abschnitt = False, None
+    for z in str(text).splitlines():
+        m = _ZS_KOPF_RE.match(z)
+        if m:
+            gefunden = True
+            res['fenster'] = int(m.group(1))
+            continue
+        m = _ZS_AC_RE.match(z)
+        if m:
+            res['ac'] = {'minuten': float(m.group(1).replace(',', '.')),
+                         'richtung': m.group(2) + 'er',
+                         'von': m.group(3), 'nach': m.group(4)}
+            res['blatt_faellig'] = 'Gegenprobe-Blatt fällig' in z
+            continue
+        m = _ZS_ABSCHNITT_RE.match(z)
+        if m:
+            abschnitt = 'frueher' if m.group(1) == 'früher' else 'spaeter'
+            continue
+        if not z.startswith(' '):
+            abschnitt = None
+        m = _ZS_PUNKT_RE.match(z)
+        if m and abschnitt:
+            res[abschnitt].append({'minuten': float(m.group(1).replace(',', '.')),
+                                   'im_text': m.group(2),
+                                   'text': m.group(3).rstrip('.')})
+    return res if gefunden else None
+
+
+def _selbsttest_zeitscan():
+    """Selbsttest des Zeitscans OHNE Klientendaten (Startprompt 2026-09-29,
+    Gegenprobe 1): synthetischer Fall ab dem Referenzzeitpunkt J2000.0
+    (JD 2451545,0), 50° Nord / 10° Ost — der erste Zeichenwechsel des AC
+    danach, die Geburt 1,5 Minuten dahinter. Geprueft: der Scan findet den
+    Zeichenwechsel auf die Kippminute von kippminuten(), den Wechsel des
+    Chart-Herrschers und mindestens einen Wechsel eines Haeuser-Kreises oder
+    Hausherrscher-Sonderfalls; Block und Leser stimmen ueberein; strukturbild()
+    schreibt den Block nur, wenn er faellig ist, und nie im Transit."""
+    try:
+        import swisseph as _swe
+    except Exception:
+        return 'Zeitscan-Test: übersprungen (kein pyswisseph)'
+    _ephe_pfad_setzen(_swe)
+    la, lo = 50.0, 10.0
+
+    def _ac(t):
+        return _swe.houses_ex(t, la, lo, b"K")[1][0]
+
+    t = 2451545.0
+    z0 = zeichen_index(_ac(t))
+    while zeichen_index(_ac(t)) == z0:
+        t += 1.0 / 1440.0
+    a, e = t - 1.0 / 1440.0, t
+    for _ in range(50):
+        m = (a + e) / 2.0
+        if zeichen_index(_ac(m)) == z0:
+            a = m
+        else:
+            e = m
+    body = (('Sonne', _swe.SUN), ('Mond', _swe.MOON), ('Merkur', _swe.MERCURY),
+            ('Venus', _swe.VENUS), ('Mars', _swe.MARS),
+            ('Jupiter', _swe.JUPITER), ('Saturn', _swe.SATURN),
+            ('Uranus', _swe.URANUS), ('Neptun', _swe.NEPTUNE),
+            ('Pluto', _swe.PLUTO), ('Mondknoten', _swe.TRUE_NODE))
+
+    def _bild(jd):
+        c, x = _swe.houses_ex(jd, la, lo, b"K")
+        f = [{'name': n, 'lon': _swe.calc_ut(jd, b, _swe.FLG_SWIEPH)[0][0]}
+             for n, b in body]
+        f.append({'name': 'Südknoten', 'lon': (f[-1]['lon'] + 180.0) % 360.0})
+        f += [{'name': 'AC', 'lon': x[0]}, {'name': 'MC', 'lon': x[1]},
+              {'name': 'DC', 'lon': (x[0] + 180.0) % 360.0},
+              {'name': 'IC', 'lon': (x[1] + 180.0) % 360.0}]
+        return f, list(c[:12])
+
+    jd = e + 1.5 / 1440.0
+    f, c = _bild(jd)
+    kp = kippminuten(jd, la, lo)
+    zs = zeitscan(jd, f, la, lo, cusps=c, kipp=kp)
+    assert zs['ac'] and zs['ac']['richtung'] == 'früher', zs['ac']
+    assert abs(zs['ac']['minuten'] - 1.5) < 0.002, zs['ac']
+    assert zs['ac']['minuten'] == round(kp[0]['frueher_genau'], 3), \
+        (zs['ac'], kp[0]['frueher_genau'])
+    assert zs['blatt_faellig'] and not zs['fehler'], zs['fehler']
+    punkt = next(p for p in zs['frueher'] if p['minuten'] == zs['ac']['minuten'])
+    arten = {w['schluessel'][0] for w in punkt['wechsel']}
+    assert {'spitze', 'chartherrscher'} <= arten, arten
+    alle = {w['schluessel'][0] for s in ('frueher', 'spaeter')
+            for p in zs[s] for w in p['wechsel']}
+    assert alle & {'kreise', 'sonderfall'}, alle
+    for s in ('frueher', 'spaeter'):
+        ms = [p['minuten'] for p in zs[s]]
+        assert ms == sorted(ms) and all(0 < x <= zs['fenster'] for x in ms), ms
+    txt = '\n'.join(zeitscan_text(zs))
+    zl = zeitscan_lesen(txt)
+    assert zl['ac'] == {'minuten': zs['ac']['minuten'], 'richtung': 'früher',
+                        'von': zs['ac']['von'], 'nach': zs['ac']['nach']}, zl['ac']
+    assert zl['blatt_faellig'] and zl['fenster'] == ZEITSCAN_FENSTER
+    for s in ('frueher', 'spaeter'):
+        assert [p['minuten'] for p in zl[s]] == \
+            [p['minuten'] for p in zs[s] if p['text']], s
+    # strukturbild(): Block da (faellig), im Transit nicht
+    sb = strukturbild(f, c, jd_geburt=jd, lat=la, lon=lo)
+    assert sb['zeitscan'] and sb['zeitscan']['ac'] == zs['ac'], sb['zeitscan']
+    t3 = strukturbild_text(sb).split('### 3')[1].split('### 4')[0]
+    assert '- Zeitscan · AC: Zeichenwechsel bei 1,500 Minuten früherer Geburt' \
+        in t3 and 'Gegenprobe-Blatt fällig' in t3, t3
+    assert '- Zeitscan' not in strukturbild_text(sb, typ='transit')
+    # Gegenfall: AC weit weg von der Grenze, keine ⚠-Zeile -> kein Block
+    for k in range(20, 400, 7):
+        f2, c2 = _bild(e + k / 1440.0)
+        sb2 = strukturbild(f2, c2, jd_geburt=e + k / 1440.0, lat=la, lon=lo)
+        if not zeitscan_faellig(sb2):
+            break
+    else:
+        raise AssertionError('kein Gegenfall ohne ⚠-Zeile gefunden')
+    assert sb2['zeitscan'] is None and '- Zeitscan' not in strukturbild_text(sb2)
+    return ('Zeitscan-Test: OK — AC %s Minuten früher (%s → %s), %d/%d '
+            'Wechselpunkte früher/später, Gegenfall ohne Block (%d Minuten '
+            'nach dem Wechsel)' % (_dez3(zs['ac']['minuten']), zs['ac']['von'],
+                                   zs['ac']['nach'], len(zs['frueher']),
+                                   len(zs['spaeter']), k))
+
+
 def _ephe_pfad_setzen(swe):
     """Setzt den Swiss-Ephemeris-Pfad aus lade.ephemeriden_pfad() (nur lesend,
     installiert nichts) bzw. SE_EPHE_PATH -> Pfad oder None."""
@@ -3887,7 +4607,9 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     Zeichengrenze der Planeten und Punkte, nur mit jd_geburt) sowie rang (U2:
     die Daten der Rangzeilen §10) — und seit dem 2026-09-23
     haus_kippminuten und haus_kipp_warnungen (Hauswechsel bei spaeterer
-    Geburt, mit jd_geburt, lat UND lon).
+    Geburt, mit jd_geburt, lat UND lon) — und seit dem 2026-09-29 zeitscan
+    (das Bild bis ±ZEITSCAN_FENSTER Minuten neu gerechnet; nur wenn
+    zeitscan_faellig(), sonst None).
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -3912,6 +4634,7 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'faktor_kipp_warnungen': None,
         'haus_kippminuten': None,
         'haus_kipp_warnungen': None,
+        'zeitscan': None,
         'rezeptionen': rezeptionen(factors),
         'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
         'aspektdichte': aspektdichte(factors, aspects, zusatz),
@@ -3947,6 +4670,16 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         _fk = faktor_kippminuten(jd_geburt, factors)
         sb['faktor_kippminuten'] = _fk
         sb['faktor_kipp_warnungen'] = faktor_kipp_warnungen(_fk)
+    # Zeitscan (neu 2026-09-29, Gegenprobe g): das Bild bis ±ZEITSCAN_FENSTER
+    # Minuten neu gerechnet — nur wenn §3 eine ⚠-Zeile traegt oder der AC unter
+    # AC_GEGENPROBE_SCHWELLE Minuten das Zeichen wechselt (zeitscan_faellig()).
+    # Die Werte der ⚠-Zeilen gehen mit, damit beide dieselbe Zahl nennen.
+    if jd_geburt is not None and lat is not None and lon is not None \
+            and zeitscan_faellig(sb):
+        sb['zeitscan'] = zeitscan(jd_geburt, factors, lat, lon, cusps=cusps,
+                                  kipp=sb['kippminuten'],
+                                  faktor_kipp=sb['faktor_kippminuten'],
+                                  haus_kipp=sb['haus_kippminuten'])
     # Achsen-Doppelungen gruppieren (neu 2026-09-09, Pruefbericht 5.7): Die
     # Handarbeit, die das Datenblatt-Modul bisher verlangte, macht jetzt
     # gruppiere_figuren() — sie fasst zusammen, was zweifelsfrei dieselbe Figur
@@ -4421,11 +5154,17 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
         if not sb.get('haus_kipp_warnungen'):
             L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
                      f'späterer Geburt das führende Haus.')
+    # --- Zeitscan (neu 2026-09-29): Wenn-dann-Rechnung zur Geburtszeit ---------
+    # Nur im Geburtshoroskop: Der Transit bleibt unberuehrt (Startprompt vom
+    # 2026-09-29, Grenzen) — ob er Block und Blatt bekommt, entscheidet Chris.
+    _zs = None if transit else sb.get('zeitscan')
+    if _zs:
+        L.extend(zeitscan_text(_zs))
     L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
              'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
              'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
              'Zeit-Einschränkung, wo eine beteiligte Spitze eine ⚠-Zeile '
-             'trägt>')
+             'trägt' + (' — nur aus dem Zeitscan' if _zs else '') + '>')
     L.append('')
 
     L.append('### 4 · Aspektdichte je Faktor')
@@ -6230,3 +6969,5 @@ if __name__ == '__main__':
               _s3['frueher_genau'], '| Hauswechsel Saturn',
               _sa['spaeter_genau'], 'Minuten, fuehrendes Haus ab',
               _sa['fuehrend_spaeter_genau'], 'Minuten')
+    # Zeitscan (2026-09-29): synthetischer Fall ab J2000.0, keine Klientendaten
+    print(_selbsttest_zeitscan())
