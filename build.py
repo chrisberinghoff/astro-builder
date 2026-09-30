@@ -4052,6 +4052,492 @@ def ressourcen_block(chart_data_pfad: str, faktoren=None,
 
 
 # ---------------------------------------------------------------------------
+# Geruest des Datenblatts (neu 2026-09-30, Klasse-2-Entscheidungslauf, Punkt 12;
+# Pruefberichte Geburtshoroskop 1+2 vom 29.09.d, Archiv 23.09.c): Es gab kein
+# Geruest des fertigen chart_data. Abschnittsfolge, Tabellenkoepfe und Leseformate
+# standen verteilt in drei Modulen, in hilfe('aspekt_heimat') und im Quelltext von
+# transit.py — ein Schritt-1+2-Lauf brauchte 9 bis 10 Erkundungsaufrufe und 25 bis
+# 65 KB dafuer. Das Geruest traegt NUR die Form: Reihenfolge, Ueberschriften,
+# Tabellenkoepfe, Blockmarker und die Formvorgaben, an denen ein Leser haengt;
+# die Regeln stehen in den Modulen, die jede Kommentarzeile nennt. Erhoben aus den
+# Modulen und den Lesern und gegen einen konstruierten Fall geprueft: selektor.
+# parse_chart, aspekt_heimat bzw. kontakt_heimat_bericht, lies_deckblatt,
+# rangzeilen_lesen, zeitscan_lesen, ressourcen_liste, transit_rechenschaft_block,
+# transit_beleg, mitlaufendes_zeilen, dichte_quartale, chartdoc.lies_zeitleiste,
+# transitdata.parse, transit.radix_from_chart_data/cusps_from_chart_data und die
+# Parser der Inhaltsprobe erkannten jede Stelle. Der Selbsttest haelt die
+# leser-gebundenen Strings fest. Wer einen Leser aendert, zieht das Geruest nach.
+
+_GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kein Leser · Legende: <…> Platzhalter, / Alternative, Kommentar über seinem Abschnitt -->
+# Chart-Datenblatt — <Klientenname>
+
+<!-- optional · Datenblatt-Modul „chart_data.md dokumentieren“; Design-Render „Konstellationstabelle“ · kein Leser · Form frei -->
+## ⚠ Schritt-3-Hinweise
+
+- **Achsen-Befund:** <Befund/keiner>
+- **Grenzlagen:**
+
+| Faktor | Haus → Nebenhaus | Abstand | Stufe | Spalte | Signatur |
+|---|---|---|---|---|---|
+| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur> |
+
+- **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
+- **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
+- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
+- **Figuren-Entscheidung:** <Entscheidung/keine>
+- **Handgriffe für Schritt 3:** <Handgriffe/keine>
+
+<!-- Pflicht, Quell-PDF nur bei gedeutetem Quell-PDF · Datenblatt-Modul „chart_data.md dokumentieren“ · inhaltsprobe P11 · Zahl direkt hinter „Alter heute:“, sonst Form frei -->
+## Kopf
+
+- **Name:** <Name>
+- **Geburtsdatum:** <TT.MM.JJJJ>
+- **Geburtszeit:** <HH:MM Zone (UTC±HH:MM)>, in UT <HH:MM>
+- **Geburtsort:** <Ort>
+- **Koordinaten der Rechnung:** <Breite>, <Länge>
+- **Julianisches Datum (UT):** <JD>
+- **Alter heute:** <n> Jahre
+- **Fassung:** <n/entfällt>
+- **Quelle der Stände:** <Quelle, Einstellungen>
+- **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten
+- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
+- **Quell-PDF:** <Behauptung, nicht verifiziert>
+
+<!-- Pflicht · Radixrechnung „Gegenprobe der Rechnung“; Datenblatt-Modul „Gegenprobe“ · kein Leser · Form frei -->
+## Gegenproben
+
+- Positions-Vergleich: <Ergebnis>
+- (a) True-vs-Mean: <Ergebnis>
+- (b) Mond-Zeitprobe: <Abweichung, Zeitunsicherheit>
+- (c) ASC/MC: <Abweichungen>
+- (d) Achsen doppelt: <Ergebnis/entfällt>
+- (e) Häusersystem: <Ergebnis/entfällt>
+- (f) Zwei-Modell-Probe: <Ergebnis>
+- (g) Zeichengrenze, Hauswechsel: <Zeilen/keine>
+
+<!-- Pflicht · Radixrechnung „Vorrang der Rohdaten“ · inhaltsprobe P2 · Überschrift wörtlich, Ebene 2; Faktorzelle nackter Name; Grad N°NN′ ohne Leerzeichen; Zeichenname vorn in Spalte 3 -->
+## Stände
+
+| Faktor | Grad | Zeichen | Haus | Lauf |
+|---|---|---|---|---|
+| Sonne | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mond | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Merkur | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Venus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mars | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Jupiter | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Saturn | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Uranus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Neptun | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Pluto | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mondknoten | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Südknoten | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Chiron | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Lilith | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Pholus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| AC | <Grad> | <Zeichen> | 1 | — |
+| MC | <Grad> | <Zeichen> | 10 | — |
+| DC | <Grad> | <Zeichen> | 7 | — |
+| IC | <Grad> | <Zeichen> | 4 | — |
+
+<!-- Pflicht · Radixrechnung „Faktoren, die nicht aus der Quelle kommen“ · transit.cusps_from_chart_data (nur ohne CUSPS) · Hausnummer in Spalte 1, Grad vor dem Zeichen in einer Zelle -->
+## Eigene Koch-Hausspitzen
+
+| Haus | Spitze |
+|---|---|
+| 1 | <Grad Zeichen> |
+| 2 | <Grad Zeichen> |
+| 3 | <Grad Zeichen> |
+| 4 | <Grad Zeichen> |
+| 5 | <Grad Zeichen> |
+| 6 | <Grad Zeichen> |
+| 7 | <Grad Zeichen> |
+| 8 | <Grad Zeichen> |
+| 9 | <Grad Zeichen> |
+| 10 | <Grad Zeichen> |
+| 11 | <Grad Zeichen> |
+| 12 | <Grad Zeichen> |
+
+<!-- Pflicht, Sonne–Merkur-Zeile nur bei Konjunktion · Radixrechnung „Aspekte“ mit Sonderregel · kein Leser · Form frei -->
+## Aspekte
+
+Sonne–Merkur-Konjunktion: <Stufe/keine>
+
+<!-- Pflicht · Radixrechnung „Aspekte“ · build.aspekt_heimat, build.ressourcen_block, inhaltsprobe P1 · Überschrift und Kopf wörtlich; Faktorzellen nackter Name; Aspektzelle Glyphe plus Wort; Orb N°NN′; zugleich als Aspektwort plus Achse; leere Tabelle als Satz „Keine.“ -->
+### Volle Aspekte
+
+| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |
+|---|---|---|---|---|---|
+| <Faktor> | <Glyphe Aspektwort> | <Faktor> | <N°NN′> | <Farbe> | <Aspektwort Achse> |
+
+<!-- Pflicht · wie oben -->
+### Einseitige Aspekte
+
+<Tabelle wie oben>
+
+<!-- Pflicht · wie oben -->
+### Nebenaspekte
+
+<Tabelle wie oben>
+
+<!-- Pflicht · Radixrechnung „Zusatzebene“; Spalte gedeutet: Werkzeuge-Modul Punkt 4 · build.aspekt_heimat, inhaltsprobe P1 · Überschrift wörtlich; Aspektzelle genau eine der beiden Formen -->
+### Untergrund-Aspekte
+
+| Faktor | Aspekt | Faktor | Orb | gedeutet |
+|---|---|---|---|---|
+| <Planet> | <∠ Halbquadrat/⚼ Anderthalbquadrat> | <Planet> | <N°NN′> | <ja/nein> |
+
+<!-- Pflicht · Datenblatt-Modul „Strukturbild“ · radix.rangzeilen_lesen, radix.zeitscan_lesen, selektor.parse_chart, inhaltsprobe P11 P12 · Ausgabe unverändert bis auf die Zeilen „- Befund:“ -->
+## Strukturbild
+← Ausgabe von radix.strukturbild_text(sb) anstelle dieser und der Überschriftszeile
+
+<!-- Pflicht · Datenblatt-Modul „chart_data.md dokumentieren“ · transit.radix_from_chart_data, transit.cusps_from_chart_data · einfache Anführungszeichen, name vor lon, lon in Dezimalgrad -->
+## factors-Liste für Schritt 3
+
+```python
+factors = [
+    {'name': 'Sonne', 'glyph': '☉', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mond', 'glyph': '☽', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Merkur', 'glyph': '☿', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Venus', 'glyph': '♀', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mars', 'glyph': '♂', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Jupiter', 'glyph': '♃', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Saturn', 'glyph': '♄', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Uranus', 'glyph': '♅', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Neptun', 'glyph': '♆', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Pluto', 'glyph': '♇', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mondknoten', 'glyph': '☊', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Chiron', 'glyph': '⚷', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Lilith', 'glyph': '⚸', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Pholus', 'glyph': 'Pho', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'AC', 'glyph': 'AC', 'lon': <lon>, 'retro': False},
+    {'name': 'MC', 'glyph': 'MC', 'lon': <lon>, 'retro': False},
+    {'name': 'DC', 'glyph': 'DC', 'lon': <lon>, 'retro': False},
+    {'name': 'IC', 'glyph': 'IC', 'lon': <lon>, 'retro': False},
+]
+CUSPS = [<zwölf Spitzen>]
+```
+
+<!-- Pflicht · Datenblatt-Modul „Themenliste“ · build.aspekt_heimat, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; fuehrt= mit dem Faktornamen vorn; Aspekte als Name Glyphe Name oder Name –Wort– Name; Freitext erst hinter GESTRICHEN:; Nachzug als eigene Zeile Nachzug:, nie mit dem Wort Deutungsort — P15 liest sonst den alten Ort -->
+## Themenliste
+
+THEMA 1 | titel=<Titel>
+  | fuehrt=<Faktor, Zeichen, Haus>
+  | klingt=<Faktoren>
+  | aspekte=<Heimat-Aspekte>
+  | verweis=<Querbezüge>
+  | rang=<Rang> | form=<voll/kurz/ressource> | grund=<Grund>
+  | praxis=<Übung>
+  | familie=<Familie>
+  | leitachse=ja
+RECHENSCHAFT: <Register>
+GESTRICHEN:   <Streichungen/keines>
+Nachzug: <was, alt → neu>
+
+<!-- Pflicht · Datenblatt-Modul „Ressourcen“ · inhaltsprobe P15 · Ausgabe unverändert, von Hand nur der Ort hinter „— Deutungsort: “ und der Wert hinter „— Gabe: “ -->
+## Ressourcen
+← Ausgabe von build.ressourcen_block('<klient>_chart_data.md') anstelle dieser und der Überschriftszeile
+
+<!-- nur bei bestelltem Zugang · Erweiterung Zugang „Schritt 1“ · inhaltsprobe P16 · Zeile beginnt „ZUGANG <n> | “, Folgezeilen eingerückt „  | “; bereich= das Wort aus dem Kicker „Zugang <Bereich>“ -->
+## Zugang
+
+ZUGANG 1 | bereich=<Bereich> | haeuser=<Häuser>
+  | herrscher=<Hausherrscher> | im_haus=<Planeten>
+  | verweise=<Kapitel> | praxis=<Übung/Verweis>
+  | familie=<Familie> | lage=<Wortlaut/keine> | duenn=<ja/nein>
+
+<!-- nur bei Tabellen-Aspekten ohne aspekte=-Heimat · Datenblatt-Modul „Aspekt-Heimat“ · build.aspekt_heimat · Überschrift wörtlich; je Zeile ein Paar Name Glyphe Name; Weglassungsgrund ohne die Wörter Getriebe/Instrument/Was trägt — aspekt_heimat zählt sie sonst als gedeutet -->
+### Aspekte ohne Deutungs-Heimat — ausdrückliche Weglassung
+
+<ein Satz, der beide Zeilenarten trennt>
+- <Name Glyphe Name> — <Orb>, <Stärke> — <Grund>
+- <Name Glyphe Name> — <Orb>, <Stärke> — gedeutet <im Getriebe-Kapitel/im Instrument-Kapitel/in Was trägt>
+
+<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel; ASPEKT nur mit den zwei Namen; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
+@@SELEKTOR
+FAKTOR SONNE zeichen=<Zeichen> haus=<n>
+FAKTOR MOND zeichen=<Zeichen> haus=<n>
+FAKTOR MERKUR zeichen=<Zeichen> haus=<n>
+FAKTOR VENUS zeichen=<Zeichen> haus=<n>
+FAKTOR MARS zeichen=<Zeichen> haus=<n>
+FAKTOR JUPITER zeichen=<Zeichen> haus=<n>
+FAKTOR SATURN zeichen=<Zeichen> haus=<n>
+FAKTOR URANUS zeichen=<Zeichen> haus=<n>
+FAKTOR NEPTUN zeichen=<Zeichen> haus=<n>
+FAKTOR PLUTO zeichen=<Zeichen> haus=<n>
+FAKTOR MONDKNOTEN zeichen=<Zeichen> haus=<n>
+FAKTOR SUEDKNOTEN zeichen=<Zeichen> haus=<n> nebenhaus=<n> abstand=<Dezimalgrad>
+FAKTOR CHIRON zeichen=<Zeichen> haus=<n>
+FAKTOR LILITH zeichen=<Zeichen> haus=<n>
+FAKTOR PHOLUS zeichen=<Zeichen> haus=<n>
+ACHSE AC zeichen=<Zeichen>
+ACHSE MC zeichen=<Zeichen>
+ACHSE DC zeichen=<Zeichen>
+ACHSE IC zeichen=<Zeichen>
+ASPEKT <A> <B>
+@@ENDE
+
+<!-- Pflicht · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
+@@DECKBLATT
+LEITSATZ: <ein Satz>
+LEITACHSE: <das Leitthema>
+TITELMOTIV: <die Szene>
+PALETTE: <Farben>
+GLYPHEN: <Glyphen> — <Begründung>
+@@ENDE
+'''
+
+_GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul „Dateinamen“ · selektor.typ_aus_pfad · Datei <klient>_Transit_chart_data.md · Legende: <…> Platzhalter, / Alternative, Kommentar über seinem Abschnitt, übernommen = aus dem Grundhoroskop, bei Rohdaten-Start selbst gerechnet (Radixrechnung) -->
+# Chart-Datenblatt Transit — <Klientenname>
+
+<!-- optional · Datenblatt-Modul „chart_data.md dokumentieren“; Design-Render „Konstellationstabelle“ · kein Leser · Form frei -->
+## ⚠ Schritt-3-Hinweise
+
+- **Achsen-Befund:** <Befund/keiner>
+- **Grenzlagen:**
+
+| Faktor | Haus → Nebenhaus | Abstand | Stufe | Spalte | Signatur |
+|---|---|---|---|---|---|
+| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur> |
+
+- **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
+- **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
+- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
+- **Figuren-Entscheidung:** <Entscheidung/keine>
+- **Handgriffe für Schritt 3:** <Handgriffe/keine>
+
+<!-- Pflicht, Geburtsangaben übernommen · Transit-Modul „Ablauf“ 1 · inhaltsprobe P11 · Zahl direkt hinter „Alter heute:“, sonst Form frei -->
+## Kopf
+
+- **Name:** <Name>
+- **Geburtsdatum:** <TT.MM.JJJJ>
+- **Geburtszeit:** <HH:MM Zone (UTC±HH:MM)>, in UT <HH:MM>
+- **Geburtsort:** <Ort>
+- **Koordinaten der Rechnung:** <Breite>, <Länge>
+- **Julianisches Datum (UT):** <JD>
+- **Alter heute:** <n> Jahre
+- **Quelle der Stände:** <Quelle, Einstellungen>
+- **Grundlage:** <Grundhoroskop-Datei und Fassung/Rohdaten-Start>
+- **Stichtag:** <TT.MM.JJJJ>
+- **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
+- **Zeitzone der Exaktdaten:** <Zone mit Grund>
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten
+- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
+
+<!-- Pflicht, bei Rohdaten-Start dazu Positions-Vergleich und (a) bis (g) · Transit-Modul „Ablauf“ 1, „Die vier Zusatz-Zeitmaße“; Radixrechnung · kein Leser · Form frei -->
+## Gegenproben
+
+- Radix-Proben: <übernommen, Fassung, Befund>
+- Zwei-Modell-Probe der Exaktdaten: <Ergebniszeile von transit.zwei_modell_probe()>
+
+<!-- Pflicht, übernommen · Transit-Modul „Ablauf“ 1 · inhaltsprobe P2, build.transit_beleg · Überschrift wörtlich, Ebene 2; Faktorzelle nackter Name; Grad N°NN′ ohne Leerzeichen; Zeichenname vorn in Spalte 3 -->
+## Stände
+
+| Faktor | Grad | Zeichen | Haus | Lauf |
+|---|---|---|---|---|
+| Sonne | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mond | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Merkur | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Venus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mars | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Jupiter | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Saturn | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Uranus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Neptun | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Pluto | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Mondknoten | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Südknoten | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Chiron | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Lilith | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| Pholus | <Grad> | <Zeichen> | <Haus> | <Lauf> |
+| AC | <Grad> | <Zeichen> | 1 | — |
+| MC | <Grad> | <Zeichen> | 10 | — |
+| DC | <Grad> | <Zeichen> | 7 | — |
+| IC | <Grad> | <Zeichen> | 4 | — |
+
+<!-- Pflicht, übernommen · Transit-Modul „Ablauf“ 1 · transit.cusps_from_chart_data (nur ohne CUSPS) · Hausnummer in Spalte 1, Grad vor dem Zeichen in einer Zelle -->
+## Eigene Koch-Hausspitzen
+
+| Haus | Spitze |
+|---|---|
+| 1 | <Grad Zeichen> |
+| 2 | <Grad Zeichen> |
+| 3 | <Grad Zeichen> |
+| 4 | <Grad Zeichen> |
+| 5 | <Grad Zeichen> |
+| 6 | <Grad Zeichen> |
+| 7 | <Grad Zeichen> |
+| 8 | <Grad Zeichen> |
+| 9 | <Grad Zeichen> |
+| 10 | <Grad Zeichen> |
+| 11 | <Grad Zeichen> |
+| 12 | <Grad Zeichen> |
+
+<!-- Pflicht, übernommen; Sonne–Merkur-Zeile nur bei Konjunktion · Transit-Modul „Aspekttabelle im Folgeprodukt“ · kein Leser · Form frei -->
+## Aspekte
+
+Sonne–Merkur-Konjunktion: <Stufe/keine>
+
+<!-- Pflicht · Radixrechnung „Aspekte“ · inhaltsprobe P1 · Überschrift und Kopf wörtlich; Faktorzellen nackter Name; Aspektzelle Glyphe plus Wort; Orb N°NN′; zugleich als Aspektwort plus Achse -->
+### Volle Aspekte
+
+| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |
+|---|---|---|---|---|---|
+| <Faktor> | <Glyphe Aspektwort> | <Faktor> | <N°NN′> | <Farbe> | <Aspektwort Achse> |
+
+<!-- Pflicht · wie oben -->
+### Einseitige Aspekte
+
+<Tabelle wie oben>
+
+<!-- Pflicht · wie oben -->
+### Nebenaspekte
+
+<Tabelle wie oben>
+
+<!-- Pflicht, übernommen, Spalte gedeutet neu · Transit-Modul „Ablauf“ 1; Werkzeuge-Modul Punkt 4 · inhaltsprobe P1 · Überschrift wörtlich; Aspektzelle genau eine der beiden Formen -->
+### Untergrund-Aspekte
+
+| Faktor | Aspekt | Faktor | Orb | gedeutet |
+|---|---|---|---|---|
+| <Planet> | <∠ Halbquadrat/⚼ Anderthalbquadrat> | <Planet> | <N°NN′> | <ja/nein> |
+
+<!-- Pflicht · Transit-Modul „Die Reihenfolge …“ (2); Datenblatt-Modul „Strukturbild“ · radix.rangzeilen_lesen, selektor.parse_chart, inhaltsprobe P11 P12 · Ausgabe unverändert bis auf die Zeilen „- Befund:“ -->
+## Strukturbild
+← Ausgabe von radix.strukturbild_text(sb, typ='transit') anstelle dieser und der Überschriftszeile
+
+<!-- Pflicht, übernommen · Transit-Modul „Die Reihenfolge …“ (3) · transit.radix_from_chart_data, transit.cusps_from_chart_data · einfache Anführungszeichen, name vor lon, lon in Dezimalgrad -->
+## factors-Liste für Schritt 3
+
+```python
+factors = [
+    {'name': 'Sonne', 'glyph': '☉', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mond', 'glyph': '☽', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Merkur', 'glyph': '☿', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Venus', 'glyph': '♀', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mars', 'glyph': '♂', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Jupiter', 'glyph': '♃', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Saturn', 'glyph': '♄', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Uranus', 'glyph': '♅', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Neptun', 'glyph': '♆', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Pluto', 'glyph': '♇', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Mondknoten', 'glyph': '☊', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Chiron', 'glyph': '⚷', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Lilith', 'glyph': '⚸', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'Pholus', 'glyph': 'Pho', 'lon': <lon>, 'retro': <bool>},
+    {'name': 'AC', 'glyph': 'AC', 'lon': <lon>, 'retro': False},
+    {'name': 'MC', 'glyph': 'MC', 'lon': <lon>, 'retro': False},
+    {'name': 'DC', 'glyph': 'DC', 'lon': <lon>, 'retro': False},
+    {'name': 'IC', 'glyph': 'IC', 'lon': <lon>, 'retro': False},
+]
+CUSPS = [<zwölf Spitzen>]
+```
+
+<!-- Pflicht · Transit-Modul „Die Reihenfolge …“ (4) · transitdata.parse · Report unverändert in Codeblöcken ohne Sprachangabe oder mit text; Überschrift, Primäre Ziele und Status Form frei -->
+## Transit-Datenblock
+
+- **Primäre Ziele:** <Ziele mit Begründung>
+
+```text
+← Ausgabe von transit.py (Report und ZUSATZ-ZEITMASSE) anstelle dieser Zeile
+```
+
+- **Status:** <Chiron, Haus-Durchgänge, Mars, Orb weit>
+
+<!-- Pflicht · Transit-Modul „Ablauf“ 1, „Die Auswahlregel“ · build.kontakt_heimat, build.dichte_quartale, build.transit_beleg, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; Kontakte als T-Name Glyphe R-Name; Freitext erst hinter GESTRICHEN:; spanne= Form frei; Nachzug als eigene Zeile Nachzug:, nie mit dem Wort Deutungsort — P15 liest sonst den alten Ort -->
+## Themenliste
+
+THEMA 1 | titel=<Titel>
+  | fuehrt=T-<Transiter> <Glyphe> R-<Radixpunkt>
+  | aspekte=<weitere Kontakte>
+  | klingt=<Kontakte>
+  | spanne=<Laufzeit>
+  | rang=<Rang> | form=<voll/kurz/ressource> | grund=<Grund>
+  | praxis=<Übung>
+  | familie=<Familie>
+  | leitachse=ja
+GESTRICHEN:   <Streichungen/keine>
+Nachzug: <was, alt → neu>
+
+<!-- Pflicht · Transit-Modul „Die Ressourcen-Pflicht des Transit-Horoskops“ · inhaltsprobe P15 · Ausgabe unverändert, von Hand nur der Ort hinter „— Deutungsort: “ und der Wert hinter „— Gabe: “ -->
+## Ressourcen
+← Ausgabe von build.ressourcen_block(chart_data, events_json_pfad=events_json) anstelle dieser und der Überschriftszeile
+
+<!-- Pflicht · Transit-Modul „Die Reihenfolge …“ (5) · build.kontakt_heimat, inhaltsprobe P5 · Ausgabe unverändert; bis @@SELEKTOR nichts anderes, der Leser liest bis zur nächsten Überschrift oder @@-Zeile -->
+TRANSIT-RECHENSCHAFT: ← Ausgabe von build.transit_rechenschaft_block(chart_data, events_json) samt Kopfzeile anstelle dieser Zeile
+
+<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Transit-Modul „Ablauf“ 1; Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel; ASPEKT nur mit den zwei Namen; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
+@@SELEKTOR
+FAKTOR SONNE zeichen=<Zeichen> haus=<n>
+FAKTOR MOND zeichen=<Zeichen> haus=<n>
+FAKTOR MERKUR zeichen=<Zeichen> haus=<n>
+FAKTOR VENUS zeichen=<Zeichen> haus=<n>
+FAKTOR MARS zeichen=<Zeichen> haus=<n>
+FAKTOR JUPITER zeichen=<Zeichen> haus=<n>
+FAKTOR SATURN zeichen=<Zeichen> haus=<n>
+FAKTOR URANUS zeichen=<Zeichen> haus=<n>
+FAKTOR NEPTUN zeichen=<Zeichen> haus=<n>
+FAKTOR PLUTO zeichen=<Zeichen> haus=<n>
+FAKTOR MONDKNOTEN zeichen=<Zeichen> haus=<n>
+FAKTOR SUEDKNOTEN zeichen=<Zeichen> haus=<n> nebenhaus=<n> abstand=<Dezimalgrad>
+FAKTOR CHIRON zeichen=<Zeichen> haus=<n>
+FAKTOR LILITH zeichen=<Zeichen> haus=<n>
+FAKTOR PHOLUS zeichen=<Zeichen> haus=<n>
+ACHSE AC zeichen=<Zeichen>
+ACHSE MC zeichen=<Zeichen>
+ACHSE DC zeichen=<Zeichen>
+ACHSE IC zeichen=<Zeichen>
+ASPEKT <A> <B>
+@@ENDE
+
+<!-- Pflicht · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
+@@DECKBLATT
+LEITSATZ: <ein Satz>
+LEITACHSE: <das Leitthema>
+TITELMOTIV: <die Szene>
+PALETTE: <Farben>
+GLYPHEN: <Glyphen> — <Begründung>
+@@ENDE
+
+<!-- Pflicht · Transit-Modul „Struktur des PDFs“ 6 · chartdoc.lies_zeitleiste · nur LEAD: und je Quartal eine Zeile, lückenlos ab Q1; LEAD-Folgezeilen ohne Leerzeile; dicht= nur Kapitelnummern; kein | in der Marke; mit @@ENDE schließen -->
+@@ZEITLEISTE
+LEAD: <Vorspann>
+Q1 | dicht=<Kapitelnummern> | marke=<Marke>
+Q2 | dicht=<Kapitelnummern> | marke=
+Q3 | dicht=<Kapitelnummern> | marke=
+Q4 | dicht=<Kapitelnummern> | marke=
+Q5 | dicht=<Kapitelnummern> | marke=
+Q6 | dicht=<Kapitelnummern> | marke=
+Q7 | dicht=<Kapitelnummern> | marke=
+Q8 | dicht=<Kapitelnummern> | marke=
+@@ENDE
+'''
+
+
+def datenblatt_geruest(typ: str = "geburtshoroskop") -> str:
+    """Das Geruest eines fertigen Datenblatts — Abschnittsfolge, Ueberschriften,
+    Tabellenkoepfe, Blockmarker, Feldnamen; Platzhalter in <…>.
+
+    typ   'geburtshoroskop' (auch 'standard', 'gh') oder 'transit'.
+    -> str, zum Lesen: print(build.datenblatt_geruest('transit')).
+
+    Je Abschnitt eine Kommentarzeile: Pflicht/optional · Modul und Abschnitt ·
+    Leser · die Formvorgaben, an denen der Leser haengt. Die Regeln selbst stehen
+    NUR in den Modulen; das Geruest wiederholt keine. Abschnitte, die eine Funktion
+    fertig liefert (Strukturbild, Ressourcen, TRANSIT-RECHENSCHAFT, Report), stehen
+    als „← Ausgabe von …“. Ein unbekannter Typ wirft ValueError.
+    """
+    t = (typ or "").strip().casefold()
+    if t in ("geburtshoroskop", "standard", "gh", "standard-geburtshoroskop"):
+        return _GERUEST_GEBURTSHOROSKOP
+    if t == "transit":
+        return _GERUEST_TRANSIT
+    raise ValueError("datenblatt_geruest: Typ %r unbekannt — 'geburtshoroskop' oder "
+                     "'transit'" % typ)
+
+
+# ---------------------------------------------------------------------------
 # Selbsttest (neu 2026-09-19, Wartungslauf A) — python3 build.py --selbsttest
 # Nur konstruierte Daten: erfundene Aspekttabellen und ein erfundenes
 # events.json (Fenster ab 2031), keine Person, kein Echtfall.
@@ -5185,6 +5671,35 @@ def _selbsttest():
         print("  (GP: chartdoc/radix fehlt — Gegenprobe-Teil uebersprungen: %s)"
               % _e)
 
+    # 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 12): das Geruest traegt jeden
+    # String, an dem ein Leser haengt; die Aspekt-Ueberschriften kommen aus
+    # _STAERKE_KOPF, damit Leser und Geruest nicht auseinanderlaufen.
+    _gg = datenblatt_geruest("geburtshoroskop")
+    _gt = datenblatt_geruest("Transit")
+    for _s in [k for k, _ in _STAERKE_KOPF] + [
+            "## Stände", "| Faktor | Aspekt | Faktor | Orb | Farbe | zugleich |",
+            "### Untergrund-Aspekte", "∠ Halbquadrat", "⚼ Anderthalbquadrat",
+            "{'name': 'Sonne', 'glyph': '☉', 'lon': ", "CUSPS = [",
+            "- **Alter heute:** ", "THEMA 1 | titel=", "  | fuehrt=", "  | aspekte=",
+            " | form=", "  | leitachse=ja", "GESTRICHEN:", "## Ressourcen",
+            "— Deutungsort: ", "@@SELEKTOR", "FAKTOR SONNE zeichen=", " haus=",
+            " nebenhaus=", " abstand=", "ACHSE AC zeichen=", "ASPEKT ", "@@DECKBLATT",
+            "LEITSATZ: ", "LEITACHSE: ", "TITELMOTIV: ", "GLYPHEN: "]:
+        pruefe(_s in _gg and _s in _gt, "Geruest: %r fehlt" % _s)
+    for _s in ("RECHENSCHAFT: ", "ZUGANG 1 | ", "duenn=",
+               "### Aspekte ohne Deutungs-Heimat — ausdrückliche Weglassung"):
+        pruefe(_s in _gg, "Geruest Geburtshoroskop: %r fehlt" % _s)
+    for _s in ("TRANSIT-RECHENSCHAFT: ", "@@ZEITLEISTE", "LEAD: ", "Q1 | dicht=",
+               " | marke=", "```text", "  | fuehrt=T-", "_Transit_chart_data.md"):
+        pruefe(_s in _gt, "Geruest Transit: %r fehlt" % _s)
+    pruefe(_gg.count("\n@@ENDE") == 2 and _gt.count("\n@@ENDE") == 3,
+           "Geruest: @@ENDE schliesst nicht jeden Block")
+    try:
+        datenblatt_geruest("hdgk")
+        pruefe(False, "Geruest: unbekannter Typ ohne ValueError")
+    except ValueError:
+        pass
+
     if fehler:
         print("Selbsttest build.py: %d Fehler" % len(fehler))
         for f_ in fehler:
@@ -5192,7 +5707,8 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5)")
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5, "
+          "K2-30.09.: Geruest)")
 
 
 def _selbsttest_verify(tmp, pruefe):

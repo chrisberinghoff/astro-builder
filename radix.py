@@ -156,8 +156,8 @@ WICHTIG: matplotlib wird bei Bedarf automatisch nachinstalliert. Der Container
 wird zwischen Sessions zurückgesetzt — diese Datei liegt darum im Projektwissen.
 Braucht KEIN pyswisseph (bekommt fertige Positionen); die Ephemeride-Rechnung
 (Pholus, True Node) passiert in Schritt 1, s. Modul Radixrechnung. Einzige
-Ausnahmen: `pluto_quadrat_alter()` und `kippminuten()` rechnen selbst mit
-pyswisseph, wenn es da ist — sonst geben sie None zurück, und
+Ausnahmen: `pluto_quadrat_alter()`, `zyklus_alter()` und `kippminuten()` rechnen
+selbst mit pyswisseph, wenn es da ist — sonst geben sie None zurück, und
 `strukturbild_text()` sagt das ausdrücklich.
 """
 
@@ -5260,8 +5260,11 @@ def mondphase(factors):
 ZYKLEN = {
     'Saturn': [(29.5, 'Saturn-Rückkehr'), (44.2, 'zweite Saturn-Opposition'),
                (58.9, 'zweite Saturn-Rückkehr'), (14.7, 'erste Saturn-Opposition')],
-    'Uranus': [(21.0, 'Uranus-Quadrat'), (42.0, 'Uranus-Opposition'),
-               (63.0, 'zweites Uranus-Quadrat')],
+    # Uranus: Mittelwerte, nur ohne jd_geburt oder ohne pyswisseph in Gebrauch —
+    # sonst rechnet zyklus_alter() je Station aus der Radix-Position (s. dort).
+    'Uranus': [(21.0, 'Uranus-Quadrat (Mittelwert, je nach Jahrgang 18½–23)'),
+               (42.0, 'Uranus-Opposition (Mittelwert, je nach Jahrgang 38½–44)'),
+               (63.0, 'zweites Uranus-Quadrat (Mittelwert, je nach Jahrgang 61–64)')],
     'Chiron': [(50.5, 'Chiron-Rückkehr')],
     # Knotenachse: Umlauf 18,61 Jahre. Rueckkehr und Halbzyklus (die
     # Knoten-Opposition, bei der die Achse gespiegelt steht) seit 2026-09-15 —
@@ -5315,6 +5318,59 @@ ZYKLUS_ALIAS = {
     'Mondknotenachse': 'Knoten', 'Knotenachse': 'Knoten',
     'Südknoten': 'Suedknoten', 'Suedknoten': 'Suedknoten',
 }
+
+
+# ZYKLUS_GERECHNET (neu 2026-09-30, Klasse-2-Entscheidungslauf, Punkt 9;
+# Pruefbericht Transit 1+2 vom 29.09.b): Die Uranus-Stationen kamen aus festen
+# Mittelwerten (21/42/63). Uranus laeuft exzentrisch — gegengerechnet fuer die
+# Jahrgaenge 1930–2020 (je 15. Juni, Moshier): erstes Quadrat 18,5–23,0,
+# Opposition 38,7–44,1, zweites Quadrat 60,8–64,2 Jahre. Mit dem Fenster von
+# ±1,5 Jahren stand bei ganzen Jahrgaengen „laeuft", wo die Passage noch Jahre
+# entfernt war, und P11 hielt ein falsches Alter fuer gedeckt. Saturn (28,5–29,9
+# und 43,4–44,7), Jupiter, Knoten und Chiron bleiben Tabellenwerte — ihre
+# Streuung liegt im Fenster. Winkel = Abstand des laufenden Planeten zur
+# Radix-Position in Laufrichtung (90 zunehmendes, 270 abnehmendes Quadrat).
+ZYKLUS_GERECHNET = {
+    'Uranus': ((90.0, 'Uranus-Quadrat'), (180.0, 'Uranus-Opposition'),
+               (270.0, 'zweites Uranus-Quadrat')),
+}
+
+
+def zyklus_alter(jd_geburt, radix_lon, planet, winkel, max_alter=100):
+    """Alter beim ERSTEN exakten Durchgang des laufenden `planet` ueber
+    Radix-Position + `winkel` (90 = zunehmendes Quadrat, 180 = Opposition,
+    270 = abnehmendes Quadrat), in Jahren auf eine Stelle gerundet.
+
+    Neu am 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 9) — dieselbe Rechnung
+    wie pluto_quadrat_alter(), fuer jeden Planeten und Winkel; Schritt 10 Tage,
+    die erste Kreuzung einer Retro-Schleife zaehlt. Rechnet gegen die
+    Ephemeride, wenn pyswisseph verfuegbar ist, sonst None — dann gilt der
+    Tabellenwert aus ZYKLEN, und sein Name sagt, dass er ein Mittelwert ist.
+    """
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    pid = {'Sonne': swe.SUN, 'Mond': swe.MOON, 'Merkur': swe.MERCURY,
+           'Venus': swe.VENUS, 'Mars': swe.MARS, 'Jupiter': swe.JUPITER,
+           'Saturn': swe.SATURN, 'Uranus': swe.URANUS, 'Neptun': swe.NEPTUNE,
+           'Pluto': swe.PLUTO}.get(planet)
+    if pid is None:
+        return None
+    ziel = (radix_lon + winkel) % 360.0
+    prev = None
+    schritt = 10.0
+    for i in range(int(max_alter * 365.25 / schritt) + 1):
+        jd = jd_geburt + i * schritt
+        try:
+            lo = swe.calc_ut(jd, pid, swe.FLG_SWIEPH)[0][0]
+        except Exception:
+            return None
+        val = ((lo - ziel + 180.0) % 360.0) - 180.0
+        if prev is not None and prev * val < 0 and abs(prev - val) < 30:
+            return round((jd - jd_geburt) / 365.25, 1)
+        prev = val
+    return None
 
 
 def pluto_quadrat_alter(jd_geburt, pluto_lon, max_alter=70):
@@ -5371,7 +5427,20 @@ def zyklusfenster(faktor, alter=None, gerechnet=None):
     out = []
     faktor = ZYKLUS_ALIAS.get(faktor, faktor)
     eintraege = sorted(ZYKLEN.get(faktor, []))
-    if gerechnet and faktor in gerechnet and gerechnet[faktor] is not None:
+    _g = (gerechnet or {}).get(faktor)
+    if isinstance(_g, dict):
+        # 2026-09-30 (Punkt 9): je Station ein gerechneter Wert (ZYKLUS_GERECHNET,
+        # Schluessel = Stationsname ohne Klammerzusatz); was fehlt, bleibt
+        # Tabellenwert mit seinem Namen.
+        _neu = []
+        for jahre, name in eintraege:
+            kurz = name.split(' (')[0]
+            if _g.get(kurz) is not None:
+                _neu.append((_g[kurz], kurz + ' (aus der Radix-Position gerechnet)'))
+            else:
+                _neu.append((jahre, name))
+        eintraege = sorted(_neu)
+    elif gerechnet and faktor in gerechnet and gerechnet[faktor] is not None:
         # Gerechneter Wert schlaegt die Jahrgangstabelle (s. pluto_quadrat_alter).
         eintraege = [(gerechnet[faktor],
                       (name.split(' (')[0] + ' (aus der Radix-Position gerechnet)')
@@ -5612,6 +5681,12 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             a = pluto_quadrat_alter(jd_geburt, pl)
             if a is not None:
                 ger['Pluto'] = a
+        # 2026-09-30 (Punkt 9): die Uranus-Stationen je aus der Radix-Position
+        for _nm, _stat in ZYKLUS_GERECHNET.items():
+            _lo = next((f['lon'] for f in factors if f['name'] == _nm), None)
+            if _lo is not None:
+                ger[_nm] = {n: zyklus_alter(jd_geburt, _lo, _nm, w)
+                            for w, n in _stat}
     sb['pluto_quadrat_gerechnet'] = ger.get('Pluto')
     sb['zyklen'] = {f['name']: zyklusfenster(f['name'], alter, ger)
                     for f in factors if zyklusfenster(f['name'])}
@@ -5843,7 +5918,14 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                     ' Eigener Befund für das Getriebe-Kapitel (seit '
                     '2026-09-14).'))
     kk = sb['ketten_klassisch']
-    if [sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]:
+    # 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 7; Pruefberichte
+    # Geburtshoroskop 1+2 vom 29.09.d und Transit 1+2 vom 29.09.b): Die Zeile
+    # stand nur, wenn die KREISE abwichen. Ein abweichender klassischer
+    # Enddispositor bei gleichen Kreisen (modern Pluto, klassisch Mars) fehlte,
+    # obwohl das Datenblatt-Modul die Nennung verlangt — beide Laeufe trugen ihn
+    # von Hand nach.
+    if ([sorted(x) for x in kk['kreise']] != [sorted(x) for x in k['kreise']]
+            or kk['enddispositoren'] != k['enddispositoren']):
         # LESBAR STATT ROH (neu 2026-09-17, Klasse-2-Entscheidungslauf).
         # `kk['kreise']` ist eine Liste von Listen und stand als
         # "[['Mars', 'Pluto']]" im ausgelieferten Datenblatt.
@@ -7562,6 +7644,41 @@ if __name__ == '__main__':
            'bei ihm): Mars (Ketten von Sonne).' in _t3f, _t3f
     assert 'ohne Zulauf' in _t3f and 'Jupiter, Pluto.' in _t3f
     assert '⚠ 3 Planeten im eigenen Zeichen (davon 1 mit Zulauf)' in _t3f
+    # 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 7): gleiche (keine) Kreise,
+    # aber klassisch ein anderer Enddispositor — Sonne im Skorpion laeuft modern
+    # zu Pluto, klassisch zu Mars im Widder. Die Klassisch-Zeile muss stehen;
+    # im F1-Fall oben (gleiche Enddispositoren) bleibt sie weg.
+    _fed = [{'name': 'Sonne', 'lon': 215.0}, {'name': 'Mars', 'lon': 10.0},
+            {'name': 'Pluto', 'lon': 220.0}] + _ax()
+    _sbed = strukturbild(_fed, _c)
+    assert _sbed['ketten']['enddispositoren'] == ['Pluto'], _sbed['ketten']
+    assert _sbed['ketten_klassisch']['enddispositoren'] == ['Mars'], \
+        _sbed['ketten_klassisch']
+    assert not _sbed['ketten']['kreise'] and not _sbed['ketten_klassisch']['kreise']
+    _ted = strukturbild_text(_sbed)
+    assert 'Klassisch gerechnet ergibt sich ein anderes Bild: Kreise keine, ' \
+           'Enddispositoren Mars' in _ted, _ted
+    assert 'Klassisch gerechnet' not in _t3f, _t3f
+    # Punkt 9: Uranus-Stationen je Station aus der Radix-Position — die
+    # Jahrgaenge 1950 und 1990 liegen an den Raendern der Streuung.
+    try:
+        import swisseph as _swe9
+        _j1950 = _swe9.julday(1950, 6, 15, 12.0)
+        _j1990 = _swe9.julday(1990, 6, 15, 12.0)
+        _u = lambda _j: _swe9.calc_ut(_j, _swe9.URANUS, _swe9.FLG_SWIEPH)[0][0]
+        _a50 = zyklus_alter(_j1950, _u(_j1950), 'Uranus', 180.0)
+        _a90 = zyklus_alter(_j1990, _u(_j1990), 'Uranus', 180.0)
+        assert _a50 is not None and 38.0 <= _a50 <= 39.5, _a50
+        assert _a90 is not None and 43.5 <= _a90 <= 44.6, _a90
+        _zf = zyklusfenster('Uranus', 41.0, {'Uranus': {
+            'Uranus-Quadrat': 18.6, 'Uranus-Opposition': 38.8,
+            'zweites Uranus-Quadrat': None}})
+        assert [(x['alter'], x['lage']) for x in _zf] == \
+            [(18.6, 'zurückliegend'), (38.8, 'zurückliegend'), (63.0, 'bevorstehend')], _zf
+        assert _zf[1]['name'] == 'Uranus-Opposition (aus der Radix-Position gerechnet)', _zf
+        assert _zf[2]['name'].startswith('zweites Uranus-Quadrat (Mittelwert'), _zf
+    except ImportError:
+        pass
 
     # W33 (1): Brennpunkt auf dem Mondknoten -> Spitze auf dem Suedknoten,
     # obwohl der Suedknoten (Vertrag) nicht in factors steht.

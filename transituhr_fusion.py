@@ -126,6 +126,22 @@ H_LUFT = 0.35      # Luft nach einem Block
 H_ACHSE = 4.2      # Achse + Stationsleiste unten
 
 
+# 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 10; Pruefbericht Transit 3+4 vom
+# 30.09., Klasse 2): Der laufende Knoten heisst im Datenstrom `Knoten`, der
+# Radix-Knoten als Ziel `Mondknoten`. Ein Themen-Eintrag in der anderen
+# Namensform traf keine Zeile, und die Linie fehlte in der Uhr, ohne dass es
+# jemand merkte. Jetzt gelten beide Formen (wortweise, s. _nf()), und
+# bloecke_zuordnen() meldet jeden Zieleintrag, der keine Zeile trifft.
+_NAMENSFORM = {'Mondknoten': 'Knoten', 'Nordknoten': 'Knoten',
+               'Aszendent': 'AC', 'Deszendent': 'DC'}
+
+
+def _nf(s):
+    """Namensform fuer den Vergleich, wortweise: `Mondknoten` und `Nordknoten`
+    gelten als `Knoten`, `Aszendent` als `AC`, `Deszendent` als `DC`."""
+    return ' '.join(_NAMENSFORM.get(w, w) for w in str(s).split())
+
+
 def _passt(r, ziele):
     """Trifft eine Langlaeufer-Zeile die Zielliste eines Themas?
 
@@ -146,9 +162,49 @@ def _passt(r, ziele):
     """
     if ziele is None:
         return True
-    return (r['ziel'] in ziele or f"{r['aspekt']} {r['ziel']}" in ziele
-            or f"{r['transiter']} {r['ziel']}" in ziele
-            or f"{r['transiter']} {r['aspekt']} {r['ziel']}" in ziele)
+    zn = {_nf(z) for z in ziele}
+    return bool({_nf(r['ziel']), _nf(f"{r['aspekt']} {r['ziel']}"),
+                 _nf(f"{r['transiter']} {r['ziel']}"),
+                 _nf(f"{r['transiter']} {r['aspekt']} {r['ziel']}")} & zn)
+
+
+def bloecke_zuordnen(ll, themen=None):
+    """Ordnet die Langlaeufer-Zeilen den Themen zu und meldet, was sonst still
+    verloren ginge. -> (bloecke, warnungen).
+
+    Ein THEMEN-Eintrag ist (Name, Untertitel, [Transiter], Farbe) oder
+    (Name, Untertitel, [Transiter], Farbe, [Ziele]); die Formen der Zielliste
+    s. _passt(). Jede Zeile geht in das ERSTE passende Thema; ein Eintrag ohne
+    Zielliste nimmt jede Zeile seiner Transiter. `warnungen` nennt jeden
+    Zieleintrag, den KEINE Zeile der Transiter seines Themas trifft (meist die
+    Schreibweise) — bauen() druckt sie mit „⚠ Transit-Uhr:" aus.
+    """
+    themen = THEMEN if themen is None else themen
+    bloecke, vergeben, warnungen = [], set(), []
+    for eintrag in themen:
+        name, unter, transiter, col = eintrag[:4]
+        ziele = eintrag[4] if len(eintrag) > 4 else None
+        tr = {_nf(t) for t in transiter}
+        eigene = [r for r in ll if _nf(r['transiter']) in tr]
+        for z in (ziele or []):
+            if not any(_passt(r, [z]) for r in eigene):
+                warnungen.append(
+                    f"Thema „{name}“: Zieleintrag „{z}“ trifft keine Zeile — "
+                    f"Ziele der Transiter dort: "
+                    f"{', '.join(sorted({r['ziel'] for r in eigene})) or 'keine'}")
+        idx = [i for i, r in enumerate(ll)
+               if i not in vergeben and _nf(r['transiter']) in tr
+               and _passt(r, ziele)]
+        vergeben.update(idx)
+        zeilen = [ll[i] for i in idx]
+        if not zeilen:
+            continue
+        zeilen.sort(key=lambda r: r['start'])
+        bloecke.append({'name': name, 'unter': unter, 'col': col,
+                        'zeilen': zeilen,
+                        'start': min(r['start'] for r in zeilen),
+                        'ende': max(r['ende'] for r in zeilen)})
+    return bloecke, warnungen
 
 
 def stationen(daten):
@@ -193,28 +249,13 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
     st_liste = stationen(daten)
 
     # --- Bloecke zusammenstellen, Hoehe vorab bestimmen ---------------------
-    # Ein THEMEN-Eintrag ist (Name, Untertitel, [Transiter], Farbe) oder
-    # (Name, Untertitel, [Transiter], Farbe, [Ziele]). Die Zielliste ist
-    # noetig, sobald EIN laufender Planet zwei Themenkapitel traegt oder ein
-    # Thema mehrere Transiter an verschiedenen Zielen hat (Formen s. _passt()).
-    # Jede Zeile geht in das ERSTE passende Thema; ein Eintrag ohne Zielliste
-    # nimmt jede Zeile seiner Transiter.
-    bloecke, vergeben = [], set()
-    for eintrag in THEMEN:
-        name, unter, transiter, col = eintrag[:4]
-        ziele = eintrag[4] if len(eintrag) > 4 else None
-        idx = [i for i, r in enumerate(ll)
-               if i not in vergeben and r['transiter'] in transiter
-               and _passt(r, ziele)]
-        vergeben.update(idx)
-        zeilen = [ll[i] for i in idx]
-        if not zeilen:
-            continue
-        zeilen.sort(key=lambda r: r['start'])
-        bloecke.append({'name': name, 'unter': unter, 'col': col,
-                        'zeilen': zeilen,
-                        'start': min(r['start'] for r in zeilen),
-                        'ende': max(r['ende'] for r in zeilen)})
+    # Die Zielliste eines THEMEN-Eintrags ist noetig, sobald EIN laufender
+    # Planet zwei Themenkapitel traegt oder ein Thema mehrere Transiter an
+    # verschiedenen Zielen hat (Formen s. _passt(), Zuordnung s.
+    # bloecke_zuordnen()).
+    bloecke, warnungen = bloecke_zuordnen(ll)
+    for w in warnungen:
+        print('⚠ Transit-Uhr:', w)
     hoehe_e = sum(H_KOPF + H_BOGEN + len(b['zeilen']) * H_ZEILE + H_LUFT
                   for b in bloecke) + H_ACHSE + 1.00
 
@@ -494,7 +535,19 @@ if __name__ == '__main__':
         assert (monats_label(0), monats_label(61)) == ('under 1 month', '2 months'), \
             monats_label(0)
         setze_sprache('de')
-        print('Selbsttest bestanden: Monatsbeschriftung deutsch und englisch')
+        # 2026-09-30: Namensform und Warnung (Klasse-2-Entscheidungslauf, Punkt 10)
+        _ll = [{'transiter': 'Knoten', 'aspekt': 'Konjunktion', 'ziel': 'Mondknoten',
+                'start': 1, 'ende': 2},
+               {'transiter': 'Saturn', 'aspekt': 'Quadrat', 'ziel': 'Mond',
+                'start': 1, 'ende': 3}]
+        _b, _w = bloecke_zuordnen(_ll, [('A', 'a', ['Mondknoten'], '#000', ['Knoten']),
+                                        ('B', 'b', ['Saturn'], '#000', ['Saturn Mondknoten'])])
+        assert [len(x['zeilen']) for x in _b] == [1], _b
+        assert len(_w) == 1 and '„Saturn Mondknoten“' in _w[0] and 'Mond' in _w[0], _w
+        _b2, _w2 = bloecke_zuordnen(_ll, [('B', 'b', ['Saturn'], '#000', ['Quadrat Mond'])])
+        assert [len(x['zeilen']) for x in _b2] == [1] and not _w2, (_b2, _w2)
+        print('Selbsttest bestanden: Monatsbeschriftung deutsch und englisch; '
+              'Namensform Knoten/Mondknoten und Warnung bei Zieleintrag ohne Treffer')
         _s.exit(0)
     import transitdata as _td
     quelle = _s.argv[2] if len(_s.argv) > 2 else None

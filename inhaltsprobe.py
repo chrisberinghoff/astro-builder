@@ -2860,6 +2860,14 @@ _P11_LEBENSJAHR = re.compile(
     re.I)
 _P11_DEKADE = re.compile(r"(?<![\wäöüß])(?:(?P<wo>Anfang|Mitte|Ende)|um\s+die)\s+(?P<z>%s)(?![\wäöüß])"
                          % _ZEHNER_W, re.I)
+# 2026-09-30 (Klasse-2-Entscheidungslauf, Punkt 8; Pruefbericht Geburtshoroskop 1+2
+# vom 29.09.d, Archiv 23.09. und 25.09.): „um die zweiundvierzig" — die Form, die
+# das Typmodul fuer die zeitliche Einordnung selbst vorgibt — lief an P11 vorbei;
+# _P11_DEKADE kennt nur Zehner („um die dreißig"). Im Pruffall pruefte P11 3 von
+# 11 Altersangaben. Gezaehlt wird n ± 1; ein folgendes Substantiv („um die zwölf
+# Monate") ist keine Altersangabe, ein Zehner bleibt bei _P11_DEKADE.
+_P11_UM_DIE = re.compile(r"(?<![\wäöüß])um\s+die\s+(?P<n>%s)(?![\wäöüß])(?!\s+[A-ZÄÖÜ])"
+                         % _ZAHL)
 
 def _zahlen_index(txt, events=None):
     """Fundstellen der chart_data (und der events.json): Tage, Monate, Jahre,
@@ -3053,6 +3061,12 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
                 lo, hi = {"anfang": (z, z + 3), "mitte": (z + 4, z + 6),
                           "ende": (z + 7, z + 9)}.get(wo, (z - 2, z + 2))
                 funde.append((m.group(0), lo, hi))
+            for m in _P11_UM_DIE.finditer(satz):
+                if m.group("n").casefold() in _ZEHNER_WERT:
+                    continue
+                n = _zahl_wert(m.group("n"))
+                if n is not None and n >= 5:
+                    funde.append((m.group(0), n - 1, n + 1))
             gesehen = set()
             for roh, lo, hi in funde:
                 if (roh, lo) in gesehen:
@@ -7180,6 +7194,25 @@ def _selbsttest(still=False):
     berichte.append("Lauf 9 (offene Führung): Satz und Signatur gemeldet, sauber still, "
                     "Reihenfolge als Fehler")
 
+    # 10) „um die N" (2026-09-30, Klasse-2-Entscheidungslauf, Punkt 8): gedeckt
+    #     vom Saturn-Fenster ~29.5 still und gezaehlt, ungedeckt gemeldet, ein
+    #     folgendes Substantiv („um die zwölf Monate") keine Altersangabe.
+    a10 = ersetze(_TEST_ANALYSE, "Saturn kehrt um die dreißig an seinen Ort zurück",
+                  "Saturn kehrt um die neunundzwanzig an seinen Ort zurück")
+    r10 = lauf(_TEST_CHART, a10)
+    assert not r10["proben"]["P11"]["pruefen"], "Lauf 10: %s" % r10["proben"]["P11"]["pruefen"]
+    assert r10["proben"]["P11"]["geprueft"] == r["proben"]["P11"]["geprueft"], (
+        "Lauf 10: „um die neunundzwanzig“ nicht gezählt (%d gegen %d)"
+        % (r10["proben"]["P11"]["geprueft"], r["proben"]["P11"]["geprueft"]))
+    a10f = ersetze(_TEST_ANALYSE, "Saturn kehrt um die dreißig an seinen Ort zurück",
+                   "Saturn kehrt um die siebenundvierzig an seinen Ort zurück, und um die "
+                   "zwölf Monate später wird es ruhiger")
+    r10f = lauf(_TEST_CHART, a10f)
+    erwarte(r10f, (("P11", "pruefen", "Altersangabe „um die siebenundvierzig“"),), "Lauf 10f")
+    assert not any("Altersangabe „um die zwölf" in t for t in r10f["proben"]["P11"]["pruefen"]), (
+        "Lauf 10f: Zeitspanne als Alter gemeldet: %s" % r10f["proben"]["P11"]["pruefen"])
+    berichte.append("Lauf 10 („um die N“): gedeckt still, ungedeckt gemeldet, Zeitspanne still")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
@@ -7187,8 +7220,8 @@ def _selbsttest(still=False):
               "Lauf 3 liest das Zugang-Kapitel; Transit: Lauf 4 sauber mit events.json, Lauf 5 und 5b "
               "finden die eingebauten Fehler, Lauf 6 ohne events.json nur teilweise übersprungen; "
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
-              "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; P16 und P17 als "
-              "Einzelproben]")
+              "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; Lauf 10 „um die N“; "
+              "P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):
