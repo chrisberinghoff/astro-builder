@@ -4021,11 +4021,18 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'grosskreuz_figuren': [{'achsen','ecken','meldungen'}],
         'grosskreuz_meldungen': n, 'grosskreuz_anzahl': m,
         'drachen_figuren': [{'drachen','meldungen'[,'orbsumme','konj_ecke']}],
-        'drachen_meldungen': n, 'drachen_anzahl': m}
+        'drachen_meldungen': n, 'drachen_anzahl': m,
+        'drachen_nebenlesarten': [{'fuehrt': i, 'neben': [j, ...],
+                                   'orbsummen': [s_i, s_j, ...]}]}
 
     DRACHEN, seit 2026-09-29: dieselbe Figur, wenn Kopf und alle drei
     Trigon-Ecken paarweise identisch oder konjunkt sind; 'drachen' ist die
     fuehrende (engere) Meldung, Orbsumme ueber Trigone, Opposition und Sextile.
+    Seit 2026-09-30 gilt fuer zwei Drachen, deren Grosstrigone zwei gemeinsame
+    Ecken haben und deren dritte Ecken NICHT konjunkt sind, die Regel der zwei
+    Grosstrigone (L9): EIN Befund, der engere fuehrt (dieselbe Orbsumme), der
+    andere ist Nebenlesart — 'drachen_nebenlesarten', Indizes in
+    'drachen_figuren'.
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -4365,6 +4372,38 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                             _paare.append([x, y])
             f['konj_ecke'] = _paare
 
+    # ZWEI DRACHEN MIT ZWEI GEMEINSAMEN TRIGON-ECKEN (2026-09-30, Wartungslauf zu
+    # den Pruefberichten vom 29./30.09., GH12-29e Klasse 1): Zwei Drachen, deren
+    # Grosstrigone zwei gemeinsame (identische oder konjunkte) Ecken haben und
+    # deren dritte Ecken NICHT konjunkt sind, meldete §6 als zwei Figuren ohne
+    # jede Zeile. Die Regel der zwei Grosstrigone (L9, 2026-09-19) sah sie nicht,
+    # weil ein Drachen sein Grosstrigon aus der Grosstrigon-Liste nimmt; der Lauf
+    # entschied per Analogie. Jetzt dieselbe Regel: EIN Befund, der engere fuehrt
+    # (kleinste Orbsumme ueber Trigone, Opposition und Sextile, bei Gleichstand
+    # der zuerst gemeldete), der andere ist Nebenlesart. Ketten aus drei und mehr
+    # bilden EINE Gruppe (Verbundkomponente) wie beim Grosstrigon.
+    dr_gruppe = list(range(len(dr_figuren)))
+
+    def _dr_wurzel(i):
+        while dr_gruppe[i] != i:
+            i = dr_gruppe[i]
+        return i
+    for i, f in enumerate(dr_figuren):
+        for j in range(i + 1, len(dr_figuren)):
+            gem = [x for x in f['drachen']['trigon']
+                   if any(gleich(x, y) for y in dr_figuren[j]['drachen']['trigon'])]
+            if len(gem) == 2:
+                dr_gruppe[_dr_wurzel(j)] = _dr_wurzel(i)
+    dr_neben = []
+    for w in sorted({_dr_wurzel(i) for i in range(len(dr_figuren))}):
+        glieder = [i for i in range(len(dr_figuren)) if _dr_wurzel(i) == w]
+        if len(glieder) < 2:
+            continue
+        glieder.sort(key=lambda i: (_dr_orbsumme(dr_figuren[i]['drachen']), i))
+        dr_neben.append({'fuehrt': glieder[0], 'neben': glieder[1:],
+                         'orbsummen': [_dr_orbsumme(dr_figuren[i]['drachen'])
+                                       for i in glieder]})
+
     # ACHSENGEOMETRIE (2026-09-29, T6): Winkel W gegen Faktor P, der am
     # Gegenwinkel von W steht — die Opposition folgt aus der Konjunktion P–W'.
     # Gemeldet nur, wenn JEDE Meldung der Figur so gebaut ist (sonst traegt
@@ -4421,6 +4460,7 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
             'drachen_figuren': dr_figuren,
             'drachen_meldungen': len(dr),
             'drachen_anzahl': len(dr_figuren),
+            'drachen_nebenlesarten': dr_neben,
             'rechteck_figuren': rect_figuren,
             'rechteck_meldungen': len(rect),
             'rechteck_anzahl': len(rect_figuren),
@@ -6001,6 +6041,21 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                  f"{d['kopf']} (Opposition zu {d['achse'][1]}; Sextile zu "
                  f"{' und '.join(s[1] for s in d['sextile'])}). Trägt sein "
                  f"Großtrigon selbst, EIN Befund.")
+    # ZWEI DRACHEN MIT ZWEI GEMEINSAMEN TRIGON-ECKEN (2026-09-30) — dieselbe Zeile
+    # wie bei zwei Grosstrigonen (L9).
+    for _dn in (fg or {}).get('drachen_nebenlesarten', []):
+        _dfg = fg['drachen_figuren']
+        _dl = [_dfg[j]['drachen'] for j in [_dn['fuehrt']] + _dn['neben']]
+        _dt = [f"Großtrigon {', '.join(d['trigon'])}, Kopf {d['kopf']}" for d in _dl]
+        L.append(f"- Drachen mit zwei gemeinsamen Trigon-Ecken: {'; '.join(_dt)} "
+                 f"(die übrigen Ecken stehen nicht in Konjunktion). EIN Befund: "
+                 f"geführt vom Drachen {_dt[0]} (die engere Figur, Orbsumme "
+                 f"{_gr(_dn['orbsummen'][0])} über Trigone, Opposition und "
+                 f"Sextile); {'; '.join(_dt[1:])} "
+                 + ('ist die Nebenlesart und wird in einem Satz genannt'
+                    if len(_dt) == 2 else
+                    'sind Nebenlesarten und werden je in einem Satz genannt')
+                 + ' (seit 2026-09-30).')
     for r in kf.get('rechteck', []):
         L.append(f"- Mystisches Rechteck: Achsen "
                  f"{' ☍ '.join(r['achsen'][0])} und {' ☍ '.join(r['achsen'][1])}"
@@ -7192,6 +7247,31 @@ if __name__ == '__main__':
         'Kopf Venus — 2 Meldungen, EIN Befund. Die Ecke ist doppelt besetzt ' \
         '(Jupiter ☌ Saturn). Geführt wird mit der engeren Fassung (Orbsumme 0°00′' \
         in _td29, _td29.split('### 6')[1][:1200]
+
+    # 2026-09-30 (GH12-29e): zwei Drachen mit zwei gemeinsamen Trigon-Ecken, die
+    # dritten Ecken 7° auseinander (nicht konjunkt), derselbe Kopf -> EIN Befund,
+    # der engere (Jupiter, Orbsumme 9°) fuehrt, der andere ist Nebenlesart.
+    _fd30 = [{'name': 'Sonne', 'lon': 0.0}, {'name': 'Mond', 'lon': 120.0},
+             {'name': 'Jupiter', 'lon': 237.0}, {'name': 'Saturn', 'lon': 244.0},
+             {'name': 'Venus', 'lon': 60.0}]
+    _ad30 = huber_aspects(_fd30)
+    _kd30 = konfigurationen(_fd30, _ad30)
+    assert len(_kd30['drachen']) == 2 and _kd30['grosstrigon'] == [], _kd30
+    _gd30 = gruppiere_figuren(_kd30, _ad30)
+    assert _gd30['drachen_anzahl'] == 2 and len(_gd30['drachen_nebenlesarten']) == 1, _gd30
+    _dn30 = _gd30['drachen_nebenlesarten'][0]
+    assert 'Jupiter' in _gd30['drachen_figuren'][_dn30['fuehrt']]['drachen']['trigon'] and \
+        [round(x, 6) for x in _dn30['orbsummen']] == [9.0, 12.0], _dn30
+    _td30 = strukturbild_text(strukturbild(_fd30 + _ax(45.0, 315.0), _c))
+    assert '- Drachen mit zwei gemeinsamen Trigon-Ecken: Großtrigon Jupiter, Mond, ' \
+        'Sonne, Kopf Venus; Großtrigon Mond, Saturn, Sonne, Kopf Venus (die übrigen ' \
+        'Ecken stehen nicht in Konjunktion). EIN Befund: geführt vom Drachen ' \
+        'Großtrigon Jupiter, Mond, Sonne, Kopf Venus (die engere Figur, Orbsumme ' \
+        '9°00′ über Trigone, Opposition und Sextile); Großtrigon Mond, Saturn, ' \
+        'Sonne, Kopf Venus ist die Nebenlesart und wird in einem Satz genannt ' \
+        '(seit 2026-09-30).' in _td30, _td30.split('### 6')[1][:1500]
+    # dieselbe Regel darf eine harte Doppelung nicht zusaetzlich zur Nebenlesart machen
+    assert _gd29['drachen_nebenlesarten'] == [], _gd29['drachen_nebenlesarten']
 
     # 2026-09-28 (K2): AC/MC unter 1° an der Zeichengrenze auch ueber der
     # Kippminuten-Schwelle; konstruiert, ohne Ephemeride.

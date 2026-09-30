@@ -60,7 +60,8 @@ THEMEN = [
 # im englischen PDF deutsch beschriftet.
 LABELS = {'rueckblick': 'Rückblick', 'stichtag': 'Stichtag',
           'stationen': 'Stationen', 'sekundaer': 'sekundär',
-          'monat': '1 Monat', 'monate': '{n} Monate'}
+          'monat': '1 Monat', 'monate': '{n} Monate',
+          'unter_monat': 'unter 1 Monat'}           # 2026-09-30, s. monats_label()
 # 2026-09-22 (W57-Nachzug): Die englische Tafel steht jetzt hier, statt dass
 # jeder englische Lauf sie selbst zusammensetzt — und mit ihr das DATUMSFORMAT.
 # Bis heute war `%d.%m.%Y` fest verdrahtet: in einem englischen PDF las sich
@@ -69,7 +70,8 @@ LABELS = {'rueckblick': 'Rückblick', 'stichtag': 'Stichtag',
 # Locale des Rechners und kann deutsch zurueckkommen).
 LABELS_EN = {'rueckblick': 'Look-back', 'stichtag': 'As of',
              'stationen': 'Stations', 'sekundaer': 'secondary',
-             'monat': '1 month', 'monate': '{n} months'}
+             'monat': '1 month', 'monate': '{n} months',
+             'unter_monat': 'under 1 month'}
 _LABELS_DE = dict(LABELS)
 _MONAT_KURZ_EN = ('', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
@@ -162,6 +164,20 @@ def stationen(daten):
         out.append({'planet': s['planet'], 'datum': s['datum'],
                     'richtung': s['richtung']})
     return sorted(out, key=lambda x: x['datum'])
+
+
+def monats_label(tage):
+    """Beschriftung des Themenbogens aus seiner Spanne in Tagen: „unter 1 Monat",
+    „1 Monat", „n Monate" (englisch nach setze_sprache('en')).
+
+    2026-09-30 (Pruefbericht Transit 3+4 vom 30.09., Klasse 1): Ein Thema, das im
+    Fenster nur rund zwei Wochen lief (am rechten Rand angeschnitten), bekam
+    round(Tage / 30,44) = 0 und stand in der Uhr mit „0 Monate".
+    """
+    mon = round(tage / 30.44)
+    if mon < 1:
+        return LABELS.get('unter_monat', 'unter 1 Monat')
+    return LABELS['monat'] if mon == 1 else LABELS['monate'].format(n=mon)
 
 
 def bauen(out_path, daten, breite=12.4, dpi=210):
@@ -259,9 +275,7 @@ def bauen(out_path, daten, breite=12.4, dpi=210):
                                     boxstyle='round,pad=0,rounding_size=0.26',
                                     facecolor=col, alpha=0.42,
                                     edgecolor='none', zorder=2))
-        mon = round((b['ende'] - b['start']).days / 30.44)
-        lab = (LABELS['monat'] if mon == 1
-               else LABELS['monate'].format(n=mon))
+        lab = monats_label((b['ende'] - b['start']).days)
         # Kurze Boegen tragen das Label nicht: dann steht es LINKS daneben in
         # der Themenfarbe statt weiss im Balken (sonst laeuft es ueber den
         # Rand hinaus — Themenbloecke am Fensterrand, 2026-07-30).
@@ -472,6 +486,15 @@ def _hilfe_cli(argv=None):
 if __name__ == '__main__':
     import sys as _s
     if _hilfe_cli():          # python3 transituhr_fusion.py --hilfe [<name>]
+        _s.exit(0)
+    if '--selbsttest' in _s.argv:     # 2026-09-30: Monatsbeschriftung, beide Sprachen
+        assert (monats_label(15), monats_label(30), monats_label(92)) == \
+            ('unter 1 Monat', '1 Monat', '3 Monate'), monats_label(15)
+        setze_sprache('en')
+        assert (monats_label(0), monats_label(61)) == ('under 1 month', '2 months'), \
+            monats_label(0)
+        setze_sprache('de')
+        print('Selbsttest bestanden: Monatsbeschriftung deutsch und englisch')
         _s.exit(0)
     import transitdata as _td
     quelle = _s.argv[2] if len(_s.argv) > 2 else None

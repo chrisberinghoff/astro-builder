@@ -3076,7 +3076,8 @@ def _rangzeilen_lesen(text):
         out[schl] = {"menge": m.group("menge"), "eintraege": eintraege}
     return out
 
-_ELEMENT_RE = re.compile(r"(?<![\wäöüß])(?:(Feuer|Erde|Luft|Wasser)(?:zeichen\w*|element\w*)?"
+# 2026-09-30 (K1): auch der Genitiv („Träger des Wassers“, „des Feuers“)
+_ELEMENT_RE = re.compile(r"(?<![\wäöüß])(?:(Feuer|Erde|Luft|Wasser)(?:s|zeichen\w*|element\w*)?"
                          r"|(Erd)(?:zeichen\w*|element\w*))(?![\wäöüß])")
 _MODUS_RE = re.compile(r"(?<![\wäöüß])([Kk]ardinal|[Ff]ix|[Vv]eränderlich|[Bb]eweglich)"
                        r"(?:e|en|er|es|em)?(?![\wäöüß])"
@@ -3147,7 +3148,11 @@ _RANG_MUSTER = (
     ("n_verbindungen", re.compile(
         r"(?<![\wäöüß])(?:(?P<n>zwei|drei|vier|fünf|fuenf|sechs|sieben|acht|neun|zehn|elf|zwölf|"
         r"zwoelf|\d{1,2})|(?:nur|genau|bloß|lediglich|gerade\s+einmal|nicht\s+mehr\s+als)\s+"
-        r"(?P<ein>eine[rnm]?|ein))\s+(?:[\wäöüß]+\s+)?Verbindung(?:en)?(?![\wäöüß])", re.I)),
+        r"(?P<ein>eine[rnm]?|ein))\s+"
+        # 2026-09-30 (K1): „die nächsten zwei Jahre Verbindungen zu pflegen“ — eine
+        # Zeitspanne zaehlt keine Verbindungen
+        r"(?:(?!(?:Jahr|Monat|Woche|Tag|Quartal|Stunde)\w*\s)[\wäöüß]+\s+)?"
+        r"Verbindung(?:en)?(?![\wäöüß])", re.I)),
     # 2026-09-24 (Pruefberichte vom 24.09.): „alle zwölf Jahre", „etwa alle neun Jahre"
     # nennen eine Umlaufzeit (Strukturbild §7; keine Probe prueft sie), keine Zaehlung
     # im Chart — sie kamen in jedem Lauf als PRUEFEN und stimmten jedes Mal.
@@ -3264,6 +3269,100 @@ def _eigenes_zeichen(txt):
                 out.add(k)
     return out if gefunden else None
 
+# 2026-09-30 (K1, Wartungslauf zu den Pruefberichten vom 29./30.09.): Fundstellen
+# fuer zwei Aussagen, die P12 bis dahin ohne Rangzeile meldete, obwohl das
+# Strukturbild sie traegt — die Leere eines Quadranten oder einer Hemisphaere (§8,
+# Zeile „- Betonung:“, Eintraege „… ⟵ leer“) und das Haus, dessen Herrscher im
+# eigenen Haus steht (§3, Hausherrscher-Zeilen mit „⟵ … im eigenen Haus“).
+_P12_ZAHL = {"eins": 1, "ein": 1, "zwei": 2, "drei": 3, "vier": 4, "fünf": 5, "fuenf": 5,
+             "sechs": 6, "sieben": 7, "acht": 8, "neun": 9, "zehn": 10, "elf": 11,
+             "zwölf": 12, "zwoelf": 12}
+_P12_ORDINAL = {"erst": 1, "zweit": 2, "dritt": 3, "viert": 4, "fünft": 5, "fuenft": 5,
+                "sechst": 6, "siebt": 7, "siebent": 7, "acht": 8, "neunt": 9, "zehnt": 10,
+                "elft": 11, "zwölft": 12, "zwoelft": 12}
+_P12_ORDINAL_RE = "(%s)(?:e|en|es|er|em)?" % "|".join(sorted(_P12_ORDINAL, key=len, reverse=True))
+_P12_BEREICH = {(1, 3): "Quadrant I", (4, 6): "Quadrant II", (7, 9): "Quadrant III",
+                (10, 12): "Quadrant IV", (7, 12): "Hemisphäre über dem Horizont",
+                (1, 6): "Hemisphäre unter dem Horizont", (10, 3): "Hemisphäre östlich",
+                (4, 9): "Hemisphäre westlich"}
+_SELBSTVERWALTUNG_RE = re.compile(
+    r"(?<![\wäöüß])(?:verwalte\w*\s+sich|aus\s+sich\s+(?:selbst\s+)?heraus"
+    r"|(?:im|in\s+seinem|in\s+ihrem)\s+eigenen\s+(?:Haus|Feld)|regier\w*\s+sich\s+selbst)",
+    re.I)
+
+
+def _p12_nummer(wort):
+    w = (wort or "").casefold()
+    if w.isdigit():
+        return int(w)
+    if w in _P12_ZAHL:
+        return _P12_ZAHL[w]
+    mo = re.fullmatch(_P12_ORDINAL_RE, w)
+    return _P12_ORDINAL[mo.group(1)] if mo else None
+
+
+def _p12_bereich(text):
+    """Quadrant oder Hemisphaere, ueber den der Text spricht — in der Schreibweise
+    von Strukturbild §8 („Quadrant II", „Hemisphäre über dem Horizont") — oder None."""
+    t = text or ""
+    mq = re.search(r"Quadrant\w*\s+(IV|I{1,3})(?![\wäöüß])", t)
+    if mq:
+        return "Quadrant " + mq.group(1)
+    mq = re.search(r"(?<![\wäöüß])(erst|zweit|dritt|viert)\w*\s+Quadrant", t, re.I)
+    if mq:
+        return "Quadrant " + ("I", "II", "III", "IV")[_P12_ORDINAL[mq.group(1).casefold()] - 1]
+    for rx in (r"Häuser\w*\s+(\w+)\s*(?:bis|–|-)\s*(\w+)",
+               r"(?<![\wäöüß])(\w+)\s+bis\s+(\w+)\s+Haus"):
+        mh = re.search(rx, t, re.I)
+        if mh:
+            a_, b_ = _p12_nummer(mh.group(1)), _p12_nummer(mh.group(2))
+            if (a_, b_) in _P12_BEREICH:
+                return _P12_BEREICH[(a_, b_)]
+    for rx, name in ((r"über\s+dem\s+Horizont|oberhalb\s+des\s+Horizonts",
+                      "Hemisphäre über dem Horizont"),
+                     (r"unter\s+dem\s+Horizont|unterhalb\s+des\s+Horizonts",
+                      "Hemisphäre unter dem Horizont"),
+                     (r"östlich\w*\s+(?:Hälfte|Seite|Hemisphäre)|Osthälfte", "Hemisphäre östlich"),
+                     (r"westlich\w*\s+(?:Hälfte|Seite|Hemisphäre)|Westhälfte", "Hemisphäre westlich")):
+        if re.search(rx, t, re.I):
+            return name
+    return None
+
+
+def _p12_hausnummern(text):
+    """Hausnummern, die ein Text nennt („dein zweites Haus", „Haus 2", „2. Haus")."""
+    out = set()
+    for mo in re.finditer(r"(?<![\wäöüß])%s\s+(?:Haus|Hauses|Feld|Feldes)(?![\wäöüß])"
+                          % _P12_ORDINAL_RE, text or "", re.I):
+        out.add(_P12_ORDINAL[mo.group(1).casefold()])
+    for mo in re.finditer(r"(?:Haus|Feld)\s+(\d{1,2})(?!\d)|(\d{1,2})\.\s+(?:Haus|Feld)",
+                          text or ""):
+        out.add(int(mo.group(1) or mo.group(2)))
+    return {h for h in out if 1 <= h <= 12}
+
+
+def _struktur_p12(txt):
+    """{'leer': {…} | None, 'eigenes_haus': {Haus: Herrscher} | None} aus
+    Strukturbild §8 und §3 der chart_data; None heisst: der Abschnitt fehlt."""
+    out = {"leer": None, "eigenes_haus": None}
+    m8 = re.search(r"### 8 · Verteilung.*?(?=\n### |\Z)", txt or "", re.S)
+    if m8:
+        out["leer"] = set()
+        mb = re.search(r"^- Betonung:\s*(.*)$", m8.group(0), re.M)
+        for teil in (mb.group(1).split(";") if mb else []):
+            teil = teil.strip().rstrip(".").strip()
+            if teil.endswith("⟵ leer"):
+                out["leer"].add(teil[:-len("⟵ leer")].strip())
+        for mq in re.finditer(r"(IV|I{1,3}) \(Häuser [^)]*\) 0(?!\d)", m8.group(0)):
+            out["leer"].add("Quadrant " + mq.group(1))
+    m3 = re.search(r"### 3 · Herrscherketten.*?(?=\n### |\Z)", txt or "", re.S)
+    if m3:
+        out["eigenes_haus"] = {}
+        for mz in re.finditer(r"^\s*- Haus\s+(\d+) \([^)]*\) → (\S+) in [^\n]*⟵[^\n]*"
+                              r"im eigenen Haus", m3.group(0), re.M):
+            out["eigenes_haus"][int(mz.group(1))] = mz.group(2)
+    return out
+
 def _hat_referent(satz):
     """Spricht der Satz ueber das Chart? Nur dann ist ein Rangwort eine Aussage,
     die eine Zahl braucht („die engste Verbindung deines Bildes" — nicht „deine
@@ -3351,11 +3450,13 @@ def _aufzaehlung_danach(satz, pos, objekte=False):
     return out
 
 
-def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
+def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
     """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
     vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …").
     eigen: die Planeten im eigenen Zeichen aus Strukturbild §3 (`_eigenes_zeichen()`,
-    None: §3 fehlt), Fundstelle fuer „der Planet, der keinem anderen folgt" (2026-09-24)."""
+    None: §3 fehlt), Fundstelle fuer „der Planet, der keinem anderen folgt" (2026-09-24).
+    struktur: `_struktur_p12()` — leere Bereiche aus §8 und Haeuser, deren Herrscher im
+    eigenen Haus steht, aus §3 (2026-09-30)."""
     if not rz:
         return ("Rang-, Zähl- oder Einzigkeitsaussage — das Datenblatt hat keine Rangzeilen "
                 "(Strukturbild §10, seit 2026-09-19); die Zahl von Hand gegen die Tabellen halten")
@@ -3377,8 +3478,20 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
     g = m.groupdict()
     fak = [f for _, _, f in _faktoren_im_satz(satz)]
     fak_v = [f for _, _, f in _faktoren_im_satz(vorher)] if vorher else []
-    me = _ELEMENT_RE.search(satz)
-    mm = _MODUS_RE.search(satz)
+    # 2026-09-30 (Wartungslauf zu den Pruefberichten vom 29./30.09., K1): Zwei
+    # Aussagen in einem Satz, durch Semikolon getrennt — Element, Modus und
+    # Zaehlweise gelten fuer das Glied, in dem das Rangwort steht. Vorher hielt die
+    # Probe einen Anteil im zweiten Glied („…; die Hälfte aller Planeten steht in der
+    # Kraft, …“) gegen das Element des ersten und „Die meisten Verbindungen, gezählt
+    # …; gewichtet …“ gegen die gewichtete Zeile.
+    # Nennt das Glied nichts, gilt weiter der ganze Satz.
+    _k0 = satz.rfind(";", 0, m.start()) + 1
+    _k1 = satz.find(";", m.end())
+    klausel = satz[_k0:] if _k1 < 0 else satz[_k0:_k1]
+    me = _ELEMENT_RE.search(klausel)
+    mm = _MODUS_RE.search(klausel)
+    if not (me or mm) and klausel != satz:
+        me, mm = _ELEMENT_RE.search(satz), _MODUS_RE.search(satz)
     if not (me or mm) and art in ("einzig", "kein_anderer", "x_von_y", "haelfte") and vorher \
             and re.search(r"Planet|Faktor|Element|Zeichen", satz):
         me, mm = _ELEMENT_RE.search(vorher), _MODUS_RE.search(vorher)
@@ -3396,13 +3509,15 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
         # Satz — vorher fiel das eine auf „gezählt" durch, das andere auf
         # „Planet". „Gewichtet ist X der am dichtesten verschaltete …" bleibt
         # wie bisher (das Adverb gilt dort dem Rang, nicht jedem Satzglied).
-        if re.search(r"^\W*Gewichtet(?:\s+gezählt)?\s*,|[Gg]ewichtet\s+gezählt", satz):
+        s_ = (klausel if re.search(r"gewichtet|gezählt|von\s+zehn|Planet|Faktor|Punkt|Stelle",
+                                   klausel, re.I) else satz)             # 2026-09-30 (K1)
+        if re.search(r"^\W*Gewichtet(?:\s+gezählt)?\s*,|[Gg]ewichtet\s+gezählt", s_):
             return ["gewichtet"]
-        if re.search(r"gewichtet", satz):
+        if re.search(r"gewichtet", s_):
             return ["gewichtet"]
-        if re.search(r"gezählt|von\s+zehn|Planet", satz):
+        if re.search(r"gezählt|von\s+zehn|Planet", s_):
             return ["gezaehlt"]
-        if re.search(r"Faktor|Punkt|Stelle", satz):
+        if re.search(r"Faktor|Punkt|Stelle", s_):
             return ["gewichtet"]
         return ["gezaehlt", "gewichtet"]
 
@@ -3529,6 +3644,32 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
             gilt = [a for a, e in werte if "%s-%s:" % (fam, a) not in " ".join(falsch)]
             return ("Rangzeile %s%s" % ("; ".join(falsch), " — gilt nur %s; die Zählung nennen"
                                         % gilt[0] if gilt else ""))
+        # 2026-09-30 (K1): „Die Häuser sieben bis neun tragen keinen einzigen Planeten“
+        # — die Leere eines Quadranten oder einer Hemisphäre steht in Strukturbild §8
+        if null:
+            _ber = _p12_bereich(klausel)
+            if _ber:
+                _leer = (struktur or {}).get("leer")
+                if _leer is None:
+                    return "Leere-Aussage über %s — Strukturbild §8 nicht gefunden" % _ber
+                if _ber in _leer:
+                    return None
+                return ("Leere-Aussage über %s — Strukturbild §8 nennt leer: %s"
+                        % (_ber, ", ".join(sorted(_leer)) or "keinen Bereich"))
+        # 2026-09-30 (K1): „Dein zweites Haus verwaltet sich aus sich heraus“ + „kein
+        # anderer“ — der Hausherrscher im eigenen Haus steht in Strukturbild §3
+        if art == "kein_anderer" and _SELBSTVERWALTUNG_RE.search(satz + " " + (vorher or "")):
+            _eh = (struktur or {}).get("eigenes_haus")
+            if _eh is None:
+                return ("„keinen anderen“ bei einem Haus, das sich selbst verwaltet — "
+                        "Strukturbild §3 (Hausherrscher) nicht gefunden")
+            _gen = _p12_hausnummern(satz) or _p12_hausnummern(vorher or "")
+            if _eh and (not _gen or _gen <= set(_eh)):
+                return None
+            return ("„keinen anderen“ bei einem Haus, das sich selbst verwaltet — Strukturbild "
+                    "§3 nennt im eigenen Haus: %s"
+                    % (", ".join("Haus %d (%s)" % (h_, _eh[h_]) for h_ in sorted(_eh))
+                       or "keinen Hausherrscher"))
         if re.match(r"\s*(?:[\wäöüß]+\s+)?(?:Verbindung|Aspekt)", satz[m.end():], re.I):
             # „Jupiter mit einer einzigen Verbindung" — der Faktor steht davor oder im
             # selben Satzglied dahinter; „eine einzige Verbindung: die zwischen Neptun
@@ -3597,9 +3738,15 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None):
             gemeint = fak or fak_v
             if not gemeint:
                 return "Rangaussage ohne Faktor in diesem oder dem vorigen Satz — von Hand prüfen"
-            schl = (["verbindungen-gewichtet"] if re.search(r"verschalt|dicht|Verkehr|vernetzt|gewichtet",
-                                                            satz, re.I)
-                    else ["verbindungen-gezaehlt"])
+            # 2026-09-30 (K1): im Glied des Rangworts; ein ausdrückliches „gezählt“
+            # geht vor, und „dicht gefolgt“ ist kein Dichtemaß
+            if re.search(r"gezählt", klausel) and not re.search(r"gewichtet", klausel, re.I):
+                schl = ["verbindungen-gezaehlt"]
+            else:
+                schl = (["verbindungen-gewichtet"]
+                        if re.search(r"verschalt|dicht(?!\s+gefolgt)|Verkehr|vernetzt|gewichtet",
+                                     klausel, re.I)
+                        else ["verbindungen-gezaehlt"])
         falsch = []
         for s_ in schl:
             ls = liste(s_)
@@ -3704,6 +3851,7 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
     # unveraendert.
     getriebe_zahlen = 0
     eigen = _eigenes_zeichen(txt)                                   # 2026-09-24, §3
+    struktur = _struktur_p12(txt)                                   # 2026-09-30, §3 und §8
     for ch, bewegung, text in _fliesstext(chapters):
         ist_getriebe = (_ist_kicker(ch, "Getriebe")
                         or _kapitelart(ch, typ, chapters) == "Getriebe-Kapitel"
@@ -3724,7 +3872,7 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                 belegt.append((a, e))
                 p.geprueft += 1
                 befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "",
-                                      eigen=eigen)
+                                      eigen=eigen, struktur=struktur)
                 if befund:
                     if ist_getriebe and befund.startswith(("Zählaussage", "Count statement")):
                         getriebe_zahlen += 1
@@ -3769,8 +3917,12 @@ _BILD_RE = re.compile(
     r"|einen\s+(?:einzigen\s+)?Strom|(?-i:gegenüber)|Zerreißprobe|zwischen\s+zwei\s+Polen?"
     r"|reib(?:t|en)\s+sich\s+an|dräng(?:t|en)\s+gegen|in\s+Spannung\s+(?:zu|mit)"
     r"|fließ(?:t|en)\s+mühelos|(?:eine|die)\s+Gelegenheit\s+(?:zu|mit)"
-    # 2026-09-29 (K6): das Sextil-Bild „öffnet dir eine Tür zu …“
-    r"|öffne[tn]\s+(?:dir\s+)?eine\s+Tür\s+(?:zu|zur|zum|mit)"
+    # 2026-09-29 (K6): das Sextil-Bild „öffnet dir eine Tür zu …“; seit 2026-09-30
+    # (K4) auch gebeugt — „öffnen einander eine Tür“, „öffnet sich ihm eine Tür“,
+    # „öffnet sich von X her eine Tür“: Marker ist das Verb, „eine Tür“ steht
+    # hoechstens vier Woerter dahinter; ein Faktor in „von … her“ steht dann hinter
+    # dem Marker und wird Partner.
+    r"|öffne[tn](?:\s+sich)?(?=(?:\s+[\wäöüÄÖÜß-]+){0,4}?\s+eine\s+Tür(?![\wäöüÄÖÜß]))"
     r"|passt\s+nicht\s+(?:mit|zu)|leiser\s+Reiz|Suchbewegung"
     r"|(?:Verbindung|Kontakt)\s+(?:zu|mit|zwischen)|verbunden\s+mit)(?![\wäöüß])", re.I)
 # nur Personalpronomen: „Dasselbe Quadrat trifft deinen Merkur" meint den Aspekt,
@@ -4265,6 +4417,98 @@ def _konstellationen(satz, vorher="", typ=None):
                 vorige_davor, vorige_danach = _gruppe, []
     return out
 
+# (19) WEITERE PAARUNGEN FUER EINE SONST UNGEDECKTE KONSTELLATION (2026-09-30,
+#      Wartungslauf zu den Pruefberichten vom 29./30.09., K2): In vier Berichten
+#      meldete P13 richtige Saetze, weil der Traeger einer Aufzaehlung im Paar fehlte.
+#      Erst wenn keine Paarung gedeckt ist, kommen weitere Kandidaten dazu — die
+#      Probe wird damit nur leiser, nie strenger:
+#      (a) GENITIV hinter dem Aspektwort („das Sextil der Venus zu Jupiter“): der
+#          Genitiv-Faktor mit jedem Faktor dahinter;
+#      (b) „… zu sich selbst“ direkt hinter dem Marker: der Faktor davor mit sich
+#          selbst (nur im Transit; `_paar_ok()` laesst es sonst nicht zu);
+#      (c) das SUBJEKT des Satzes — der erste Faktor ohne Praeposition, ohne
+#          Objekt-Possessiv und ohne Artikel, der nicht zum Nominativ passt, oder der
+#          Bezug eines Personalpronomens am Satzanfang — mit jedem Faktor dahinter:
+#          die Beiordnung („… und steht im Quincunx zu …“), die Folge („…, dann im
+#          Quadrat zu … und zuletzt im Quadrat zu …“) und der lange Satz, dessen
+#          Subjekt jenseits des Fensters steht;
+#      (d) im Transit die Transiter des Kapitels (Kontakte seines Belegs) mit jedem
+#          Faktor dahinter („…, wenige Tage später das Trigon zu deinem Neptun“).
+#      (c) und (d) nur, wenn vor dem Marker kein eigenes Subjekt steht — jeder Faktor
+#      davor ist Objekt („zu deinem Saturn“, „an deiner Venus“). Sonst wuerde ein
+#      falsch benannter Planet („Dazu kommt Pluto im Quadrat zu deiner Sonne“ in einem
+#      Saturn-Kapitel) vom richtigen gedeckt (Selbsttest Lauf 5).
+_P13_PRAEP_VOR_RE = re.compile(
+    r"(?<![\wäöüÄÖÜß])(?:zwischen|bei|beim|nach|vor|hinter|neben|unter|aus|für|ohne|seit|"
+    r"samt|außer|statt|trotz|wegen|dank|gegenüber)\s+(?:(?:der|die|das|dem|den|des|"
+    r"ein\w*|dein\w*|sein\w*|ihr\w*)\s+)?(?:[\wäöüÄÖÜß-]+\s+)?$", re.I)
+_P13_ARTIKEL_VOR_RE = re.compile(
+    r"(?<![\wäöüÄÖÜß])(der|die|das|dem|den|des)\s+(?:[\wäöüÄÖÜß-]+\s+)?$", re.I)
+_P13_BEIORDNUNG_RE = re.compile(
+    r"\s*(?:,\s*)?(?:(?:und|sowie|oder)\s+)?(?:(?:der|die|das|dem|den|des|dein\w*)\s+)?",
+    re.I)
+_P13_GENITIV_RE = re.compile(r"\s+(?:der|des|deiner|deines)\s+(?:[\wäöüÄÖÜß-]+\s+)?", re.I)
+_P13_SELBST_RE = re.compile(r"\s+(?:zu|mit)\s+sich(?:\s+selbst)?(?![\wäöüÄÖÜß])", re.I)
+_P13_NOMINATIV = {"m": ("der",), "f": ("die",), "n": ("das",)}
+
+
+def _p13_satzsubjekt(satz, bis, vorher=""):
+    """(19c) Das Subjekt des Satzes vor Position `bis` -> [Faktor] oder []."""
+    pm = _PRONOMEN_ANFANG_RE.match(satz)
+    if pm:
+        return _pronomen_bezug(pm.group(1), "", vorher) if vorher else []
+    ende_objekt = None                  # Ende des letzten uebersprungenen Objekts
+    for a, e, f in sorted(_faktoren_im_satz(satz)):
+        if a >= bis:
+            break
+        vor = satz[max(0, a - 30):a]
+        weg = bool(_OBJEKT_VOR_RE.search(vor) or _P13_PRAEP_VOR_RE.search(vor))
+        if not weg and ende_objekt is not None \
+                and _P13_BEIORDNUNG_RE.fullmatch(satz, ende_objekt, a):
+            weg = True                  # „zwischen Venus und Pluto“: auch das zweite Glied
+        ma = _P13_ARTIKEL_VOR_RE.search(vor)
+        if not weg and ma and ma.group(1).lower() not in _P13_NOMINATIV.get(
+                _GENUS.get(f), ("der", "die", "das")):
+            weg = True                  # „der Sonne“, „dem Mond“: kein Nominativ
+        if not weg:
+            return [f]
+        ende_objekt = e
+    return []
+
+
+def _p13_nur_objekte(satz, m, davor):
+    """(19) Steht jeder Faktor von `davor` vor dem Marker als Objekt? Ein Faktor, der
+    im Satz nicht vor dem Marker steht (Bezug eines Pronomens), gilt als Subjekt."""
+    pos = {}
+    for a, e, f in sorted(_faktoren_im_satz(satz)):
+        if e <= m.start():
+            pos[f] = a                  # die letzte Stelle vor dem Marker
+    for f in davor:
+        a = pos.get(f)
+        if a is None:
+            return False
+        vor = satz[max(0, a - 30):a]
+        if not (_OBJEKT_VOR_RE.search(vor) or _P13_PRAEP_VOR_RE.search(vor)):
+            return False
+    return True
+
+
+def _p13_weitere_paare(satz, m, davor, danach, typ, vorher="", transiter=()):
+    """(19) Weitere Paarungen [(x, y)] fuer eine sonst ungedeckte Konstellation."""
+    out = []
+    nach_pos = [(a, f) for a, _e, f in sorted(_faktoren_im_satz(satz)) if a >= m.end()]
+    if nach_pos and _P13_GENITIV_RE.fullmatch(satz, m.end(), nach_pos[0][0]):   # (a)
+        out += [(nach_pos[0][1], y) for y in danach if y != nach_pos[0][1]]
+    if typ == "transit" and _P13_SELBST_RE.match(satz, m.end()):                 # (b)
+        out += [(x, x) for x in davor]
+    if _p13_nur_objekte(satz, m, davor):
+        for s_ in _p13_satzsubjekt(satz, m.start(), vorher):                    # (c)
+            out += [(s_, y) for y in danach if y != s_]
+        if typ == "transit":                                                    # (d)
+            out += [(t_, y) for t_ in transiter for y in danach if y != t_]
+    return list(dict.fromkeys(out))
+
+
 def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
     p = _Probe("P13", "Text-Beleg-Deckung")
     p.einheit = "Konstellationen"
@@ -4304,6 +4548,16 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
         kontakte.update(_ev_index(events).keys())
 
     paare_art = {fs for fs, _ar in paare}
+    # (19d) die Transiter je Kapitel aus den Kontakten seines Belegs
+    kap_transiter = {}
+    if typ == "transit":
+        for ch in chapters:
+            ts_ = set()
+            for seg in _segmente(ch.get("beleg") or ""):
+                k_ = _kontakt_aus_segment(seg)
+                if k_ and k_.get("t"):
+                    ts_.add(k_["t"])
+            kap_transiter[id(ch)] = tuple(sorted(ts_))
     kontakte_art = {frozenset((t, r)) for t, _ar, r in kontakte}
 
     def gedeckt(a, art, b):
@@ -4345,6 +4599,10 @@ def _p13_beleg_deckung(chapters, typ, tabelle, txt, events=None):
                     continue
                 p.geprueft += 1
                 if any(gedeckt(x, art, y) for x, y in paarungen):
+                    continue
+                if any(gedeckt(x2, art, y2) for x2, y2 in _p13_weitere_paare(      # (19)
+                        satz, m, davor, danach, typ, saetze[i - 1][2] if i else "",
+                        kap_transiter.get(id(ch), ())) if _paar_ok(x2, y2, typ)):
                     continue
                 x, y = paarungen[0]
                 if isinstance(art, str):
@@ -5928,6 +6186,62 @@ def _selbsttest(still=False):
     # 2026-09-29 (K6): „öffnet dir eine Tür zu“ ist ein Sextil-Bild
     assert _p13_paare("Dein Mars öffnet dir eine Tür zu deiner Venus.") == \
         {frozenset(("MARS", "VENUS"))}, "K6: Sextil-Bild"
+    # 2026-09-30 (K4): das Sextil-Bild auch gebeugt
+    for _s, _soll in (("Mond und Saturn öffnen einander eine Tür.", ("MOND", "SATURN")),
+                      ("Deiner Venus öffnet sich von Jupiter her eine Tür.", ("VENUS", "JUPITER")),
+                      ("Deinem Merkur öffnet sich eine Tür zu deinem Uranus.",
+                       ("MERKUR", "URANUS"))):
+        assert frozenset(_soll) in _p13_paare(_s), "K4 Sextil-Bild gebeugt: %r -> %r" % (
+            _s, _p13_paare(_s))
+    assert not _p13_paare("Wenn du das zulässt, öffnet sich eine Tür."), "K4: ohne Faktor still"
+    # 2026-09-30 (K2): weitere Paarungen einer sonst ungedeckten Konstellation (19)
+    def _w13(satz, marker, davor, danach, typ=None, vorher="", transiter=()):
+        m_ = next(x for x in ASPEKT_RE.finditer(satz) if x.group(0) == marker) \
+            if marker != "über" else _UEBER_RE.search(satz)
+        return _p13_weitere_paare(satz, m_, davor, danach, typ, vorher, transiter)
+    assert ("VENUS", "JUPITER") in _w13("Beim Mars ist das gedeutet, das Trigon der Venus zu "
+                                        "Jupiter im Register.", "Trigon", ["MARS"],
+                                        ["VENUS", "JUPITER"]), "K2 (a) Genitiv"
+    assert ("SATURN", "SATURN") in _w13("Saturns Quadrat zu sich selbst wiederholt sich im "
+                                        "Fenster zweimal.", "Quadrat", ["SATURN"], ["URANUS"],
+                                        "transit"), "K2 (b) zu sich selbst"
+    assert ("SATURN", "SATURN") not in _w13("Saturns Quadrat zu sich selbst wiederholt sich "
+                                            "im Fenster zweimal.", "Quadrat", ["SATURN"],
+                                            ["URANUS"]), "K2 (b) nur im Transit"
+    _s13 = ("Saturn stand deiner Venus gegenüber, dann im Quadrat zu deinem Mond und "
+            "zuletzt im Quadrat zu deinem Pluto.")
+    _m13 = [x for x in ASPEKT_RE.finditer(_s13)][-1]
+    assert ("SATURN", "PLUTO") in _p13_weitere_paare(_s13, _m13, ["MOND"], ["PLUTO"], "transit"), \
+        "K2 (c) Folge: das Subjekt traegt weiter"
+    assert ("URANUS", "MERKUR") in _w13("Er reibt sich an deiner Sonne und steht im Sextil zu "
+                                        "deinem Merkur.", "Sextil", ["SONNE"], ["MERKUR"],
+                                        "transit", "Uranus läuft durch dein drittes Haus."), \
+        "K2 (c) Pronomen am Satzanfang"
+    assert ("MONDKNOTEN", "MARS") in _w13(
+        "Und der Mondknoten, der rückläufig durch dein fünftes Haus zieht, steht von Juni bis "
+        "Dezember im Quadrat zu deiner Sonne und deinem Jupiter und geht im Januar über deinen "
+        "Mars.", "über", ["SONNE", "JUPITER"], ["MARS"], "transit"), "K2 (c) Artikel-Subjekt"
+    assert _p13_satzsubjekt("Das Quadrat zwischen Mond und Mars ist beim Mond gedeutet, "
+                            "das Sextil der Venus zu Jupiter im Register.", 200) == [], \
+        "K2 (c) Objekte hinter „zwischen“ und „beim“ sind kein Subjekt"
+    assert ("SATURN", "NEPTUN") in _w13("Im Herbst wird das Quadrat zu deinem MC genau, wenige "
+                                        "Tage später das Trigon zu deinem Neptun.",
+                                        "Trigon", ["MC"], ["NEPTUN"], "transit", "",
+                                        ("SATURN",)), "K2 (d) Transiter des Kapitels"
+    assert _w13("Dazu kommt Pluto im Quadrat zu deiner Sonne.", "Quadrat", ["PLUTO"],
+                ["SONNE"], "transit", "", ("SATURN",)) == [], \
+        "K2 (c)/(d) nicht, wenn vor dem Marker ein eigenes Subjekt steht"
+    _t13 = [{"a": "VENUS", "b": "JUPITER", "art": "Sextil"}, {"a": "MOND", "b": "MARS",
+                                                              "art": "Quadrat"}]
+    _k13 = {"kicker": "Rechenschaft", "title": "T", "signatur": "", "beleg": "",
+            "blocks": [{"type": "para", "text": "Das Quadrat zwischen Mond und Mars ist beim "
+                        "Mond gedeutet, das Sextil der Venus zu Jupiter im Register."}]}
+    _p13k = _p13_beleg_deckung([_k13], "geburt", _t13, "")
+    assert _p13k.status == "OK", ("K2 Genitiv im Lauf", _p13k.status, _p13k.pruefen)
+    _t13b = [{"a": "VENUS", "b": "JUPITER", "art": "Trigon"}, {"a": "MOND", "b": "MARS",
+                                                               "art": "Quadrat"}]
+    _p13k = _p13_beleg_deckung([_k13], "geburt", _t13b, "")
+    assert _p13k.status == "PRUEFEN", ("K2: falsche Art bleibt gemeldet", _p13k.pruefen)
     # 2026-09-23b: Pronomen mit Genus (a), Subjekt-Pronomen vor Objekt-Faktoren (b),
     # neues Glied hinter Komma (5)
     def _p13_mit_vorsatz(satz, vorher):
@@ -6043,6 +6357,56 @@ def _selbsttest(still=False):
     assert _p13_paare("Dein Mars steht sowohl im Trigon zu Venus, als auch im Sextil zu "
                       "Jupiter.") == {frozenset(("MARS", "VENUS")), frozenset(("MARS", "JUPITER"))}, \
         "P13 (1) „als auch“ reiht auf"
+    # 2026-09-30 (K1): P12 — Glied des Rangworts, leerer Bereich (§8), Haus im eigenen
+    # Haus (§3), Genitiv des Elements, Zeitspanne; konstruierte Werte
+    _txt30 = ("### 3 · Herrscherketten, Rezeption, Hausherrscher\n"
+              "- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht; die vier "
+              "Sonderfälle des Typmoduls stehen hinter ⟵):\n"
+              "  - Haus  2 (Stier) → Venus in Stier, Haus 2  ⟵ im eigenen Haus\n"
+              "  - Haus  3 (Zwillinge) → Merkur in Krebs, Haus 4\n"
+              "### 8 · Verteilung (zehn klassische Planeten)\n"
+              "- Quadranten: I (Häuser 1–3) 4 · II (Häuser 4–6) 3 · III (Häuser 7–9) 0 · "
+              "IV (Häuser 10–12) 3\n"
+              "- Betonung: Quadrant I (4 von 10) ⟵ betont; Quadrant III ⟵ leer.\n"
+              "### 10 · Rangzeilen\n"
+              "- RANG elemente-gezaehlt [zehn Planeten]: 1. Erde 4 von 10 = 40 % (Saturn, "
+              "Venus, Mars, Jupiter) · 2. Wasser 3 von 10 = 30 % (Mond, Neptun, Pluto) · 3. Luft "
+              "2 von 10 = 20 % (Merkur, Uranus) · 4. Feuer 1 von 10 = 10 % (Sonne)\n"
+              "- RANG modi-gezaehlt [zehn Planeten]: 1. veränderlich 5 von 10 = 50 % (Merkur, "
+              "Mars, Jupiter, Saturn, Neptun) · 2. fix 3 von 10 = 30 % (Sonne, Venus, Pluto) · "
+              "3. kardinal 2 von 10 = 20 % (Mond, Uranus)\n"
+              "- RANG verbindungen-gezaehlt [je 1]: 1. Jupiter 9 · 2. Saturn 8 · 3. Mond 6\n"
+              "- RANG verbindungen-gewichtet [voll 1]: 1. Jupiter 5.5 · 1. Saturn 5.5 · "
+              "3. Mond 4\n")
+    _st30 = _struktur_p12(_txt30)
+    assert _st30 == {"leer": {"Quadrant III"}, "eigenes_haus": {2: "Venus"}}, _st30
+
+    def _p12_satz30(satz, vorher=""):
+        out = []
+        for art, rx in _RANG_MUSTER:
+            for m_ in rx.finditer(satz):
+                b = _rang_befund(art, m_, satz, _rangzeilen_lesen(_txt30), "geburt", vorher,
+                                 eigen=_eigenes_zeichen(_txt30), struktur=_st30)
+                if b:
+                    out.append((art, b))
+        return out
+    for _s in ("Erde, Wasser und Luft tragen, gezählt, neun Planeten; die Hälfte aller "
+               "Planeten steht in der Kraft, sich anzupassen.",
+               "Die meisten Verbindungen hat, gezählt über alle Faktoren, dein Jupiter, dicht "
+               "gefolgt von Saturn; gewichtet liegen beide gleichauf.",
+               "Die Häuser sieben bis neun tragen keinen einzigen Planeten.",
+               "Unter den Planeten ist deine Sonne der einzige Träger des Feuers.",
+               "Dein zweites Haus verwaltet sich aus sich heraus und ist dafür auf keinen "
+               "anderen angewiesen.",
+               "Die nächsten zwei Jahre Verbindungen zu pflegen, lohnt sich."):
+        assert _p12_satz30(_s) == [], "K1 P12: %r -> %r" % (_s, _p12_satz30(_s))
+    for _s in ("Die Häuser zehn bis zwölf tragen keinen einzigen Planeten.",
+               "Dein drittes Haus verwaltet sich aus sich heraus und ist dafür auf keinen "
+               "anderen angewiesen.",
+               "Erde, Wasser und Luft tragen, gezählt, neun Planeten; die Hälfte aller "
+               "Planeten steht in der Kraft, anzufangen.",
+               "Die meisten Verbindungen, gezählt über alle Faktoren, hat dein Saturn."):
+        assert _p12_satz30(_s), "K1 P12 muss melden: %r" % _s
     # 2026-09-24: P12 — §3 als Fundstelle, Umlaufzeit, Verbindungs-Rangzeile
     _txt12 = ("- Enddispositoren (im eigenen Zeichen, und eine fremde Kette endet bei ihm): "
               "Saturn (Ketten von Sonne, Mond).\n"
