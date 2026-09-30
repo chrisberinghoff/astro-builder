@@ -148,6 +148,7 @@ pyswisseph, wenn es da ist — sonst geben sie None zurück, und
 `strukturbild_text()` sagt das ausdrücklich.
 """
 
+import math
 import re
 import subprocess
 import sys
@@ -748,6 +749,255 @@ def glyphen_ergaenzen(factors, melden=True):
 MARKE_FARBE = '#7d6f93'
 
 
+# --- Beschriftung im Rad: gemessene Tinte, radiale Staffelung, notfalls seitlich
+#
+# 2026-09-30 (Musterhoroskop-Lauf, von Chris freigegeben): Bis dahin staffelte
+# radix() nach einem FESTEN Abstand von 6° und kannte nur zwei Stufen. Zwei
+# Faelle gingen damit schief, beide im fertigen PDF sichtbar: Zwei BREITE
+# Kuerzel (ein Achsenkuerzel neben „Pho") knapp ueber 6° auseinander blieben
+# auf derselben Stufe und liefen oben im Rad ineinander; drei und mehr eng
+# stehende Beschriftungen — auch eine Achse mit zwei, drei Planeten daneben —
+# fielen auf Stufe 0 zurueck, und die erste und dritte beruehrten sich (bis
+# dahin als „bekannte Grenze" gefuehrt). Jetzt wird die Tinte jeder
+# Beschriftung einmal gemessen; gestaffelt wird, wo sich zwei Beschriftungen
+# wirklich beruehren wuerden, und wo zwei Stufen nicht reichen, rueckt die
+# Beschriftung seitlich aus. Die Positionsmarke bleibt auf dem exakten Grad,
+# die Haarlinie fuehrt dann schraeg zur Glyphe. Achsen ruecken nie — ihr
+# Kuerzel steht auf der roten Achslinie.
+
+# Halber lichter Mindestabstand je Beschriftungsart, pt: zwei Glyphen halten
+# 2,2 pt, Glyphe und Kuerzel 3,7 pt, zwei Kuerzel 5,2 pt — zwei Kuerzel mit
+# weniger Luft lesen sich als EIN Wort („MCPho").
+BESCHRIFTUNG_LUFT_PT = {'zeichen': 1.1, 'kuerzel': 2.6}
+_TINTE_CACHE = {}
+
+
+def _tinte_masse(text, fontsize, dpi):
+    """Tintenkasten einer Beschriftung in pt, bezogen auf ihren Ankerpunkt
+    (gesetzt mit ha='center', va='center'): (x0, x1, y0, y1), y nach oben.
+
+    Einmal offscreen gezeichnet und an der Deckung gemessen — so gelten
+    Schriftersatz und der Versatz, den va='center' bei Kuerzeln ohne
+    Unterlaenge erzeugt, genau wie im Rad. Zwischengespeichert je Text,
+    Schriftgrad und Aufloesung."""
+    key = (text, float(fontsize), int(dpi))
+    if key in _TINTE_CACHE:
+        return _TINTE_CACHE[key]
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    import numpy as np
+    fig = plt.figure(figsize=(1.6, 1.6), dpi=dpi)
+    fig.patch.set_alpha(0.0)
+    fig.text(0.5, 0.5, text, ha='center', va='center', fontsize=fontsize,
+             color='black')
+    fig.canvas.draw()
+    buf = np.asarray(fig.canvas.buffer_rgba())
+    plt.close(fig)
+    h, w = buf.shape[:2]
+    ys, xs = np.nonzero(buf[..., 3] > 16)
+    if len(xs) == 0:
+        m = (-0.3 * fontsize, 0.3 * fontsize, -0.3 * fontsize, 0.3 * fontsize)
+    else:
+        f = 72.0 / dpi
+        m = ((xs.min() - w / 2.0) * f, (xs.max() + 1 - w / 2.0) * f,
+             (h / 2.0 - (ys.max() + 1)) * f, (h / 2.0 - ys.min()) * f)
+    _TINTE_CACHE[key] = m
+    return m
+
+
+def _beschriftungsform(masse, zeichen):
+    """(cx, cy, hx, hy, rc) in pt: Tintenkasten als abgerundetes Rechteck —
+    eine Einzelglyphe fast rund (sonst stossen zwei Glyphen auf verschiedenen
+    Stufen schraeg im Rad an den leeren Ecken ihrer Kaesten an), ein Kuerzel
+    kastenfoermig."""
+    x0, x1, y0, y1 = masse
+    hx, hy = (x1 - x0) / 2.0, (y1 - y0) / 2.0
+    rc = (0.9 if zeichen else 0.2) * min(hx, hy)
+    return ((x0 + x1) / 2.0, (y0 + y1) / 2.0, hx, hy, rc)
+
+
+def _freiraum(a, b):
+    """Lichter Abstand zweier Formen in pt; negativ = sie ueberlappen."""
+    ix = max(0.0, abs(a[0] - b[0]) - ((a[2] - a[4]) + (b[2] - b[4])))
+    iy = max(0.0, abs(a[1] - b[1]) - ((a[3] - a[4]) + (b[3] - b[4])))
+    return math.hypot(ix, iy) - (a[4] + b[4])
+
+
+def beschriftung_setzen(eintraege, asc, radien, pt_je_einheit,
+                        luft=None):
+    """Stufe und Anzeigewinkel fuer die Beschriftungen im Faktorring des Rads
+    (neu 2026-09-30; vorher fester 6°-Abstand mit bekannter Grenze bei drei
+    eng stehenden Faktoren).
+
+    eintraege  Liste von dicts: 'lon' (exakter Grad), 'masse' (Tintenkasten
+               x0, x1, y0, y1 in pt relativ zum Anker, s. _tinte_masse),
+               'fest' (True bei den Achsen AC/DC/MC/IC: ihr Kuerzel steht auf
+               der Achslinie und rueckt NIE seitlich), 'zeichen' (True =
+               Einzelglyphe, False = Kuerzel wie 'Pho', 'MC').
+    asc        AC-Laenge (Bildwinkel = 180 + lon - asc, wie in radix()).
+    radien     (Radius Stufe 0, Radius Stufe 1) in Radeinheiten.
+    pt_je_einheit  Punkt je Radeinheit im gezeichneten Rad.
+    luft       halber lichter Mindestabstand je Art, Vorgabe
+               BESCHRIFTUNG_LUFT_PT; ein Paar haelt die Summe seiner beiden.
+
+    Vorgehen. In Winkelfolge, beginnend hinter der groessten Luecke des
+    Rings, kommt jede Beschriftung auf die Stufe, auf der sie — samt allen
+    schon gesetzten derselben Stufe — am wenigsten von ihrem exakten Grad
+    wegruecken muss; bei Gleichstand Stufe 0. Steht sie auf Stufe 0 frei, bleibt
+    sie dort, sonst auf Stufe 1, wenn sie dort frei steht: die radiale,
+    zweistufige Staffelung des Hausstils, jetzt nach der gemessenen Tinte.
+    Reicht keine Stufe, ruecken die Beschriftungen einer Stufe seitlich
+    auseinander, und zwar mit der kleinsten Summe der Quadrate aller
+    Verschiebungen (isotone Regression, Pool Adjacent Violators): eine Gruppe
+    spreizt sich um ihre Mitte, eine Achse bleibt stehen und schiebt nur die
+    anderen. Was danach noch stoesst (selten: zwei grosse Glyphen auf
+    verschiedenen Stufen, schraeg im Rad), wird paarweise auseinandergeschoben.
+
+    -> Liste von dicts in der Reihenfolge von `eintraege`: 'stufe' (0/1),
+       'lon' (Anzeigegrad), 'versatz' (Grad, Anzeige minus exakt),
+       'frei' (False nur, wenn zwei Achsen sich beruehren — radix() meldet
+       das).
+    """
+    n = len(eintraege)
+    if n == 0:
+        return []
+    luft = dict(BESCHRIFTUNG_LUFT_PT if luft is None else luft)
+    formen = [_beschriftungsform(e['masse'], e.get('zeichen', True))
+              for e in eintraege]
+    fest = [bool(e.get('fest')) for e in eintraege]
+    halb = [luft['zeichen'] if e.get('zeichen', True) else luft['kuerzel']
+            for e in eintraege]
+    rel = [(e['lon'] - asc) % 360.0 for e in eintraege]
+    folge = sorted(range(n), key=lambda i: rel[i])
+    if n > 1:
+        _, kmax = max(((rel[folge[(k + 1) % n]] - rel[folge[k]]) % 360.0, k)
+                      for k in range(n))
+        start = (kmax + 1) % n
+        folge = folge[start:] + folge[:start]
+    basis = rel[folge[0]]
+    u = [basis + ((rel[i] - basis) % 360.0) for i in range(n)]
+    rang = {i: k for k, i in enumerate(folge)}
+
+    def form_bei(i, st, w):
+        t = math.radians(180.0 + w)
+        r = radien[st] * pt_je_einheit
+        f = formen[i]
+        return (r * math.cos(t) + f[0], r * math.sin(t) + f[1],
+                f[2], f[3], f[4])
+
+    def rest(i, si, wi, j, sj, wj):
+        """Lichter Abstand minus geforderter Luft; negativ = zu eng."""
+        return (_freiraum(form_bei(i, si, wi), form_bei(j, sj, wj))
+                - (halb[i] + halb[j]))
+
+    _tr = {}
+
+    def trennung(i, j, st):
+        """Kleinster Winkelabstand (Grad), bei dem i und j auf Stufe st frei
+        stehen — gemessen an der Mitte ihrer exakten Grade."""
+        key = (i, j, st)
+        if key not in _tr:
+            wm = (u[i] + u[j]) / 2.0
+            lo, hi = 0.0, 90.0
+            for _ in range(40):
+                mid = (lo + hi) / 2.0
+                if rest(i, st, wm - mid / 2.0, j, st, wm + mid / 2.0) >= 0.02:
+                    hi = mid
+                else:
+                    lo = mid
+            _tr[key] = hi
+        return _tr[key]
+
+    def spreizen(glieder, st):
+        """Positionen einer Stufe: kleinste Quadratsumme der Verschiebungen
+        unter den Mindestabstaenden (isotone Regression)."""
+        m = len(glieder)
+        summe = [0.0] * m
+        for k in range(1, m):
+            summe[k] = summe[k - 1] + trennung(glieder[k - 1], glieder[k], st)
+        bloecke = []
+        for k in range(m):
+            g = glieder[k]
+            w = 1e6 if fest[g] else 1.0
+            z = u[g] - summe[k]
+            bloecke.append([w, w * z, 1, [z] if fest[g] else []])
+            while (len(bloecke) > 1 and bloecke[-2][1] / bloecke[-2][0]
+                   > bloecke[-1][1] / bloecke[-1][0]):
+                bl = bloecke.pop()
+                bloecke[-1][0] += bl[0]
+                bloecke[-1][1] += bl[1]
+                bloecke[-1][2] += bl[2]
+                bloecke[-1][3] += bl[3]
+        y = []
+        for bl in bloecke:
+            # Eine Achse im Block steht EXAKT auf ihrem Grad (das Gewicht 1e6
+            # allein liesse sie um Millionstel wandern).
+            wert = bl[3][0] if len(set(bl[3])) == 1 else bl[1] / bl[0]
+            y += [wert] * bl[2]
+        return {glieder[k]: y[k] + summe[k] for k in range(m)}
+
+    def kosten(pos):
+        return sum((pos[g] - u[g]) ** 2 * (1e6 if fest[g] else 1.0)
+                   for g in pos)
+
+    stufe = {}
+    anz = {}
+    for i in folge:
+        best = None
+        for st in (0, 1):
+            glieder = [j for j in folge
+                       if j == i or (j in stufe and stufe[j] == st)]
+            pos = spreizen(glieder, st)
+            andere = {j: anz[j] for j in stufe if stufe[j] != st}
+            k = kosten(pos) + kosten(andere)
+            for j, wj in andere.items():      # Stoss ueber die Stufen hinweg
+                if abs(wj - pos[i]) < 40.0 and rest(i, st, pos[i],
+                                                    j, 1 - st, wj) < 0:
+                    k += 100.0
+            if best is None or k < best[0] - 1e-9:
+                best = (k, st, pos)
+        stufe[i] = best[1]
+        anz.update(best[2])
+
+    # Rest ueber die Stufen hinweg: paarweise auseinanderschieben.
+    for _ in range(600):
+        bewegt = False
+        for a in range(n):
+            for b in range(a + 1, n):
+                i, j = folge[a], folge[b]
+                if abs(anz[i] - anz[j]) > 40.0 or (fest[i] and fest[j]):
+                    continue
+                c = rest(i, stufe[i], anz[i], j, stufe[j], anz[j])
+                if c >= -1e-6:
+                    continue
+                bewegt = True
+                r = min(radien[stufe[i]], radien[stufe[j]]) * pt_je_einheit
+                d = math.degrees((0.05 - c) / r) * 0.6
+                sg = 1.0 if (anz[j] > anz[i] or (anz[j] == anz[i]
+                                                 and rang[j] > rang[i])) else -1.0
+                if fest[i]:
+                    anz[j] += sg * d
+                elif fest[j]:
+                    anz[i] -= sg * d
+                else:
+                    anz[i] -= sg * d / 2.0
+                    anz[j] += sg * d / 2.0
+        if not bewegt:
+            break
+
+    frei = [True] * n
+    for a in range(n):
+        for b in range(a + 1, n):
+            i, j = folge[a], folge[b]
+            if abs(anz[i] - anz[j]) > 40.0:
+                continue
+            if rest(i, stufe[i], anz[i], j, stufe[j], anz[j]) < -0.05:
+                frei[i] = frei[j] = False
+    return [{'stufe': stufe[i], 'lon': (anz[i] + asc) % 360.0,
+             'versatz': anz[i] - u[i], 'frei': frei[i]} for i in range(n)]
+
+
 def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
           title=None, aspects=None, palette=None, dpi=210, grade=False,
           gradmarke=True, marken=()):
@@ -785,6 +1035,18 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
 
     Wer gradmarke=False setzt, bekommt das Rad im Stand vom 2026-07-27 zurück
     (5°-Skala innen, Glyphen auf 0,80, keine Marken).
+
+    Beschriftung (seit 2026-09-30, beschriftung_setzen): Die Staffelung bleibt
+    radial und zweistufig, richtet sich aber nach der GEMESSENEN Tinte jeder
+    Glyphe bzw. jedes Kürzels statt nach einem festen Abstand von 6°. Reichen
+    die zwei Stufen nicht — drei und mehr eng stehende Faktoren, auch eine
+    Achse mit Planeten daneben —, rückt die Glyphe seitlich aus, bis
+    der Abstand aus BESCHRIFTUNG_LUFT_PT steht, mit der kleinsten
+    Summe der Verschiebungen; die Positionsmarke bleibt auf dem
+    exakten Grad, und die Haarlinie führt schräg von ihr zur Glyphe. Die
+    Kürzel AC/DC/MC/IC rücken nie, sie stehen auf ihrer Achslinie. Die frühere
+    „bekannte Grenze" (erster und dritter von drei Faktoren berühren sich)
+    ist damit aufgehoben.
 
     Der Hintergrund ist die Papierfarbe des Dokuments (palette['grund']), nicht
     Weiss — sonst steht das Rad als weisses Rechteck auf der cremefarbenen
@@ -893,42 +1155,64 @@ def radix(factors, cusps, asc, mc, out_path='/home/claude/radix.png',
             lw, al, ls = 0.9, 0.7, '-'
         ax.plot([x0, x1], [y0, y1], color=col, lw=lw, alpha=al, ls=ls, zorder=1.5)
 
-    # Planeten mit einfacher Kollisionsstaffelung (bei <6° Abstand alternierend).
-    # Bekannte Grenze, am 2026-07-30 bewusst so gelassen: bei DREI dicht
-    # beieinander stehenden Faktoren springt die Staffelung zurueck auf Stufe 0,
-    # der erste und dritte koennen sich dann beruehren. Die Positionsmarke traegt
-    # in diesem Fall die genaue Stelle, auch wenn die Glyphen eng liegen.
+    # Beschriftung: Tinte gemessen, Staffelung radial und zweistufig, wo das
+    # nicht reicht seitlich ausgerueckt (beschriftung_setzen, seit 2026-09-30 —
+    # vorher fester 6°-Abstand, bei drei eng stehenden Faktoren beruehrten
+    # sich der erste und der dritte). Die Positionsmarke steht immer auf dem
+    # exakten Grad; rueckt eine Glyphe aus, fuehrt die Haarlinie schraeg zu ihr.
     ACHSEN = ('AC', 'DC', 'MC', 'IC')
+    ax.apply_aspect()
+    _p0 = ax.transData.transform((0.0, 0.0))
+    _p1 = ax.transData.transform((1.0, 0.0))
+    pt_je_einheit = (_p1[0] - _p0[0]) * 72.0 / fig.dpi
     order = sorted(factors, key=lambda f: f['lon'])
-    last, tier = -999.0, 0
+    zeichen_fs, eintraege = [], []
     for f in order:
-        L = f['lon']
         # 2026-09-19 (F24): leeres oder fehlendes Glyphenfeld -> Kuerzel bzw.
         # Symbol aus FAKTOR_GLYPHE, wie die Pruefliste es verlangt; ein
         # leerer String machte den Faktor im Rad unsichtbar.
         g = f.get('glyph') or FAKTOR_GLYPHE.get(f['name'], '?')
-        tier = (tier + 1) % 2 if 0 <= (L - last) % 360 < 6 else 0
-        last = L
+        fs = 13 if len(g) == 1 else 8.5
+        zeichen_fs.append((g, fs))
+        eintraege.append({'lon': f['lon'], 'masse': _tinte_masse(g, fs, dpi),
+                          'fest': f['name'] in ACHSEN, 'zeichen': len(g) == 1})
+    setzung = beschriftung_setzen(eintraege, asc, (R_PL, R_PL - TIER_DR),
+                                  pt_je_einheit)
+    _beruehrt = sorted({f['name'] for f, sz in zip(order, setzung)
+                        if not sz['frei']})
+    if _beruehrt:
+        print('[radix] Beschriftung: nicht frei zu stellen: '
+              + ', '.join(_beruehrt))
+    for f, (g, fs), e, sz in zip(order, zeichen_fs, eintraege, setzung):
+        L = f['lon']
+        tier = sz['stufe']
         r = R_PL - tier * TIER_DR
-        px, py = xy(L, r)
+        px, py = xy(sz['lon'], r)
 
-        # Positionsmarke auf dem exakten Grad + Haarlinie zur Glyphe.
+        # Positionsmarke auf dem exakten Grad + Haarlinie bis kurz vor den
+        # Tintenkasten der Glyphe (schraeg, wenn sie ausgerueckt ist).
         if gradmarke and f['name'] not in ACHSEN:
             xa, ya = xy(L, R_SIGN - 0.002)
             xb, yb = xy(L, R_SIGN - 0.034)
             ax.plot([xa, xb], [ya, yb], color=INK, lw=1.45,
                     solid_capstyle='butt', zorder=3.5)
-            r_glyph = r + 0.030
-            if (R_SIGN - 0.034) - r_glyph > 0.004:
-                xc, yc = xy(L, R_SIGN - 0.034)
-                xd, yd = xy(L, r_glyph)
-                ax.plot([xc, xd], [yc, yd], color=INK, lw=0.5, alpha=0.40,
-                        zorder=3.2)
+            mx0, mx1, my0, my1 = e['masse']
+            dx = px + (mx0 + mx1) / 2.0 / pt_je_einheit - xb
+            dy = py + (my0 + my1) / 2.0 / pt_je_einheit - yb
+            hx = ((mx1 - mx0) / 2.0 + 0.8) / pt_je_einheit
+            hy = ((my1 - my0) / 2.0 + 0.8) / pt_je_einheit
+            q = min(hx / abs(dx) if abs(dx) > 1e-9 else float('inf'),
+                    hy / abs(dy) if abs(dy) > 1e-9 else float('inf'))
+            if q < 1.0:
+                xd, yd = xb + (1.0 - q) * dx, yb + (1.0 - q) * dy
+                if math.hypot(xd - xb, yd - yb) > 0.004:
+                    ax.plot([xb, xd], [yb, yd], color=INK, lw=0.5,
+                            alpha=0.40, zorder=3.2)
 
         ax.text(px, py, g, ha='center', va='center',
-                fontsize=(13 if len(g) == 1 else 8.5), color=INK, zorder=4)
+                fontsize=fs, color=INK, zorder=4)
         if grade:
-            dx, dy = xy(L, r - TAG_DR)
+            dx, dy = xy(sz['lon'], r - TAG_DR)
             tag = f"{int(f['lon'] % 30)}°" + ("℞" if f.get('retro') else "")
             ax.text(dx, dy, tag, ha='center', va='center',
                     fontsize=6.2, color='#707070', zorder=4)
@@ -7319,3 +7603,37 @@ if __name__ == '__main__':
           'gemeldet, allein stehend und am Gegenwinkel still | K3 Venus als '
           'Zentrale (4 der 5 fremden Ketten), eine einzige Kette bleibt „keine '
           'Zentrale“')
+
+    # --- Beschriftung im Rad (2026-09-30): anonyme, gedachte Haeufungen —
+    # nur Gradzahlen, kein Name, kein Datum, keine Zeit, kein Ort. Geprueft
+    # wird die Setzung selbst: nichts beruehrt sich, Achsen ruecken nie, eine
+    # freie Einzelglyphe bleibt auf Stufe 0 an ihrem Grad, und eine Gruppe
+    # spreizt sich um ihre Mitte.
+    def _bs(liste, asc_, pt=167.28):
+        e = [{'lon': l_, 'masse': _tinte_masse(g_, 13 if len(g_) == 1 else 8.5,
+                                               210),
+              'fest': g_ in ('AC', 'DC', 'MC', 'IC'), 'zeichen': len(g_) == 1}
+             for g_, l_ in liste]
+        return beschriftung_setzen(e, asc_, (0.775, 0.697), pt)
+    # Achse mit drei Planeten daneben (die frueher „bekannte Grenze")
+    _s1 = _bs([('AC', 100.0), ('♀', 103.0), ('☿', 103.5), ('☉', 107.0),
+               ('♂', 200.0)], 100.0)
+    assert all(z['frei'] for z in _s1), _s1
+    assert _s1[0]['versatz'] == 0.0 and _s1[0]['stufe'] in (0, 1), _s1[0]
+    assert _s1[4]['stufe'] == 0 and abs(_s1[4]['versatz']) < 1e-9, _s1[4]
+    # zwei breite Kuerzel knapp ueber 6° auseinander, oben im Rad
+    _s2 = _bs([('Pho', 4.0), ('MC', 10.4), ('⚷', 15.0)], 100.0)
+    assert all(z['frei'] for z in _s2) and _s2[1]['versatz'] == 0.0, _s2
+    # dichte Gruppe ueber die Schnittstelle des Rings (rel. 0/360) hinweg
+    _s3 = _bs([('♇', 97.5), ('⚷', 98.8), ('AC', 100.0), ('⚸', 101.2),
+               ('☊', 102.0), ('♃', 250.0)], 100.0)
+    assert all(z['frei'] for z in _s3) and _s3[2]['versatz'] == 0.0, _s3
+    # fuenf Glyphen in fuenf Grad: kein Stoss, Mitte der Gruppe bleibt
+    _s4 = _bs([('☉', 20.0), ('☽', 21.0), ('☿', 22.0), ('♀', 23.0),
+               ('♂', 24.0)], 300.0)
+    assert all(z['frei'] for z in _s4), _s4
+    assert abs(sum(z['versatz'] for z in _s4)) < 0.5, _s4
+    print('Beschriftungs-Test (2026-09-30): OK — Achse mit drei Planeten, '
+          'zwei Kuerzel, Gruppe ueber die Ringnaht, fuenf in fuenf Grad; '
+          'groesster Versatz %.2f°' % max(abs(z['versatz'])
+                                         for z in _s1 + _s2 + _s3 + _s4))
