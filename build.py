@@ -3297,8 +3297,9 @@ def _thema_bloecke(txt):
 def _beleg_stand(txt, name):
     """Segment 1: „Sonne ☉ 12°34′ Stier ♉, 10. Haus". Grad und Zeichen aus der
     Staendetabelle (`## Stände`), das Haus aus dem @@SELEKTOR-Block — bei
-    Grenzlage das fuehrende Haus vorn (selektor.beleg_notation()); eine Achse
-    ohne Haus."""
+    Grenzlage das fuehrende Haus vorn (selektor.beleg_notation()), bei
+    `fuehrung=offen` seit 2026-09-30 das rechnerische mit „gleich stark" (K9);
+    eine Achse ohne Haus."""
     import radix as _rx
     import selektor as _sel
     m = re.search(r"\n## St[äa]nde[^\n]*", "\n" + txt)
@@ -3331,7 +3332,9 @@ def _beleg_stand(txt, name):
     if not f or not f.get("haus"):
         return seg                     # P2 meldet die fehlende FAKTOR-Zeile
     if f.get("nebenhaus"):
-        stufe = _sel.grenz_stufe(f.get("abstand"))[0]
+        # 2026-09-30 (K9): offene Fuehrung — Stufe „gleich stark", rechnerisch vorn
+        stufe = _sel.grenz_stufe(f.get("abstand"),
+                                 offen=f.get("fuehrung") == "offen")[0]
         return seg + ", " + _sel.beleg_notation(
             {"faktor": schl, "haus": f["haus"], "nebenhaus": f["nebenhaus"],
              "abstand": f.get("abstand"), "stufe": stufe})
@@ -3355,7 +3358,8 @@ def transit_beleg(chart_data_pfad: str, events_json_pfad: str, thema: int = None
 
     Segment 1 sind die Staende des Radix-Ziels des ersten Kontakts (Grad und
     Zeichen aus der Staendetabelle, Haus aus dem @@SELEKTOR-Block, Grenzlage
-    mit dem fuehrenden Haus vorn, eine Achse ohne Haus). Jedes weitere Segment
+    mit dem fuehrenden Haus vorn, offene Fuehrung mit dem rechnerischen und
+    „gleich stark", eine Achse ohne Haus). Jedes weitere Segment
     ist EIN Kontakt: „T-Saturn ♄ Quadrat □ R-Sonne ☉ — exakt 02.03.2031,
     06.10.2031" mit allen Nulldurchgaengen seiner Passagen, auch vor und nach
     dem Fenster; ohne Nulldurchgang „— nicht exakt, Annäherung bis 1,8′ am
@@ -4833,6 +4837,13 @@ def _selbsttest():
         b5 = transit_beleg(tb, evj, kontakte=["T-Jupiter △ R-Mond"])
         pruefe(b5.startswith("Mond ☽ 3°05′ Krebs ♋, 1./12. Haus (Schwellenlage, "
                              "1°30′ vor Spitze 1)"), "T11: Grenzlage: %s" % b5)
+        # 2026-09-30 (K9): offene Fuehrung — rechnerisches Haus vorn, „gleich stark"
+        tbo = datei("tbo_Transit_chart_data.md", open(tb, encoding="utf-8").read().replace(
+            "FAKTOR Mond zeichen=Krebs haus=12 nebenhaus=1 abstand=1.5",
+            "FAKTOR Mond zeichen=Krebs haus=12 nebenhaus=1 abstand=1.5 fuehrung=offen"))
+        b6 = transit_beleg(tbo, evj, kontakte=["T-Jupiter △ R-Mond"])
+        pruefe(b6.startswith("Mond ☽ 3°05′ Krebs ♋, 12./1. Haus (gleich stark, "
+                             "1°30′ vor Spitze 1)"), "T11/K9: offene Fuehrung: %s" % b6)
         try:
             transit_beleg(tb, evj, kontakte=["T-Saturn △ R-Sonne"])
             pruefe(False, "T11: unbekannter Kontakt muss abbrechen")

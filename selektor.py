@@ -17,6 +17,13 @@ dann `nebenhaus=<N> abstand=<Grad>` an die FAKTOR-Zeile; der Selektor zieht BEID
 Hausbloecke und schreibt die Gewichtungsstufe als Deutungsanweisung in die
 referenz.md (Abstand <= 2° -> Nebenhaus fuehrt; 2°-5° -> Nebenhaus als Nebenton).
 Ohne `nebenhaus=` verhaelt sich alles wie zuvor.
+OFFENE FUEHRUNG (seit 2026-09-30, K9, Chris-Entscheidung): Traegt die Zeile
+zusaetzlich `fuehrung=offen` (Strukturbild §3 meldet „⚠ Führung offen": schon
+unter einer Minute frueherer oder spaeterer Geburt fuehrte das andere Haus),
+fuehrt keins der beiden Haeuser — Stufe „gleich stark", das rechnerische Haus
+vorn, und der ⚠-Block verlangt EINEN offenen Satz an der ersten Stelle, die den
+Faktor deutet. Weichen die §3-Zeilen und die `fuehrung=offen`-Felder
+voneinander ab, bricht der Lauf hart ab (_pruefe_hart).
 
 FAKTORNAMEN: kanonisch sind die zehn Planeten und die vier Spezialfaktoren
 CHIRON, LILITH, MONDKNOTEN, PHOLUS. Gaengige Schreibweisen loest FAKTOR_ALIAS
@@ -159,6 +166,12 @@ AUSGEMUSTERT = {'GLUECKSPUNKT': '2026-09-23'}
 # Grenzlagen-Schwellen (Grad vor der naechsten Hausspitze).
 GRENZ_ORB = 5.0      # bis hierher gilt ueberhaupt Grenzlage (= radix.HAUS_ORB)
 SCHWELLE_ORB = 2.0   # bis hierher fuehrt das Nebenhaus die Deutung
+# 2026-09-30 (K9): die ⚠-Zeile „Führung offen" aus Strukturbild §3
+# (radix.strukturbild_text()) und das Merkmal eines §3, das sie schon kennt.
+OFFEN_ZEILE_RE = re.compile(r'^\s*-\s*⚠ Führung offen:\s*([A-Za-zÄÖÜäöüß]+)', re.M)
+OFFEN_STAND_RE = re.compile(r'die Führung prüfen die Zeilen darunter in beide '
+                            r'Richtungen|früherer oder späterer Geburt das '
+                            r'führende Haus')
 
 STEM = {'WIDDER': 'Widder', 'STIER': 'Stier', 'ZWILLINGE': 'Zwillinge',
         'KREBS': 'Krebs', 'LOEWE': 'Loewe', 'JUNGFRAU': 'Jungfrau',
@@ -238,13 +251,27 @@ def _gradmin(deg):
     return '%d°%02d′' % (g, m)
 
 
-def grenz_stufe(abstand):
+def grenz_stufe(abstand, offen=False):
     """Gewichtungsstufe der Grenzlage als Klartext-Deutungsanweisung.
 
     <= SCHWELLE_ORB (2°): der Faktor sitzt praktisch auf der Spitze -> das
     Nebenhaus fuehrt die Deutung. Darueber bis GRENZ_ORB (5°): das rechnerische
     Haus fuehrt, das Nebenhaus klingt als deutlicher Nebenton mit.
+
+    offen  (neu 2026-09-30, K9) True bei `fuehrung=offen`: keins der beiden
+           Haeuser fuehrt — Stufe 'offen' („gleich stark"), gleich welcher
+           Abstand; das rechnerische Haus steht vorn.
     """
+    if offen:
+        try:
+            _a = ' (%.2f° vor der Spitze)' % float(abstand)
+        except (TypeError, ValueError):
+            _a = ''
+        return 'offen', (
+            'Fuehrung offen%s: KEINS der beiden Haeuser fuehrt — beide GLEICH '
+            'STARK deuten, das rechnerische Haus vorn; der Text sagt EINMAL, '
+            'an der ersten Stelle, die den Faktor deutet, dass die '
+            'Geburtszeit nicht entscheiden kann, welches fuehrt' % _a)
     try:
         a = float(abstand)
     except (TypeError, ValueError):
@@ -286,7 +313,11 @@ def _ord(n, tafel):
 
 def _ordnung(g):
     """(fuehrendes Haus, zweites Haus, Stufenwort). Schwellenlage (<= 2°): das
-    Nebenhaus fuehrt; Grenzlage (2°–5°) und fehlender Abstand: das rechnerische."""
+    Nebenhaus fuehrt; Grenzlage (2°–5°) und fehlender Abstand: das rechnerische.
+    Offene Fuehrung (seit 2026-09-30, K9): das rechnerische Haus vorn, Stufe
+    „gleich stark" — vorn heisst dann nur Reihenfolge, nicht Fuehrung."""
+    if g['stufe'] == 'offen':
+        return g['haus'], g['nebenhaus'], 'gleich stark'
     if g['stufe'] == 'nebenhaus_fuehrt':
         return g['nebenhaus'], g['haus'], 'Schwellenlage'
     return g['haus'], g['nebenhaus'], 'Grenzlage'
@@ -307,6 +338,9 @@ def signatur_notation(g):
     """
     fh, zh, stufe = _ordnung(g)
     name = FAKTOR_ANZEIGE.get(g['faktor'], g['faktor'].capitalize())
+    if stufe == 'gleich stark':         # 2026-09-30, K9 (Chris-Entscheidung)
+        return '%s an der Schwelle zwischen dem %s und dem %s Haus, beide ' \
+            'gleich stark' % (name, _ord(fh, _ORD_DATIV), _ord(zh, _ORD_DATIV))
     if stufe == 'Schwellenlage':
         return '%s im %s Haus, dicht an der Schwelle aus dem %s' % (
             name, _ord(fh, _ORD_DATIV), _ord(zh, _ORD_DATIV))
@@ -316,8 +350,11 @@ def signatur_notation(g):
 
 def fachmodus_notation(g):
     """Signatur im Fachmodus (Typmodul): „Haus 12/11, Schwellenlage" — fuehrendes
-    Haus vorn, ohne Gradzahl. Neu 2026-09-19 (W35)."""
+    Haus vorn, ohne Gradzahl. Neu 2026-09-19 (W35). Offene Fuehrung (seit
+    2026-09-30): „Haus 6=7, gleich stark" wie die Haus-Spalte."""
     fh, zh, stufe = _ordnung(g)
+    if stufe == 'gleich stark':
+        return 'Haus %s=%s, %s' % (fh, zh, stufe)
     return 'Haus %s/%s, %s' % (fh, zh, stufe)
 
 
@@ -404,10 +441,13 @@ def parse_chart(text):
                 # die Zwei-Haeuser-Deutung fuer jeden fuehrenden Faktor verlangt.
                 sp = {'name': norm_faktor(roh), 'zeichen': None, 'haus': None,
                       'nebenhaus': None, 'abstand': None, 'fuehrt': False,
+                      'fuehrung': None,
                       'spiegel_von': SPIEGEL_FAKTOREN[roh]}
                 for p in parts[2:]:
                     pl = p.lower()
-                    if pl.startswith('zeichen='):
+                    if pl.startswith('fuehrung='):      # 2026-09-30, K9
+                        sp['fuehrung'] = p.split('=', 1)[1].strip().lower()
+                    elif pl.startswith('zeichen='):
                         sp['zeichen'] = norm(p.split('=', 1)[1])
                     elif pl.startswith('nebenhaus='):
                         sp['nebenhaus'] = p.split('=', 1)[1]
@@ -428,11 +468,13 @@ def parse_chart(text):
                     'gerechnet noch gedeutet, keine Bloecke). Die Zeile aus dem '
                     '@@SELEKTOR-Block streichen.' % (name, AUSGEMUSTERT[name]))
                 continue
-            zeichen = haus = nebenhaus = abstand = None
+            zeichen = haus = nebenhaus = abstand = fuehrung = None
             fuehrt = False
             for p in parts[2:]:
                 pl = p.lower()
-                if pl.startswith('zeichen='):
+                if pl.startswith('fuehrung='):          # 2026-09-30, K9
+                    fuehrung = p.split('=', 1)[1].strip().lower()
+                elif pl.startswith('zeichen='):
                     zeichen = norm(p.split('=', 1)[1])
                 elif pl.startswith('nebenhaus='):
                     nebenhaus = p.split('=', 1)[1]
@@ -445,7 +487,7 @@ def parse_chart(text):
                         'ja', 'j', 'true', '1')
             faktoren.append({'name': name, 'zeichen': zeichen, 'haus': haus,
                              'nebenhaus': nebenhaus, 'abstand': abstand,
-                             'fuehrt': fuehrt})
+                             'fuehrt': fuehrt, 'fuehrung': fuehrung})
         elif kw == 'ACHSE':
             ax = norm_token(parts[1])
             z = None
@@ -481,8 +523,13 @@ def parse_chart(text):
             'Aspekttabellen fuehrt. Erwartet wird je gedeutetem Paar eine '
             'Zeile der Form "ASPEKT <A> <B>" (nur die beiden Faktornamen, '
             'ohne Aspektart und ohne Orb).')
+    # 2026-09-30 (K9): die Faktoren, die Strukturbild §3 (radix) mit offener
+    # Fuehrung meldet — gegen `fuehrung=offen` gehalten in _pruefe_hart().
+    offen_s3 = sorted({norm_faktor(m.group(1)) for m in OFFEN_ZEILE_RE.finditer(text)})
     return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
-            'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise}
+            'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise,
+            'offen_strukturbild': offen_s3,
+            'strukturbild_seit_k9': bool(OFFEN_STAND_RE.search(text))}
 
 
 # ---------------------------------------------------------------- Bloecke laden
@@ -594,10 +641,11 @@ def build_requests(chart, typ=None):
         nh, ab = f.get('nebenhaus'), f.get('abstand')
         got = []
         if nh:
-            stufe, text = grenz_stufe(ab)
+            stufe, text = grenz_stufe(ab, offen=f.get('fuehrung') == 'offen')
             grenz.append({'faktor': nm, 'haus': h, 'nebenhaus': nh,
                           'abstand': ab, 'stufe': stufe, 'text': text,
                           'fuehrt': bool(f.get('fuehrt')),
+                          'fuehrung': f.get('fuehrung'),
                           'spiegel_von': f.get('spiegel_von')})
         if f.get('spiegel_von'):
             # Blockanfragen bewusst NICHT stellen: Die Deutung kommt gespiegelt
@@ -1028,9 +1076,28 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
             'ersten Mal mit dem\nLebensbereich dahinter"). Bis zum 2026-09-06 '
             'stand hier "weder Hausnummer\nnoch Gradzahl" — das widersprach '
             'dem Klartext-Modul (Pruefbericht Transit 1.7).\n')
+        if any(g.get('stufe') == 'offen' for g in grenz):
+            # 2026-09-30 (K9, Chris-Entscheidung Frage 2 = A)
+            out.append(
+                'OFFENE FUEHRUNG (seit 2026-09-30): Steht bei einem Faktor '
+                '„gleich stark", fuehrt KEINS\nder beiden Haeuser — schon '
+                'unter einer Minute frueherer oder spaeterer Geburt\nfuehrte '
+                'das andere (Strukturbild §3). Beide werden GLEICH STARK '
+                'gedeutet; der Text\nsagt EINMAL, an der ersten Stelle, die '
+                'den Faktor deutet, dass die Geburtszeit\nnicht entscheiden '
+                'kann, welches Haus fuehrt (die Knotenachse ist dabei ein '
+                'Faktor).\n'
+                + ('Das Lagebild nennt es nicht.\n' if typ == 'transit' else
+                   'Kein Hinweis im Auftakt; eine Registerzeile traegt nur '
+                   '„gleich stark".\n'))
         for g in grenz:
-            marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
-                     if g.get('fuehrt') else marke_nf)
+            if g.get('stufe') == 'offen':
+                marke = (' [FUEHRT ein Thema — beide Haeuser GLEICH STARK '
+                         'deuten, einmal offen sagen]'
+                         if g.get('fuehrt') else marke_nf)
+            else:
+                marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
+                         if g.get('fuehrt') else marke_nf)
             out.append('- **%s**: Haus %s → Haus %s. %s.%s'
                        % (g['faktor'].capitalize(), g['haus'], g['nebenhaus'],
                           g['text'], marke))
@@ -1137,6 +1204,7 @@ def _pruefe_hart(chart):
         print('       ASPEKT MARS AC')
         print('   Nur die beiden Faktornamen — keine Aspektart, kein Orb.')
         sys.exit(1)
+    _pruefe_offen(chart)
     unbek = chart.get('unbekannt', [])
     if unbek:
         print('UNBEKANNTE FAKTOREN (harter Fehler — frueher fielen sie lautlos durch):')
@@ -1151,6 +1219,74 @@ def _pruefe_hart(chart):
         print('   Ausgemustert (uebergangen, mit HINWEIS): %s'
               % ', '.join(sorted(AUSGEMUSTERT)))
         sys.exit(1)
+
+
+def offen_abgleich(chart):
+    """Offene Fuehrung: §3-Zeilen gegen die `fuehrung=offen`-Felder (neu
+    2026-09-30, K9). -> Liste von (art, text), art 'fehler' oder 'hinweis';
+    leer = stimmig.
+
+    Fehler: ein Faktor, den Strukturbild §3 mit „⚠ Führung offen" meldet, ohne
+    FAKTOR-Zeile oder ohne `fuehrung=offen`; `fuehrung=offen` ohne Grenzlage
+    (`nebenhaus=`); ein anderer Wert als `offen`; `fuehrung=offen` ohne
+    §3-Zeile, sobald das Strukturbild die offene Fuehrung schon rechnet.
+    Hinweis: `fuehrung=offen` in einem Datenblatt, dessen §3 aelter ist — dann
+    ist das Feld nicht nachpruefbar."""
+    fak = {f['name']: f for f in chart.get('faktoren', [])}
+    s3 = set(chart.get('offen_strukturbild') or [])
+    k9 = bool(chart.get('strukturbild_seit_k9'))
+    out = []
+    for n in sorted(s3):
+        f = fak.get(n)
+        if f is None:
+            out.append(('fehler', '%s: Strukturbild §3 meldet „⚠ Führung offen", '
+                        'der @@SELEKTOR-Block hat keine FAKTOR-Zeile — anlegen '
+                        'mit nebenhaus=, abstand= und fuehrung=offen' % n))
+        elif f.get('fuehrung') != 'offen':
+            out.append(('fehler', '%s: Strukturbild §3 meldet „⚠ Führung offen", '
+                        'die FAKTOR-Zeile traegt kein fuehrung=offen' % n))
+    for n, f in sorted(fak.items()):
+        w = f.get('fuehrung')
+        if w is None:
+            continue
+        if w != 'offen':
+            out.append(('fehler', '%s: fuehrung=%s — erlaubt ist nur '
+                        'fuehrung=offen' % (n, w)))
+            continue
+        if not f.get('nebenhaus'):
+            out.append(('fehler', '%s: fuehrung=offen ohne Grenzlage (nebenhaus=, '
+                        'abstand= fehlen) — offen ist die Fuehrung nur zwischen '
+                        'zwei Haeusern' % n))
+        if n not in s3:
+            if k9:
+                out.append(('fehler', '%s: fuehrung=offen, aber Strukturbild §3 '
+                            'meldet keine offene Fuehrung — Feld streichen oder '
+                            '§3 neu rechnen' % n))
+            else:
+                out.append(('hinweis', '%s: fuehrung=offen, das Strukturbild '
+                            'rechnet die offene Fuehrung noch nicht (Datenblatt '
+                            'von vor dem 2026-09-30) — nicht nachpruefbar' % n))
+    return out
+
+
+def _pruefe_offen(chart):
+    """Harter Abbruch bei Abweichung zwischen §3 und `fuehrung=offen`
+    (offen_abgleich(), seit 2026-09-30); Hinweise werden nur gemeldet."""
+    bef = offen_abgleich(chart)
+    for art, t in bef:
+        if art == 'hinweis':
+            print('   HINWEIS offene Fuehrung: %s' % t)
+    fehler = [t for art, t in bef if art == 'fehler']
+    if not fehler:
+        return
+    print('OFFENE FUEHRUNG — §3 und @@SELEKTOR-Block weichen ab (harter Fehler, '
+          'seit 2026-09-30):')
+    for t in fehler:
+        print('   %s' % t)
+    print('   Die ⚠-Zeilen „Führung offen" in Strukturbild §3 sind die Quelle '
+          '(radix.strukturbild_text()); je solchem Faktor steht an seiner '
+          'FAKTOR-Zeile fuehrung=offen, sonst nicht.')
+    sys.exit(1)
 
 
 def _melde_ohne_block(ohne):
@@ -1234,6 +1370,57 @@ def _selbsttest():
     assert beleg_notation(g['MOND']) == \
         '12./11. Haus (Schwellenlage, 1°30′ vor Spitze 12)'
     assert register_notation(g['SATURN']) == 'sechstes/siebtes Haus, Grenzlage'
+    # 2026-09-30 (K9): offene Fuehrung — Stufe „gleich stark", rechnerisches
+    # Haus vorn, harter Abgleich mit Strukturbild §3. Konstruierte Zeilen.
+    _s3 = ('- Hauswechsel bei späterer Geburt (Gegenprobe g, seit 2026-09-23; '
+           'die frühere Geburt deckt die 5°-Grenzlage, die Führung prüfen die '
+           'Zeilen darunter in beide Richtungen): …\n'
+           '- ⚠ Führung offen: Saturn (2°03′00″ vor der Spitze 7) — …\n')
+    blk_o = blk.replace(
+        'FAKTOR SATURN zeichen=Jungfrau haus=6 nebenhaus=7 abstand=3.25',
+        'FAKTOR SATURN zeichen=Jungfrau haus=6 nebenhaus=7 abstand=2.05 '
+        'fuehrung=offen fuehrt=ja')
+    chart_o = parse_chart(_s3 + blk_o)
+    assert chart_o['offen_strukturbild'] == ['SATURN'] and \
+        chart_o['strukturbild_seit_k9'] and offen_abgleich(chart_o) == [], chart_o
+    _req_o, _prot_o, grenz_o = build_requests(chart_o)
+    go = dict((x['faktor'], x) for x in grenz_o)['SATURN']
+    assert go['stufe'] == 'offen' and go['fuehrung'] == 'offen', go
+    assert signatur_notation(go) == ('Saturn an der Schwelle zwischen dem '
+                                     'sechsten und dem siebten Haus, beide '
+                                     'gleich stark'), signatur_notation(go)
+    assert fachmodus_notation(go) == 'Haus 6=7, gleich stark'
+    assert beleg_notation(go) == '6./7. Haus (gleich stark, 2°03′ vor Spitze 7)'
+    assert register_notation(go) == 'sechstes/siebtes Haus, gleich stark'
+    md_o = assemble_md(chart_o, [], _prot_o, [], grenz_o)
+    assert 'OFFENE FUEHRUNG (seit 2026-09-30)' in md_o and \
+        'beide Haeuser GLEICH STARK deuten, einmal offen sagen' in md_o and \
+        'Kein Hinweis im Auftakt' in md_o, md_o
+    md_ot = assemble_md(chart_o, [], _prot_o, [], grenz_o, typ='transit')
+    assert 'Das Lagebild nennt es nicht.' in md_ot
+    assert 'OFFENE FUEHRUNG' not in assemble_md(chart, [], prot, [], grenz)
+    # Abgleich: §3 meldet Saturn, das Feld fehlt -> harter Fehler
+    _ch = parse_chart(_s3 + blk)
+    assert [a for a, _t in offen_abgleich(_ch)] == ['fehler'], offen_abgleich(_ch)
+    import contextlib, io
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            _pruefe_offen(_ch)
+            raise AssertionError('kein Abbruch')
+        except SystemExit as _e:
+            assert _e.code == 1
+    # fuehrung=offen ohne Grenzlage -> Fehler; aelteres Datenblatt -> Hinweis
+    _ch2 = parse_chart(blk.replace('FAKTOR CHIRON zeichen=Stier haus=2',
+                                   'FAKTOR CHIRON zeichen=Stier haus=2 '
+                                   'fuehrung=offen'))
+    assert any(a == 'fehler' and 'ohne Grenzlage' in t
+               for a, t in offen_abgleich(_ch2)), offen_abgleich(_ch2)
+    _ch3 = parse_chart(blk_o)
+    assert [a for a, _t in offen_abgleich(_ch3)] == ['hinweis'], \
+        offen_abgleich(_ch3)
+    with contextlib.redirect_stdout(io.StringIO()) as _buf:
+        _pruefe_offen(_ch3)
+    assert 'HINWEIS offene Fuehrung: SATURN' in _buf.getvalue()
     for x in grenz:
         for zeile in (signatur_notation(x), fachmodus_notation(x),
                       register_notation(x)):
@@ -1328,7 +1515,8 @@ def _selbsttest():
     print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
           'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
-          'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II)]')
+          'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II), '
+          'offene Fuehrung (K9)]')
 
 
 def main():

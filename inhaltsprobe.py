@@ -118,7 +118,11 @@ P1  Beleg-Aspekte    jedes Aspekt-Segment eines Normal-Belegs (Faktor A, Aspekta
                      Profektion mit ihrem Geburtstag (nur PRUEFEN).
 P2  Beleg-Staende    Segment 1 jedes Normal-Belegs und jedes Instrument-Segment:
                      Zeichen und Haus gegen den @@SELEKTOR-Block (bei Grenzlage das
-                     fuehrende Haus vorn), Gradminute gegen die Staendetabelle.
+                     fuehrende Haus vorn, bei `fuehrung=offen` seit 2026-09-30 das
+                     rechnerische), Gradminute gegen die Staendetabelle. Offene
+                     Fuehrung (K9): an der ersten Stelle, die den Faktor deutet, ein
+                     Satz zur Geburtszeit, und die Signatur des Kapitels, das er
+                     fuehrt, sagt „gleich stark" — beides nur PRUEFEN.
 P3  Kapitel/Themen   die nummerierten Themenkapitel in Dokumentreihenfolge
                      gegen die THEMA-Zeilen (seit 2026-09-19, L7: `Kapitel n` ist
                      das Kapitel zu `THEMA n`; in Analysen alter Form, die das
@@ -1477,12 +1481,21 @@ def _tage(a, b):
     except (TypeError, ValueError):
         return 9999
 
+# 2026-09-30 (K9): der offene Satz zur offenen Fuehrung, deutsch und englisch
+GEBURTSZEIT_RE = re.compile(r"Geburtszeit|Geburtsminute|Geburtsuhrzeit|Uhrzeit (?:deiner|der) "
+                            r"Geburt|birth ?time|time of (?:your )?birth|birth minute", re.I)
+
+
 def _erwartete_haeuser(f):
     """(fuehrendes Haus, Nebenhaus) aus einer FAKTOR-Zeile — Schwellenlage (<= 2°)
-    fuehrt das Nebenhaus, Grenzlage (2°–5°) das rechnerische Haus (Datenblatt-Modul)."""
+    fuehrt das Nebenhaus, Grenzlage (2°–5°) das rechnerische Haus (Datenblatt-Modul).
+    Bei `fuehrung=offen` (seit 2026-09-30, K9) fuehrt keins; vorn steht das
+    rechnerische Haus."""
     h, nh, ab = f.get("haus"), f.get("nebenhaus"), f.get("abstand")
     if not nh:
         return h, None
+    if f.get("fuehrung") == "offen":
+        return h, nh
     try:
         a = float(ab) if ab is not None else 99.0
     except ValueError:
@@ -1532,9 +1545,15 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                                          % (stelle, soll1, "/" + soll2 if soll2 else ""))
                 else:
                     if soll1 and st["haus1"] != soll1:
-                        p.fehler.append("%s — führendes Haus %s, @@SELEKTOR verlangt %s%s vorn"
-                                        % (stelle, st["haus1"], soll1,
-                                           " (Grenzlage, Nebenhaus %s)" % soll2 if soll2 else ""))
+                        if fz.get("fuehrung") == "offen":      # 2026-09-30, K9
+                            p.fehler.append("%s — Haus %s vorn, @@SELEKTOR verlangt %s vorn "
+                                            "(offene Führung: das rechnerische Haus vorn, "
+                                            "gleich stark, Nebenhaus %s)"
+                                            % (stelle, st["haus1"], soll1, soll2))
+                        else:
+                            p.fehler.append("%s — führendes Haus %s, @@SELEKTOR verlangt %s%s vorn"
+                                            % (stelle, st["haus1"], soll1,
+                                               " (Grenzlage, Nebenhaus %s)" % soll2 if soll2 else ""))
                     elif st["haus2"] and not soll2:
                         p.fehler.append("%s — Beleg nennt ein Nebenhaus %s, @@SELEKTOR kennt keine "
                                         "Grenzlage" % (stelle, st["haus2"]))
@@ -1585,6 +1604,44 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                                     % (bez, i, _kurz(seg, 80)))
                     continue
                 pruefe("%s, Segment %d" % (bez, i), st)
+    # 2026-09-30 (K9, Chris-Entscheidung): offene Fuehrung — keins der beiden
+    # Haeuser fuehrt. Der Text sagt es EINMAL, an der ersten Stelle, die den
+    # Faktor deutet (erster Normal-Beleg mit ihm als Segment 1 oder erstes
+    # Instrument-Segment, in Dokumentreihenfolge); die Signatur eines Kapitels,
+    # das er fuehrt, traegt „gleich stark" (Wortform aus dem ⚠-Block). Beides
+    # ist Text — nur PRUEFEN.
+    offen = {n for n, f in fak.items() if f.get("fuehrung") == "offen"}
+    if offen:
+        erste = {}
+        for ch in chapters:
+            form = _beleg_form(ch, typ, chapters)
+            if form not in ("normal", "instrument"):
+                continue
+            segs = _segmente(ch["beleg"])
+            if form == "normal":
+                sts = [_staende_segment(segs[0])] if segs else []
+            else:
+                sts = [_staende_segment(sg) for sg in segs]
+            for i, st in enumerate(x for x in sts if x):
+                n = st["faktor"]
+                if n not in offen:
+                    continue
+                erste.setdefault(n, ch)
+                if form == "normal" and i == 0 and \
+                        "gleich stark" not in (ch.get("signatur") or ""):
+                    p.pruefen.append(
+                        "%s — %s führt das Kapitel mit offener Führung; die Signatur "
+                        "sagt nicht „gleich stark“ (Wortform aus dem ⚠-Block der "
+                        "referenz.md): „%s“" % (_bezeichnung(ch), ANZEIGE.get(n, n),
+                                               _kurz(ch.get("signatur"), 70)))
+        for n, ch in erste.items():
+            text = " ".join(_ws(b.get("text")) for b in ch["blocks"])
+            if not GEBURTSZEIT_RE.search(text):
+                p.pruefen.append(
+                    "%s — %s mit offener Führung (gleich stark): kein Satz, dass die "
+                    "Geburtszeit nicht entscheiden kann, welches Haus führt — einmal, "
+                    "an der ersten Stelle, die den Faktor deutet" % (_bezeichnung(ch),
+                                                                    ANZEIGE.get(n, n)))
     if p.geprueft == 0 and not p.fehler:
         return p.aussagelos("kein Stände-Segment gefunden")
     return p.abschluss()
@@ -7094,6 +7151,35 @@ def _selbsttest(still=False):
     erwarte(r8b, (("P15", "pruefen", "über dem Deckel, aber keine Zeile"),), "Lauf 8b")
     berichte.append("Lauf 8 (Transit, Deutungsort über dem Deckel): erkannt, 8b gemeldet")
 
+    # 9) offene Fuehrung (2026-09-30, K9): die Sonne konstruiert offen zwischen
+    #    Haus 1 und 2 — Beleg „1./2. Haus (gleich stark, …)", rechnerisch vorn
+    c9 = ersetze(_TEST_CHART, "FAKTOR SONNE zeichen=Widder haus=1 fuehrt=ja",
+                 "FAKTOR SONNE zeichen=Widder haus=1 nebenhaus=2 abstand=2.05 "
+                 "fuehrung=offen fuehrt=ja")
+    _alt9 = "Sonne ☉ 10°00′ Widder ♈, 1. Haus"
+    assert _TEST_ANALYSE.count(_alt9) == 2, "Selbsttest-Marke Lauf 9"
+    a9 = _TEST_ANALYSE.replace(_alt9, "Sonne ☉ 10°00′ Widder ♈, 1./2. Haus (gleich stark, "
+                                      "2°03′ vor Spitze 2)")
+    r9 = lauf(c9, a9)
+    erwarte(r9, (("P2", "pruefen", "kein Satz, dass die Geburtszeit"),
+                 ("P2", "pruefen", "die Signatur sagt nicht „gleich stark“")), "Lauf 9")
+    assert not r9["proben"]["P2"]["fehler"], r9["proben"]["P2"]["fehler"]
+    a9ok = ersetze(a9, "**Signatur:** Die Sonne im Widder im ersten Haus, verschmolzen mit "
+                         "Merkur — mitklingend der Mond im Stier",
+                   "**Signatur:** Sonne an der Schwelle zwischen dem ersten und dem zweiten "
+                   "Haus, beide gleich stark, verschmolzen mit Merkur — mitklingend der Mond "
+                   "im Stier")
+    a9ok = ersetze(a9ok, "die Sonne steht im Widder im ersten Haus.",
+                   "die Sonne steht im Widder im ersten und zweiten Haus zugleich — welches "
+                   "davon führt, kann deine Geburtszeit nicht entscheiden.")
+    r9ok = lauf(c9, a9ok)
+    assert not r9ok["proben"]["P2"]["pruefen"] and not r9ok["proben"]["P2"]["fehler"], (
+        "Lauf 9 (sauber): %s" % befunde(r9ok))
+    r9f = lauf(c9, a9ok.replace("1./2. Haus (gleich stark", "2./1. Haus (gleich stark"))
+    erwarte(r9f, (("P2", "fehler", "offene Führung: das rechnerische Haus vorn"),), "Lauf 9f")
+    berichte.append("Lauf 9 (offene Führung): Satz und Signatur gemeldet, sauber still, "
+                    "Reihenfolge als Fehler")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
@@ -7101,7 +7187,8 @@ def _selbsttest(still=False):
               "Lauf 3 liest das Zugang-Kapitel; Transit: Lauf 4 sauber mit events.json, Lauf 5 und 5b "
               "finden die eingebauten Fehler, Lauf 6 ohne events.json nur teilweise übersprungen; "
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
-              "Lauf 8 Deutungsort über dem Deckel; P16 und P17 als Einzelproben]")
+              "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; P16 und P17 als "
+              "Einzelproben]")
     return True
 
 def _main(argv):

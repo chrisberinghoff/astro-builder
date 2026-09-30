@@ -78,7 +78,20 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         zeichengrenze_fussnote(). Seit 2026-09-26 (Chris-Entscheidung) warnt
         sie nur, wenn dabei unter KIPP_SCHWELLE das FÜHRENDE Haus wechselt —
         nach dem Wechsel steht der Faktor in Schwellenlage vor derselben Spitze,
-        und das alte Haus führt weiter (fuehrendes_haus()).
+        und das alte Haus führt weiter (fuehrendes_haus()). Seit 2026-09-30
+        (K9) wird der Wechsel des führenden Hauses ab der Geburtsminute in
+        BEIDE Richtungen gerechnet, und die Warnung gilt in beide Richtungen.
+
+    fuehrung_offen(hk) -> list | None          (neu 2026-09-30, K9)
+    haus_spalte(lon, cusps, offen=True) -> '6=7'
+    grenzlagen_note(spalten, sprache='de') -> str | None
+        OFFENE FÜHRUNG: Würde schon weniger als FUEHRUNG_OFFEN (eine Minute)
+        frühere oder spätere Geburt einen grenzlagigen Faktor über die
+        2°-Marke schieben, führt keins der beiden Häuser — beide werden gleich
+        stark gedeutet (Chris-Entscheidung 2026-09-30). Die Haus-Spalte heißt
+        dann „6=7", das rechnerische Haus vorn; grenzlagen_note() liefert die
+        Erklärung der Konstellationsseite für „/" und „=" (vorher als
+        KONST_NOTE in beiden Vorlagen).
 
     zeitscan(jd, factors, lat, lon, cusps=None, fenster=15) -> dict | None
     zeitscan_text(zs) -> list            zeitscan_lesen(chart_data) -> dict | None
@@ -673,17 +686,30 @@ def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
             'abstand_spitze': None, 'label': 'Haus ?'}
 
 
-def haus_spalte(lon, cusps, orb=HAUS_ORB):
-    """Kompakte Haus-Angabe für die Konstellationstabelle: '7' oder '11/12'.
+def haus_spalte(lon, cusps, orb=HAUS_ORB, offen=False):
+    """Kompakte Haus-Angabe für die Konstellationstabelle: '7', '11/12' oder
+    '6=7'.
 
     Hausstil seit 2026-07-27: In der Tabelle steht bei einer Grenzlage NUR die
     Doppelzahl, kein Wort „Grenzlage" und keine Gradangabe — führendes Haus
     vorn. Die Stufe (≤2° Schwelle / 2–5° Grenzlage) entscheidet, welches Haus
     führt; sie wird weiter in Schritt 1/2 aus `abstand_spitze` bestimmt.
+
+    offen  (neu 2026-09-30, K9) True für einen Faktor mit OFFENER FÜHRUNG —
+           `fuehrung=offen` an seiner FAKTOR-Zeile im @@SELEKTOR-Block,
+           gerechnet von haus_kippminuten() (fuehrung_offen()): keins der
+           beiden Häuser führt, beide gleich stark. Dann '6=7', das
+           rechnerische Haus vorn (Chris-Entscheidung 2026-09-30). Ohne
+           Grenzlage wirkt offen=True nicht. Die Gradzahl allein kennt keine
+           Zeit — ob die Führung offen ist, sagt nur die Rechnung mit jd, lat
+           und lon; die Konstellationstabelle liest es darum aus dem
+           Datenblatt.
     """
     h = haus_und_grenzlage(lon, cusps, orb)
     if not h['grenzlage']:
         return str(h['haus'])
+    if offen:                                    # keins führt: rechnerisch vorn
+        return f"{h['haus']}={h['nebenhaus']}"
     if h['abstand_spitze'] <= SCHWELLENLAGE:     # Schwellenlage: Nebenhaus führt
         return f"{h['nebenhaus']}/{h['haus']}"
     return f"{h['haus']}/{h['nebenhaus']}"       # Grenzlage: rechnerisch führt
@@ -1599,10 +1625,13 @@ _SPITZEN_ASPEKTE = (0, 60, 90, 120, 180)   # Konjunktion, Sextil, Quadrat,
 _HART = (90, 180)
 KIPP_SCHWELLE = 2               # Minuten: eine Spitze oder ein Faktor, die
                                 #   frueher als das ihr Zeichen wechseln, und ein
-                                #   Faktor, bei dem frueher als das bei SPAETERER
-                                #   Geburt das FUEHRENDE Haus wechselt (seit
-                                #   2026-09-26; vorher jeder Hauswechsel),
-                                #   gehoeren in den
+                                #   Faktor, bei dem frueher als das bei
+                                #   FRUEHERER oder SPAETERER Geburt das
+                                #   FUEHRENDE Haus wechselt (seit 2026-09-30
+                                #   beide Richtungen, K9; seit 2026-09-26 nur
+                                #   das fuehrende Haus, vorher jeder
+                                #   Hauswechsel) und dessen Fuehrung nicht
+                                #   offen ist (FUEHRUNG_OFFEN), gehoeren in den
                                 #   ⚠-Block, den Datenblatt-Kopf und den
                                 #   Handlungsblock (Gegenprobe g). Verglichen wird
                                 #   der UNGERUNDETE Wert (`*_genau`). Bis
@@ -1610,6 +1639,16 @@ KIPP_SCHWELLE = 2               # Minuten: eine Spitze oder ein Faktor, die
                                 #   in einer Stichprobe in rund zwei Dritteln der
                                 #   Horoskope an (Chris-Entscheidung 2026-09-23).
 KIPP_MAX = 180                  # Minuten: weiter wird nicht gesucht
+FUEHRUNG_OFFEN = 1              # Minuten (ungerundet, drei Nachkommastellen):
+                                #   wechselt das FUEHRENDE Haus eines grenz-
+                                #   lagigen Faktors schon bei weniger
+                                #   frueherer ODER spaeterer Geburt zum anderen
+                                #   Haus seines Paars, fuehrt KEINS der beiden
+                                #   — beide gleich stark, Haus-Spalte „6=7",
+                                #   rechnerisches Haus vorn (Chris-Entscheidung
+                                #   2026-09-30, K9: die Urkunde ist nur
+                                #   minutengenau). Darueber bis KIPP_SCHWELLE
+                                #   bleibt es die Warnung (Gegenprobe g).
 ACHSE_GRENZE = 1.0              # Grad: AC oder MC naeher an einer Zeichengrenze
                                 #   -> Warnung auch ueber KIPP_SCHWELLE (Gegenprobe
                                 #   g, 1°-Regel; Chris-Entscheidung 2026-09-28:
@@ -2343,43 +2382,85 @@ def _zeichengrenze_fussnote_en(w, fw):
 # 2026-09-23: pruefen, nur die spaetere Geburt, Schwelle KIPP_SCHWELLE auf den
 # ungerundeten Wert; gemeldet in §3, ⚠-Block, Kopf, Handlungsblock, Text und
 # als Fussnote.
+#
+# --- Fuehrung in beide Richtungen, offene Fuehrung (neu 2026-09-30, K9) ------
+# „Die fruehere Geburt deckt die 5°-Grenzlage" traegt nur die Zwei-Haeuser-
+# DEUTUNG, nicht die FUEHRUNG. In einem Prueffall kippte bei mehreren
+# grenzlagigen Faktoren schon unter einer Minute frueherer Geburt die Fuehrung,
+# und keine Zeile meldete es (Pruefbericht Geburtshoroskop 1+2 vom 29.09.e,
+# Klasse 2; Schritt 3+4 vom 29.09.c, K9).
+# Umgekehrt blieb ein Faktor in Schwellenlage unbemerkt, der bei SPAETERER
+# Geburt ueber die 2°-Marke rueckt und damit die Fuehrung verliert, ohne das
+# Haus zu wechseln: Der Fuehrungswechsel wurde erst ab dem Hauswechsel gesucht
+# (Befund des Wartungslaufs, synthetisch nachgestellt: 1,98° vor der Spitze
+# meldete 83,57 statt rund 0,1 Minuten). Seitdem sucht haus_kippminuten() den
+# Wechsel des fuehrenden Hauses ab der Geburtsminute in BEIDE Richtungen.
+# Chris-Entscheidung 2026-09-30: Unter FUEHRUNG_OFFEN (einer Minute) fuehrt
+# keins der beiden Haeuser — beide gleich stark, Haus-Spalte „6=7", der Text
+# sagt es einmal offen (fuehrung_offen()); darueber bis KIPP_SCHWELLE bleibt es
+# die Warnung, in beide Richtungen (haus_kipp_warnungen()). Kein Fragen-PDF fuer
+# Haeuser — das Gegenprobe-Blatt bleibt beim Aszendenten. Der Hauswechsel selbst
+# bleibt die Infozeile fuer die spaetere Geburt (haus_kipp_ohne_fuehrung()).
 
 
 def haus_kippminuten(jd, factors, cusps, lat, lon, hsys=b"K", max_min=KIPP_MAX,
-                     schwellenlage=SCHWELLENLAGE):
+                     schwellenlage=SCHWELLENLAGE, offen_schwelle=FUEHRUNG_OFFEN):
     """Je Faktor: nach wie vielen Minuten SPAETERER Geburt er ins vorige Haus
-    faellt (neu 2026-09-23). Braucht pyswisseph; ohne es None.
+    faellt (neu 2026-09-23) — und seit dem 2026-09-30 nach wie vielen Minuten
+    FRUEHERER wie SPAETERER Geburt ein anderes Haus FUEHRT. Braucht pyswisseph;
+    ohne es None.
 
-    Die fruehere Geburt deckt die 5°-Grenzlage (haus_und_grenzlage()), die
-    spaetere nicht: Die Spitzen laufen mit der Zeit vor, und ein Faktor knapp
-    hinter der Spitze seines Hauses rutscht ins vorige. Gerechnet wird die
-    BEWEGUNG der Spitzen aus der Ephemeride (houses_ex, Minutenschritt bis
-    max_min, dann Bisektion) und an die uebergebenen `cusps` angelegt — der
-    Befund haengt an denselben Spitzen wie das Datenblatt. Die Eigenbewegung
-    des Faktors geht aus der Ephemeride mit ein (merklich nur beim Mond: gut
-    eine Bogenminute in zwei Minuten); ohne Ephemeride gilt er als fest. Die
-    Winkel stehen nicht in der Liste — sie SIND Spitzen —, ausgemusterte
-    Faktoren (AUSGEMUSTERT) auch nicht.
+    Die fruehere Geburt deckt die 5°-Grenzlage (haus_und_grenzlage()) fuer die
+    Zwei-Haeuser-Deutung, die spaetere nicht: Die Spitzen laufen mit der Zeit
+    vor, und ein Faktor knapp hinter der Spitze seines Hauses rutscht ins
+    vorige. Gerechnet wird die BEWEGUNG der Spitzen aus der Ephemeride
+    (houses_ex, Minutenschritt bis max_min, dann Bisektion) und an die
+    uebergebenen `cusps` angelegt — der Befund haengt an denselben Spitzen wie
+    das Datenblatt. Die Eigenbewegung des Faktors geht aus der Ephemeride mit
+    ein (merklich nur beim Mond: gut eine Bogenminute in zwei Minuten); ohne
+    Ephemeride gilt er als fest. Die Winkel stehen nicht in der Liste — sie
+    SIND Spitzen —, ausgemusterte Faktoren (AUSGEMUSTERT) auch nicht.
+
+    Der Suedknoten laeuft mit (seit 2026-09-30): Fehlt er in `factors` (der
+    chartdata.py-Vertrag fuehrt ihn nicht), wird er aus dem Mondknoten
+    abgeleitet — Laenge +180°, dieselbe Bewegung —, weil seine Grenzlage die
+    des Mondknotens spiegelt und das Datenblatt ihn dann mit eigener
+    FAKTOR-Zeile fuehrt. Bei Koch liegen Gegenspitzen genau gegenueber: Beide
+    Enden der Knotenachse kippen zur selben Minute.
 
     jd, lat, lon  wie bei kippminuten(); cusps die zwoelf Koch-Spitzen des
                   Datenblatts (Dezimalgrad).
-    -> Liste von dicts in der Reihenfolge von `factors`:
+    -> Liste von dicts in der Reihenfolge von `factors` (ein abgeleiteter
+       Suedknoten direkt hinter dem Mondknoten):
        {'name', 'lon', 'haus', 'hinter_spitze' (Grad hinter der Spitze seines
-        Hauses), 'spaeter' (erste ganze Minute im vorigen Haus, None = kein
-        Wechsel bis max_min), 'spaeter_genau' (ungerundet, drei
-        Nachkommastellen), 'haus_spaeter' (das Haus danach),
-        'fuehrend' (das heute FUEHRENDE Haus, fuehrendes_haus()),
-        'fuehrend_spaeter' / 'fuehrend_spaeter_genau' (erste ganze bzw.
-        ungerundete Minute, ab der NACH dem Wechsel ein anderes Haus fuehrt;
-        None = nicht bis max_min), 'fuehrend_haus_spaeter' (das Haus, das
-        dann fuehrt)}
+        Hauses), 'nebenhaus' / 'abstand_spitze' (die Grenzlage wie
+        haus_und_grenzlage(); ohne Grenzlage None), 'spaeter' (erste ganze
+        Minute im vorigen Haus, None = kein Wechsel bis max_min),
+        'spaeter_genau' (ungerundet, drei Nachkommastellen), 'haus_spaeter'
+        (das Haus danach),
+        'fuehrend' (das heute FUEHRENDE Haus nach der Stufe, fuehrendes_haus()),
+        'fuehrend_spaeter' / 'fuehrend_spaeter_genau' und 'fuehrend_frueher' /
+        'fuehrend_frueher_genau' (erste ganze bzw. ungerundete Minute
+        spaeterer bzw. frueherer Geburt, ab der ein anderes Haus fuehrt; None =
+        nicht bis max_min), 'fuehrend_haus_spaeter' / 'fuehrend_haus_frueher'
+        (das Haus, das dann fuehrt),
+        'offen_richtung' ('frueher' | 'spaeter' | None) und 'fuehrung_offen'
+        (bool): grenzlagig, und schon unter `offen_schwelle` Minuten fuehrte
+        das ANDERE Haus seines Paars (haus, nebenhaus) — fuehrung_offen(),
+        'abgeleitet' (nur beim abgeleiteten Suedknoten, True)}
 
-    Das fuehrende Haus (neu 2026-09-26, Chris-Entscheidung): Nach dem Wechsel
-    ins vorige Haus steht der Faktor zunaechst in Schwellenlage vor derselben
+    Das fuehrende Haus (2026-09-26, Chris-Entscheidung): Nach dem Wechsel ins
+    vorige Haus steht der Faktor zunaechst in Schwellenlage vor derselben
     Spitze (bis `schwellenlage` Grad) — das alte Haus FUEHRT weiter, nur ein
     Nebenton kommt dazu. Es wechselt erst, wenn der Faktor weiter als
-    `schwellenlage` vor die Spitze gerueckt ist; in unseren Breiten braucht
-    das mehr als zwei Minuten. haus_kipp_warnungen() warnt nur daran.
+    `schwellenlage` vor die Spitze gerueckt ist; in unseren Breiten braucht das
+    mehr als zwei Minuten. Seit dem 2026-09-30 wird der Wechsel ab der
+    Geburtsminute gesucht, in beide Richtungen (vorher erst ab dem Hauswechsel
+    und nur spaeter). Offen ist die Fuehrung nur innerhalb des Paars der
+    Grenzlage: Ein Wechsel ueber den Hauswechsel hinter der eigenen Spitze
+    (nur bei sehr schnellen Spitzen unter einer Minute moeglich) bleibt eine
+    Warnung, weil die 5°-Regel das vorige Haus dort nicht mitdeutet.
+    haus_kipp_warnungen() warnt, fuehrung_offen() liest die offenen.
     `schwellenlage` ist ein Parameter nur fuer den Selbsttest.
     """
     try:
@@ -2392,13 +2473,29 @@ def haus_kippminuten(jd, factors, cusps, lat, lon, hsys=b"K", max_min=KIPP_MAX,
         return ((neu - alt + 180.0) % 360.0) - 180.0
 
     c0 = swe.houses_ex(jd, lat, lon, hsys)[0][:12]
+    _sc = {}
 
     def spitzen_bei(t):
-        ct = swe.houses_ex(jd + t * schritt, lat, lon, hsys)[0][:12]
-        return [(cusps[i] + _delta(ct[i], c0[i])) % 360.0 for i in range(12)]
+        k = round(t, 9)
+        if k not in _sc:
+            ct = swe.houses_ex(jd + t * schritt, lat, lon, hsys)[0][:12]
+            _sc[k] = [(cusps[i] + _delta(ct[i], c0[i])) % 360.0
+                      for i in range(12)]
+        return _sc[k]
+
+    # 2026-09-30: der Suedknoten laeuft mit, abgeleitet, wenn er fehlt.
+    liste = []
+    namen = {f['name'] for f in factors}
+    for f in factors:
+        liste.append(f)
+        if f['name'] in ('Mondknoten', 'Knoten', 'Nordknoten') \
+                and f.get('lon') is not None \
+                and not namen & {'Südknoten', 'Suedknoten'}:
+            liste.append({'name': 'Südknoten', 'lon': (f['lon'] + 180.0) % 360.0,
+                          '_abgeleitet': True})
 
     tempo = {}
-    for f in factors:
+    for f in liste:
         nm = f['name']
         body = 'TRUE_NODE' if nm in ('Suedknoten', 'Südknoten') \
             else _KIPP_KOERPER.get(nm)
@@ -2411,29 +2508,36 @@ def haus_kippminuten(jd, factors, cusps, lat, lon, hsys=b"K", max_min=KIPP_MAX,
             tempo[nm] = 0.0
 
     out = []
-    for f in factors:
+    for f in liste:
         nm = f['name']
         if nm in WINKEL or nm in AUSGEMUSTERT or f.get('lon') is None:
             continue
         l0 = f['lon'] % 360.0
-        h = haus_und_grenzlage(l0, cusps)['haus']
+        hg = haus_und_grenzlage(l0, cusps)
+        h = hg['haus']
         if h is None:
             continue
-        out.append({'name': nm, 'lon': l0, 'haus': h,
-                    'hinter_spitze': round((l0 - cusps[h - 1]) % 360.0, 4),
-                    'spaeter': None, 'spaeter_genau': None,
-                    'haus_spaeter': None})
+        e = {'name': nm, 'lon': l0, 'haus': h,
+             'hinter_spitze': round((l0 - cusps[h - 1]) % 360.0, 4),
+             'nebenhaus': hg['nebenhaus'],
+             'abstand_spitze': (hg['abstand_spitze'] if hg['grenzlage']
+                                else None),
+             'spaeter': None, 'spaeter_genau': None,
+             'haus_spaeter': None}
+        if f.get('_abgeleitet'):
+            e['abgeleitet'] = True
+        out.append(e)
 
     def haus_bei(e, t, ct):
         return haus_und_grenzlage(e['lon'] + tempo.get(e['name'], 0.0) * t,
                                   ct)['haus']
 
-    offen = list(out)
+    suche = list(out)
     for k in range(1, max_min + 1):
-        if not offen:
+        if not suche:
             break
         ck = spitzen_bei(k)
-        for e in list(offen):
+        for e in list(suche):
             if haus_bei(e, k, ck) == e['haus']:
                 continue
             g = _genau(lambda t, _e=e: haus_bei(_e, t, spitzen_bei(t))
@@ -2441,56 +2545,110 @@ def haus_kippminuten(jd, factors, cusps, lat, lon, hsys=b"K", max_min=KIPP_MAX,
             e['spaeter'] = k
             e['spaeter_genau'] = round(g, 3)
             e['haus_spaeter'] = haus_bei(e, g, spitzen_bei(g))
-            offen.remove(e)
+            suche.remove(e)
 
-    # 2026-09-26: ab dem Wechsel weiter, bis ein ANDERES Haus fuehrt.
-    def fuehrend_bei(e, t, ct):
-        return fuehrendes_haus(e['lon'] + tempo.get(e['name'], 0.0) * t, ct,
-                               schwelle=schwellenlage)
+    # 2026-09-30 (K9): Wechsel des FUEHRENDEN Hauses ab der Geburtsminute, in
+    # BEIDE Richtungen (vorher erst ab dem Hauswechsel und nur spaeter).
+    def fuehrend_bei(e, t):
+        return fuehrendes_haus(e['lon'] + tempo.get(e['name'], 0.0) * t,
+                               spitzen_bei(t), schwelle=schwellenlage)
 
     for e in out:
         e['fuehrend'] = fuehrendes_haus(e['lon'], cusps, schwelle=schwellenlage)
-        e['fuehrend_spaeter'] = e['fuehrend_spaeter_genau'] = None
-        e['fuehrend_haus_spaeter'] = None
-        if e['spaeter_genau'] is None:
-            continue
-        for k in range(int(e['spaeter_genau']) + 1, max_min + 1):
-            if fuehrend_bei(e, k, spitzen_bei(k)) == e['fuehrend']:
-                continue
-            g = _genau(lambda t, _e=e: fuehrend_bei(_e, t, spitzen_bei(t))
-                       != _e['fuehrend'], max(k - 1, e['spaeter_genau']), k)
-            e['fuehrend_spaeter'] = k
-            e['fuehrend_spaeter_genau'] = round(g, 3)
-            e['fuehrend_haus_spaeter'] = fuehrend_bei(e, g, spitzen_bei(g))
-            break
+        for vz, feld in ((1, 'spaeter'), (-1, 'frueher')):
+            e['fuehrend_' + feld] = e['fuehrend_%s_genau' % feld] = None
+            e['fuehrend_haus_' + feld] = None
+            for k in range(1, max_min + 1):
+                if fuehrend_bei(e, vz * k) == e['fuehrend']:
+                    continue
+                g = _genau(lambda t, _e=e, _v=vz: fuehrend_bei(_e, _v * t)
+                           != _e['fuehrend'], k - 1, k)
+                e['fuehrend_' + feld] = k
+                e['fuehrend_%s_genau' % feld] = round(g, 3)
+                e['fuehrend_haus_' + feld] = fuehrend_bei(e, vz * g)
+                break
+        paar = {e['haus'], e['nebenhaus']} if e['nebenhaus'] else set()
+        kand = [(e['fuehrend_%s_genau' % f], f) for f in ('frueher', 'spaeter')
+                if e['fuehrend_%s_genau' % f] is not None
+                and e['fuehrend_%s_genau' % f] < offen_schwelle
+                and e['fuehrend_haus_' + f] in paar]
+        e['offen_richtung'] = min(kand)[1] if kand else None
+        e['fuehrung_offen'] = bool(kand)
     return out
 
 
-def haus_kipp_warnungen(hk, schwelle=KIPP_SCHWELLE):
-    """Die Faktoren, bei denen spaetere Geburt unter der Schwelle (ungerundet)
-    das FUEHRENDE Haus wechselt — die knappste zuerst (Gegenprobe g, seit
-    2026-09-23; seit 2026-09-26 nur noch der Wechsel des fuehrenden Hauses,
-    Chris-Entscheidung: Ein Wechsel ins vorige Haus, nach dem das alte Haus in
-    Schwellenlage weiter fuehrt, bekommt keine Warnung, keine Frage und keine
-    Fussnote — §3 nennt ihn in einer Infozeile ohne ⚠).
+def _offen_schluessel(nm):
+    """Vergleichsschluessel eines Faktornamens fuer die offene Fuehrung: Die
+    Vorlagen reichen Namen aus dem @@SELEKTOR-Block durch (SATURN,
+    SUEDKNOTEN), haus_kippminuten() fuehrt Vertragsnamen (Saturn, Südknoten)."""
+    n = str(nm).strip().upper()
+    for a, b in (('Ä', 'AE'), ('Ö', 'OE'), ('Ü', 'UE'), ('ß', 'SS')):
+        n = n.replace(a, b)
+    return {'KNOTEN': 'MONDKNOTEN', 'NORDKNOTEN': 'MONDKNOTEN'}.get(n, n)
 
-    -> [{'name', 'minuten', 'minuten_genau' (bis zum Wechsel ins vorige
-         Haus), 'haus', 'haus_neu', 'hinter_spitze', 'fuehrend_minuten',
+
+def _ist_offen(e, offen=None):
+    """Offene Fuehrung eines Eintrags aus haus_kippminuten(): gerechnet
+    (offen=None) oder als Menge von Namen vorgegeben (die Vorlagen lesen sie
+    aus `fuehrung=offen` des Datenblatts)."""
+    if offen is None:
+        return bool(e.get('fuehrung_offen'))
+    return _offen_schluessel(e['name']) in {_offen_schluessel(n) for n in offen}
+
+
+def haus_kipp_warnungen(hk, schwelle=KIPP_SCHWELLE, offen=None):
+    """Die Faktoren, bei denen FRUEHERE oder SPAETERE Geburt unter der Schwelle
+    (ungerundet) das FUEHRENDE Haus wechselt und deren Fuehrung nicht offen
+    ist — die knappste zuerst (Gegenprobe g, seit 2026-09-23; seit 2026-09-26
+    nur noch der Wechsel des fuehrenden Hauses, Chris-Entscheidung: Ein Wechsel
+    ins vorige Haus, nach dem das alte Haus in Schwellenlage weiter fuehrt,
+    bekommt keine Warnung, keine Frage und keine Fussnote — §3 nennt ihn in
+    einer Infozeile ohne ⚠; seit 2026-09-30 in BEIDE Richtungen,
+    Chris-Entscheidung zu K9).
+
+    offen  None: Faktoren mit offener Fuehrung (fuehrung_offen()) fallen heraus
+           — sie werden gleich stark gedeutet statt gewarnt. Eine Menge von
+           Namen ersetzt die Rechnung: Die Vorlagen reichen die Faktoren mit
+           `fuehrung=offen` aus dem Datenblatt durch; ein Datenblatt von vor
+           dem 2026-09-30 traegt keine, dann warnt die Fussnote auch unter
+           einer Minute wie zuvor.
+
+    -> [{'name', 'richtung' ('früher' | 'später'), 'minuten', 'minuten_genau'
+         (bis zum Wechsel ins vorige Haus bei spaeterer Geburt, sonst None),
+         'haus', 'haus_neu', 'hinter_spitze', 'nebenhaus', 'abstand_spitze',
+         'fuehrend' (das heute fuehrende Haus), 'fuehrend_minuten',
          'fuehrend_minuten_genau' (bis zum Wechsel des fuehrenden Hauses),
-         'fuehrend_haus_neu'}]; leer, wenn keiner unter der Schwelle liegt;
-        None, wenn hk None ist.
+         'fuehrend_haus_neu', 'ueber_hauswechsel' (True: spaeter, und der
+         Faktor faellt vorher ins vorige Haus)}]; leer, wenn keiner unter der
+        Schwelle liegt; None, wenn hk None ist.
     """
     if hk is None:
         return None
-    out = [{'name': e['name'], 'minuten': e['spaeter'],
-            'minuten_genau': e['spaeter_genau'], 'haus': e['haus'],
-            'haus_neu': e['haus_spaeter'],
-            'hinter_spitze': e['hinter_spitze'],
-            'fuehrend_minuten': e.get('fuehrend_spaeter'),
-            'fuehrend_minuten_genau': e.get('fuehrend_spaeter_genau'),
-            'fuehrend_haus_neu': e.get('fuehrend_haus_spaeter')}
-           for e in hk if e.get('fuehrend_spaeter_genau') is not None
-           and e['fuehrend_spaeter_genau'] < schwelle]
+    out = []
+    for e in hk:
+        if _ist_offen(e, offen):
+            continue
+        kand = [(e['fuehrend_%s_genau' % f], f) for f in ('spaeter', 'frueher')
+                if e.get('fuehrend_%s_genau' % f) is not None
+                and e['fuehrend_%s_genau' % f] < schwelle]
+        if not kand:
+            continue
+        g, f = min(kand)
+        sp = f == 'spaeter'
+        out.append({'name': e['name'],
+                    'richtung': 'später' if sp else 'früher',
+                    'minuten': e['spaeter'], 'minuten_genau': e['spaeter_genau'],
+                    'haus': e['haus'], 'haus_neu': e['haus_spaeter'],
+                    'hinter_spitze': e['hinter_spitze'],
+                    'nebenhaus': e.get('nebenhaus'),
+                    'abstand_spitze': e.get('abstand_spitze'),
+                    'fuehrend': e.get('fuehrend'),
+                    'fuehrend_minuten': e['fuehrend_' + f],
+                    'fuehrend_minuten_genau': g,
+                    'fuehrend_haus_neu': e['fuehrend_haus_' + f],
+                    'ueber_hauswechsel': bool(
+                        sp and e['spaeter_genau'] is not None
+                        and e['spaeter_genau'] <= g)})
     out.sort(key=lambda w: w['fuehrend_minuten_genau'])
     return out
 
@@ -2516,7 +2674,40 @@ def haus_kipp_ohne_fuehrung(hk, schwelle=KIPP_SCHWELLE):
     return out
 
 
-def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de'):
+def fuehrung_offen(hk):
+    """Die Faktoren mit OFFENER FUEHRUNG (neu 2026-09-30, K9;
+    Chris-Entscheidung vom selben Tag): grenzlagig, und schon unter
+    FUEHRUNG_OFFEN Minuten frueherer oder spaeterer Geburt fuehrte das andere
+    Haus ihres Paars. Keins der beiden Haeuser fuehrt — beide werden gleich
+    stark gedeutet; die FAKTOR-Zeile im @@SELEKTOR-Block traegt
+    `fuehrung=offen`, die Haus-Spalte heisst '6=7' (haus_spalte(offen=True),
+    das rechnerische Haus vorn), und der Text sagt es einmal offen: an der
+    ersten Stelle, die den Faktor deutet (Datenblatt-Modul, Grenzlagen).
+
+    -> [{'name', 'haus', 'nebenhaus', 'abstand_spitze', 'fuehrend' (was die
+         Stufe allein sagte), 'richtung' ('früher' | 'später'),
+         'minuten_genau', 'fuehrend_haus_neu', 'spalte' ('6=7')}], knappste
+        zuerst; leer, wenn keiner; None, wenn hk None ist."""
+    if hk is None:
+        return None
+    out = []
+    for e in hk:
+        f = e.get('offen_richtung')
+        if not e.get('fuehrung_offen') or f is None:
+            continue
+        out.append({'name': e['name'], 'haus': e['haus'],
+                    'nebenhaus': e['nebenhaus'],
+                    'abstand_spitze': e['abstand_spitze'],
+                    'fuehrend': e['fuehrend'],
+                    'richtung': 'später' if f == 'spaeter' else 'früher',
+                    'minuten_genau': e['fuehrend_%s_genau' % f],
+                    'fuehrend_haus_neu': e['fuehrend_haus_' + f],
+                    'spalte': f"{e['haus']}={e['nebenhaus']}"})
+    out.sort(key=lambda w: w['minuten_genau'])
+    return out
+
+
+def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de', offen=None):
     """Fertiger FUSSNOTENSATZ zum Hauswechsel fuer die Konstellationsseite —
     oder None (neu 2026-09-23). Steht als EIGENE Fussnote neben der von
     zeichengrenze_fussnote(); Schritt 3 setzt ihn, ohne ihn zu formulieren und
@@ -2524,14 +2715,21 @@ def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de'):
 
     hk  Rueckgabe von haus_kippminuten() (oder strukturbild()['haus_kippminuten']).
     sprache 'de' oder 'en' (seit 2026-09-26, englische Fassung).
+    offen   wie bei haus_kipp_warnungen() (seit 2026-09-30).
     -> str oder None (None = kein Faktor unter der Schwelle).
 
     Seit 2026-09-26 nur fuer den Wechsel des FUEHRENDEN Hauses
     (haus_kipp_warnungen): „steht N Minuten hinter der Spitze" ist die Zeit bis
     zum Wechsel ins vorige Haus, „bei M Minuten spaeterer Geburt stuende er im
-    …" die Zeit, ab der das andere Haus fuehrt.
+    …" die Zeit, ab der das andere Haus fuehrt. Seit dem 2026-09-30 in beide
+    Richtungen: Ein Faktor nahe vor einer Spitze, dessen Fuehrung an der
+    2°-Marke kippt, bekommt „steht nahe an der Spitze des N. Hauses: bei M
+    Minuten frueherer/spaeterer Geburt fuehrte das X. Haus, nicht das Y.";
+    ein Faktor mit offener Fuehrung steht nicht hier, sondern in der
+    Haus-Spalte („6=7") und ihrer Fussnote (grenzlagen_note()).
     """
-    w = haus_kipp_warnungen(hk, schwelle=schwelle) if hk is not None else None
+    w = (haus_kipp_warnungen(hk, schwelle=schwelle, offen=offen)
+         if hk is not None else None)
     if not w:
         return None
     if _sprache(sprache) == 'en':
@@ -2539,12 +2737,22 @@ def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de'):
         for x in w:
             anz = _faktor_anzeige(x['name'])
             wer = _FAKTOR_EN.get(anz, anz)
-            m = _min_wort_en(x['minuten_genau'])
             mf = _min_wort_en(x['fuehrend_minuten_genau'])
-            teile.append(f"{wer} lies {m} behind the cusp of the "
-                         f"{_ordinal_en(x['haus'])} house: with a birth {mf} "
-                         f"later, it would stand in the "
-                         f"{_ordinal_en(x['fuehrend_haus_neu'])} house")
+            if x['ueber_hauswechsel'] or not x.get('nebenhaus'):
+                m = _min_wort_en(x['minuten_genau'] if x['minuten_genau']
+                                 is not None else x['fuehrend_minuten_genau'])
+                teile.append(f"{wer} lies {m} behind the cusp of the "
+                             f"{_ordinal_en(x['haus'])} house: with a birth "
+                             f"{mf} later, it would stand in the "
+                             f"{_ordinal_en(x['fuehrend_haus_neu'])} house")
+            else:
+                ri = 'earlier' if x['richtung'] == 'früher' else 'later'
+                teile.append(f"{wer} lies close to the cusp of the "
+                             f"{_ordinal_en(x['nebenhaus'])} house: with a "
+                             f"birth {mf} {ri}, the "
+                             f"{_ordinal_en(x['fuehrend_haus_neu'])} house "
+                             f"would lead, not the "
+                             f"{_ordinal_en(x['fuehrend'])}")
         teile = [teile[0]] + [(t[0].lower() + t[1:]) if t.startswith('The ')
                               else t for t in teile[1:]]
         return ('; '.join(teile)
@@ -2555,18 +2763,71 @@ def hauswechsel_fussnote(hk, schwelle=KIPP_SCHWELLE, sprache='de'):
     for x in w:
         anz = _faktor_anzeige(x['name'])
         wer, pron = _FAKTOR_ARTIKEL.get(anz, (anz, 'er'))
-        m = _min_wort(x['minuten_genau'], ziffer=True)
         mf = _min_wort(x['fuehrend_minuten_genau'], ziffer=True)
-        teile.append(f"{wer} steht {m} hinter der Spitze des {x['haus']}. "
-                     f"Hauses: bei {mf} späterer Geburt stünde {pron} im "
-                     f"{x['fuehrend_haus_neu']}. Haus")
+        if x['ueber_hauswechsel'] or not x.get('nebenhaus'):
+            m = _min_wort(x['minuten_genau'] if x['minuten_genau'] is not None
+                          else x['fuehrend_minuten_genau'], ziffer=True)
+            teile.append(f"{wer} steht {m} hinter der Spitze des {x['haus']}. "
+                         f"Hauses: bei {mf} späterer Geburt stünde {pron} im "
+                         f"{x['fuehrend_haus_neu']}. Haus")
+        else:
+            teile.append(f"{wer} steht nahe an der Spitze des "
+                         f"{x['nebenhaus']}. Hauses: bei {mf} "
+                         f"{x['richtung']}er Geburt führte das "
+                         f"{x['fuehrend_haus_neu']}. Haus, nicht das "
+                         f"{x['fuehrend']}.")
     teile = [teile[0]] + [(t[0].lower() + t[1:])
                           if t.startswith(('Die ', 'Der ')) else t
                           for t in teile[1:]]
-    return ('; '.join(teile)
+    satz = '; '.join(teile)
+    if satz.endswith('.'):
+        satz = satz[:-1]
+    return (satz
             + ('. Die Hausdeutung dieser Faktoren hängt damit an der '
                'Geburtszeit.' if len(teile) > 1 else
                '. Die Hausdeutung hängt damit an der Geburtszeit.'))
+
+
+# --- Grenzlagen-Erklaerung der Konstellationsseite (neu 2026-09-30, K9) -------
+# Der Wortlaut stand bis dahin in beiden Vorlagen (KONST_NOTE) und im
+# Design-Render-Modul — doppelt (Pruefbericht Geburtshoroskop 3+4 vom 29.09.c,
+# Klasse 2) und ohne den Fall „keins fuehrt" (K9). Jetzt nur hier.
+_GRENZLAGEN_NOTE = {
+    'de': ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
+           'Hausspitze und wird in beiden Häusern gedeutet — das führende '
+           'Haus steht vorn.',
+           'Gleichheitszeichen: Der Faktor steht bis 5° vor der nächsten '
+           'Hausspitze, und schon eine Minute Unterschied in der Geburtszeit '
+           'würde umdrehen, welches der beiden Häuser führt — beide werden '
+           'gleich stark gedeutet.'),
+    'en': ('Double house entry: the factor stands up to 5° before the next '
+           'house cusp and is read in both houses — the leading house comes '
+           'first.',
+           'Equals sign: the factor stands up to 5° before the next house '
+           'cusp, and a difference of a single minute in the birth time would '
+           'reverse which of the two houses leads — both are read with equal '
+           'weight.')}
+
+
+def grenzlagen_note(spalten, sprache='de'):
+    """Die Grenzlagen-Erklaerung der Konstellationsseite, fertig fuer
+    `chartdoc.konstellationen_page(..., note=…)` — oder None (neu 2026-09-30,
+    K9; Chris-Entscheidung zum Wortlaut vom selben Tag).
+
+    spalten  die Haus-Spalte der Faktorentabelle (Strings wie '7', '11/12',
+             '6=7'); Trennzeilen weglassen.
+    sprache  'de' oder 'en'.
+    -> str: der Satz zur Doppelangabe (eine Zelle mit '/'), der zum
+       Gleichheitszeichen (eine Zelle mit '=') oder beide, durch ein
+       Leerzeichen getrennt; None, wenn keine Zelle eine Grenzlage traegt."""
+    s = _sprache(sprache)
+    z = [str(x) for x in spalten if x is not None]
+    teile = []
+    if any('/' in x for x in z):
+        teile.append(_GRENZLAGEN_NOTE[s][0])
+    if any('=' in x for x in z):
+        teile.append(_GRENZLAGEN_NOTE[s][1])
+    return ' '.join(teile) or None
 
 
 # --- Zeitscan (neu 2026-09-29) -----------------------------------------------
@@ -3026,10 +3287,11 @@ def zeitscan(jd, factors, lat, lon, cusps=None, fenster=ZEITSCAN_FENSTER,
         for e in (faktor_kipp or []):
             if not e.get('fehler'):
                 ersatz.setdefault(('zeichen', e['name']), []).append(e.get(feld))
-        if vz > 0:
-            for e in (haus_kipp or []):
-                ersatz.setdefault(('haus', e['name']), []).extend(
-                    [e.get('spaeter_genau'), e.get('fuehrend_spaeter_genau')])
+        # 2026-09-30 (K9): die Fuehrung auch frueher
+        for e in (haus_kipp or []):
+            ersatz.setdefault(('haus', e['name']), []).extend(
+                [e.get('spaeter_genau'), e.get('fuehrend_spaeter_genau')]
+                if vz > 0 else [e.get('fuehrend_frueher_genau')])
         ev = []
         t_alt, alt = 0.0, b0
         for k in range(1, n + 1):
@@ -3066,14 +3328,15 @@ def zeitscan(jd, factors, lat, lon, cusps=None, fenster=ZEITSCAN_FENSTER,
 def zeitscan_faellig(sb):
     """Braucht §3 den Zeitscan-Block? Ja, sobald §3 eine ⚠-Zeile der
     Gegenprobe g traegt (Spitze oder Faktor unter KIPP_SCHWELLE, AC/MC unter
-    ACHSE_GRENZE an einer Zeichengrenze, Wechsel des fuehrenden Hauses) ODER
+    ACHSE_GRENZE an einer Zeichengrenze, Wechsel des fuehrenden Hauses,
+    seit 2026-09-30 auch offene Fuehrung) ODER
     der AC bei weniger als AC_GEGENPROBE_SCHWELLE Minuten das Zeichen
     wechselt. Ohne kippminuten (kein jd/lat/lon) nie."""
     kipp = sb.get('kippminuten')
     if not kipp:
         return False
     if sb.get('kipp_warnungen') or sb.get('faktor_kipp_warnungen') \
-            or sb.get('haus_kipp_warnungen'):
+            or sb.get('haus_kipp_warnungen') or sb.get('fuehrung_offen'):
         return True
     g = kipp[0].get('min_genau', kipp[0].get('min'))
     return g is not None and g < AC_GEGENPROBE_SCHWELLE
@@ -3193,6 +3456,139 @@ def zeitscan_lesen(quelle):
     return res if gefunden else None
 
 
+def _selbsttest_fuehrung():
+    """Selbsttest der offenen Fuehrung und der Warnung in beide Richtungen
+    (neu 2026-09-30, K9) OHNE Klientendaten: J2000.0 (JD 2451545,0), 50° Nord
+    / 10° Ost, die Faktoren von Hand vor die Spitzen gesetzt — der Abstand zur
+    2°-Marke aus der Laufgeschwindigkeit der Spitze. Geprueft: offen frueher
+    (Saturn, 0,5 Minuten) und spaeter (Jupiter, Schwellenlage, 0,4 Minuten),
+    die Knotenachse samt abgeleitetem Suedknoten, die Warnung frueher (Mars,
+    1,5 Minuten) und spaeter OHNE Hauswechsel (Venus, Schwellenlage, 1,5
+    Minuten — bis 2026-09-29 unbemerkt), Haus-Spalte, Erklaerung,
+    Fussnote, §3-Zeilen und der Vorrang der Datenblatt-Menge."""
+    try:
+        import swisseph as _swe
+    except Exception:
+        return 'Führungs-Test: übersprungen (kein pyswisseph)'
+    _ephe_pfad_setzen(_swe)
+    la, lo, jd = 50.0, 10.0, 2451545.0
+    c = list(_swe.houses_ex(jd, la, lo, b"K")[0][:12])
+    c1 = list(_swe.houses_ex(jd + 1.0 / 1440.0, la, lo, b"K")[0][:12])
+    v = [((c1[i] - c[i] + 180.0) % 360.0) - 180.0 for i in range(12)]
+
+    def vor(spitze, grad):              # Laenge `grad` vor der Spitze n
+        return (c[spitze - 1] - grad) % 360.0
+
+    f = [{'name': 'Saturn', 'lon': vor(7, 2.0 + 0.5 * v[6])},
+         {'name': 'Jupiter', 'lon': vor(4, 2.0 - 0.4 * v[3])},
+         {'name': 'Mars', 'lon': vor(10, 2.0 + 1.5 * v[9])},
+         {'name': 'Venus', 'lon': vor(1, 2.0 - 1.5 * v[0])},
+         {'name': 'Mondknoten', 'lon': vor(2, 2.0 + 0.3 * v[1])},
+         {'name': 'Merkur', 'lon': (c[4] + ((c[5] - c[4]) % 360.0) / 2) % 360}]
+    hk = haus_kippminuten(jd, f, c, la, lo)
+    e = {x['name']: x for x in hk}
+    assert list(e) == ['Saturn', 'Jupiter', 'Mars', 'Venus', 'Mondknoten',
+                       'Südknoten', 'Merkur'], list(e)
+    assert e['Südknoten'].get('abgeleitet') and e['Südknoten']['haus'] == 7, \
+        e['Südknoten']
+    sa, ju, ma, ve = e['Saturn'], e['Jupiter'], e['Mars'], e['Venus']
+    assert (sa['haus'], sa['nebenhaus'], sa['fuehrend']) == (6, 7, 6), sa
+    assert sa['fuehrung_offen'] and sa['offen_richtung'] == 'frueher' and \
+        abs(sa['fuehrend_frueher_genau'] - 0.5) < 0.05 and \
+        sa['fuehrend_haus_frueher'] == 7, sa
+    assert (ju['haus'], ju['nebenhaus'], ju['fuehrend']) == (3, 4, 4), ju
+    assert ju['fuehrung_offen'] and ju['offen_richtung'] == 'spaeter' and \
+        abs(ju['fuehrend_spaeter_genau'] - 0.4) < 0.05 and \
+        ju['fuehrend_haus_spaeter'] == 3, ju
+    for n in ('Mondknoten', 'Südknoten'):
+        assert e[n]['fuehrung_offen'] and e[n]['offen_richtung'] == 'frueher' \
+            and abs(e[n]['fuehrend_frueher_genau'] - 0.3) < 0.05, e[n]
+    assert not ma['fuehrung_offen'] and not ve['fuehrung_offen'], (ma, ve)
+    assert not e['Merkur']['fuehrung_offen'], e['Merkur']
+    # gegen die Ephemeride: eine Sekunde vor und nach dem Wechsel
+    for x, feld, vz in ((sa, 'frueher', -1), (ju, 'spaeter', 1),
+                        (ma, 'frueher', -1), (ve, 'spaeter', 1)):
+        g = x['fuehrend_%s_genau' % feld]
+        for dt, soll in ((g - 1 / 60, x['fuehrend']),
+                         (g + 1 / 60, x['fuehrend_haus_' + feld])):
+            cx = list(_swe.houses_ex(jd + vz * dt / 1440.0, la, lo,
+                                     b"K")[0][:12])
+            assert fuehrendes_haus(x['lon'], cx) == soll, (x['name'], dt, soll)
+    fo = fuehrung_offen(hk)
+    assert [w['name'] for w in fo] == ['Mondknoten', 'Südknoten', 'Jupiter',
+                                       'Saturn'], fo
+    assert {w['name']: w['spalte'] for w in fo}['Saturn'] == '6=7', fo
+    w = haus_kipp_warnungen(hk)
+    assert [(x['name'], x['richtung']) for x in w] == \
+        [('Mars', 'früher'), ('Venus', 'später')] or \
+        [(x['name'], x['richtung']) for x in w] == \
+        [('Venus', 'später'), ('Mars', 'früher')], w
+    wv = next(x for x in w if x['name'] == 'Venus')
+    assert not wv['ueber_hauswechsel'] and wv['fuehrend_haus_neu'] == 12 \
+        and abs(wv['fuehrend_minuten_genau'] - 1.5) < 0.05, wv
+    # Haus-Spalte und Erklaerung
+    assert haus_spalte(sa['lon'], c) == '6/7'
+    assert haus_spalte(sa['lon'], c, offen=True) == '6=7'
+    assert haus_spalte(ju['lon'], c) == '4/3'
+    assert haus_spalte(ju['lon'], c, offen=True) == '3=4'
+    assert haus_spalte(e['Merkur']['lon'], c, offen=True) == '5'
+    n1 = grenzlagen_note(['6=7', '9', '4/3'])
+    assert n1.startswith('Doppelte Hausangabe:') and \
+        'Gleichheitszeichen: Der Faktor' in n1 and \
+        n1.endswith('beide werden gleich stark gedeutet.'), n1
+    assert grenzlagen_note(['5', '7']) is None
+    assert grenzlagen_note(['6=7'], sprache='en').startswith('Equals sign:')
+    # Fussnote: Mars frueher und Venus spaeter, die offenen nicht
+    fn = hauswechsel_fussnote(hk)
+    assert 'Mars steht nahe an der Spitze des 10. Hauses: bei ' in fn and \
+        'früherer Geburt führte das 10. Haus, nicht das 9' in fn and \
+        'Venus steht nahe an der Spitze des 1. Hauses' in fn and \
+        'späterer Geburt führte das 12. Haus, nicht das 1' in fn and \
+        'Saturn' not in fn and 'Jupiter' not in fn and \
+        fn.endswith('Die Hausdeutung dieser Faktoren hängt damit an der '
+                    'Geburtszeit.') and '..' not in fn, fn
+    fe = hauswechsel_fussnote(hk, sprache='en')
+    assert 'Mars lies close to the cusp of the 10th house: with a birth ' in fe \
+        and 'earlier, the 10th house would lead, not the 9th' in fe, fe
+    # Vorrang der Datenblatt-Menge: ein altes Datenblatt ohne fuehrung=offen
+    # -> die Fussnote warnt auch unter einer Minute
+    f0 = hauswechsel_fussnote(hk, offen=set())
+    assert 'Saturn' in f0 and 'Jupiter' in f0, f0
+    f1 = hauswechsel_fussnote(hk, offen={'SATURN', 'JUPITER', 'MONDKNOTEN',
+                                         'SUEDKNOTEN'})
+    assert f1 == fn, (f1, fn)
+    # §3: Zeilen, Zeitscan faellig
+    sb = {'haus_kippminuten': hk, 'haus_kipp_warnungen': w,
+          'haus_kipp_ohne_fuehrung': haus_kipp_ohne_fuehrung(hk),
+          'fuehrung_offen': fo, 'kippminuten': [{'min_genau': 50.0}]}
+    assert zeitscan_faellig(dict(sb, haus_kipp_warnungen=[]))
+    f_voll = f + [{'name': 'AC', 'lon': c[0]}, {'name': 'MC', 'lon': c[9]}]
+    sbv = strukturbild(f_voll, c, jd_geburt=jd, lat=la, lon=lo)
+    assert [x['name'] for x in sbv['fuehrung_offen']] == \
+        [x['name'] for x in fo], sbv['fuehrung_offen']
+    t3 = strukturbild_text(sbv).split('### 3')[1].split('### 4')[0]
+    assert '⚠ Führung offen: Saturn (' in t3 and 'vor der Spitze 7) — bei ' \
+        in t3 and 'früherer Geburt führte Haus 7 statt Haus 6' in t3, t3
+    assert 'Unter 1 Minute führt keins der beiden Häuser: 6 und 7 gleich ' \
+        'stark' in t3 and '`fuehrung=offen`' in t3 and '`6=7`' in t3, t3
+    assert 'kein Hinweis im Auftakt' in t3 and 'gleich stark"' in t3, t3
+    assert '⚠ Wechsel des führenden Hauses unter %d: Mars (' % KIPP_SCHWELLE \
+        in t3 and 'früherer Geburt in Haus 10 gedeutet statt in Haus 9' in t3
+    assert '⚠ Wechsel des führenden Hauses unter %d: Venus (' % KIPP_SCHWELLE \
+        in t3 and 'späterer Geburt in Haus 12 gedeutet statt in Haus 1' in t3
+    assert 'Geburt das führende Haus.' not in t3, t3
+    assert sbv['zeitscan'] is not None
+    t3t = strukturbild_text(sbv, typ='transit').split('### 3')[1].split(
+        '### 4')[0]
+    assert 'das Lagebild nennt es nicht' in t3t, t3t
+    return ('Führungs-Test (2026-09-30, K9): OK — offen früher Saturn %.3f, '
+            'später Jupiter %.3f, Knotenachse %.3f; Warnung Mars früher %.3f, '
+            'Venus später %.3f ohne Hauswechsel'
+            % (sa['fuehrend_frueher_genau'], ju['fuehrend_spaeter_genau'],
+               e['Mondknoten']['fuehrend_frueher_genau'],
+               ma['fuehrend_frueher_genau'], ve['fuehrend_spaeter_genau']))
+
+
 def _selbsttest_zeitscan():
     """Selbsttest des Zeitscans OHNE Klientendaten (Startprompt 2026-09-29,
     Gegenprobe 1): synthetischer Fall ab dem Referenzzeitpunkt J2000.0
@@ -3309,7 +3705,7 @@ def _ephe_pfad_setzen(swe):
 
 
 def konstellations_fussnoten(jd, factors, cusps, lat, lon,
-                             schwelle=KIPP_SCHWELLE, sprache='de'):
+                             schwelle=KIPP_SCHWELLE, sprache='de', offen=None):
     """Beide Geburtszeit-Fussnoten der Konstellationsseite in EINEM Aufruf —
     Zeichengrenze (Spitzen und Faktoren) und Hauswechsel — als Liste fertiger
     Saetze fuer `chartdoc.konstellationen_page(..., fussnoten=[...])`; leer,
@@ -3338,6 +3734,11 @@ def konstellations_fussnoten(jd, factors, cusps, lat, lon,
        einer oder keiner; jeder ist ein EIGENER Eintrag in fussnoten=[…].
     sprache   'de' oder 'en' (seit 2026-09-26) — die Saetze einer englischen
               Fassung, ebenso fertig; die Vorlagen reichen SPRACHE durch.
+    offen     (seit 2026-09-30, K9) die Faktoren mit `fuehrung=offen` aus dem
+              @@SELEKTOR-Block der chart_data — die Vorlagen reichen sie durch
+              (offene_fuehrung()). Sie stehen nicht im Hauswechsel-Satz,
+              sondern als „6=7" in der Haus-Spalte mit grenzlagen_note().
+              None: gerechnet (haus_kippminuten()).
     """
     try:
         import swisseph as swe
@@ -3382,7 +3783,8 @@ def konstellations_fussnoten(jd, factors, cusps, lat, lon,
     out = []
     for satz in (zeichengrenze_fussnote(kipp, schwelle=schwelle, faktoren=fk,
                                         sprache=sprache),
-                 hauswechsel_fussnote(hk, schwelle=schwelle, sprache=sprache)):
+                 hauswechsel_fussnote(hk, schwelle=schwelle, sprache=sprache,
+                                      offen=offen)):
         if satz:
             out.append(satz)
     return out
@@ -5120,7 +5522,10 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     Zeichengrenze der Planeten und Punkte, nur mit jd_geburt) sowie rang (U2:
     die Daten der Rangzeilen §10) — und seit dem 2026-09-23
     haus_kippminuten und haus_kipp_warnungen (Hauswechsel bei spaeterer
-    Geburt, mit jd_geburt, lat UND lon) — und seit dem 2026-09-29 zeitscan
+    Geburt, mit jd_geburt, lat UND lon; seit dem 2026-09-30 der Wechsel des
+    fuehrenden Hauses in beide Richtungen) und fuehrung_offen (seit dem
+    2026-09-30, K9: unter FUEHRUNG_OFFEN fuehrt keins der beiden Haeuser) —
+    und seit dem 2026-09-29 zeitscan
     (das Bild bis ±ZEITSCAN_FENSTER Minuten neu gerechnet; nur wenn
     zeitscan_faellig(), sonst None).
     """
@@ -5147,6 +5552,7 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
         'faktor_kipp_warnungen': None,
         'haus_kippminuten': None,
         'haus_kipp_warnungen': None,
+        'fuehrung_offen': None,
         'zeitscan': None,
         'rezeptionen': rezeptionen(factors),
         'rezeptionen_klassisch': rezeptionen(factors, klassisch=True),
@@ -5177,6 +5583,7 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             sb['haus_kippminuten'] = _hk
             sb['haus_kipp_warnungen'] = haus_kipp_warnungen(_hk)
             sb['haus_kipp_ohne_fuehrung'] = haus_kipp_ohne_fuehrung(_hk)
+            sb['fuehrung_offen'] = fuehrung_offen(_hk)      # 2026-09-30, K9
     # Zeichengrenze der Faktoren (neu 2026-09-19, W34): braucht jd_geburt und
     # pyswisseph.
     if jd_geburt is not None:
@@ -5281,6 +5688,31 @@ _KIPP_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben 
                'Spitze läuft; mitklingende Kontakte tragen nicht, das Lagebild '
                'nennt es nicht. Trägt kein Kapitel, steht es im PDF nur in der '
                'Fußnote der Konstellationsseite (Gegenprobe g).')
+
+
+# 2026-09-30 (K9, Chris-Entscheidung Frage 2 = A): Die offene Fuehrung ist
+# keine Warnung, sondern eine Deutungsvorgabe — keine Entscheidung, keine Frage.
+# Der Text sagt sie EINMAL je Faktor, dort, wo er zuerst gedeutet wird; kein
+# Hinweis im Auftakt; eine Registerzeile traegt nur „gleich stark".
+_OFFEN_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
+                'Zeitunsicherheit aus der Mond-Zeitprobe — keine Entscheidung, '
+                'keine Frage, kein Handlungsblock. Im Text EIN Satz, dass die '
+                'Geburtszeit nicht entscheiden kann, welches der beiden Häuser '
+                'führt, an der ersten Stelle, die den Faktor deutet (Führer '
+                'eines Themas oder Porträt im Instrument; die Knotenachse ist '
+                'dabei ein Faktor); kein Hinweis im Auftakt; eine Registerzeile '
+                'trägt nur „gleich stark". Die Konstellationsseite erklärt „=" '
+                'mit radix.grenzlagen_note() (Gegenprobe g).')
+_OFFEN_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben '
+                'die Zeitunsicherheit aus der Mond-Zeitprobe — keine '
+                'Entscheidung, keine Frage, kein Handlungsblock. Im Text EIN '
+                'Satz, dass die Geburtszeit nicht entscheiden kann, welches '
+                'der beiden Häuser führt, an der ersten Stelle, die den Punkt '
+                'mit seinen Häusern deutet (Kapitel, dessen führender Kontakt '
+                'auf ihm landet; die Knotenachse ist dabei ein Punkt); das '
+                'Lagebild nennt es nicht. Sonst steht es im PDF nur in der '
+                'Haus-Spalte („=") und ihrer Erklärung (radix.grenzlagen_note(), '
+                'Gegenprobe g).')
 
 
 def strukturbild_text(sb, typ='geburtshoroskop'):
@@ -5670,13 +6102,17 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             _e = _hkn[0]
             _fz = _e.get('fuehrend_spaeter_genau')
             L.append(f"- Hauswechsel bei späterer Geburt (Gegenprobe g, seit "
-                     f"2026-09-23; die frühere Geburt deckt die 5°-Grenzlage): "
+                     f"2026-09-23; die frühere Geburt deckt die 5°-Grenzlage, "
+                     f"die Führung prüfen die Zeilen darunter in beide "
+                     f"Richtungen): "
                      f"am knappsten {_faktor_anzeige(_e['name'])}, "
                      f"{_gr_s(_e['hinter_spitze'])} hinter der Spitze "
                      f"{_e['haus']} — bei {_min_dez(_e['spaeter_genau'])} "
                      f"Minuten späterer Geburt in Haus {_e['haus_spaeter']}"
-                     + (f"; das führende Haus wechselt erst bei "
-                        f"{_min_dez(_fz)} Minuten." if _fz is not None
+                     + ((f"; das führende Haus wechselt erst bei "
+                         if _fz >= _e['spaeter_genau'] else
+                         f"; das führende Haus wechselt bei ")
+                        + f"{_min_dez(_fz)} Minuten." if _fz is not None
                         else "."))
         # 2026-09-26 (Chris-Entscheidung): Faellt ein Faktor ins vorige Haus
         # und fuehrt das alte in Schwellenlage weiter, ist das nur eine Info.
@@ -5689,21 +6125,44 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"dort in Schwellenlage, und Haus {w['haus']} führt "
                      f"weiter — kein ⚠, keine Frage, kein Hinweissatz, keine "
                      f"Fußnote (Gegenprobe g, Chris-Entscheidung 2026-09-26).")
+        # 2026-09-30 (K9, Chris-Entscheidung): OFFENE FUEHRUNG — unter
+        # FUEHRUNG_OFFEN Minuten frueherer oder spaeterer Geburt fuehrte das
+        # andere Haus des Paars; keins fuehrt, beide gleich stark.
+        _ofw = _OFFEN_WOHIN_TRANSIT if transit else _OFFEN_WOHIN
+        for w in (sb.get('fuehrung_offen') or []):
+            L.append(f"- ⚠ Führung offen: {_faktor_anzeige(w['name'])} "
+                     f"({_gr_s(w['abstand_spitze'])} vor der Spitze "
+                     f"{w['nebenhaus']}) — bei {_min_dez(w['minuten_genau'])} "
+                     f"Minuten {w['richtung']}er Geburt führte Haus "
+                     f"{w['fuehrend_haus_neu']} statt Haus {w['fuehrend']}. "
+                     f"Unter {FUEHRUNG_OFFEN} Minute führt keins der beiden "
+                     f"Häuser: {w['haus']} und {w['nebenhaus']} gleich stark "
+                     f"(Chris-Entscheidung 2026-09-30); an die FAKTOR-Zeile im "
+                     f"@@SELEKTOR-Block `fuehrung=offen`, Haus-Spalte "
+                     f"`{w['spalte']}`; Signatur, Beleg und Registerzeile aus "
+                     f"dem ⚠-Block der referenz.md. " + _ofw)
+        # 2026-09-30: die Warnung in BEIDE Richtungen (Chris-Entscheidung).
         for w in (sb.get('haus_kipp_warnungen') or []):
+            if w.get('ueber_hauswechsel') or not w.get('nebenhaus'):
+                _wo = (f"{_gr_s(w['hinter_spitze'])} hinter der Spitze "
+                       f"{w['haus']}")
+            else:
+                _wo = (f"{_gr_s(w['abstand_spitze'])} vor der Spitze "
+                       f"{w['nebenhaus']}")
             L.append(f"- ⚠ Wechsel des führenden Hauses unter {KIPP_SCHWELLE}: "
-                     f"{_faktor_anzeige(w['name'])} "
-                     f"({_gr_s(w['hinter_spitze'])} hinter der Spitze "
-                     f"{w['haus']}) wird bei "
+                     f"{_faktor_anzeige(w['name'])} ({_wo}) wird bei "
                      f"{_min_dez(w['fuehrend_minuten_genau'])} Minuten "
-                     f"späterer Geburt in Haus {w['fuehrend_haus_neu']} "
-                     f"gedeutet statt in Haus {w['haus']}; im Text "
-                     f"„{_min_wort(w['fuehrend_minuten_genau'])} später\". "
+                     f"{w['richtung']}er Geburt in Haus "
+                     f"{w['fuehrend_haus_neu']} gedeutet statt in Haus "
+                     f"{w.get('fuehrend') or w['haus']}; im Text "
+                     f"„{_min_wort(w['fuehrend_minuten_genau'])} "
+                     f"{w['richtung']}\". "
                      + _kipp_wohin
                      + " Fußnote: radix.hauswechsel_fussnote("
                        "radix.haus_kippminuten(…)).")
-        if not sb.get('haus_kipp_warnungen'):
+        if not sb.get('haus_kipp_warnungen') and not sb.get('fuehrung_offen'):
             L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
-                     f'späterer Geburt das führende Haus.')
+                     f'früherer oder späterer Geburt das führende Haus.')
     # --- Zeitscan (neu 2026-09-29): Wenn-dann-Rechnung zur Geburtszeit ---------
     # Auch im Transit (Chris-Entscheidung 2026-09-29, Nachtrag): Der Block traegt
     # dort die Wenn-dann-Saetze wie im Geburtshoroskop; das Blatt gibt es im
@@ -7600,8 +8059,8 @@ if __name__ == '__main__':
         assert 'Hauswechsel unter %d ohne Wechsel des führenden Hauses: ' \
             'Saturn' % KIPP_SCHWELLE in _t3h, _t3h
         assert '⚠ Wechsel des führenden Hauses' not in _t3h, _t3h
-        assert 'Kein Faktor wechselt unter %d Minuten späterer Geburt das ' \
-            'führende Haus.' % KIPP_SCHWELLE in _t3h, _t3h
+        assert 'Kein Faktor wechselt unter %d Minuten früherer oder späterer ' \
+            'Geburt das führende Haus.' % KIPP_SCHWELLE in _t3h, _t3h
         # dieselbe Stelle mit der Test-Schwellenlage: die ⚠-Zeile
         _sbh['haus_kippminuten'] = _hk2
         _sbh['haus_kipp_warnungen'] = haus_kipp_warnungen(_hk2)
@@ -7620,6 +8079,9 @@ if __name__ == '__main__':
               _sa['fuehrend_spaeter_genau'], 'Minuten')
     # Zeitscan (2026-09-29): synthetischer Fall ab J2000.0, keine Klientendaten
     print(_selbsttest_zeitscan())
+    # Offene Fuehrung und Warnung in beide Richtungen (2026-09-30, K9):
+    # synthetischer Fall ab J2000.0, keine Klientendaten
+    print(_selbsttest_fuehrung())
     # Klasse-2-Entscheidungslauf 2026-09-29: T4 naechster Kandidat, T6
     # Achsengeometrie. Konstruierte Laengen, keine Klientendaten.
     _k2 = [dict(name='Sonne', lon=200.0), dict(name='Mond', lon=140.0),

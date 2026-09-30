@@ -26,7 +26,9 @@ aendert den Hausstil aller kuenftigen Horoskope. Kurzfassung der Beschluesse:
     Modus-Verteilung nebeneinander, darunter die Element-Verteilung ueber die
     volle Breite. Unter jedem Balken stehen die beteiligten Planeten.
   * Grenzlagen erscheinen in der Haus-Spalte NUR als Doppelzahl („11/12"),
-    ohne das Wort „Grenzlage" und ohne Gradangabe.
+    ohne das Wort „Grenzlage" und ohne Gradangabe; bei offener Fuehrung seit
+    dem 2026-09-30 mit Gleichheitszeichen („6=7", radix.haus_spalte(offen=True)),
+    erklaert von radix.grenzlagen_note().
   * Die Aspektseite passt IMMER auf eine Seite — Tabelle und Legende zusammen
     (aspekt_page skaliert dafuer notfalls die Schriftgroesse, s. `skala`).
   * Signatur und Beleg rendern seit dem 2026-09-05 am KAPITELENDE, fuer jeden
@@ -1576,7 +1578,8 @@ def konstellationen_page(zeilen, achsen, elemente, modi, note=None,
 
     zeilen    [(Glyphe, Name, Zeichenname, Gradtext, Haustext, Lauftext), ...]
               — 'SEP' als Glyphe zieht eine Trennlinie.
-              Haustext bei Grenzlage NUR als Doppelzahl, z. B. '12/11'.
+              Haustext bei Grenzlage NUR als Doppelzahl, z. B. '12/11', bei
+              offener Fuehrung '6=7' (seit 2026-09-30, K9).
     achsen    [(Kuerzel, Name, Zeichenname, Gradtext), ...]
     fussnoten weitere Zeilen unter der Tabelle, je ein String. Hierher gehoert
               vor allem der UNASPEKTIERTE Faktor: er taucht in der
@@ -2313,6 +2316,7 @@ _BELEG_WENDUNGEN_EN = (
     (r'\bAspektdichte\b', 'aspect density'),
     (r'\bdicht\b', 'dense'),
     (r'\bdünn\b', 'sparse'),
+    (r'\bgleich stark\b', 'equally weighted'),       # 2026-09-30, K9
     (r'\bGrenzlage\b', 'near the cusp'),
     (r'\bSchwellenlage\b', 'at the threshold'),
     (r'\bFeuer\b', 'Fire'), (r'\bErde\b', 'Earth'), (r'\bLuft\b', 'Air'),
@@ -3286,6 +3290,11 @@ def _selbsttest():
         assert beleg_segment_en('T-Saturn ♄ Quadrat □ R-Sonne ☉ — exakt '
                                 '14.03.2027') == \
             'T-Saturn ♄ Square □ R-Sun ☉ — exact 14 Mar 2027'
+        # 2026-09-30 (K9): offene Fuehrung im Beleg
+        assert beleg_segment_en('Saturn ♄ 22°05′ Jungfrau ♍, 6./7. Haus (gleich '
+                                'stark, 2°03′ vor Spitze 7)') == \
+            'Saturn ♄ 22°05′ Virgo ♍, 6th/7th house (equally weighted, 2°03′ ' \
+            'before cusp 7)'
     finally:
         konfiguriere(sprache='de', signaturen_en={}, belege_en={})
     assert _seiten() == de_vorher, 'deutsche Ausgabe nach dem Wechsel anders'

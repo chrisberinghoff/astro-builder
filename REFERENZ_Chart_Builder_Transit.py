@@ -387,19 +387,33 @@ RAD_NOTE = {
     'en': (f'{VORNAME} · <D Month YYYY, HH:MM ZONE> · <Place> · '
            'Koch houses · true lunar node · true Lilith · aspects by '
            'Huber orbs')}[SPRACHE]
-KONST_NOTE = {
-    'de': ('Doppelte Hausangabe: Der Faktor steht bis 5° vor der nächsten '
-           'Hausspitze und wird in beiden Häusern gedeutet — das führende '
-           'Haus steht vorn.'),
-    'en': ('Double house entry: the factor stands up to 5° before the next '
-           'house cusp and is read in both houses — the leading house comes '
-           'first.')}[SPRACHE]
+# --- Offene Fuehrung (2026-09-30, K9) ---------------------------------------
+# Die Faktoren mit `fuehrung=offen` im @@SELEKTOR-Block: keins der beiden
+# Haeuser fuehrt, die Haus-Spalte heisst „6=7" (rechnerisches Haus vorn).
+# GELESEN, nicht gerechnet — Quelle ist das Datenblatt (Design-Render-Modul,
+# Konstellationstabelle). Ein Datenblatt von vor dem 2026-09-30 traegt keins;
+# dann steht die Tabelle, wie das Datenblatt sie meint.
+import selektor                                # noqa: E402
+OFFEN = {selektor.norm_faktor(_f['name']) for _f in selektor.parse_chart(
+    open(CHARTDATA, encoding='utf-8').read())['faktoren']
+    if _f.get('fuehrung') == 'offen'}
+
+
+def haus_zelle(name, lon):
+    """Haus-Spalte eines Faktors: cd.haus(lon) — bei offener Fuehrung '6=7'
+    (radix.haus_spalte(offen=True))."""
+    if selektor.norm_faktor(name) in OFFEN:
+        return radix.haus_spalte(lon, cd.CUSPS, offen=True)
+    return cd.haus(lon)
 
 
 def konst_note(zeilen):
-    """KONST_NOTE nur, wenn die Haus-Spalte eine Doppelangabe traegt (`8/9`), sonst
-    None — Design-Render-Modul, Konstellationsseite."""
-    return KONST_NOTE if any('/' in str(z[4]) for z in zeilen if z[0] != 'SEP') else None
+    """Die Grenzlagen-Erklaerung, nur wenn die Haus-Spalte eine Doppelangabe
+    traegt (`8/9` oder `6=7`), sonst None — der Wortlaut kommt fertig aus
+    radix.grenzlagen_note() (seit 2026-09-30; vorher als KONST_NOTE hier und im
+    Design-Render-Modul)."""
+    return radix.grenzlagen_note([z[4] for z in zeilen if z[0] != 'SEP'],
+                                 sprache=SPRACHE)
 
 
 def rad_zeichnen():
@@ -425,7 +439,8 @@ def konst_zeilen():
             # Der Suedknoten ist der Mondknoten um 180 Grad — beide Enden der
             # Achse laufen gleich; der Lauf wird ABGELEITET, nie gesetzt.
             out.append(('☋', 'Südknoten', cd.sign_name(cd.SUEDKNOTEN),
-                        cd.gr(cd.SUEDKNOTEN % 30), cd.haus(cd.SUEDKNOTEN),
+                        cd.gr(cd.SUEDKNOTEN % 30),
+                        haus_zelle('Südknoten', cd.SUEDKNOTEN),
                         'rückläufig' if _BY['Mondknoten']['retro'] else 'direkt'))
             continue
         if n == 'Glueckspunkt' and n not in _BY:
@@ -443,7 +458,8 @@ def konst_zeilen():
         # `f['name']` traegt den Vertragsnamen. Einen ASCII-Namen in der
         # Tabelle sehen verify(), Pflicht-Bausteine und Preflight nicht.
         out.append((glyph, cd.name_of(f['name']), cd.sign_name(f['lon']),
-                    cd.gr(f['lon'] % 30), cd.haus(f['lon']), lauf))
+                    cd.gr(f['lon'] % 30), haus_zelle(f['name'], f['lon']),
+                    lauf))
     return out
 
 
@@ -538,7 +554,8 @@ def konst_fussnoten():
     from lade import ephemeriden
     ephemeriden(still=True)
     return list(FUSSNOTEN_EXTRA) + radix.konstellations_fussnoten(
-        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON, sprache=SPRACHE)
+        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON, sprache=SPRACHE,
+        offen=OFFEN)
 
 
 KONST_FUSSNOTEN = konst_fussnoten()
