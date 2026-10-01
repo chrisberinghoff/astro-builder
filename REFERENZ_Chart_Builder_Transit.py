@@ -79,13 +79,7 @@ UHRPNG = '<klient>_transituhr.png'
 from datetime import datetime as _dt; from zoneinfo import ZoneInfo as _Zone  # noqa: E402,E702
 OUT = f"/home/claude/Transit_<klient>_{_dt.now(_Zone('Europe/Berlin')):%Y-%m-%d}.pdf"  # = Name im Klientenordner (Chris 2026-09-28)
 
-# Geburtsmoment fuer die Fussnoten der Konstellationsseite (Zeichengrenze,
-# Hauswechsel) — aus dem KOPF der chart_data uebernommen,
-# nicht gerechnet: JD in UT mit mindestens fuenf Nachkommastellen, Breite und
-# Laenge in Dezimalgrad. Solange einer fehlt, bricht der Builder mit Meldung ab.
-JD_GEBURT = None          # <<JD (UT) aus dem Kopf der chart_data>>
-LAT, LON = None, None     # <<Breite, Laenge aus dem Kopf der chart_data>>
-# Weitere Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
+# Fussnoten der Konstellationsseite mit Wortlaut AUS DEM DATENBLATT
 # (unaspektierter Faktor, Strukturbild §4) — je Satz ein Eintrag; in einer
 # englischen Fassung der Satz englisch (von Hand, sinngleich).
 FUSSNOTEN_EXTRA = []
@@ -541,21 +535,13 @@ if SPRACHE == 'en':
 
 
 # --- Fussnoten der Konstellationsseite --------------------------------------
-# Die beiden Geburtszeit-Saetze (Zeichengrenze, Hauswechsel) kommen fertig aus
-# radix.konstellations_fussnoten(); die Funktion setzt den Ephemeridenpfad
-# selbst und bricht ab, statt einen Satz still wegzulassen. lade.ephemeriden()
-# holt pyswisseph und die Dateien, wenn sie fehlen — im frischen Container bis
-# zu zehn Minuten, darum den Builder im Hintergrund starten. Vorn stehen die
-# Saetze aus dem Datenblatt.
+# Nur die Saetze aus dem Datenblatt (FUSSNOTEN_EXTRA). Die Geburtszeit-Saetze
+# (Zeichengrenze, Hauswechsel) stehen seit dem 2026-10-01 nicht mehr im PDF
+# (Chris-Entscheidung: ein Satz zur Geburtsminute nur dort, wo der Leser etwas
+# damit tun kann); damit braucht der Render keine Ephemeriden und keinen
+# Geburtsmoment mehr. Die Grenzlagen-Erklaerung laeuft weiter ueber note=.
 def konst_fussnoten():
-    if None in (JD_GEBURT, LAT, LON):
-        raise SystemExit('JD_GEBURT, LAT und LON aus dem Kopf der chart_data '
-                         'eintragen (Fussnoten der Konstellationsseite).')
-    from lade import ephemeriden
-    ephemeriden(still=True)
-    return list(FUSSNOTEN_EXTRA) + radix.konstellations_fussnoten(
-        JD_GEBURT, cd.factors, cd.CUSPS, LAT, LON, sprache=SPRACHE,
-        offen=OFFEN)
+    return list(FUSSNOTEN_EXTRA)
 
 
 KONST_FUSSNOTEN = konst_fussnoten()

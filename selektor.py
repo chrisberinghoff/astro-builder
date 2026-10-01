@@ -269,9 +269,8 @@ def grenz_stufe(abstand, offen=False):
             _a = ''
         return 'offen', (
             'Fuehrung offen%s: KEINS der beiden Haeuser fuehrt — beide GLEICH '
-            'STARK deuten, das rechnerische Haus vorn; der Text sagt EINMAL, '
-            'an der ersten Stelle, die den Faktor deutet, dass die '
-            'Geburtszeit nicht entscheiden kann, welches fuehrt' % _a)
+            'STARK deuten, das rechnerische Haus vorn; kein Satz zur '
+            'Geburtszeit im Text (Chris-Entscheidung 2026-10-01)' % _a)
     try:
         a = float(abstand)
     except (TypeError, ValueError):
@@ -1083,17 +1082,15 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
                 '„gleich stark", fuehrt KEINS\nder beiden Haeuser — schon '
                 'unter einer Minute frueherer oder spaeterer Geburt\nfuehrte '
                 'das andere (Strukturbild §3). Beide werden GLEICH STARK '
-                'gedeutet; der Text\nsagt EINMAL, an der ersten Stelle, die '
-                'den Faktor deutet, dass die Geburtszeit\nnicht entscheiden '
-                'kann, welches Haus fuehrt (die Knotenachse ist dabei ein '
-                'Faktor).\n'
+                'gedeutet. Einen Satz zur\nGeburtszeit schreibt der Text dazu '
+                'nicht (Chris-Entscheidung 2026-10-01); das „="\nerklaert die '
+                'Konstellationsseite.\n'
                 + ('Das Lagebild nennt es nicht.\n' if typ == 'transit' else
-                   'Kein Hinweis im Auftakt; eine Registerzeile traegt nur '
-                   '„gleich stark".\n'))
+                   'Eine Registerzeile traegt nur „gleich stark".\n'))
         for g in grenz:
             if g.get('stufe') == 'offen':
                 marke = (' [FUEHRT ein Thema — beide Haeuser GLEICH STARK '
-                         'deuten, einmal offen sagen]'
+                         'deuten]'
                          if g.get('fuehrt') else marke_nf)
             else:
                 marke = (' [FUEHRT ein Thema — beide Haeuser deuten]'
@@ -1394,8 +1391,8 @@ def _selbsttest():
     assert register_notation(go) == 'sechstes/siebtes Haus, gleich stark'
     md_o = assemble_md(chart_o, [], _prot_o, [], grenz_o)
     assert 'OFFENE FUEHRUNG (seit 2026-09-30)' in md_o and \
-        'beide Haeuser GLEICH STARK deuten, einmal offen sagen' in md_o and \
-        'Kein Hinweis im Auftakt' in md_o, md_o
+        'beide Haeuser GLEICH STARK deuten]' in md_o and \
+        'Einen Satz zur\nGeburtszeit schreibt der Text dazu nicht' in md_o, md_o
     md_ot = assemble_md(chart_o, [], _prot_o, [], grenz_o, typ='transit')
     assert 'Das Lagebild nennt es nicht.' in md_ot
     assert 'OFFENE FUEHRUNG' not in assemble_md(chart, [], prot, [], grenz)

@@ -120,9 +120,9 @@ P2  Beleg-Staende    Segment 1 jedes Normal-Belegs und jedes Instrument-Segment:
                      Zeichen und Haus gegen den @@SELEKTOR-Block (bei Grenzlage das
                      fuehrende Haus vorn, bei `fuehrung=offen` seit 2026-09-30 das
                      rechnerische), Gradminute gegen die Staendetabelle. Offene
-                     Fuehrung (K9): an der ersten Stelle, die den Faktor deutet, ein
-                     Satz zur Geburtszeit, und die Signatur des Kapitels, das er
-                     fuehrt, sagt „gleich stark" — beides nur PRUEFEN.
+                     Fuehrung (K9): die Signatur des Kapitels, das er fuehrt, sagt
+                     „gleich stark" (nur PRUEFEN); einen Satz zur Geburtszeit
+                     verlangt sie seit 2026-10-01 nicht mehr — P11 meldet ihn.
 P3  Kapitel/Themen   die nummerierten Themenkapitel in Dokumentreihenfolge
                      gegen die THEMA-Zeilen (seit 2026-09-19, L7: `Kapitel n` ist
                      das Kapitel zu `THEMA n`; in Analysen alter Form, die das
@@ -186,7 +186,9 @@ P11 Zahlen-Deckung   (2026-09-19, U1 a) jedes Tagesdatum, jeder Monat, jede
                      Zyklusfenster (Strukturbild §7) eines im Satz (oder im Satz
                      davor) genannten Faktors liegt; „das n. Lebensjahr" ist Alter
                      n−1. Nur PRUEFEN; englisch mit eigenen Wortlisten (seit
-                     2026-09-22).
+                     2026-09-22). Seit 2026-10-01 dazu jeder Satz zur
+                     Geburtsminute — erlaubt ist nur EINER im Auftakt, wenn der
+                     Zeitscan „Gegenprobe-Blatt fällig“ meldet.
 P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", „die
                      zweitengste", „die meisten Verbindungen", „einzige", „kein
                      anderer", „x von y", „mehr als die Hälfte", „n Verbindungen",
@@ -1481,9 +1483,6 @@ def _tage(a, b):
     except (TypeError, ValueError):
         return 9999
 
-# 2026-09-30 (K9): der offene Satz zur offenen Fuehrung, deutsch und englisch
-GEBURTSZEIT_RE = re.compile(r"Geburtszeit|Geburtsminute|Geburtsuhrzeit|Uhrzeit (?:deiner|der) "
-                            r"Geburt|birth ?time|time of (?:your )?birth|birth minute", re.I)
 
 
 def _erwartete_haeuser(f):
@@ -1605,14 +1604,11 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                     continue
                 pruefe("%s, Segment %d" % (bez, i), st)
     # 2026-09-30 (K9, Chris-Entscheidung): offene Fuehrung — keins der beiden
-    # Haeuser fuehrt. Der Text sagt es EINMAL, an der ersten Stelle, die den
-    # Faktor deutet (erster Normal-Beleg mit ihm als Segment 1 oder erstes
-    # Instrument-Segment, in Dokumentreihenfolge); die Signatur eines Kapitels,
-    # das er fuehrt, traegt „gleich stark" (Wortform aus dem ⚠-Block). Beides
-    # ist Text — nur PRUEFEN.
+    # Haeuser fuehrt; die Signatur eines Kapitels, das er fuehrt, traegt „gleich
+    # stark" (Wortform aus dem ⚠-Block) — nur PRUEFEN. Den Satz zur Geburtszeit
+    # verlangt die Probe seit 2026-10-01 nicht mehr (Chris-Entscheidung, F1).
     offen = {n for n, f in fak.items() if f.get("fuehrung") == "offen"}
     if offen:
-        erste = {}
         for ch in chapters:
             form = _beleg_form(ch, typ, chapters)
             if form not in ("normal", "instrument"):
@@ -1626,7 +1622,6 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                 n = st["faktor"]
                 if n not in offen:
                     continue
-                erste.setdefault(n, ch)
                 if form == "normal" and i == 0 and \
                         "gleich stark" not in (ch.get("signatur") or ""):
                     p.pruefen.append(
@@ -1634,14 +1629,6 @@ def _p2_beleg_staende(chapters, typ, chart, staende):
                         "sagt nicht „gleich stark“ (Wortform aus dem ⚠-Block der "
                         "referenz.md): „%s“" % (_bezeichnung(ch), ANZEIGE.get(n, n),
                                                _kurz(ch.get("signatur"), 70)))
-        for n, ch in erste.items():
-            text = " ".join(_ws(b.get("text")) for b in ch["blocks"])
-            if not GEBURTSZEIT_RE.search(text):
-                p.pruefen.append(
-                    "%s — %s mit offener Führung (gleich stark): kein Satz, dass die "
-                    "Geburtszeit nicht entscheiden kann, welches Haus führt — einmal, "
-                    "an der ersten Stelle, die den Faktor deutet" % (_bezeichnung(ch),
-                                                                    ANZEIGE.get(n, n)))
     if p.geprueft == 0 and not p.fehler:
         return p.aussagelos("kein Stände-Segment gefunden")
     return p.abschluss()
@@ -3084,9 +3071,46 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
                                            if bekannt else "",
                                            "; Zyklusfenster der Faktoren im Satz: " +
                                            ", ".join("~%g" % w for w in zyk) if zyk else ""))
+    _p11_geburtsminute(p, chapters, txt)                    # 2026-10-01
     if p.geprueft == 0:
         p.hinweise.append("keine Datums- oder Altersangabe im Fließtext")
     return p.abschluss()
+
+
+# 2026-10-01 (Chris-Entscheidung, Klasse-2-Sammelliste; Wartungslauf zu den
+# Pruefberichten vom 30.09.): Ein Satz zur Geburtsminute steht im Text nur beim AC
+# mit Gegenprobe-Blatt — EINER, im Auftakt, der auf das Blatt zeigt (Strukturbild §3,
+# Zeitscan). Jeder andere ist ein PRUEFEN. „frühere Geburten“ (Plural) und Minuten
+# ohne Bezug auf Geburt, Zeichen, Haus oder Achse („zehn Minuten später“ in einer
+# Übung) zaehlen nicht.
+_GM_STARK_RE = re.compile(
+    r"(?<![\wäöüÄÖÜß])(?:(?:früher|später)e[rnms]?\s+Geburt(?![\wäöüÄÖÜß])|Geburtsminute"
+    r"|Geburts(?:zeit|uhrzeit)\w*\s+(?:[\wäöüÄÖÜß]+\s+){0,3}?(?:entscheid|kipp|wechsel)"
+    r"|(?:entscheid|kipp)\w*\s+(?:[\wäöüÄÖÜß]+\s+){0,3}?(?:die|deine)\s+Geburts(?:zeit|uhrzeit)"
+    r"|(?:earlier|later)\s+birth(?![\w])|birth\s+minute)", re.I)
+_GM_MINUTEN_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:Minuten?|Sekunden|minutes?)\s+"
+                            r"(?:früher|später|eher|earlier|later)(?![\wäöüÄÖÜß])", re.I)
+_GM_KONTEXT_RE = re.compile(r"geboren|Geburt|Zeichen|Haus|Häuser|Aszendent|Himmelsmitte|"
+                            r"Spitze|Achse|born|birth|sign|house|ascendant", re.I)
+
+
+def _p11_geburtsminute(p, chapters, txt):
+    """PRUEFEN je Satz zur Geburtsminute im Fliesstext; meldet der Zeitscan der
+    chart_data „Gegenprobe-Blatt fällig“, bleibt EIN Satz im Auftakt still."""
+    frei = 1 if "Gegenprobe-Blatt fällig" in (txt or "") else 0
+    for ch, bewegung, text in _fliesstext(chapters):
+        for _a, _e, satz in _saetze_pos(text):
+            if not (_GM_STARK_RE.search(satz) or (_GM_MINUTEN_RE.search(satz)
+                                                  and _GM_KONTEXT_RE.search(satz))):
+                continue
+            if frei and _ist_kicker(ch, "Auftakt"):
+                frei -= 1
+                continue
+            p.pruefen.append(
+                "%s · %s: „%s“ — Satz zur Geburtsminute im Text; seit 2026-10-01 steht "
+                "dazu im PDF nur beim AC mit Gegenprobe-Blatt EIN Satz im Auftakt, der "
+                "auf das Blatt zeigt (Strukturbild §3, Zeitscan)"
+                % (_bezeichnung(ch), bewegung, _kurz(satz, 140)))
 
 # --- P12 Rang- und Einzigkeitswörter -----------------------------------------
 # Rangzeilen des Strukturbilds (§10, seit 2026-09-19, U2). Die Muster stehen
@@ -3521,6 +3545,15 @@ def _aufzaehlung_danach(satz, pos, objekte=False):
     return out
 
 
+_P12_TEILMENGE_RE = re.compile(
+    r"(?<![\wäöüß])(?:unter\s+(?:(?:ihren|seinen|deren|dessen|diesen|den|deinen)\s+"
+    r"(?:[\wäöüß]+\s+)?(?:Gliedern|Ecken|Mitgliedern|Beteiligten)|ihnen|diesen\s+(?:drei|"
+    r"vier|fünf|sechs)\w*|den\s+(?:drei|vier|fünf|sechs)en)"
+    r"|innerhalb\s+(?:der|dieser|des|dieses|ihrer|seiner|deiner)\s+[\wäöüß]+"
+    r"|in\s+(?:dieser|der|seiner|ihrer)\s+(?:Ballung|Figur|Gruppe|Konstellation|Kette))"
+    r"(?![\wäöüß])", re.I)
+
+
 def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
     """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
     vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …").
@@ -3559,6 +3592,13 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
     _k0 = satz.rfind(";", 0, m.start()) + 1
     _k1 = satz.find(";", m.end())
     klausel = satz[_k0:] if _k1 < 0 else satz[_k0:_k1]
+    # 2026-10-01 (Pruefbericht Geburtshoroskop 1+2 vom 30.09., K1): Ein Rang INNERHALB
+    # einer Gruppe („unter ihren Gliedern … die meisten Verbindungen“ — so verlangt
+    # es die Figur-Regel) meint eine Teilmenge; die
+    # Rangzeilen tragen nur die Gesamtmenge. Kein Befund — „unter allen Planeten“ und
+    # „unter den zehn Planeten“ bleiben geprueft.
+    if art in ("engste", "meiste", "wenigste") and _P12_TEILMENGE_RE.search(klausel):
+        return None
     me = _ELEMENT_RE.search(klausel)
     mm = _MODUS_RE.search(klausel)
     if not (me or mm) and klausel != satz:
@@ -4187,7 +4227,11 @@ def _selbstpaar_im_satz(satz, x):
 # (3) ACHSENPAAR — AC/DC und MC/IC stehen einander immer gegenüber; ein Satz, der
 #     beide Enden nennt („über deinen Deszendenten … deinem Aszendenten
 #     gegenüber"), behauptet damit keinen Aspekt. Solche Paarungen zaehlen nicht.
-_ACHSENPAARE = {frozenset(("AC", "DC")), frozenset(("MC", "IC"))}
+#     Seit 2026-10-01 auch die Knotenachse (Pruefbericht Geburtshoroskop 1+2 vom
+#     30.09., K1: ein Satz, der beide Enden der Knotenachse nennt, wurde
+#     Mondknoten–Südknoten).
+_ACHSENPAARE = {frozenset(("AC", "DC")), frozenset(("MC", "IC")),
+                frozenset(("MONDKNOTEN", "SUEDKNOTEN"))}
 # (4) ZUSATZ-SEGMENTE im Transit-Beleg („Sonnenbogen-Merkur ☿ Quadrat □ R-Neptun ♆")
 #     decken die gleichnamige Konstellation im Text; P1 prueft ihr Datum.
 _ZUSATZ_KONTAKT_RE = re.compile(
@@ -4262,6 +4306,37 @@ _ZW_GRUPPE_RE = re.compile(
 #      vor dem Marker; Y gehoert zum naechsten Marker (vorher A–Y, B–Y im Sextil).
 _ZUEINANDER_RE = re.compile(r"\s*(?:[\wäöüÄÖÜß]+\s+)?(?:zueinander|miteinander|"
                             r"untereinander)(?![\wäöüÄÖÜß])", re.I)
+# (20) MARKER IM RELATIVSATZ (2026-10-01, Pruefbericht Geburtshoroskop 1+2 vom
+#      30.09., K1): „Pholus, der hier im Trigon mitklingt, steht in Kapitel 4 Mars
+#      gegenüber“ wurde Pholus–Mars im Trigon. Steht der Marker
+#      in einem Relativsatz, endet sein „danach“ am Komma, das ihn schliesst — der
+#      Faktor des Hauptsatzes dahinter ist nicht sein Partner.
+# (21) GRUPPE VOR „UND + PRAEDIKAT“ (2026-10-01, ebd.): „Venus und Uranus bilden ein
+#      Sextil und zeigen gemeinsam auf deinen Mars“ wurde Venus–Mars im Sextil. Steht
+#      vor dem Marker eine Gruppe aus mindestens zwei Faktoren und folgt ihm direkt
+#      „und“ mit einem Wort, das kein Faktor, Artikel, Possessiv und keine Praeposition
+#      ist, gehoert der Aspekt der Gruppe selbst (Nachstellung, wie „zueinander“ (18)).
+#      Ein folgendes „…, beide im Quincunx zu ihm“ paart dann wie (17) mit der Gruppe,
+#      wenn vor ihm nur Objekte stehen („auf deinen Mars“).
+# (22) „A UND B … ZU IHM“ AM ERSTEN MARKER (2026-10-01, ebd.): „Und Venus und Jupiter
+#      stehen beide im Quincunx zu ihm“ wurde Venus–Jupiter. Wie (17), nur ohne
+#      vorigen Marker: Partner ist der Faktor des Vorsatzes mit passendem Genus („ihm“
+#      maskulin, „ihr“ feminin; MC/IC passen immer); findet sich keiner, kein Paar.
+#      „ihnen“ und „dir/dich“ tragen kein Paar.
+def _gruppe_koordiniert(satz, davor_pos):
+    """(21), (22): Stehen vor dem Marker mindestens zwei verschiedene Faktoren, die
+    nur durch „und“, „sowie“, „oder“ oder Komma verbunden sind („Venus und Jupiter“)?
+    Ein Hauptsatz-Subjekt vor einem Nebensatz („Dein Mond bleibt wachsam, weil Pluto
+    …“) ist keine Gruppe."""
+    if len({f for _a, _e, f in davor_pos}) < 2:
+        return False
+    return all(_LISTE_RE.fullmatch(satz[davor_pos[k][1]:davor_pos[k + 1][0]])
+               for k in range(len(davor_pos) - 1))
+
+
+_UND_PRAEDIKAT_RE = re.compile(
+    r"\s+(?:und|sowie)\s+(?!(?:zu|zum|zur|mit|im|in|ins|an|am|auf|der|die|das|dem|den|"
+    r"des|ein\w*|mein\w*|dein\w*|sein\w*|ihr\w*)(?![\wäöüÄÖÜß]))(?P<w>[\wäöüÄÖÜß-]+)", re.I)
 _ZW_NACH_RE = re.compile(r"\s*(?:[\wäöüÄÖÜß]+\s+){0,2}?(?:zwischen|between)"
                          r"(?![\wäöüÄÖÜß])", re.I)
 _OBJ_PRONOMEN_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:ihm|ihr|ihn|ihnen|sie|him|her|them)"
@@ -4354,6 +4429,10 @@ def _konstellationen(satz, vorher="", typ=None):
                     and not _OBJ_PRONOMEN_RE.search(satz, _mn.end(),
                                                     _mk.start() if _mk else nach_grenze):
                 vor_grenze = max(vor_grenze, _mn.start())
+        if _im_relativsatz(satz, m.start()):                            # (20)
+            _rk = re.compile(r"[,;]").search(satz, m.end(), nach_grenze)
+            if _rk:
+                nach_grenze = _rk.start()
         for mr in _RELATIV_RE.finditer(satz, m.end(), nach_grenze):   # (2)
             if any(a >= m.end() and e <= mr.start() for a, e, _f in fak):
                 nach_grenze = mr.start()
@@ -4418,6 +4497,10 @@ def _konstellationen(satz, vorher="", typ=None):
                 continue
         if danach and _ZUEINANDER_RE.match(satz[m.end():]):               # (18)
             danach = []
+        if danach and _gruppe_koordiniert(satz, davor_pos):              # (21)
+            _ud = _UND_PRAEDIKAT_RE.match(satz, m.end())
+            if _ud and not _faktoren_im_satz(_ud.group("w")):
+                danach = []
         if danach and len(set(f for _a, _e, f in davor_pos)) >= 2:       # (16)
             _k = satz.find(",", m.end(), nach_grenze)
             if _k >= 0 and not any(m.end() <= a < _k for a, _e, _f in fak) and (
@@ -4473,10 +4556,21 @@ def _konstellationen(satz, vorher="", typ=None):
         _p17 = None if danach else re.match(
             r"\s*(?:[\wäöüÄÖÜß]+\s+){0,2}?(?P<p>ihm|ihr|ihnen|ihn|dir|dich)(?![\wäöüÄÖÜß])",
             satz[m.end():nach_grenze])
-        if _p17 and _i and set(davor) <= set(vorige_danach or ()):       # (17)
+        if _p17 and _i and (set(davor) <= set(vorige_danach or ()) or (   # (17)
+                not vorige_danach and davor_pos and all(                     # (21)
+                    _OBJEKT_VOR_RE.search(satz[max(0, a - 30):a]) for a, _e, _f in davor_pos))):
             if _p17.group("p") in ("dir", "dich"):
                 continue
             danach = [f for f in (vorige_davor or []) if f not in davor]
+        elif _p17 and not _i and _gruppe_koordiniert(satz, davor_pos):   # (22)
+            if _p17.group("p") in ("dir", "dich", "ihnen"):
+                continue
+            _g22 = "f" if _p17.group("p") == "ihr" else "m"
+            danach = list(dict.fromkeys(
+                f for _a, _e, f in _faktoren_im_satz(vorher or "")
+                if _GENUS.get(f, _g22) == _g22 and f not in davor))
+            if not danach:
+                continue
         if not danach and len(set(davor)) >= 2 and not vor_schnitt:     # (9): nur leiser
             danach = [davor[-1]]
             davor = [f for f in davor[:-1] if f != danach[0]]
@@ -6371,6 +6465,47 @@ def _selbsttest(still=False):
         and not _selbstpaar_im_satz("Er steht Chiron gegenüber, Chiron in den Zwillingen.", "CHIRON") \
         and _selbstpaar_im_satz("Saturn steht im Quadrat zu deinem Saturn.", "SATURN") \
         and _selbstpaar_im_satz("Er steht im Quadrat zu deinem Saturn.", "SATURN"), "P13 (10) Selbstpaar"
+    # 2026-10-01 (Pruefbericht Geburtshoroskop 1+2 vom 30.09., K1): (3) Knotenachse,
+    # (20) Marker im Relativsatz, (21) Gruppe vor „und + Praedikat“, (22) „zu ihm“ am
+    # ersten Marker — konstruierte Saetze nach den gemeldeten
+    assert not _paar_ok("MONDKNOTEN", "SUEDKNOTEN", "geburt"), "P13 (3) Knotenachse"
+    _ist = _p13_paare("Pholus, der hier im Trigon mitklingt, steht in "
+                      "Kapitel 4 Mars gegenüber.")
+    assert frozenset(("PHOLUS", "MARS")) not in _ist, "P13 (20): %r" % _ist
+    _ist = _p13_paare("Dein Mond, der im Trigon zu Venus steht, reibt sich an Saturn.")
+    assert frozenset(("MOND", "VENUS")) in _ist, "P13 (20) zu weit: %r" % _ist
+    _k21 = [(a, frozenset((x, y))) for d, a, n, _m in _konstellationen(
+        "Venus und Uranus bilden ein Sextil und zeigen gemeinsam auf deinen Mars, beide im "
+        "Quincunx zu ihm.") for x in d for y in n if x != y]
+    assert set(_k21) == {("Sextil", frozenset(("VENUS", "URANUS"))),
+                         ("Quincunx", frozenset(("MARS", "VENUS"))),
+                         ("Quincunx", frozenset(("MARS", "URANUS")))}, "P13 (21): %r" % _k21
+    _ist = _p13_paare("Saturn steht im Quadrat und trifft deinen Mars.")
+    assert _ist == {frozenset(("SATURN", "MARS"))}, "P13 (21) nur mit Gruppe: %r" % _ist
+    _ist = _p13_mit_vorsatz("Und Venus und Jupiter stehen beide im Quincunx zu ihm.",
+                            "Dein Mars ist das Zentrum.")
+    assert _ist == {frozenset(("VENUS", "MARS")), frozenset(("JUPITER", "MARS"))}, \
+        "P13 (22): %r" % _ist
+    assert _p13_mit_vorsatz("Venus und Jupiter stehen beide im Quincunx zu ihm.", "") == set(), \
+        "P13 (22) ohne Vorsatz"
+    # 2026-10-01: P11 meldet Saetze zur Geburtsminute, ausser EINEM im Auftakt bei
+    # faelligem Gegenprobe-Blatt
+    def _gm(kicker, saetze, txt_gm=""):
+        _pr = _Probe("P11", "Zahlen-Deckung")
+        _p11_geburtsminute(_pr, [{"kicker": kicker, "title": "T", "blocks": [
+            {"type": "p", "text": t} for t in saetze]}], txt_gm)
+        return len(_pr.pruefen)
+    _gm_ja = ("Dein Aszendent liegt so nah an einer Zeichengrenze, dass das beiliegende "
+              "Blatt dir hilft, selbst zu prüfen, welches Zeichen zu dir passt.",
+              "Bei knapp zwei Minuten früherer Geburt läge die Himmelsmitte im Krebs.",
+              "Wärst du zwei Minuten früher geboren, stünde Saturn im zwölften Haus.",
+              "Welches der beiden Häuser führt, kann die Geburtszeit nicht entscheiden.")
+    _gm_nein = ("Notiere, was zehn Minuten später noch da ist.",
+                "Aus früheren Geburten bringst du dieses Thema nicht mit.")
+    assert _gm("Hauptthemen", _gm_ja[1:] + _gm_nein) == 3, "P11 Geburtsminute"
+    assert _gm("Auftakt", _gm_ja[1:2], "- Zeitscan · AC: … Gegenprobe-Blatt fällig") == 0 \
+        and _gm("Auftakt", _gm_ja[1:3], "Gegenprobe-Blatt fällig") == 1 \
+        and _gm("Auftakt", _gm_ja[1:2]) == 1, "P11 Geburtsminute im Auftakt"
     # 2026-09-23c: P5 nimmt die Registerzeile mit dem richtigen Ziel
     _zl = ["Jupiter im Trigon zu deinem MC — der Weg nach außen zeigt sich (Kapitel 2).",
            "Mondknoten im Sextil zu deinem Jupiter — klingt mit in Kapitel 3.",
@@ -6541,6 +6676,13 @@ def _selbsttest(still=False):
                    ("Es ist eine einzige Figur, nicht zwei.", ""),
                    ("Alle vier Ecken stehen in fixen Zeichen.", "")):
         assert _p12_satz(_s, _v, txt_rz=_rz29) == [], "K1 P12: %r" % _s
+    # 2026-10-01 (K1): Rang in einer Teilmenge still, Gesamtmenge weiter geprueft
+    assert _p12_satz("Unter den Gliedern dieser Gruppe trägt Lilith, gewichtet gezählt, die "
+                     "meisten Verbindungen.", txt_rz=_rz29) == [], \
+        "P12 Teilmenge"
+    assert [a for a, _b in _p12_satz("Unter allen Planeten hat Lilith, gewichtet gezählt, die "
+                                     "meisten Verbindungen.", txt_rz=_rz29)] == ["meiste"], \
+        "P12 Gesamtmenge"
     assert [a for a, _b in _p12_satz("Ihre einzigen Verbindungen führen zur Sonne, zu "
                                      "Jupiter und zu Mars.", "Deine Lilith steht im Skorpion.",
                                      txt_rz=_rz29)] == ["einzig"], "K1 P12 Plural falsch"
@@ -7175,24 +7317,26 @@ def _selbsttest(still=False):
     a9 = _TEST_ANALYSE.replace(_alt9, "Sonne ☉ 10°00′ Widder ♈, 1./2. Haus (gleich stark, "
                                       "2°03′ vor Spitze 2)")
     r9 = lauf(c9, a9)
-    erwarte(r9, (("P2", "pruefen", "kein Satz, dass die Geburtszeit"),
-                 ("P2", "pruefen", "die Signatur sagt nicht „gleich stark“")), "Lauf 9")
+    erwarte(r9, (("P2", "pruefen", "die Signatur sagt nicht „gleich stark“"),), "Lauf 9")
     assert not r9["proben"]["P2"]["fehler"], r9["proben"]["P2"]["fehler"]
     a9ok = ersetze(a9, "**Signatur:** Die Sonne im Widder im ersten Haus, verschmolzen mit "
                          "Merkur — mitklingend der Mond im Stier",
                    "**Signatur:** Sonne an der Schwelle zwischen dem ersten und dem zweiten "
                    "Haus, beide gleich stark, verschmolzen mit Merkur — mitklingend der Mond "
                    "im Stier")
-    a9ok = ersetze(a9ok, "die Sonne steht im Widder im ersten Haus.",
-                   "die Sonne steht im Widder im ersten und zweiten Haus zugleich — welches "
-                   "davon führt, kann deine Geburtszeit nicht entscheiden.")
     r9ok = lauf(c9, a9ok)
-    assert not r9ok["proben"]["P2"]["pruefen"] and not r9ok["proben"]["P2"]["fehler"], (
+    assert not r9ok["proben"]["P2"]["pruefen"] and not r9ok["proben"]["P2"]["fehler"] \
+        and not [t for t in r9ok["proben"]["P11"]["pruefen"] if "Geburtsminute" in t], (
         "Lauf 9 (sauber): %s" % befunde(r9ok))
+    # 2026-10-01 (F1): der alte Pflichtsatz meldet jetzt P11
+    r9s = lauf(c9, ersetze(a9ok, "die Sonne steht im Widder im ersten Haus.",
+                           "die Sonne steht im Widder im ersten und zweiten Haus zugleich — "
+                           "welches davon führt, kann deine Geburtszeit nicht entscheiden."))
+    erwarte(r9s, (("P11", "pruefen", "Satz zur Geburtsminute"),), "Lauf 9s")
     r9f = lauf(c9, a9ok.replace("1./2. Haus (gleich stark", "2./1. Haus (gleich stark"))
     erwarte(r9f, (("P2", "fehler", "offene Führung: das rechnerische Haus vorn"),), "Lauf 9f")
-    berichte.append("Lauf 9 (offene Führung): Satz und Signatur gemeldet, sauber still, "
-                    "Reihenfolge als Fehler")
+    berichte.append("Lauf 9 (offene Führung): Signatur gemeldet, sauber still, Satz zur "
+                    "Geburtszeit als P11, Reihenfolge als Fehler")
 
     # 10) „um die N" (2026-09-30, Klasse-2-Entscheidungslauf, Punkt 8): gedeckt
     #     vom Saturn-Fenster ~29.5 still und gezaehlt, ungedeckt gemeldet, ein

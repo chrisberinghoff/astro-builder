@@ -375,8 +375,8 @@ def _ephemeriden_warnung():
         "      from lade import ephemeriden\n"
         "      ephe = ephemeriden()      # installiert nur, wenn noetig, und "
         "liefert den Pfad fuer --ephe\n"
-        "  Schritt 3+4 braucht sie fuer die Fussnoten der Konstellationsseite;\n"
-        "  die Vorlagen holen sie dort selbst (seit 2026-09-23c).\n"
+        "  Schritt 3+4 braucht sie nicht (seit 2026-10-01 ohne Geburtszeit-"
+        "Fussnoten).\n"
         "  Rechnet transit.py ohne sie, bricht es selbst hart ab."
     )
 

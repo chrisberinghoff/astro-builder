@@ -4083,7 +4083,6 @@ _GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kei
 
 - **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
 - **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
-- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 - **Figuren-Entscheidung:** <Entscheidung/keine>
 - **Handgriffe für Schritt 3:** <Handgriffe/keine>
 
@@ -4100,17 +4099,17 @@ _GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kei
 - **Fassung:** <n/entfällt>
 - **Quelle der Stände:** <Quelle, Einstellungen>
 - **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
-- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 - **Quell-PDF:** <Behauptung, nicht verifiziert>
 
 <!-- Pflicht · Radixrechnung „Gegenprobe der Rechnung“; Datenblatt-Modul „Gegenprobe“ · kein Leser · Form frei -->
 ## Gegenproben
 
-- Positions-Vergleich: <Ergebnis>
+- Positions-Vergleich: <Ergebnis/entfällt — kein Quellexport>
 - (a) True-vs-Mean: <Ergebnis>
-- (b) Mond-Zeitprobe: <Abweichung, Zeitunsicherheit>
-- (c) ASC/MC: <Abweichungen>
+- (b) Mond-Zeitprobe: <Abweichung, Zeitunsicherheit/entfällt — kein Quellexport>
+- (c) ASC/MC: <Abweichungen/entfällt — kein Quellexport>
 - (d) Achsen doppelt: <Ergebnis/entfällt>
 - (e) Häusersystem: <Ergebnis/entfällt>
 - (f) Zwei-Modell-Probe: <Ergebnis>
@@ -4303,7 +4302,6 @@ _GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul
 
 - **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
 - **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
-- **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 - **Figuren-Entscheidung:** <Entscheidung/keine>
 - **Handgriffe für Schritt 3:** <Handgriffe/keine>
 
@@ -4322,7 +4320,7 @@ _GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul
 - **Stichtag:** <TT.MM.JJJJ>
 - **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
 - **Zeitzone der Exaktdaten:** <Zone mit Grund>
-- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 
 <!-- Pflicht, bei Rohdaten-Start dazu Positions-Vergleich und (a) bis (g) · Transit-Modul „Ablauf“ 1, „Die vier Zusatz-Zeitmaße“; Radixrechnung · kein Leser · Form frei -->

@@ -106,7 +106,10 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
 
     konstellations_fussnoten(jd, factors, cusps, lat, lon, sprache='de') -> list
         Seit 2026-09-23c: beide Fußnoten zur Geburtszeit (Zeichengrenze,
-        Hauswechsel) für die Konstellationsseite in EINEM Aufruf. Setzt den
+        Hauswechsel) für die Konstellationsseite in EINEM Aufruf. Seit dem
+        2026-10-01 rufen die Vorlagen sie NICHT mehr auf (Chris-Entscheidung:
+        kein Satz zur Geburtsminute im PDF außer dem Auftakt-Satz zum
+        Gegenprobe-Blatt); sie bleibt für Prüfzwecke. Setzt den
         Ephemeridenpfad selbst und bricht ab, statt eine Fußnote still
         wegzulassen. Die beiden Vorlagen rufen sie auf.
 
@@ -3345,6 +3348,12 @@ def zeitscan_faellig(sb):
 _ZS_MODUL = '`claude/Projektanweisung_Modul_Gegenprobe_Geburtszeit.md`'
 
 
+# 2026-10-01 (Chris-Entscheidung): der einzige Satz zur Geburtsminute im PDF
+_ZS_AUFTAKT = ('; im Auftakt steht dazu EIN Satz, der auf das Blatt zeigt — ohne '
+               'Minutenzahl und ohne zu sagen, was sich dann ändert; sonst nichts '
+               'im Text (Chris-Entscheidung 2026-10-01).')
+
+
 def zeitscan_text(zs, typ='geburtshoroskop'):
     """Die Zeilen des Blocks „Zeitscan" fuer Strukturbild §3 (Liste von
     Strings). zeitscan_lesen() liest sie zurueck. Nebenaspekt-Zeilen an den
@@ -3359,8 +3368,9 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
              f"bis {fe:g} Minuten früher und später, jeder Wechselpunkt auf die "
              f"Sekunde (Minuten ungerundet; Nebenaspekte an den Achsen nicht "
              f"aufgeführt). Nur aus diesen Zeilen kommen Wenn-dann-Sätze zur "
-             f"Geburtszeit: Kopf, ⚠-Block, Auftakt, Hinweissätze, Befund, "
-             f"Analyse.")
+             f"Geburtszeit — in Kopf, ⚠-Block und Befund des Datenblatts, im "
+             f"Handlungsblock und auf dem Gegenprobe-Blatt; im Analysetext steht "
+             f"keiner (Chris-Entscheidung 2026-10-01).")
     ac = zs.get('ac')
     if ac:
         z = (f"- Zeitscan · AC: Zeichenwechsel bei {_dez3(ac['minuten'])} Minuten "
@@ -3369,10 +3379,10 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
         if zs.get('blatt_faellig') and typ == 'transit':
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
                   f"fällig nur beim Rohdaten-Start dieses Transits, dann am Ende "
-                  f"von Schritt 2 {_ZS_MODUL} laden.")
+                  f"von Schritt 2 {_ZS_MODUL} laden" + _ZS_AUFTAKT)
         elif zs.get('blatt_faellig'):
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
-                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden.")
+                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden" + _ZS_AUFTAKT)
         else:
             z += f" — nicht unter {AC_GEGENPROBE_SCHWELLE} Minuten, kein Blatt."
         L.append(z)
@@ -3384,7 +3394,7 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
         if not pk:
             L.append(f"- Zeitscan · {ri}: bis {fe:g} Minuten kein Wechsel.")
             continue
-        L.append(f"- Zeitscan · {ri} (Minuten; Wortlaut im Text):")
+        L.append(f"- Zeitscan · {ri} (Minuten; in Worten):")
         for p in pk:
             L.append(f"  - {_dez3(p['minuten'])} („{_min_wort(p['minuten'])}\"): "
                      f"{p['text']}.")
@@ -3395,7 +3405,8 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
                  f"{_gr(zs['abweichung_spitzen'])} von houses_ex(jd) ab — jd, lat "
                  f"und lon passen nicht zu ihnen; Scan erst nach Klärung nutzen.")
     L.append("- Zeitscan · Protokollzeile der Gegenproben, sobald ein "
-             "Wenn-dann-Satz zur Geburtszeit im Text steht: „Zeitscan: <n> "
+             "Wenn-dann-Satz zur Geburtszeit geschrieben ist (Datenblatt, "
+             "Handlungsblock, Gegenprobe-Blatt): „Zeitscan: <n> "
              "Wenn-dann-Sätze gegen den Block gehalten — keine Abweichung\" "
              "bzw. je Abweichung Satz und Zeile.")
     return L
@@ -3571,7 +3582,7 @@ def _selbsttest_fuehrung():
         in t3 and 'früherer Geburt führte Haus 7 statt Haus 6' in t3, t3
     assert 'Unter 1 Minute führt keins der beiden Häuser: 6 und 7 gleich ' \
         'stark' in t3 and '`fuehrung=offen`' in t3 and '`6=7`' in t3, t3
-    assert 'kein Hinweis im Auftakt' in t3 and 'gleich stark"' in t3, t3
+    assert 'Im Text kein Satz zur Geburtszeit' in t3 and 'gleich stark"' in t3, t3
     assert '⚠ Wechsel des führenden Hauses unter %d: Mars (' % KIPP_SCHWELLE \
         in t3 and 'früherer Geburt in Haus 10 gedeutet statt in Haus 9' in t3
     assert '⚠ Wechsel des führenden Hauses unter %d: Venus (' % KIPP_SCHWELLE \
@@ -3580,7 +3591,7 @@ def _selbsttest_fuehrung():
     assert sbv['zeitscan'] is not None
     t3t = strukturbild_text(sbv, typ='transit').split('### 3')[1].split(
         '### 4')[0]
-    assert 'das Lagebild nennt es nicht' in t3t, t3t
+    assert 'im PDF steht es nur in der Haus-Spalte' in t3t, t3t
     return ('Führungs-Test (2026-09-30, K9): OK — offen früher Saturn %.3f, '
             'später Jupiter %.3f, Knotenachse %.3f; Warnung Mars früher %.3f, '
             'Venus später %.3f ohne Hauswechsel'
@@ -3706,7 +3717,11 @@ def _ephe_pfad_setzen(swe):
 
 def konstellations_fussnoten(jd, factors, cusps, lat, lon,
                              schwelle=KIPP_SCHWELLE, sprache='de', offen=None):
-    """Beide Geburtszeit-Fussnoten der Konstellationsseite in EINEM Aufruf —
+    """SEIT 2026-10-01 RUFT KEINE VORLAGE SIE MEHR AUF (Chris-Entscheidung: kein
+    Satz zur Geburtsminute im PDF ausser dem Auftakt-Satz zum Gegenprobe-Blatt;
+    die Grenzlagen-Erklaerung kommt weiter aus grenzlagen_note()).
+
+    Beide Geburtszeit-Fussnoten der Konstellationsseite in EINEM Aufruf —
     Zeichengrenze (Spitzen und Faktoren) und Hauswechsel — als Liste fertiger
     Saetze fuer `chartdoc.konstellationen_page(..., fussnoten=[...])`; leer,
     wenn keine faellig ist (neu 2026-09-23c).
@@ -5745,49 +5760,38 @@ STRUKTURBILD_TYPEN = ('geburtshoroskop', 'transit')   # EA/Ultimativ ausgemuster
 # Kapitel einen Radixpunkt, im Geburtshoroskop blieb offen, ob ein Porträt, eine
 # mitklingende Figurecke oder ein Thema ueber Planeten im Haus traegt. Getragen
 # wird, wo der Punkt selbst gedeutet wird; der Transit hat eine eigene Fassung.
-_KIPP_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
+# 2026-10-01 (Chris-Entscheidung, Klasse-2-Sammelliste; Wartungslauf zu den
+# Pruefberichten vom 30.09.): Ein Satz zur Geburtsminute steht im Klienten-PDF nur,
+# wo der Leser etwas damit tun kann — beim AC mit Gegenprobe-Blatt EIN Satz im
+# Auftakt, der auf das Blatt zeigt (Zeitscan, AC-Zeile). Sonst kein Hinweissatz,
+# keine Auftakt-Nennung, kein Wenn-dann-Satz, keine Fussnote — auch im Transit.
+# Information ohne Handlungsmoeglichkeit verunsichert den Leser mehr, als sie nuetzt.
+# Damit entfaellt die Frage, welches Kapitel eine Stelle „traegt" (Pruefberichte vom
+# 30.09., K4). Die Warnung bleibt im Datenblatt und als Entscheidung im Handlungsblock.
+_KIPP_WOHIN = ('Gehört in den ⚠-Block und den Kopf der chart_data, neben die '
                'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
-               'in den Handlungsblock am Ende von Schritt 1+2; '
-               'im Text ein Hinweissatz in jedem Kapitel, das die Stelle trägt, '
-               'und eine Nennung im Auftakt. Die Stelle trägt, wer den Punkt '
-               'selbst deutet: als Führer eines Themas, als Porträt im Instrument, '
-               'bei einer Spitze über ihr Zeichen oder ihren Herrscher (auch das '
-               'Getriebe). Nur Mitklingen trägt nicht, ein Planet im Haus der '
-               'Spitze auch nicht; trägt kein Kapitel, entfallen Hinweissatz und '
-               'Nennung (Gegenprobe g).')
-_KIPP_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
-               'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
-               'in den Handlungsblock am Ende von Schritt 1+2; '
-               'im Text ein Hinweissatz nur im Kapitel, dessen führender Kontakt '
-               'auf diesem Punkt landet oder dessen Hausdurchgang über diese '
-               'Spitze läuft; mitklingende Kontakte tragen nicht, das Lagebild '
-               'nennt es nicht. Trägt kein Kapitel, steht es im PDF nur in der '
-               'Fußnote der Konstellationsseite (Gegenprobe g).')
+               'in den Handlungsblock am Ende von Schritt 1+2. Ins PDF kommt '
+               'davon nichts — kein Satz im Text, keine Fußnote; einzige '
+               'Ausnahme ist der AC mit Gegenprobe-Blatt (Zeitscan, AC-Zeile; '
+               'Gegenprobe g, Chris-Entscheidung 2026-10-01).')
+_KIPP_WOHIN_TRANSIT = _KIPP_WOHIN
 
 
 # 2026-09-30 (K9, Chris-Entscheidung Frage 2 = A): Die offene Fuehrung ist
 # keine Warnung, sondern eine Deutungsvorgabe — keine Entscheidung, keine Frage.
-# Der Text sagt sie EINMAL je Faktor, dort, wo er zuerst gedeutet wird; kein
-# Hinweis im Auftakt; eine Registerzeile traegt nur „gleich stark".
-_OFFEN_WOHIN = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben die '
-                'Zeitunsicherheit aus der Mond-Zeitprobe — keine Entscheidung, '
-                'keine Frage, kein Handlungsblock. Im Text EIN Satz, dass die '
-                'Geburtszeit nicht entscheiden kann, welches der beiden Häuser '
-                'führt, an der ersten Stelle, die den Faktor deutet (Führer '
-                'eines Themas oder Porträt im Instrument; die Knotenachse ist '
-                'dabei ein Faktor); kein Hinweis im Auftakt; eine Registerzeile '
-                'trägt nur „gleich stark". Die Konstellationsseite erklärt „=" '
-                'mit radix.grenzlagen_note() (Gegenprobe g).')
-_OFFEN_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Datenblatt-Kopf, neben '
-                'die Zeitunsicherheit aus der Mond-Zeitprobe — keine '
-                'Entscheidung, keine Frage, kein Handlungsblock. Im Text EIN '
-                'Satz, dass die Geburtszeit nicht entscheiden kann, welches '
-                'der beiden Häuser führt, an der ersten Stelle, die den Punkt '
-                'mit seinen Häusern deutet (Kapitel, dessen führender Kontakt '
-                'auf ihm landet; die Knotenachse ist dabei ein Punkt); das '
-                'Lagebild nennt es nicht. Sonst steht es im PDF nur in der '
-                'Haus-Spalte („=") und ihrer Erklärung (radix.grenzlagen_note(), '
-                'Gegenprobe g).')
+# 2026-10-01 (Chris-Entscheidung, F1): Der Satz, dass die Geburtszeit nicht
+# entscheiden kann, welches Haus fuehrt, steht nicht mehr im Text; das „="
+# erklaert die Konstellationsseite (grenzlagen_note()).
+_OFFEN_WOHIN = ('Gehört in den ⚠-Block und den Kopf der chart_data — keine '
+                'Entscheidung, keine Frage, kein Handlungsblock. Im Text kein Satz '
+                'zur Geburtszeit; Signatur und Registerzeile tragen „gleich stark", '
+                'die Konstellationsseite erklärt „=" mit radix.grenzlagen_note() '
+                '(Gegenprobe g, Chris-Entscheidung 2026-10-01).')
+_OFFEN_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Kopf der chart_data — keine '
+                'Entscheidung, keine Frage, kein Handlungsblock. Im Text kein Satz '
+                'zur Geburtszeit; im PDF steht es nur in der Haus-Spalte („=") und '
+                'ihrer Erklärung (radix.grenzlagen_note(); Gegenprobe g, '
+                'Chris-Entscheidung 2026-10-01).')
 
 
 def strukturbild_text(sb, typ='geburtshoroskop'):
@@ -6105,7 +6109,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                          f"wechseln bei {_min_dez(_g)} Minuten {w['richtung']}er "
                          f"Geburt das Zeichen ({w['von'][0]} → {w['nach'][0]}, "
                          f"{w['von'][1]} → {w['nach'][1]}; "
-                         f"{_gr(w['grad_je_minute'])} je Minute); im Text "
+                         f"{_gr(w['grad_je_minute'])} je Minute); in Worten "
                          f"„{_min_wort(_g)} {w['richtung']}\". " + _kipp_wohin)
                 continue
             L.append(f"- ⚠ Kippminute unter {KIPP_SCHWELLE}: Spitzen "
@@ -6113,7 +6117,7 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"{_min_dez(_g)} Minuten {w['richtung']}er Geburt das "
                      f"Zeichen ({w['von'][0]} → {w['nach'][0]}, {w['von'][1]} "
                      f"→ {w['nach'][1]}; {_gr(w['grad_je_minute'])} je "
-                     f"Minute); im Text „{_min_wort(_g)} {w['richtung']}\". "
+                     f"Minute); in Worten „{_min_wort(_g)} {w['richtung']}\". "
                      + _kipp_wohin
                      + ('' if transit else
                         " Ein Sonderfall an dieser Spitze führt ein Thema nur "
@@ -6157,10 +6161,8 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f" wechselt bei {_min_dez(_g)} Minuten "
                      f"{w['richtung']}er Geburt das Zeichen ({w['von']} → "
                      f"{w['nach']}; {_gr_s(w['grad_je_minute'])} je Minute); "
-                     f"im Text „{_min_wort(_g)} {w['richtung']}\". "
-                     + _kipp_wohin
-                     + " Fußnote: radix.zeichengrenze_fussnote(kipp, "
-                       "faktoren=…).")
+                     f"in Worten „{_min_wort(_g)} {w['richtung']}\". "
+                     + _kipp_wohin)
         if not sb.get('faktor_kipp_warnungen'):
             L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
                      f'das Zeichen.')
@@ -6236,12 +6238,10 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      f"{_min_dez(w['fuehrend_minuten_genau'])} Minuten "
                      f"{w['richtung']}er Geburt in Haus "
                      f"{w['fuehrend_haus_neu']} gedeutet statt in Haus "
-                     f"{w.get('fuehrend') or w['haus']}; im Text "
+                     f"{w.get('fuehrend') or w['haus']}; in Worten "
                      f"„{_min_wort(w['fuehrend_minuten_genau'])} "
                      f"{w['richtung']}\". "
-                     + _kipp_wohin
-                     + " Fußnote: radix.hauswechsel_fussnote("
-                       "radix.haus_kippminuten(…)).")
+                     + _kipp_wohin)
         if not sb.get('haus_kipp_warnungen') and not sb.get('fuehrung_offen'):
             L.append(f'- Kein Faktor wechselt unter {KIPP_SCHWELLE} Minuten '
                      f'früherer oder späterer Geburt das führende Haus.')
@@ -6256,8 +6256,9 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     L.append('- Befund: <die strukturelle Pointe in einer Zeile; einen Häuser-Kreis '
              'Glied für Glied mit Konsequenz — wohin die Bereiche auslagern, welche '
              'keinen Verwalter empfangen, der Kreis prüft sich nicht selbst; '
-             'Zeit-Einschränkung, wo eine beteiligte Spitze eine ⚠-Zeile '
-             'trägt' + (' — nur aus dem Zeitscan' if _zs else '') + '>')
+             'Zeit-Einschränkung' + (' (aus dem Zeitscan)' if _zs else '')
+             + ', wo eine beteiligte Spitze eine ⚠-Zeile trägt — nur hier im '
+             'Datenblatt, nie im Text>')
     L.append('')
 
     L.append('### 4 · Aspektdichte je Faktor')
@@ -8101,7 +8102,7 @@ if __name__ == '__main__':
         _t33 = strukturbild_text(_sb3).split('### 3')[1].split('### 4')[0]
         assert '⚠ Kippminute unter %d: Sonne wechselt bei 1,' \
             % KIPP_SCHWELLE in _t33, _t33
-        assert 'im Text „gut eine Minute früher"' in _t33, _t33
+        assert 'in Worten „gut eine Minute früher"' in _t33, _t33
         assert zeichengrenze_fussnote(
             _sb3['kippminuten'],
             faktoren=_sb3['faktor_kippminuten']).count('gut 1 Minute') >= 2
@@ -8185,7 +8186,7 @@ if __name__ == '__main__':
         _t3w = strukturbild_text(_sbh).split('### 3')[1].split('### 4')[0]
         assert '⚠ Wechsel des führenden Hauses unter %d: Saturn' \
             % KIPP_SCHWELLE in _t3w, _t3w
-        assert 'in Haus 5 gedeutet statt in Haus 6; im Text „' in _t3w \
+        assert 'in Haus 5 gedeutet statt in Haus 6; in Worten „' in _t3w \
             and 'später"' in _t3w and 'das führende Haus.' not in _t3w, _t3w
         assert 'Hauswechsel bei späterer Geburt: nicht gerechnet' in \
             strukturbild_text(strukturbild(_fhv, _cw, jd_geburt=_jd))
