@@ -2837,10 +2837,35 @@ _P11_ALTER = (
     re.compile(r"(?<![\wäöüß])im\s+Alter\s+von\s+(?:gut\s+|knapp\s+|etwa\s+|rund\s+)?(?P<n>%s)"
                r"(?![\wäöüß])" % _ZAHL, re.I),
     re.compile(r"(?<![\wäöüß])(?P<n>%s)\s+Jahre\s+alt\b" % _ZAHL, re.I),
-    re.compile(r"(?<![\wäöüß])(?P<n>%s)-?jährig" % _ZAHL, re.I),
+    # 2026-10-01b (Pruefbericht Transit 1+2 vom 01.10., K1): attributiv vor einem
+    # Nomen, das keine Person ist („im zwölfjährigen Umlauf“), ist es eine Dauer, kein
+    # Lebensalter; „als Zwölfjährige“, „ein zwölfjähriges Kind“ bleiben Alter.
+    # Nur die klein geschriebene, attributive Form zaehlt als Dauer; „als
+    # Zwölfjähriger …“ (gross, substantiviert) bleibt Alter, ebenso vor einer Person.
+    re.compile(r"(?<![\wäöüß])(?!(?-i:[a-zäöü0-9])[\wäöüß-]*?(?-i:jährig)(?:e|em|en|er|es)\s+"
+               r"(?!(?:Kind|Kinder|Kindern|Kindes|Mädchen|Junge|Jungen|Bub|Knabe|Sohn|Tochter|"
+               r"Bruder|Schwester|Enkel\w*|Neffe|Nichte|Mensch|Menschen|Frau|Mann|Person|"
+               r"Schüler\w*|Jugendliche\w*|Teenager|Ich|Selbst)(?![\wäöüß]))(?-i:[A-ZÄÖÜ]))"
+               r"(?P<n>%s)-?jährig" % _ZAHL, re.I),
     re.compile(r"(?<![\wäöüß])(?:du\s+bist|bist\s+du)\s+(?:jetzt\s+|heute\s+|gerade\s+|nun\s+)?"
                r"(?P<n>%s)(?=\s*(?:[.,;:!?–—)]|$)|\s+Jahre\b|\s+und\b)" % _ZAHL, re.I),
 )
+# 2026-10-01b (Pruefbericht Transit 1+2 vom 01.10., K1): die Reihe „als du X und Y
+# warst“ lief an P11 vorbei (drei Stellen, sechs Alter ungeprueft) — das Einzelmuster
+# verlangt „warst“ direkt hinter der Zahl. Jedes Glied wird einzeln geprueft; getrennt
+# wird nur an Komma und freistehendem „und“/„oder“, nie im Zahlwort („achtundfünfzig“).
+_P11_Q = r"(?:(?:gut|knapp|etwa|rund|about|around|roughly|just)\s+)?"
+_P11_ALTER_LISTE = re.compile(
+    r"(?<![\wäöüß])als\s+du\s+"
+    r"(?P<liste>%s%s(?:\s*,\s*%s%s)*\s+(?:und|oder)\s+%s%s)(?:\s+Jahre\s+alt)?\s+"
+    r"(?:warst|bist|wirst)\b" % (_P11_Q, _ZAHL, _P11_Q, _ZAHL, _P11_Q, _ZAHL), re.I)
+_P11_ALTER_LISTE_EN = re.compile(
+    r"(?<!\w)when\s+you\s+(?:were|are|turn|turned)\s+"
+    r"(?P<liste>%s%s(?:\s*,\s*%s%s)*,?\s+(?:and|or)\s+%s%s)(?:\s+years?\s+old)?(?!\w)"
+    % (_P11_Q, _ZAHL_EN, _P11_Q, _ZAHL_EN, _P11_Q, _ZAHL_EN), re.I)
+_P11_Q_RE = re.compile(_P11_Q, re.I)
+_P11_LISTE_TRENNER = re.compile(r"\s*,\s*(?:(?:und|oder|and|or)\s+)?|\s+(?:und|oder|and|or)\s+",
+                                re.I)
 _P11_LEBENSJAHR = re.compile(
     r"(?<![\wäöüß])(?:(?P<z>\d{1,3})\.\s*Lebensjahr|(?:das|dem|dein|deinem|deines|ins|im|bis|und|"
     r"um\s+das)\s+(?P<w>%s)(?=\s*(?:,|und\b|oder\b|bis\b|–|Lebensjahr|wenn\b|\.|$)))" % _ORDWORT,
@@ -3032,8 +3057,18 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
             fak = [f for _, _, f in _faktoren_im_satz(satz)] or \
                 ([f for _, _, f in _faktoren_im_satz(saetze[i_s - 1][2])] if i_s else [])
             funde = []
+            listen = []                  # 2026-10-01b: Reihe „als du X und Y warst“
+            for m in (_P11_ALTER_LISTE_EN if englisch else _P11_ALTER_LISTE).finditer(satz):
+                listen.append((m.start(), m.end()))
+                for glied in _P11_LISTE_TRENNER.split(m.group("liste")):
+                    glied = _P11_Q_RE.sub("", glied.strip(), count=1).strip()
+                    n = _zahl_wert(glied)
+                    if n is not None and (n >= 5 or glied.isdigit()):
+                        funde.append(("%s (%s)" % (m.group(0), glied), n, n))
             for rx in ALTER:
                 for m in rx.finditer(satz):
+                    if any(a_ <= m.start() < e_ for a_, e_ in listen):
+                        continue             # schon als Glied der Reihe gezaehlt
                     n = _zahl_wert(m.group("n"))
                     if n is not None and (n >= 5 or m.group("n").isdigit()):
                         funde.append((m.group(0), n, n))
@@ -4253,6 +4288,32 @@ _ZUSATZ_KONTAKT_RE = re.compile(
 #      Erkennung faengt erfundene oder falsch benannte Konjunktionen.
 _UEBER_RE = re.compile(r"(?<![\wäöüÄÖÜß])über(?=\s+(?:dein\w*\s+|R-\s*)(?:[\wäöüÄÖÜß-]+\s+)?"
                        r"(?:%s|Knoten)(?![\wäöüÄÖÜß]))" % _FAKTOR_RE)
+# (24) HERRSCHAFTSFORMEL (2026-10-01b, Wartungslauf zu den Pruefberichten vom 01.10.,
+#      Transit 1+2 K1): „…, dem Planeten, der über deinem Mond steht“ ist die
+#      Klartext-Formel fuer eine Herrschaft (Klartext-Modul, Uebersetzungstabelle;
+#      Transit-Modul, „Die Herrscherfunktion des Transitplaneten wird genannt“), keine
+#      Beruehrung — P13 meldete eine Konjunktion, die der Satz nicht behauptet. Kein
+#      Marker ist deshalb „über“ in genau dieser Form: „Planet, der“ / „Planeten, die“
+#      (dazwischen hoechstens „auch“, „zugleich“, „außerdem“, „zudem“, „ja“),
+#      Dativ-Possessiv, Faktor, „steht“/„stehen“; der beherrschte Faktor ist dann kein
+#      Partner im Satz. „Saturn, der jetzt über deinem Mond steht“, „…, der ab März über
+#      deinem Mond steht“ und „geht über deinen Mond“ bleiben Bild.
+_HERRSCHAFT_VOR_RE = re.compile(r"(?<![\wäöüÄÖÜß])Planet(?:en)?\s*,\s*(?:der|die|welcher|"
+                                r"welche)\s+(?:(?:auch|zugleich|außerdem|zudem|ja)\s+)?$")
+_HERRSCHAFT_NACH_RE = re.compile(r"\s+dein(?:em|er)\s+(?:[\wäöüÄÖÜß-]+\s+)?(?:%s|Knoten)"
+                                 r"(?![\wäöüÄÖÜß])(?=\s+(?:[\wäöüÄÖÜß]+\s+)?(?:steht|stehen)"
+                                 r"(?![\wäöüÄÖÜß]))" % _FAKTOR_RE)
+
+
+def _herrschaft_ueber(satz, m):
+    """(24) Ist das „über“ an `m` die Herrschaftsformel „der Planet, der über deinem X
+    steht“? -> Ende des beherrschten Faktors oder None."""
+    if not _HERRSCHAFT_VOR_RE.search(satz[max(0, m.start() - 50):m.start()]):
+        return None
+    h = _HERRSCHAFT_NACH_RE.match(satz, m.end())
+    return h.end() if h else None
+
+
 _ZEIT_WORT = (r"(?:Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|"
               r"November|Dezember|Frühjahr|Fruehjahr|Frühling|Sommer|Herbst|Winter|"
               r"Jahresanfang|Jahresmitte|Jahresende)")
@@ -4365,6 +4426,11 @@ def _konstellationen(satz, vorher="", typ=None):
     leer, wenn es fuer keine bestimmte steht. typ='transit' erkennt dazu das
     Transit-Bild „über" (11, seit 2026-09-29)."""
     fak = _faktoren_im_satz(satz)
+    if typ == "transit":                                                # (24)
+        _hs = [(m.start(), _herrschaft_ueber(satz, m)) for m in _UEBER_RE.finditer(satz)]
+        _hs = [(a_, e_) for a_, e_ in _hs if e_ is not None]
+        if _hs:                       # der beherrschte Faktor ist kein Partner
+            fak = [x for x in fak if not any(a_ <= x[0] < e_ for a_, e_ in _hs)]
     marker = [(m, _art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2)))
               for m in ASPEKT_RE.finditer(satz)]
     for m in _BILD_RE.finditer(satz):
@@ -4374,7 +4440,10 @@ def _konstellationen(satz, vorher="", typ=None):
     if typ == "transit":
         for m in _UEBER_RE.finditer(satz):
             if not any(m.start() < x.end() and x.start() < m.end() for x, _ in marker):
-                marker.append((m, ("Konjunktion",)))
+                if _herrschaft_ueber(satz, m) is not None:              # (24)
+                    marker.append((m, "HERRSCHAFT"))    # kein Paar, traegt das Subjekt
+                else:
+                    marker.append((m, ("Konjunktion",)))
                 ueber.add(m.start())
     out = []
     # 2026-09-22 (Prueflauf Geburtshoroskop 1+2 vom 2026-09-22b, Nr. 10): Traegt
@@ -4388,6 +4457,11 @@ def _konstellationen(satz, vorher="", typ=None):
     vorige_davor = None
     vorige_danach = None                                             # (17)
     for _i, (m, art) in enumerate(marker):
+        if art == "HERRSCHAFT":                                         # (24)
+            vorige_davor = list(vorige_davor or []) or _p13_satzsubjekt(satz, m.start(),
+                                                                        vorher)
+            vorige_danach = []
+            continue
         if _VERNEINUNG_RE.search(satz[max(0, m.start() - 25):m.start()]):
             continue
         # Zwei Grenzen statt nur des Fensters (2026-09-22, Prueflauf
@@ -4641,20 +4715,71 @@ def _p13_satzsubjekt(satz, bis, vorher=""):
     return []
 
 
+# (23) GLIEDER EINER OBJEKT-REIHE (2026-10-01b, Wartungslauf zu den Pruefberichten
+#      vom 01.10., Transit 1+2 K1): „… die Reibung an Venus und Pluto, mit einem
+#      Stillstand nahe am Quadrat zu deinem Pluto“ (Satzform nachgebaut) wurde als
+#      Pluto–Pluto gemeldet. Das zweite Glied hinter „und“ trug keine Praeposition,
+#      galt als Subjekt, und (19) kam nicht zum Zug. Jetzt ist ein Faktor auch dann
+#      Objekt, wenn er mit „und“/„sowie“/„oder“ an ein Objekt angereiht ist (ein
+#      Glied hinter blossem Komma nur, wenn die Reihe mit einem dieser Woerter
+#      weitergeht: „an Venus, Mars und Pluto“) UND zwischen ihm und dem Marker ein
+#      Komma steht. Ohne Komma ist er das Subjekt einer Ellipse („zu deinem Merkur und
+#      Pluto im Quadrat zu deiner Sonne“), „, und“ beginnt einen neuen Hauptsatz
+#      („…, und Pluto steht im Quadrat …“) — beide bleiben Subjekt; sonst deckte (19)
+#      einen falsch benannten Planeten (Gegenpruefung im Wartungslauf).
+#      Die Probe wird damit nur leiser, nie strenger (wie (19)).
+_P13_REIHE_UND_RE = re.compile(r"\s+(?:und|sowie|oder)\s+(?:(?:der|die|das|dem|den|des|"
+                               r"dein\w*|zu|zum|zur|an|am|mit)\s+)?", re.I)
+_P13_REIHE_KOMMA_RE = re.compile(r"\s*,\s*(?:(?:der|die|das|dem|den|des|dein\w*|zu|zum|zur|"
+                                 r"an|am|mit)\s+)?", re.I)
+
+
+def _p13_objekt_stellen(satz, bis):
+    """(19), (23): {Anfang: Ende} der Faktoren vor `bis`, die als Objekt dastehen —
+    hinter einer Praeposition oder einem Objekt-Possessiv (Ende None), oder angereiht
+    an ein solches Objekt (Ende des Glieds; zaehlt nur mit Komma vor dem Marker)."""
+    obj, offen, vorig = {}, [], None       # vorig: Ende des vorigen Reihen-Glieds
+    for a, e, _f in sorted(_faktoren_im_satz(satz)):
+        if e > bis:
+            break
+        vor = satz[max(0, a - 30):a]
+        if _OBJEKT_VOR_RE.search(vor) or _P13_PRAEP_VOR_RE.search(vor):
+            obj[a] = None
+            offen, vorig = [], e
+        elif vorig is not None and _P13_REIHE_UND_RE.fullmatch(satz, vorig, a):
+            obj[a] = e
+            obj.update(offen)
+            offen, vorig = [], e
+        elif vorig is not None and _P13_REIHE_KOMMA_RE.fullmatch(satz, vorig, a):
+            offen.append((a, e))
+            vorig = e
+        else:
+            offen, vorig = [], None
+    return obj
+
+
+def _p13_reihe_dabei(satz, m, davor):
+    """(23) Steht ein Faktor von `davor` nur als angereihtes Glied vor dem Marker?"""
+    obj = _p13_objekt_stellen(satz, m.start())
+    pos = {f: a for a, e, f in sorted(_faktoren_im_satz(satz)) if e <= m.start()}
+    return any(obj.get(pos.get(f)) is not None for f in davor)
+
+
 def _p13_nur_objekte(satz, m, davor):
     """(19) Steht jeder Faktor von `davor` vor dem Marker als Objekt? Ein Faktor, der
-    im Satz nicht vor dem Marker steht (Bezug eines Pronomens), gilt als Subjekt."""
+    im Satz nicht vor dem Marker steht (Bezug eines Pronomens), gilt als Subjekt.
+    Seit 2026-10-01b zaehlt auch ein angereihtes Glied als Objekt (23)."""
     pos = {}
     for a, e, f in sorted(_faktoren_im_satz(satz)):
         if e <= m.start():
             pos[f] = a                  # die letzte Stelle vor dem Marker
+    obj = _p13_objekt_stellen(satz, m.start())
     for f in davor:
         a = pos.get(f)
-        if a is None:
+        if a is None or a not in obj:
             return False
-        vor = satz[max(0, a - 30):a]
-        if not (_OBJEKT_VOR_RE.search(vor) or _P13_PRAEP_VOR_RE.search(vor)):
-            return False
+        if obj[a] is not None and "," not in satz[obj[a]:m.start()]:
+            return False                # (23): angereiht, aber ohne Komma vor dem Marker
     return True
 
 
@@ -4667,9 +4792,10 @@ def _p13_weitere_paare(satz, m, davor, danach, typ, vorher="", transiter=()):
     if typ == "transit" and _P13_SELBST_RE.match(satz, m.end()):                 # (b)
         out += [(x, x) for x in davor]
     if _p13_nur_objekte(satz, m, davor):
-        for s_ in _p13_satzsubjekt(satz, m.start(), vorher):                    # (c)
+        _subj = _p13_satzsubjekt(satz, m.start(), vorher)
+        for s_ in _subj:                                                        # (c)
             out += [(s_, y) for y in danach if y != s_]
-        if typ == "transit":                                                    # (d)
+        if typ == "transit" and not (_subj and _p13_reihe_dabei(satz, m, davor)):  # (d)
             out += [(t_, y) for t_ in transiter for y in danach if y != t_]
     return list(dict.fromkeys(out))
 
@@ -6492,6 +6618,58 @@ def _selbsttest(still=False):
         "P13 (22): %r" % _ist
     assert _p13_mit_vorsatz("Venus und Jupiter stehen beide im Quincunx zu ihm.", "") == set(), \
         "P13 (22) ohne Vorsatz"
+    # 2026-10-01b (23): ein angereihtes Glied ist Objekt — (19) findet den Transiter
+    _s23 = ("Dann kommt im Winter die Reibung an Venus und Pluto, mit einem zweiten "
+            "Stillstand nahe am Quadrat zu deinem Pluto.")
+    _m23 = [x for x in ASPEKT_RE.finditer(_s23) if x.group(0) == "Quadrat"][0]
+    assert ("SATURN", "PLUTO") in _p13_weitere_paare(_s23, _m23, ["VENUS", "PLUTO"],
+                                                     ["PLUTO"], "transit", "", ("SATURN",)), \
+        "P13 (23): Reihe hinter „an“"
+    _s23s = ("Pluto reibt sich an deinem Merkur und Chiron, mit einem Stillstand nahe am "
+             "Quadrat zu deiner Sonne.")
+    _m23s = [x for x in ASPEKT_RE.finditer(_s23s) if x.group(0) == "Quadrat"][0]
+    assert ("SATURN", "SONNE") not in _p13_weitere_paare(_s23s, _m23s, ["MERKUR", "CHIRON"],
+                                                         ["SONNE"], "transit", "", ("SATURN",)), \
+        "P13 (23): eigenes Subjekt — der Transiter des Kapitels deckt nicht"
+    _s23k = "Saturn steht im Trigon zu deiner Sonne, Mars im Quadrat zu deiner Venus."
+    _m23k = [x for x in ASPEKT_RE.finditer(_s23k) if x.group(0) == "Quadrat"][0]
+    assert not _p13_nur_objekte(_s23k, _m23k, ["SONNE", "MARS"]), \
+        "P13 (23): ein Komma allein reiht nicht an"
+    for _s23e in ("Saturn steht im Quadrat zu deinem Merkur und Pluto im Quadrat zu "
+                  "deiner Sonne.", "Der Druck liegt auf deinem Mond, und Pluto steht im "
+                  "Quadrat zu deiner Sonne."):
+        _m23e = [x for x in ASPEKT_RE.finditer(_s23e) if x.group(0) == "Quadrat"][-1]
+        assert not _p13_nur_objekte(_s23e, _m23e, ["PLUTO"]), \
+            "P13 (23): Ellipse/neuer Hauptsatz bleibt Subjekt: %r" % _s23e
+    # 2026-10-01b (24): die Herrschaftsformel ist kein Konjunktionsbild
+    assert not _konstellationen("Saturn ist in deinem Bild der Planet, der über deinem "
+                                "Merkur steht.", typ="transit"), "P13 (24) Herrschaftsformel"
+    assert [k for k in _konstellationen("Jupiter, der jetzt über deiner Venus steht, wird "
+                                        "langsamer.", typ="transit")
+            if k[3].group(0) == "über"], "P13 (24): ohne „Planet“ bleibt „über“ Bild"
+    assert [k for k in _konstellationen("Jupiter ist der Planet, der ab März über deiner "
+                                        "Venus steht.", typ="transit")
+            if k[3].group(0) == "über"], "P13 (24): mit Zeitangabe bleibt „über“ Bild"
+    _k24b = _konstellationen("Pluto ist der Planet, der über deinem Merkur steht, und steht "
+                             "zugleich im Quadrat zu deiner Sonne.", typ="transit")
+    assert [(d, n) for d, _a, n, _m in _k24b] == [(["PLUTO"], ["SONNE"])], \
+        "P13 (24): das Subjekt traegt ueber die Herrschaftsformel weiter: %r" % _k24b
+    _k24 = _konstellationen("Saturn, der Planet, der über deinem Merkur steht, bildet ein "
+                            "Quadrat zu Mars.", typ="transit")
+    assert [(d, n) for d, _a, n, _m in _k24] == [(["SATURN"], ["MARS"])], \
+        "P13 (24): der beherrschte Faktor ist kein Partner: %r" % _k24
+    # P11 (2026-10-01b, Gegenpruefung): „-jährig“ gross/vor Person bleibt Alter,
+    # Zusatzwoerter vor jedem Glied der Reihe
+    for _s11, _soll in (("als Zwölfjähriger Verantwortung zu tragen", 12),
+                        ("dein zwölfjähriges Ich", 12), ("als zwölfjähriger Sohn", 12)):
+        assert [_zahl_wert(m_.group("n")) for rx in _P11_ALTER for m_ in rx.finditer(_s11)] \
+            == [_soll], "P11 -jährig als Alter: %r" % _s11
+    assert not [m_ for rx in _P11_ALTER for m_ in rx.finditer("im zwölfjährigen Umlauf")], \
+        "P11 -jährig als Dauer"
+    _gl = [_P11_Q_RE.sub("", g_.strip(), count=1).strip() for m_ in _P11_ALTER_LISTE.finditer(
+        "als du gut zwölf und knapp vierundzwanzig warst")
+        for g_ in _P11_LISTE_TRENNER.split(m_.group("liste"))]
+    assert [_zahl_wert(g_) for g_ in _gl] == [12, 24], "P11 Reihe mit Zusatzwort: %r" % _gl
     # 2026-10-01: P11 meldet Saetze zur Geburtsminute, ausser EINEM im Auftakt bei
     # faelligem Gegenprobe-Blatt
     def _gm(kicker, saetze, txt_gm=""):
@@ -7368,6 +7546,26 @@ def _selbsttest(still=False):
         "Lauf 10f: Zeitspanne als Alter gemeldet: %s" % r10f["proben"]["P11"]["pruefen"])
     berichte.append("Lauf 10 („um die N“): gedeckt still, ungedeckt gemeldet, Zeitspanne still")
 
+    # 11) Altersreihe (2026-10-01b, Pruefbericht Transit 1+2 vom 01.10., K1): jedes
+    #     Glied von „als du X und Y warst“ gezaehlt und geprueft; „im …jährigen Umlauf“
+    #     ist eine Dauer, kein Alter. Saetze konstruiert.
+    a11 = ersetze(_TEST_ANALYSE, "Saturn kehrt um die dreißig an seinen Ort zurück",
+                  "Saturn kehrt an seinen Ort zurück, als du neunundzwanzig und "
+                  "vierundvierzig warst, im neunundzwanzigjährigen Umlauf")
+    r11 = lauf(_TEST_CHART, a11)
+    assert not r11["proben"]["P11"]["pruefen"], "Lauf 11: %s" % r11["proben"]["P11"]["pruefen"]
+    assert r11["proben"]["P11"]["geprueft"] == r["proben"]["P11"]["geprueft"] + 1, (
+        "Lauf 11: Reihe nicht je Glied gezählt oder „-jährigen Umlauf“ als Alter (%d gegen %d)"
+        % (r11["proben"]["P11"]["geprueft"], r["proben"]["P11"]["geprueft"]))
+    a11f = ersetze(_TEST_ANALYSE, "Saturn kehrt um die dreißig an seinen Ort zurück",
+                   "Saturn kehrt an seinen Ort zurück, als du neunundzwanzig und "
+                   "siebenundvierzig warst")
+    r11f = lauf(_TEST_CHART, a11f)
+    erwarte(r11f, (("P11", "pruefen", "(siebenundvierzig)“ (Alter 47)"),), "Lauf 11f")
+    assert len(r11f["proben"]["P11"]["pruefen"]) == 1, r11f["proben"]["P11"]["pruefen"]
+    berichte.append("Lauf 11 (Altersreihe): jedes Glied gezählt, ungedeckt gemeldet, "
+                    "„-jährigen Umlauf“ kein Alter")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
@@ -7376,7 +7574,7 @@ def _selbsttest(still=False):
               "finden die eingebauten Fehler, Lauf 6 ohne events.json nur teilweise übersprungen; "
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
               "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; Lauf 10 „um die N“; "
-              "P16 und P17 als Einzelproben]")
+              "Lauf 11 Altersreihe; P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):
@@ -7485,7 +7683,10 @@ KONSTELLATION IM TEXT — P13.
   Im Transit ist „über" vor „dein…"/„R-" und einem Faktor das Bild der Konjunktion
   („Saturn geht über deine Sonne"); ein zweites „über" hinter Komma oder „und" und
   höchstens einer Zeitangabe teilt das Subjekt („…, im Oktober über deinen Mars"),
-  daneben trägt das Subjekt des vorigen Markers weiter (seit 2026-09-29).
+  daneben trägt das Subjekt des vorigen Markers weiter (seit 2026-09-29). Kein Bild ist
+  die Herrschaftsformel „der Planet, der über deinem Mond steht“ (seit 2026-10-01b).
+  Ein Faktor, der mit „und“/„sowie“/„oder“ an ein Objekt angereiht ist („an Venus und
+  Pluto“), ist selbst Objekt, nicht Subjekt des nächsten Markers (seit 2026-10-01b).
   Seit 2026-09-29 (K1) außerdem: Stehen vor einem Doppelpunkt nur Objekte, ist keins
   davon Partner eines Markers dahinter, wenn dort kein Faktor steht oder ein eigenes
   Paar mit Subjekt („…: Im Quadrat zu Saturn steht Mars“); sonst schon („Bei deinem

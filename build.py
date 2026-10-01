@@ -1831,6 +1831,19 @@ def fuss_signaturen(parsed) -> list:
     return [FUSS_ANZEIGE(s) for s in sigs] if FUSS_ANZEIGE else sigs
 
 
+def _sig_nrm(s: str) -> str:
+    """Vergleichsform einer Signatur fuer den Fuss-Anker.
+
+    2026-10-01b (Pruefbericht Transit Schritt 3+4 vom 01.10., K1): Eine Signatur in
+    Grenzlagen-Schreibweise („fünftes/sechstes Haus“) bricht im schmalen Streifen
+    hinter dem Schraegstrich um; zusammengesetzt stand „fünftes/ sechstes“ gegen
+    „fünftes/sechstes“, der Anker fehlte, und verify() meldete eine regelkonforme
+    Seite als „endet mitten im Satz“. Leerraum um „/“ faellt auf BEIDEN Seiten des
+    Vergleichs weg — Seitentext wie Signaturliste —, sonst nichts.
+    """
+    return re.sub(r'\s*/\s*', '/', _dehyph(_nrm(s)))
+
+
 def _sig_anfang(plines, i, sigs, max_zeilen=6):
     """Index der ERSTEN Zeile einer Kapitel-Signatur, die auf Zeile `i` endet.
 
@@ -1855,7 +1868,7 @@ def _sig_anfang(plines, i, sigs, max_zeilen=6):
         s = i - k
         if s < 0:
             break
-        if _dehyph(_nrm(' '.join(plines[s:i + 1]))) in sigs:
+        if _sig_nrm(' '.join(plines[s:i + 1])) in sigs:
             return s
     return None
 
@@ -1897,7 +1910,7 @@ def _fuss_zeilen(plines, sig_set) -> int:
     n = len(plines)
     if not n:
         return 0
-    sigs = {_dehyph(s) for s in (sig_set or ())}
+    sigs = {_sig_nrm(s) for s in (sig_set or ())}
     for i in range(n - 1, max(-1, n - 30), -1):
         zeile = plines[i]
         ist_label = bool(_FUSS_LABEL_RE.match(zeile))
@@ -1949,7 +1962,7 @@ def _fuss_zeilen(plines, sig_set) -> int:
             for k in range(1, 7):
                 if i - k < 0:
                     break
-                if _dehyph(_nrm(' '.join(plines[i - k:i]))) in sigs:
+                if _sig_nrm(' '.join(plines[i - k:i])) in sigs:
                     start = i - k
                     break
         return n - start
@@ -4112,7 +4125,7 @@ _GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kei
 - **Fassung:** <n/entfällt>
 - **Quelle der Stände:** <Quelle, Einstellungen>
 - **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
-- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/nicht bestimmbar — kein Quellexport
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/−<a,a> bis +<b,b> Minuten (abschneidende Quelle)/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 - **Quell-PDF:** <Behauptung, nicht verifiziert>
 
@@ -4333,7 +4346,7 @@ _GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul
 - **Stichtag:** <TT.MM.JJJJ>
 - **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
 - **Zeitzone der Exaktdaten:** <Zone mit Grund>
-- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/nicht bestimmbar — kein Quellexport
+- **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/−<a,a> bis +<b,b> Minuten (abschneidende Quelle)/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 
 <!-- Pflicht, bei Rohdaten-Start dazu Positions-Vergleich und (a) bis (g) · Transit-Modul „Ablauf“ 1, „Die vier Zusatz-Zeitmaße“; Radixrechnung · kein Leser · Form frei -->
@@ -5737,6 +5750,19 @@ def _selbsttest():
     except ValueError:
         pass
 
+    # 2026-10-01b (Pruefbericht Transit 3+4 vom 01.10., K1): Signatur, die hinter „/“
+    # umbricht, ist ein Anker; dieselbe Zeile ohne bekannte Signatur bleibt keiner.
+    _sg = "Venus im fünften/sechsten Haus, im Sextil zu deinem Saturn"
+    _pl = ["Der letzte Satz der Prosa endet hier.", "Venus im fünften/",
+           "sechsten Haus, im Sextil zu deinem Saturn"]
+    pruefe(_fuss_zeilen(_pl, [_sg]) == 2, "Fuss-Anker: Signatur mit Umbruch hinter „/“")
+    pruefe(_fuss_zeilen(_pl, ["Venus im fünften Haus"]) == 0,
+           "Fuss-Anker: fremde Signatur zieht nichts ab")
+    # 2026-10-01b (Gegenprobe b, abschneidende Quelle): das Geruest kennt die schiefe Form
+    pruefe("−<a,a> bis +<b,b> Minuten (abschneidende Quelle)" in _gg
+           and "−<a,a> bis +<b,b> Minuten (abschneidende Quelle)" in _gt,
+           "Geruest: schiefe Zeitunsicherheit fehlt")
+
     if fehler:
         print("Selbsttest build.py: %d Fehler" % len(fehler))
         for f_ in fehler:
@@ -5745,7 +5771,8 @@ def _selbsttest():
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
           "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5, "
-          "K2-30.09.: Geruest, K2-01.10.: T1, N8)")
+          "K2-30.09.: Geruest, K2-01.10.: T1, N8, K1-01.10.b: Fuss-Schraegstrich, "
+          "Zeitunsicherheit)")
 
 
 def _selbsttest_verify(tmp, pruefe):

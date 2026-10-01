@@ -23,12 +23,16 @@ Repo-Download von lade.py per urlretrieve als ersten Schritt):
     sys.path.insert(0, "/home/claude")
     from lade import lade, lade_schritt, ephemeriden, uebersicht, pruefe_repo
 
-  Stufe 2 — Rechner nicht verbunden oder das Stagen klemmt: `curl` aus dem
-  Repo, einzeln nach den Namen aus SCHRITTE, ohne etwas auszufuehren:
+  Klemmt Stufe 1: erledigen, was ohne Builder geht, dann anhalten und Chris
+  fragen — Rechner verbinden oder Stufe 2 erlauben (seit 2026-10-01b; ohne
+  Erlaubnis wies der Auto-Modus den Import am 29.09. und zweimal am 01.10. ab).
+
+  Stufe 2 — nur, wenn Chris sie erlaubt: `curl` aus dem Repo, einzeln nach den
+  Namen aus SCHRITTE, ohne etwas auszufuehren (oder lade(..., repo=True)):
 
     curl -sS -o /home/claude/<datei> <REPO><datei>
 
-  Klemmen beide Stufen: anhalten und Chris fragen. `project_read` ist kein
+  `project_read` ist kein
   Ladeweg fuer Builder mehr (2026-09-19, W5): Er legte in einem Lauf rund
   620.000 Zeichen Quelltext inline in den Kontext und brachte grosse Builder
   trotzdem nicht auf die Platte. Code aus dem Netz AUSFUEHREN (python3 -c,
@@ -381,9 +385,9 @@ def _ephemeriden_warnung():
     )
 
 
-def lade(*module, ziel="/home/claude", frisch=False, still=False):
-    """Builder bereitstellen: was unter `ziel` liegt, nehmen; nur FEHLENDES aus
-    dem Repo holen; `ziel` in den sys.path legen.
+def lade(*module, ziel="/home/claude", frisch=False, still=False, repo=False):
+    """Builder bereitstellen: was unter `ziel` liegt, nehmen; FEHLENDES nur mit
+    repo=True aus dem Repo holen; `ziel` in den sys.path legen.
 
     module  Modulnamen ohne oder mit .py — `lade("build", "chartdoc")`
     ziel    Zielverzeichnis, Vorgabe /home/claude (dort erwarten die Builder
@@ -396,6 +400,10 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
             von raw.githubusercontent.com. Nur auf Chris' Ansage, etwa direkt
             nach einem Repo-Upload — sonst gilt der BUILDER-Ordner.
     still   True unterdrueckt die Erfolgsmeldung
+    repo    True holt eine FEHLENDE Datei aus dem Repo (Stufe 2) — nur, wenn
+            Chris Stufe 2 erlaubt hat (Werkzeuge-Modul, Punkt 3). Ohne bricht
+            lade() bei einer fehlenden Datei mit klarer Meldung ab; seit
+            2026-10-01b, vorher holte es ungefragt. frisch=True schliesst es ein.
 
     SEIT 2026-09-19 (W5): Eine Datei, die schon unter `ziel` liegt, wird NICHT
     mehr geladen. Vorher lief urlretrieve bei jedem Aufruf und ueberschrieb
@@ -432,9 +440,8 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
             if pfad.stat().st_size == 0:
                 raise RuntimeError(
                     f"{name} liegt unter {ziel}, ist aber LEER. Die Kopie aus dem "
-                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1) oder die "
-                    "Datei per curl holen (Stufe 2); klemmt beides: anhalten und "
-                    "Chris fragen.")
+                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1); klemmt das: "
+                    "anhalten und Chris fragen (Stufe 2 nur, wenn er sie erlaubt).")
             try:
                 py_compile.compile(str(pfad), cfile="/tmp/_ladecheck.pyc",
                                    doraise=True)
@@ -442,12 +449,17 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
                 raise RuntimeError(
                     f"{name} liegt unter {ziel}, ist aber kein gueltiges Python "
                     "(abgeschnittene oder falsche Datei?). Die Kopie aus dem "
-                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1) oder per "
-                    "curl holen (Stufe 2); klemmt beides: anhalten und Chris "
-                    "fragen."
+                    "BUILDER-Ordner neu stagen und kopieren (Stufe 1); klemmt das: "
+                    "anhalten und Chris fragen (Stufe 2 nur, wenn er sie erlaubt)."
                 ) from e
             geladen.append((name, f"{name} ({pfad.stat().st_size} B, lokal)"))
             continue
+        if not (repo or frisch):
+            # 2026-10-01b (Wartungslauf, K1): Stufe 2 nur, wenn Chris sie erlaubt.
+            raise RuntimeError(
+                f"{name} fehlt unter {ziel}. Stufe 1: BUILDER-Ordner neu stagen und "
+                "kopieren; klemmt das: anhalten und Chris fragen — Rechner verbinden "
+                "oder Stufe 2 erlauben, dann lade(..., repo=True).")
         url = REPO + name + ("?frisch=1" if frisch else "")
         try:
             urllib.request.urlretrieve(url, pfad)
@@ -457,8 +469,8 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
                 f"{name} liess sich nicht aus dem Repo laden ({type(e).__name__}: "
                 f"{e}). Ladeweg klemmt — anhalten und Chris fragen. Liegt die "
                 f"Datei nicht unter {ziel}: Stufe 1 (BUILDER-Ordner per "
-                "device_stage_files) oder Stufe 2 (curl) nehmen; project_read "
-                "ist kein Ladeweg fuer Builder."
+                "device_stage_files); Stufe 2 (curl) nur, wenn Chris sie erlaubt; "
+                "project_read ist kein Ladeweg fuer Builder."
             ) from e
         if pfad.stat().st_size == 0:
             raise RuntimeError(f"{name} kam leer an — Ladeweg pruefen")
@@ -483,13 +495,13 @@ def lade(*module, ziel="/home/claude", frisch=False, still=False):
 
 def lade_schritt(schritt, **kw):
     """Stellt genau die Builder bereit, die dieser Schritt braucht — s.
-    SCHRITTE. Holt seit 2026-09-19 (W5) nur, was unter `ziel` fehlt.
+    SCHRITTE. Holt nichts nach; Fehlendes nur mit repo=True (seit 2026-10-01b).
 
         lade_schritt("1")        # Datenblatt
         lade_schritt("3+4")      # Design/Render
         lade_schritt("transit")  # zusaetzlich beim Transit-Lauf
 
-    Nimmt dieselben Zusatzargumente wie lade() (ziel, frisch, still).
+    Nimmt dieselben Zusatzargumente wie lade() (ziel, frisch, still, repo).
     Vorzuziehen gegenueber lade("a", "b", ...) von Hand: die Liste steht dann
     an genau einer Stelle und kann nicht chatweise abweichen.
 
@@ -543,9 +555,9 @@ def uebersicht():
     # 2026-09-19 (W5): Die Quelle ist nicht mehr „immer das Repo".
     print("Ladeweg — Stufe 1: BUILDER-Ordner per device_stage_files, nach "
           "/home/claude kopiert;")
-    print("          Stufe 2: curl aus", REPO)
-    print("          lade()/lade_schritt() holen nur, was lokal fehlt "
-          "(frisch=True: alles neu).")
+    print("          Stufe 2 (nur, wenn Chris sie erlaubt): curl aus", REPO)
+    print("          lade()/lade_schritt() holen nichts nach — Fehlendes nur mit "
+          "repo=True, frisch=True holt alles neu; beides nur mit Chris' Erlaubnis.")
     print("\nJe Schritt:")
     for s, mods in SCHRITTE.items():
         print("  lade_schritt(%-12s -> %-42s # %s"
@@ -589,7 +601,13 @@ def _selbsttest():
             (pathlib.Path(tmp) / "build.py").write_text("LOKAL = True\n",
                                                         encoding="utf-8")
             with mock.patch.object(urllib.request, "urlretrieve", falscher_abruf):
-                namen = lade("build", "chartdoc", ziel=tmp, still=True)
+                try:            # 2026-10-01b: ohne repo=True holt lade() nichts
+                    lade("build", "chartdoc", ziel=tmp, still=True)
+                    raise AssertionError("fehlende Datei ohne repo=True geholt")
+                except RuntimeError as e:
+                    assert "fehlt" in str(e) and "Stufe 2 erlauben" in str(e), e
+                    assert not abrufe, abrufe
+                namen = lade("build", "chartdoc", ziel=tmp, still=True, repo=True)
                 assert namen == ["build.py", "chartdoc.py"], namen
                 assert [u.rsplit("/", 1)[-1] for u in abrufe] == ["chartdoc.py"], abrufe
                 assert "LOKAL" in (pathlib.Path(tmp) / "build.py").read_text(
@@ -600,12 +618,12 @@ def _selbsttest():
                 assert "GEHOLT" in (pathlib.Path(tmp) / "build.py").read_text(
                     encoding="utf-8")
                 abrufe.clear()
-                namen = lade_schritt("1", ziel=tmp, still=True)
+                namen = lade_schritt("1", ziel=tmp, still=True, repo=True)
                 assert "selektor.py" in namen, namen
                 # T14 (2026-09-24): die Vorlagen kommen mit ihrem Schritt
-                namen = lade_schritt("3+4", ziel=tmp, still=True)
+                namen = lade_schritt("3+4", ziel=tmp, still=True, repo=True)
                 assert "REFERENZ_Chart_Builder_Geburtshoroskop.py" in namen, namen
-                namen = lade_schritt("transit", ziel=tmp, still=True)
+                namen = lade_schritt("transit", ziel=tmp, still=True, repo=True)
                 assert "REFERENZ_Chart_Builder_Transit.py" in namen, namen
             (pathlib.Path(tmp) / "radix.py").write_text("", encoding="utf-8")
             try:
@@ -626,7 +644,7 @@ def _selbsttest():
 
             with mock.patch.object(urllib.request, "urlretrieve", abruf_scheitert):
                 try:
-                    lade("hd", ziel=tmp, still=True)
+                    lade("hd", ziel=tmp, still=True, repo=True)
                     raise AssertionError("gescheiterter Abruf nicht gemeldet")
                 except RuntimeError as e:
                     assert "anhalten und Chris fragen" in str(e), e
@@ -642,7 +660,8 @@ def _selbsttest():
     finally:
         sys.path[:] = pfad_vorher
     print("[lade-Selbsttest ohne Netz bestanden: lokal vorhandene Dateien "
-          "bleiben (W5), frisch=True holt neu, klare Fehlermeldungen, "
+          "bleiben (W5), Fehlendes nur mit repo=True (2026-10-01b), frisch=True holt "
+          "neu, klare Fehlermeldungen, "
           "Schritt 1 mit selektor (W40), Ephemeriden-Hinweis (F23)]")
 
 

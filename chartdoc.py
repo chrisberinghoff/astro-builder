@@ -853,7 +853,7 @@ ZUSATZ_LEGENDE = {
     'Halbquadrat': ('45°', 'halbe Reibung — ein Spannungspunkt im Untergrund, '
                     'leiser als ein Quadrat und dauerhafter.'),
     'Anderthalbquadrat': ('135°', 'dieselbe Reibung aus der Gegenrichtung — '
-                          'sie meldet sich spaeter und in fremder Gestalt.'),
+                          'sie meldet sich später und in fremder Gestalt.'),
 }
 # Symbole der Zusatz-Aspektarten. Ohne sie stand im gerenderten Kasten vor
 # „Halbquadrat (45°)" ein nackter Mittelpunkt, wo jede andere Zeile ihr
@@ -3299,9 +3299,32 @@ def _selbsttest():
         konfiguriere(sprache='de', signaturen_en={}, belege_en={})
     assert _seiten() == de_vorher, 'deutsche Ausgabe nach dem Wechsel anders'
     assert build.fuss_signaturen({'chapters': [kap]}) == ['Eine Signatur.']
+    # 2026-10-01b (Pruefbericht Geburtshoroskop 3+4 vom 01.10., K1): „spaeter“ stand
+    # sichtbar in der Legende der Aspektseite. Die deutschen Seitentexte tragen keine
+    # umschriebenen Umlaute — geprueft wird jeder String der Sprach-Tafeln.
+    import re as _re
+    _umschrieben = _re.compile(r'(?<![A-Za-z])(?:spaeter|frueher|ueber|fuer|waehrend|'
+                               r'naechst|aehnlich|moeglich|haeufig|staerk|schwaech|koenn|'
+                               r'muess|gefuehl|fuehr|gehoer|zurueck|laeuft|traegt|zaehl)',
+                               _re.I)
+
+    def _strings(o):
+        if isinstance(o, str):
+            yield o
+        elif isinstance(o, dict):
+            for k_, v_ in o.items():
+                yield from _strings(k_)
+                yield from _strings(v_)
+        elif isinstance(o, (list, tuple)):
+            for x_ in o:
+                yield from _strings(x_)
+    _treffer = [t for n_ in _LABEL_NAMEN + ('ZUSATZ_LEGENDE',)
+                for t in _strings(globals().get(n_)) if _umschrieben.search(t)]
+    assert not _treffer, 'umschriebene Umlaute im Seitentext: %r' % _treffer[:3]
     print('[chartdoc-Selbsttest bestanden: lies_zeitleiste(), Marke der '
           'Zeitleiste (W12), kopf-Pruefung von inhalt_page() (W61), '
-          'Orb der Aspektseite (W2), Sprachfassung (2026-09-26)]')
+          'Orb der Aspektseite (W2), Sprachfassung (2026-09-26), '
+          'Umlaute im Seitentext (2026-10-01b)]')
 
 
 # ---------------------------------------------------------------------------
