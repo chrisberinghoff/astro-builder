@@ -51,7 +51,7 @@ Dann EINE Zeile je Schritt — welche Builder das sind, steht in SCHRITTE und
 nirgends sonst:
 
     lade_schritt("1")         # Datenblatt
-    lade_schritt("2")         # Referenzschnitt
+    lade_schritt("2")         # Analyse (Schemapruefung, Inhaltsprobe)
     lade_schritt("3+4")       # Design/Render
     lade_schritt("transit")   # zusaetzlich beim Transit-Lauf
 
@@ -139,6 +139,9 @@ SCHRITTE = {
     # `selektor` seit dem 2026-09-19 (W40): Die Referenzdatei-Liste am Ende von
     # Schritt 1 kommt aus `selektor.py --liste` (Nur-Liste-Modus, ohne
     # Bibliothek). Ein Import kostet keine Token.
+    # Seit dem 2026-10-01 (Schritt 2 in eigener Konversation) baut Schritt 1 auch
+    # den Referenzschnitt — derselbe `selektor`, mit Bibliothek; Schritt 2 liest
+    # nur die hochgeladene referenz.md und braucht `selektor` fuer die Inhaltsprobe.
     "1":        ("radix", "build", "selektor"),
     # Schritt 2 zieht seit dem 2026-09-16 auch `build` (das Werkzeuge-Modul
     # verlangt dort `build.parse_analyse()`) und `inhaltsprobe` (Analyse gegen
@@ -168,8 +171,8 @@ SCHRITTE = {
 
 # Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
 _SCHRITT_TEXT = {
-    "1":        "Datenblatt (Heimat-Probe braucht build, Referenzdatei-Liste selektor)",
-    "2":        "Referenzschnitt, Schemapruefung und Inhaltsprobe der Analyse",
+    "1":        "Datenblatt (Heimat-Probe braucht build; Referenzdatei-Liste und Referenzschnitt selektor)",
+    "2":        "Analyse in eigener Konversation: Schemapruefung und Inhaltsprobe (sie braucht selektor)",
     "3+4":      "Design, HTML, Rendern, Pruefen (Inhaltsprobe vor dem Render, sie braucht selektor; Geburtshoroskop-Vorlage — im Transit liegt sie ungenutzt daneben, kein Befund)",
     "transit":  "zusaetzlich beim Transit-Lauf (mit der Transit-Vorlage)",
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",

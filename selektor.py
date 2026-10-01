@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""selektor.py — Schritt-2-Referenzschnitt.
+"""selektor.py — Referenzschnitt (gebaut am Ende von Schritt 1, gelesen in Schritt 2).
 
 Liest aus <klient>_chart_data.md den maschinenlesbaren @@SELEKTOR-Block,
 leitet nach Plan §5 die benoetigten Blockschluessel ab, zieht NUR diese Bloecke
@@ -1198,7 +1198,7 @@ AUFRUF = (
     'Aufruf:\n'
     '  python3 selektor.py <klient>[_KUERZEL]_chart_data.md blocks_bundle.txt '
     '<klient>[_KUERZEL]_referenz.md\n'
-    '      Referenzschnitt (Schritt 2): schreibt die referenz.md. Alle drei '
+    '      Referenzschnitt (Ende Schritt 1): schreibt die referenz.md. Alle drei '
     'Argumente angeben.\n'
     '  python3 selektor.py <klient>[_KUERZEL]_chart_data.md --liste '
     '[blocks_bundle.txt]\n'

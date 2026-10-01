@@ -4124,7 +4124,8 @@ _GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kei
 - **Alter heute:** <n> Jahre
 - **Fassung:** <n/entfällt>
 - **Quelle der Stände:** <Quelle, Einstellungen>
-- **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
+- **Geschlecht und Anrede:** <Geschlecht; Anrede, falls anders als der Name>
+- **Beruf, Wohnort, Familienstand, weitere Angaben aus dem Auftrag:** <Angaben im Wortlaut/nicht angegeben>
 - **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/−<a,a> bis +<b,b> Minuten (abschneidende Quelle)/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
 - **Quell-PDF:** <Behauptung, nicht verifiziert>
@@ -4344,7 +4345,8 @@ _GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul
 - **Quelle der Stände:** <Quelle, Einstellungen>
 - **Grundlage:** <Grundhoroskop-Datei und Fassung/Rohdaten-Start>
 - **Stichtag:** <TT.MM.JJJJ>
-- **Beruf, Wohnort, Familienstand:** <Angaben/nicht angegeben>
+- **Geschlecht und Anrede:** <Geschlecht; Anrede, falls anders als der Name>
+- **Beruf, Wohnort, Familienstand, weitere Angaben aus dem Auftrag:** <Angaben im Wortlaut/nicht angegeben>
 - **Zeitzone der Exaktdaten:** <Zone mit Grund>
 - **Zeitunsicherheit (Mond-Zeitprobe b):** ±<m,m> Minuten/−<a,a> bis +<b,b> Minuten (abschneidende Quelle)/nicht bestimmbar — kein Quellexport
 - **⚠-Zeilen der Gegenprobe g:** <Zeilen/keine>
@@ -4572,9 +4574,9 @@ def datenblatt_geruest(typ: str = "geburtshoroskop") -> str:
 # ---------------------------------------------------------------------------
 # Wartungslauf „Gegenprobe Geburtszeit" (Startprompt vom 2026-09-29, Block D).
 # Wechselt der AC bei weniger als radix.AC_GEGENPROBE_SCHWELLE Minuten
-# frueherer oder spaeterer Geburt das Zeichen, baut Schritt 2 — im
-# Geburtshoroskop und, seit dem Nachtrag vom selben Tag, im Transit mit
-# Rohdaten-Start — am Ende ein zweiseitiges Blatt, mit dem der Klient
+# frueherer oder spaeterer Geburt das Zeichen, baut Schritt 1 (bis 2026-10-01:
+# Schritt 2) — im Geburtshoroskop und, seit dem Nachtrag vom selben Tag, im
+# Transit mit Rohdaten-Start — am Ende ein zweiseitiges Blatt, mit dem der Klient
 # selbst prueft, ob der Aszendent der Urkunde zu ihm passt. Im Prueffall vom
 # 29.09. entstand es von Hand (gut 60 Aufrufe, ein falscher Wenn-dann-Satz).
 # Hier steht der Aufbau fest (Vorlage des Prueffalls, anonymisiert), und jede

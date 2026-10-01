@@ -3363,8 +3363,9 @@ def zeitscan_faellig(sb):
 _ZS_MODUL = '`claude/Projektanweisung_Modul_Gegenprobe_Geburtszeit.md`'
 # 2026-10-01 (Klasse-2-Entscheidungslauf, T11): Die Ablage des Blatts braucht den
 # Klientenordner; angefragt erst am Ende von Schritt 2, blieb der Dialog
-# unbeantwortet und das Blatt nur im Chat.
-_ZS_ZUGRIFF = ' und den Zugriff auf den Klientenordner schon in Schritt 1 anfordern'
+# unbeantwortet und das Blatt nur im Chat. Seit dem Umbau vom 2026-10-01
+# (Schritt 2 in eigener Konversation) entsteht das Blatt am Ende von Schritt 1.
+_ZS_ZUGRIFF = ' und den Zugriff auf den Klientenordner anfordern'
 
 
 # 2026-10-01 (Chris-Entscheidung): der einzige Satz zur Geburtsminute im PDF
@@ -3398,10 +3399,10 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
         if zs.get('blatt_faellig') and typ == 'transit':
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
                   f"fällig nur beim Rohdaten-Start dieses Transits, dann am Ende "
-                  f"von Schritt 2 {_ZS_MODUL} laden" + _ZS_ZUGRIFF + _ZS_AUFTAKT)
+                  f"von Schritt 1 {_ZS_MODUL} laden" + _ZS_ZUGRIFF + _ZS_AUFTAKT)
         elif zs.get('blatt_faellig'):
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
-                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden" + _ZS_ZUGRIFF
+                  f"fällig, am Ende von Schritt 1 {_ZS_MODUL} laden" + _ZS_ZUGRIFF
                   + _ZS_AUFTAKT)
         else:
             z += f" — nicht unter {AC_GEGENPROBE_SCHWELLE} Minuten, kein Blatt."
@@ -3446,7 +3447,7 @@ _ZS_KOPF_RE = re.compile(r'^- Zeitscan \(Gegenprobe g\): .*? bis (\d+) Minuten')
 
 def zeitscan_lesen(quelle):
     """Den Block „Zeitscan" aus einem chart_data.md zuruecklesen (Pfad oder
-    Text) — fuer das Gegenprobe-Blatt in Schritt 2, ohne den Scan neu zu
+    Text) — fuer das Gegenprobe-Blatt am Ende von Schritt 1, ohne den Scan neu zu
     rechnen. -> {'fenster', 'ac', 'blatt_faellig', 'frueher', 'spaeter'} in
     derselben Form wie zeitscan() ('frueher'/'spaeter' je {'minuten',
     'im_text', 'text'}); None, wenn der Block fehlt."""
