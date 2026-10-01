@@ -14,9 +14,10 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         Berechnet die Aspekte nach Huber-Orbis (planetenindividuell). DIESELBE
         Liste speist Rad UND Aspekttabelle -> beide sind garantiert deckungsgleich.
 
-    haus_und_grenzlage(lon, cusps, orb=5) -> dict
+    haus_und_grenzlage(lon, cusps, orb=5, name=None) -> dict
         Haupthaus + Grenzlage eines Faktors nach der einheitlichen 5°-Haus-Regel
-        (zweite, von den Aspekt-Orben STRIKT getrennte Orb-Ebene).
+        (zweite, von den Aspekt-Orben STRIKT getrennte Orb-Ebene); Winkel mit
+        name= -> festes Haus 1/10/7/4.
 
     radix(factors, cusps, asc, mc, out_path=..., title=..., aspects=None,
           palette=None, gradmarke=True) -> str
@@ -616,6 +617,10 @@ def _zeilen_zusammenziehen(roh, factors):
 # --- Haus-Zuordnung & Grenzlage (einheitliche 5°-Regel) ---------------------
 
 HAUS_ORB = 5   # Grenzlagen-Orb in Grad, planetenunabhängig
+# 2026-10-01 (Klasse-2-Entscheidungslauf, B9): festes Haus der Winkel fuer
+# haus_und_grenzlage(..., name=...)
+_ACHSEN_HAUS = {'AC': 1, 'ASC': 1, 'ASZENDENT': 1, 'MC': 10, 'MEDIUM COELI': 10,
+                'DC': 7, 'DSC': 7, 'DESZENDENT': 7, 'IC': 4, 'IMUM COELI': 4}
 SCHWELLENLAGE = 2   # Grad: bis hierhin vor der naechsten Spitze FUEHRT das
                     #   Nebenhaus (Datenblatt-Modul, Grenzlagen). Konstante seit
                     #   2026-09-26; haus_spalte(), fuehrendes_haus(),
@@ -652,7 +657,7 @@ def gr_zeichen(lon):
     return f"{d}°{m:02d}′"
 
 
-def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
+def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB, name=None):
     """Haupthaus + Grenzlage eines Faktors nach der einheitlichen Haus-Orb-Regel.
 
     Rueckgabe: dict {'haus': int, 'nebenhaus': int|None, 'grenzlage': bool,
@@ -667,7 +672,17 @@ def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB):
     Konstellationstabelle liefert haus_spalte(). Liegt lon in keinem Haus
     (nur bei fehlerhaften cusps): haus None, label 'Haus ?'.
     (Rueckgabe dokumentiert 2026-09-20, D3 — Befund G12-17c Nr. 2.)
+
+    name  (neu 2026-10-01, Klasse-2-Entscheidungslauf B9) der Faktorname. Fuer
+          AC, MC, DC und IC kommt ihr festes Haus (1, 10, 7, 4) ohne Grenzlage
+          zurueck, abstand_spitze None. Eine auf die Minute gerundete
+          Achsenlaenge gegen ungerundete Spitzen ergab sonst eine
+          Scheingrenzlage („Haus 12 (Grenzlage → 1, 0°00′ vor Spitze 1)“).
     """
+    _ax = _ACHSEN_HAUS.get(str(name or '').strip().upper())
+    if _ax:
+        return {'haus': _ax, 'nebenhaus': None, 'grenzlage': False,
+                'abstand_spitze': None, 'label': f"Haus {_ax}"}
     lon = lon % 360
     for k in range(12):
         span = (cusps[(k + 1) % 12] - cusps[k]) % 360
@@ -3346,6 +3361,10 @@ def zeitscan_faellig(sb):
 
 
 _ZS_MODUL = '`claude/Projektanweisung_Modul_Gegenprobe_Geburtszeit.md`'
+# 2026-10-01 (Klasse-2-Entscheidungslauf, T11): Die Ablage des Blatts braucht den
+# Klientenordner; angefragt erst am Ende von Schritt 2, blieb der Dialog
+# unbeantwortet und das Blatt nur im Chat.
+_ZS_ZUGRIFF = ' und den Zugriff auf den Klientenordner schon in Schritt 1 anfordern'
 
 
 # 2026-10-01 (Chris-Entscheidung): der einzige Satz zur Geburtsminute im PDF
@@ -3379,10 +3398,11 @@ def zeitscan_text(zs, typ='geburtshoroskop'):
         if zs.get('blatt_faellig') and typ == 'transit':
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
                   f"fällig nur beim Rohdaten-Start dieses Transits, dann am Ende "
-                  f"von Schritt 2 {_ZS_MODUL} laden" + _ZS_AUFTAKT)
+                  f"von Schritt 2 {_ZS_MODUL} laden" + _ZS_ZUGRIFF + _ZS_AUFTAKT)
         elif zs.get('blatt_faellig'):
             z += (f" — unter {AC_GEGENPROBE_SCHWELLE} Minuten: Gegenprobe-Blatt "
-                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden" + _ZS_AUFTAKT)
+                  f"fällig, am Ende von Schritt 2 {_ZS_MODUL} laden" + _ZS_ZUGRIFF
+                  + _ZS_AUFTAKT)
         else:
             z += f" — nicht unter {AC_GEGENPROBE_SCHWELLE} Minuten, kein Blatt."
         L.append(z)
@@ -7101,6 +7121,12 @@ if __name__ == '__main__':
     assert haus_und_grenzlage(15.0, _c)['haus'] == 1
     assert haus_und_grenzlage(359.0, _c)['nebenhaus'] == 1
     assert haus_und_grenzlage(25.0, _c)['grenzlage'] is True
+    # 2026-10-01 (B9): gerundete Achse knapp vor ihrer Spitze -> mit name= fest
+    assert haus_und_grenzlage(359.996, _c)['grenzlage'] is True
+    _hgx = haus_und_grenzlage(359.996, _c, name='AC')
+    assert _hgx['haus'] == 1 and not _hgx['grenzlage'] and _hgx['label'] == 'Haus 1', _hgx
+    assert haus_und_grenzlage(269.996, _c, name='mc')['haus'] == 10
+    assert haus_und_grenzlage(28.0, _c, name='Sonne')['nebenhaus'] == 2
     assert haus_spalte(15.0, _c) == '1'
     assert haus_spalte(28.5, _c) == '2/1'      # 1°30' vor Spitze -> Nebenhaus fuehrt
     assert haus_spalte(26.5, _c) == '1/2'      # 3°30' vor Spitze -> rechnerisch fuehrt

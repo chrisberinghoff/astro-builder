@@ -394,15 +394,29 @@ def typ_aus_pfad(pfad):
 # ---------------------------------------------------------------- Eingabe
 def parse_chart(text):
     """-> dict: faktoren [{name,zeichen,haus,nebenhaus,abstand}], achsen, aspekte,
-    spiegel [(rohname, kanonisch)]"""
+    spiegel [(rohname, kanonisch)], aspekte_keine.
+
+    Der Block endet an `@@ENDE` oder, mit HINWEIS, an der naechsten @@-Zeile;
+    `ASPEKT KEINE` (nur Transit) erklaert die leere Aspektebene (2026-10-01)."""
     faktoren, achsen, aspekte, spiegel, hinweise = [], {}, [], [], []
     inblock = False
+    aspekte_keine = False   # 2026-10-01 (T3): Zeile `ASPEKT KEINE`
     for ln in text.split('\n'):
         s = ln.strip()
         if s == '@@SELEKTOR':
             inblock = True
             continue
         if s == '@@ENDE':
+            inblock = False
+            continue
+        # 2026-10-01 (Klasse-2-Entscheidungslauf, T2): Auch jede andere @@-Zeile
+        # schliesst den Block. Fehlte das @@ENDE, las der Selektor die Zeilen
+        # des @@DECKBLATT-Blocks mit, und eine Folgezeile, die mit „Achse …“
+        # beginnt, wurde still zur Achse.
+        if s.startswith('@@'):
+            if inblock:
+                hinweise.append('@@SELEKTOR-Block ohne @@ENDE — geschlossen an '
+                                '„%s“; @@ENDE ergaenzen.' % s)
             inblock = False
             continue
         if not inblock or not s or s.startswith('#'):
@@ -495,6 +509,12 @@ def parse_chart(text):
                     z = norm(p.split('=', 1)[1])
             achsen[ax] = z
         elif kw == 'ASPEKT':
+            # 2026-10-01 (Klasse-2-Entscheidungslauf, T3): Die ASPEKT-Regel des
+            # Transits kann zu Recht keine Zeile ergeben; `ASPEKT KEINE` sagt
+            # das ausdruecklich, statt in den Abbruch LEERE ASPEKTEBENE zu laufen.
+            if len(parts) >= 2 and parts[1].upper() == 'KEINE':
+                aspekte_keine = True
+                continue
             if len(parts) >= 3:
                 weg = [norm_faktor(p) for p in parts[1:3]
                        if norm_faktor(p) in AUSGEMUSTERT]
@@ -515,8 +535,11 @@ def parse_chart(text):
     # ANGEFORDERTE Block existiert, und bei null Anforderungen ist sie trivial
     # gruen. Im Prueffall vom 15.09. ist genau das passiert; gemerkt hat es
     # erst Schritt 3, zwei Konversationen spaeter.
-    if not aspekte and re.search(r'^\|\s*Faktor\s*\|\s*Aspekt\s*\|', text,
-                                 re.M):
+    if aspekte and aspekte_keine:
+        hinweise.append('ASPEKT KEINE neben ASPEKT-Zeilen -> KEINE uebergangen; '
+                        'die Zeile aus dem @@SELEKTOR-Block streichen.')
+    if not aspekte and not aspekte_keine and re.search(
+            r'^\|\s*Faktor\s*\|\s*Aspekt\s*\|', text, re.M):
         hinweise.append(
             'KEINE ASPEKT-ZEILE im @@SELEKTOR-Block, obwohl die chart_data '
             'Aspekttabellen fuehrt. Erwartet wird je gedeutetem Paar eine '
@@ -526,6 +549,7 @@ def parse_chart(text):
     # Fuehrung meldet — gegen `fuehrung=offen` gehalten in _pruefe_hart().
     offen_s3 = sorted({norm_faktor(m.group(1)) for m in OFFEN_ZEILE_RE.finditer(text)})
     return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
+            'aspekte_keine': aspekte_keine,
             'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise,
             'offen_strukturbild': offen_s3,
             'strukturbild_seit_k9': bool(OFFEN_STAND_RE.search(text))}
@@ -1022,6 +1046,11 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
                        'bei `fuehrt=ja` ueberspringbar: das chart-')
             out.append('> spezifische Material eines fuehrenden Spezialfaktors '
                        'steht unter "Spezialfaktor" und "Aspekte".')
+    # 2026-10-01 (Klasse-2-Entscheidungslauf, T6): Das Auswahl-Protokoll am
+    # Dateiende belegt die Auswahl fuer die Pruefung, nicht fuer die Deutung.
+    out.append('>')
+    out.append('> Das Auswahl-Protokoll am Dateiende (~%d Zeilen) belegt nur die '
+               'Auswahl und darf uebersprungen werden.' % (len(prot) + 3))
     out.append('')
     if ohne:
         # 2026-09-19 (W36): eindeutige Meldung samt Anweisung — vorher stand
@@ -1182,10 +1211,16 @@ AUFRUF = (
     '      Selbsttest ohne Bibliothek (konstruierte Werte).')
 
 
-def _pruefe_hart(chart):
+def _pruefe_hart(chart, typ=None):
     """Harte Abbrueche, die fuer beide Modi gelten (leere Aspektebene,
     unbekannter Faktor). Aus main() herausgezogen am 2026-09-19 (W40), damit der
     Nur-Liste-Modus dieselben Proben faehrt; Wortlaut unveraendert."""
+    # 2026-10-01 (Klasse-2-Entscheidungslauf, T3): `ASPEKT KEINE` gilt nur im
+    # Transit; im Geburtshoroskop ist eine leere Aspektebene immer ein Fehler.
+    if chart.get('aspekte_keine') and typ != 'transit':
+        print('ASPEKT KEINE gilt nur im Transit (harter Fehler) — im '
+              'Geburtshoroskop je gedeutetem Paar eine ASPEKT-Zeile.')
+        sys.exit(1)
     leer = [h for h in chart.get('hinweise', [])
             if h.startswith('KEINE ASPEKT-ZEILE')]
     if leer:
@@ -1200,6 +1235,10 @@ def _pruefe_hart(chart):
         print('       ASPEKT SONNE MOND')
         print('       ASPEKT MARS AC')
         print('   Nur die beiden Faktornamen — keine Aspektart, kein Orb.')
+        if typ == 'transit':
+            print('   Ergibt die ASPEKT-Regel des Transits wirklich keine Zeile, '
+                  'stattdessen:')
+            print('       ASPEKT KEINE')
         sys.exit(1)
     _pruefe_offen(chart)
     unbek = chart.get('unbekannt', [])
@@ -1305,7 +1344,7 @@ def _main_liste(chart_path, blocks_ref=None):
     chart = r['chart']
     for h in chart.get('hinweise', []):
         print('   HINWEIS %s' % h)
-    _pruefe_hart(chart)
+    _pruefe_hart(chart, typ_aus_pfad(chart_path))
     print('Referenzdateien, die dieses Chart braucht (Nur-Liste-Modus — '
           'schreibt keine referenz.md):')
     for src in sorted(r['dateien']):
@@ -1509,11 +1548,48 @@ def _selbsttest():
     assert r['fehlt'] is None and 'Sonne_Aspekte.txt' in r['dateien']
     assert 'SONNE_MOND' in r['dateien']['Sonne_Aspekte.txt']
     assert len(r['fehlstellen']) == 2
+    # 2026-10-01 (T2): ohne @@ENDE endet der Block an der naechsten @@-Zeile
+    _oe = parse_chart('\n'.join(['@@SELEKTOR', 'FAKTOR SONNE zeichen=Widder haus=1',
+                                 'ASPEKT SONNE MOND', '@@DECKBLATT',
+                                 'LEITACHSE: <Platzhalter>',
+                                 'Achse Widder–Waage als Bild', '@@ENDE']))
+    assert _oe['achsen'] == {} and len(_oe['faktoren']) == 1, _oe
+    # 2026-10-01 (T3): ASPEKT KEINE erlaubt die leere Aspektebene; ohne die
+    # Zeile bleibt der Abbruch, neben echten Zeilen wird KEINE gemeldet
+    _tab = '| Faktor | Aspekt | Faktor | Orb |\n'
+    _k0 = parse_chart(_tab + '@@SELEKTOR\nFAKTOR SONNE zeichen=Widder haus=1\n@@ENDE')
+    assert any(h.startswith('KEINE ASPEKT-ZEILE') for h in _k0['hinweise'])
+    _k1 = parse_chart(_tab + '@@SELEKTOR\nFAKTOR SONNE zeichen=Widder haus=1\n'
+                      'ASPEKT KEINE\n@@ENDE')
+    assert _k1['aspekte'] == [] and not any(
+        h.startswith('KEINE ASPEKT-ZEILE') for h in _k1['hinweise']), _k1['hinweise']
+    with contextlib.redirect_stdout(io.StringIO()) as _buf0:
+        try:
+            _pruefe_hart(_k0, 'transit')
+            raise AssertionError('kein Abbruch')
+        except SystemExit as _e:
+            assert _e.code == 1
+    assert 'ASPEKT KEINE' in _buf0.getvalue()
+    with contextlib.redirect_stdout(io.StringIO()):              # KEINE nur im Transit
+        _pruefe_hart(_k1, 'transit')
+        try:
+            _pruefe_hart(_k1)
+            raise AssertionError('kein Abbruch im Geburtshoroskop')
+        except SystemExit as _e:
+            assert _e.code == 1
+    assert parse_chart(_tab + '@@SELEKTOR\nASPEKT KEINE (Regel ergibt nichts)\n'
+                       '@@ENDE')['aspekte_keine']
+    assert any('ohne @@ENDE' in h for h in _oe['hinweise']), _oe['hinweise']
+    _k2 = parse_chart(_tab + '@@SELEKTOR\nFAKTOR SONNE zeichen=Widder haus=1\n'
+                      'ASPEKT KEINE\nASPEKT SONNE MOND\n@@ENDE')
+    assert any('KEINE uebergangen' in h for h in _k2['hinweise']), _k2['hinweise']
+    # 2026-10-01 (T6): der Kopf nennt das Auswahl-Protokoll als ueberspringbar
+    assert 'Das Auswahl-Protokoll am Dateiende' in md
     print('[selektor-Selbsttest bestanden: Grenzlagen-Wortform (W35), '
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
           'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
           'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II), '
-          'offene Fuehrung (K9)]')
+          'offene Fuehrung (K9), Blockende und ASPEKT KEINE (K2-01.10.)]')
 
 
 def main():
@@ -1568,7 +1644,7 @@ def main():
     for roh, ziel in chart.get('spiegel', []):
         print('   SPIEGELPOL %-12s -> uebersprungen, wird ueber %s als Achse '
               'mitgedeutet' % (roh, ziel))
-    _pruefe_hart(chart)
+    _pruefe_hart(chart, typ_aus_pfad(chart_path))
     if missing:
         print('FEHLSTELLEN (harter Fehler):')
         for src, key in missing:

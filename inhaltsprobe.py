@@ -5006,7 +5006,11 @@ def _p15_ressourcen(chapters, typ, txt, zuordnung):
             if ch is not None:
                 kap_zu_thema[th["nr"]] = ch
     for zeile in teil.splitlines():
-        if "Deutungsort" not in zeile or re.match(r"^\s*(?:Zählmenge|\*\*|>)", zeile):
+        # 2026-10-01 (Klasse-2-Entscheidungslauf, T4): Eine Zeile `Nachzug:` und ein
+        # Nachzug-Vermerk in Klammern im Ortsfeld („Was trägt (Nachzug: vorher
+        # Thema 2)“) sind Chronik, kein Deutungsort — P15 pruefte gegen den alten Ort.
+        if "Deutungsort" not in zeile or re.match(
+                r"^\s*(?:Zählmenge|\*\*|>|(?:[-*]\s+)?Nachzug\s*:)", zeile):
             continue
         mz = _RESSOURCE_ZEILE_RE.match(zeile)
         if not mz:
@@ -5021,7 +5025,7 @@ def _p15_ressourcen(chapters, typ, txt, zuordnung):
         stufe = ms.group(1) if ms else None
         soll = 1 if stufe == "neben" else 3
         name = "%s %s %s" % (ANZEIGE.get(a, a), mz.group("g"), ANZEIGE.get(b, b))
-        ort = mz.group("ort").strip()
+        ort = re.sub(r"\s*\(\s*Nachzug\b[^)]*\)", "", mz.group("ort")).strip()
         mo = re.search(r"(Thema|Ressource)\s+(\d+)", ort)
         if mo:
             n = int(mo.group(2))
@@ -7305,7 +7309,14 @@ def _selbsttest(still=False):
     r8b = lauf(ersetze(c8, "T-Neptun ⚹ R-Mars    im Wirkorb    — Deutungsort: Mitlaufendes (Deckel)",
                        "T-Uranus △ R-Venus    im Wirkorb    — Deutungsort: Mitlaufendes (Deckel)"), ta, tev)
     erwarte(r8b, (("P15", "pruefen", "über dem Deckel, aber keine Zeile"),), "Lauf 8b")
-    berichte.append("Lauf 8 (Transit, Deutungsort über dem Deckel): erkannt, 8b gemeldet")
+    # 8c) Nachzug-Vermerk im Ortsfeld und eigene Nachzug-Zeile (2026-10-01, T4)
+    r8c = lauf(ersetze(c8, "— Deutungsort: Mitlaufendes (Deckel)",
+                       "— Deutungsort: Mitlaufendes (Deckel) (Nachzug: vorher Thema 2)\n"
+                       "Nachzug: Deutungsort: Thema 2 → Mitlaufendes (Deckel)"), ta, tev)
+    assert not r8c["proben"]["P15"]["pruefen"] and r8c["proben"]["P15"]["geprueft"] == 2, \
+        "Lauf 8c: Nachzug als Ort gelesen: %s" % r8c["proben"]["P15"]["pruefen"]
+    berichte.append("Lauf 8 (Transit, Deutungsort über dem Deckel): erkannt, 8b gemeldet, "
+                    "8c Nachzug still")
 
     # 9) offene Fuehrung (2026-09-30, K9): die Sonne konstruiert offen zwischen
     #    Haus 1 und 2 — Beleg „1./2. Haus (gleich stark, …)", rechnerisch vorn
@@ -7414,7 +7425,7 @@ def _main(argv):
 # Geburtshoroskop 1+2 vom 23.09.: 15 Aufrufe/77.349 B): Die Modultexte sagen, WAS die
 # Proben pruefen, nicht, WORAN sie es erkennen. Das steht hier, an einer Stelle:
 # `inhaltsprobe.hilfe('LESEFORMATE')`. Wer einen Leser aendert, zieht diesen Text nach.
-LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-09-24).
+LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-10-01).
 
 THEMENLISTE (chart_data) — P3, P6, P7, P15; build.aspekt_heimat() liest gleich.
   Beginn an der ersten Zeile `THEMA <n> |`; Ende am ersten Vorkommen von
@@ -7450,7 +7461,8 @@ DEUTUNGSORT (Ressourcen-Block) — P15.
   Zeile `… — Deutungsort: Thema n` | `Ressource n` | `Was trägt`; im Transit auch
   „Was dich durch diese Zeit trägt" (Abschnitt `###`) und `Mitlaufendes (Deckel)`
   für Kontakte über dem Deckel von sechs — dort genügt eine Zeile im Kapitel
-  `Mitlaufendes`, die beide Faktoren nennt. Ein anderer Ort ist PRÜFEN.
+  `Mitlaufendes`, die beide Faktoren nennt. Ein anderer Ort ist PRÜFEN. Eine Zeile
+  `Nachzug:` und ein Klammervermerk „(Nachzug: …)“ im Ortsfeld sind kein Ort.
   Gezählt werden die Sätze ab dem Satz, der BEIDE Faktoren nennt (oder zwei Sätzen,
   die sie zusammen nennen), bis zu einem Satz nur über andere Faktoren.
 

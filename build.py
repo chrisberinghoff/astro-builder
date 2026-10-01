@@ -2566,9 +2566,10 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
       Dokumentiert  NUR die Zeilen unter der Überschrift `### Aspekte ohne
                     Deutungs-Heimat — ausdrückliche Weglassung` (zwei bis vier
                     #), je Zeile ein Paar (Tabellenzeile oder `Faktor Glyphe
-                    Faktor`, Zusatzebene mit ∠, ⚼ oder –Wort–). Nennt die Zeile
-                    das Getriebe- oder das Instrument-Kapitel oder „Was trägt“
-                    (seit 2026-09-29), steht das Paar in
+                    Faktor`, Zusatzebene mit ∠, ⚼ oder –Wort–). Sagt die Zeile
+                    „gedeutet im Getriebe-/Instrument-Kapitel“ oder „gedeutet
+                    in Was trägt“ (seit 2026-09-29; seit 2026-10-01 nur in
+                    dieser Form, das Wort allein genügt nicht), steht das Paar in
                     `anderswo_gedeutet`, sonst in `dokumentiert` (weggelassen).
                     Andere Wörter im Datenblatt — „Weglassung", „GESTRICHEN" —
                     dokumentieren nichts mehr (bis 2026-09-23 öffneten sie
@@ -2726,7 +2727,12 @@ def aspekt_heimat(chart_data_pfad: str) -> dict:
             # Hauptthemen-Kapitels) deutet ausserhalb der Themenliste. Vorher
             # zaehlte eine solche Zeile als Weglassung. Das Wort „Hauptthemen“
             # allein genuegt nicht — es steht auch in Weglassungsgruenden.
-            if _re.search(r"Getriebe|Instrument|Was trägt", zeile):
+            # 2026-10-01 (Klasse-2-Entscheidungslauf, N8): nur die Form des Geruests
+            # „— gedeutet im Getriebe-/Instrument-Kapitel“ bzw. „— gedeutet in Was
+            # trägt“; ein Weglassungsgrund, der eines der Woerter bloss nennt („im
+            # Getriebe nur gestreift“), bleibt Weglassung. Vorher reichte das Wort.
+            if _re.search(r"(?<![Nn]icht )(?<![\wäöüß])[Gg]edeutet\s+(?:im|in)\s+"
+                          r"[^—|,;]{0,25}?(?:Getriebe|Instrument|Was trägt)", zeile):
                 anderswo |= paare
             else:
                 dok |= paare
@@ -3677,7 +3683,7 @@ def aspekt_heimat_bericht(chart_data_pfad: str) -> str:
     if r["offen"]:
         L.append("  Dokumentiert wird nur unter der Überschrift „### Aspekte ohne "
                  "Deutungs-Heimat — ausdrückliche Weglassung“, je Zeile ein Paar mit "
-                 "Grund oder Kapitel (build.hilfe('aspekt_heimat')).")
+                 "Grund oder „gedeutet im/in <Kapitel>“ (build.hilfe('aspekt_heimat')).")
     for p, a, b in r["doppelt"]:
         L.append("  DOPPELTE HEIMAT: %s -> %s / %s" % (p, a, b))
     return "\n".join(L + unl)
@@ -3720,7 +3726,14 @@ def _ressourcen_zeilen(chart_data_pfad: str, faktoren=None) -> list:
         r"\|\s*(%s)\s*\|\s*([%s])\s*[A-Za-zÄÖÜäöüß]*\s*\|\s*(%s)\s*\|"
         r"\s*(\d{1,3}°\d{2}′)\s*\|" % (_AH_NAME, "".join(_HARMONISCH), _AH_NAME))
     out = []
-    for kopf, stufe in _STAERKE_KOPF:
+    # 2026-10-01 (Klasse-2-Entscheidungslauf, T1): Datenblaetter von vor dem
+    # 22.09. fuehren die vollen Aspekte unter `### Hauptaspekte`; aspekt_heimat()
+    # und die Inhaltsprobe lesen den alten Namen, hier fehlte er — der
+    # Ressourcen-Block eines Folgeprodukts auf altem Datenblatt blieb unvollstaendig.
+    koepfe = list(_STAERKE_KOPF)
+    if "### Volle Aspekte" not in txt:
+        koepfe.append(("### Hauptaspekte", "voll"))
+    for kopf, stufe in koepfe:
         if kopf not in txt:
             continue
         teil = txt.split(kopf, 1)[1]
@@ -4079,7 +4092,7 @@ _GERUEST_GEBURTSHOROSKOP = '''<!-- Pflicht · Kern, Identitäts-Guardrail · kei
 
 | Faktor | Haus → Nebenhaus | Abstand | Stufe | Spalte | Signatur |
 |---|---|---|---|---|---|
-| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur> |
+| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur: in Schritt 1 „—“, in Schritt 2 die Wortform aus dem ⚠-Kopf der referenz.md> |
 
 - **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
 - **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
@@ -4218,7 +4231,7 @@ factors = [
 CUSPS = [<zwölf Spitzen>]
 ```
 
-<!-- Pflicht · Datenblatt-Modul „Themenliste“ · build.aspekt_heimat, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; fuehrt= mit dem Faktornamen vorn; Aspekte als Name Glyphe Name oder Name –Wort– Name; Freitext erst hinter GESTRICHEN:; Nachzug als eigene Zeile Nachzug:, nie mit dem Wort Deutungsort — P15 liest sonst den alten Ort -->
+<!-- Pflicht · Datenblatt-Modul „Themenliste“ · build.aspekt_heimat, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; fuehrt= mit dem Faktornamen vorn; Aspekte als Name Glyphe Name oder Name –Wort– Name; Freitext erst hinter GESTRICHEN:; Nachzug als eigene Zeile Nachzug: -->
 ## Themenliste
 
 THEMA 1 | titel=<Titel>
@@ -4246,14 +4259,14 @@ ZUGANG 1 | bereich=<Bereich> | haeuser=<Häuser>
   | verweise=<Kapitel> | praxis=<Übung/Verweis>
   | familie=<Familie> | lage=<Wortlaut/keine> | duenn=<ja/nein>
 
-<!-- nur bei Tabellen-Aspekten ohne aspekte=-Heimat · Datenblatt-Modul „Aspekt-Heimat“ · build.aspekt_heimat · Überschrift wörtlich; je Zeile ein Paar Name Glyphe Name; Weglassungsgrund ohne die Wörter Getriebe/Instrument/Was trägt — aspekt_heimat zählt sie sonst als gedeutet -->
+<!-- nur bei Tabellen-Aspekten ohne aspekte=-Heimat · Datenblatt-Modul „Aspekt-Heimat“ · build.aspekt_heimat · Überschrift wörtlich; je Zeile ein Paar Name Glyphe Name; als gedeutet zählt nur „gedeutet im/in …“ -->
 ### Aspekte ohne Deutungs-Heimat — ausdrückliche Weglassung
 
 <ein Satz, der beide Zeilenarten trennt>
 - <Name Glyphe Name> — <Orb>, <Stärke> — <Grund>
 - <Name Glyphe Name> — <Orb>, <Stärke> — gedeutet <im Getriebe-Kapitel/im Instrument-Kapitel/in Was trägt>
 
-<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel; ASPEKT nur mit den zwei Namen; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
+<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel, ohne fuehrt=; ASPEKT nur mit den zwei Namen; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
 @@SELEKTOR
 FAKTOR SONNE zeichen=<Zeichen> haus=<n>
 FAKTOR MOND zeichen=<Zeichen> haus=<n>
@@ -4298,7 +4311,7 @@ _GERUEST_TRANSIT = '''<!-- Pflicht · Kern, Identitäts-Guardrail; Transit-Modul
 
 | Faktor | Haus → Nebenhaus | Abstand | Stufe | Spalte | Signatur |
 |---|---|---|---|---|---|
-| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur> |
+| <Faktor> | <n> → <n> | <N°NN′> | <Stufe> | <Spalte> | <Signatur: in Schritt 1 „—“, in Schritt 2 die Wortform aus dem ⚠-Kopf der referenz.md> |
 
 - **Gedeutete Untergrund-Aspekte (ZUSATZ_PAARE):** <Paare/keine>
 - **Zusatzzeilen über der Huber-Grenze:** <Paare/keine>
@@ -4443,7 +4456,7 @@ CUSPS = [<zwölf Spitzen>]
 
 - **Status:** <Chiron, Haus-Durchgänge, Mars, Orb weit>
 
-<!-- Pflicht · Transit-Modul „Ablauf“ 1, „Die Auswahlregel“ · build.kontakt_heimat, build.dichte_quartale, build.transit_beleg, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; Kontakte als T-Name Glyphe R-Name; Freitext erst hinter GESTRICHEN:; spanne= Form frei; Nachzug als eigene Zeile Nachzug:, nie mit dem Wort Deutungsort — P15 liest sonst den alten Ort -->
+<!-- Pflicht · Transit-Modul „Ablauf“ 1, „Die Auswahlregel“ · build.kontakt_heimat, build.dichte_quartale, build.transit_beleg, inhaltsprobe P3 P5–P7 P15 P16 · Zeile beginnt „THEMA <n> | “ (n = Kapitelnummer), Folgezeilen „  | “; Kontakte als T-Name Glyphe R-Name; Freitext erst hinter GESTRICHEN:; spanne= Form frei; Nachzug als eigene Zeile Nachzug: -->
 ## Themenliste
 
 THEMA 1 | titel=<Titel>
@@ -4465,7 +4478,7 @@ Nachzug: <was, alt → neu>
 <!-- Pflicht · Transit-Modul „Die Reihenfolge …“ (5) · build.kontakt_heimat, inhaltsprobe P5 · Ausgabe unverändert; bis @@SELEKTOR nichts anderes, der Leser liest bis zur nächsten Überschrift oder @@-Zeile -->
 TRANSIT-RECHENSCHAFT: ← Ausgabe von build.transit_rechenschaft_block(chart_data, events_json) samt Kopfzeile anstelle dieser Zeile
 
-<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Transit-Modul „Ablauf“ 1; Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel; ASPEKT nur mit den zwei Namen; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
+<!-- Pflicht, SUEDKNOTEN-Zeile nur bei Grenzlage oder fuehrt=ja · Transit-Modul „Ablauf“ 1; Datenblatt-Modul „Der @@SELEKTOR-Block“ · selektor.parse_chart · mit @@ENDE schließen; ACHSE für die Winkel, ohne fuehrt=; ASPEKT nur mit den zwei Namen, ergibt die Regel keine: ASPEKT KEINE; haus= das rechnerische Haus, abstand= in Dezimalgrad; fuehrung=offen genau bei „⚠ Führung offen“ in §3, sonst Abbruch -->
 @@SELEKTOR
 FAKTOR SONNE zeichen=<Zeichen> haus=<n>
 FAKTOR MOND zeichen=<Zeichen> haus=<n>
@@ -5146,6 +5159,27 @@ def _selbsttest():
         pruefe(r["ok"] and r["dokumentiert"] == ["Saturn — Venus"]
                and not r["anderswo_gedeutet"],
                "T2: Weglassungsgrund mit „Hauptthemen“ als gedeutet gezaehlt: %r" % r)
+        # N8 (2026-10-01): ein Grund, der das Getriebe nur nennt, bleibt Weglassung
+        r = aspekt_heimat(datei("g4d.md", tab + th1 + th2 + schluss + wegl.replace(
+            "gedeutet im Instrument-Kapitel", "im Getriebe nur gestreift")))
+        pruefe(r["ok"] and r["dokumentiert"] == ["Saturn — Venus"]
+               and not r["anderswo_gedeutet"],
+               "N8: Weglassungsgrund mit „Getriebe“ als gedeutet gezaehlt: %r" % r)
+        for _nr, _grund in (("f", "bleibt ungedeutet im Getriebe"),
+                            ("g", "gedeutet in Thema 3; im Getriebe nur gestreift"),
+                            ("h", "Nicht gedeutet im Instrument-Kapitel")):
+            r = aspekt_heimat(datei("g4%s.md" % _nr, tab + th1 + th2 + schluss
+                                    + wegl.replace("gedeutet im Instrument-Kapitel", _grund)))
+            pruefe(r["dokumentiert"] == ["Saturn — Venus"],
+                   "N8: %r als gedeutet gezaehlt: %r" % (_grund, r))
+        r = aspekt_heimat(datei("g4i.md", tab + th1 + th2 + schluss + wegl.replace(
+            "gedeutet im Instrument-Kapitel", "Gedeutet im Getriebe-Kapitel")))
+        pruefe(r["anderswo_gedeutet"] == ["Saturn — Venus"],
+               "N8: „Gedeutet im …“ nicht als gedeutet gezaehlt: %r" % r)
+        r = aspekt_heimat(datei("g4e.md", tab + th1 + th2 + schluss + wegl.replace(
+            "gedeutet im Instrument-Kapitel", "nicht gedeutet im Getriebe-Kapitel")))
+        pruefe(r["ok"] and r["dokumentiert"] == ["Saturn — Venus"],
+               "N8: „nicht gedeutet“ als gedeutet gezaehlt: %r" % r)
         r = aspekt_heimat(datei("g5.md", tab + th1 + th2 + schluss.replace(
             "GESTRICHEN: keine.", "GESTRICHEN: Venus △ Saturn (Weglassung)")))
         b = aspekt_heimat_bericht(os.path.join(tmp, "g5.md"))
@@ -5531,6 +5565,11 @@ def _selbsttest():
             pruefe(rl2["zeilen"] == [
                 "Jupiter △ IC 1°20′ voll (zugleich Sextil MC) — Deutungsort: "],
                 "F18/Gegenende: %r" % rl2["zeilen"])
+            # T1 (2026-10-01): aelteres Datenblatt mit `### Hauptaspekte`
+            rl3 = ressourcen_liste(datei("r3_chart_data.md", rtab.replace(
+                "### Volle Aspekte (3)", "### Hauptaspekte (3)")))
+            pruefe(rl3["zeilen"] == rl["zeilen"],
+                   "T1: alte Ueberschrift Hauptaspekte nicht gelesen: %r" % rl3["zeilen"])
             beide = ressourcen_liste(rg, events_json_pfad=evj, radix=True)
             pruefe(len(beide["eintraege"]) == 2 and len(beide["transit"]) == 4
                    and len(beide["zeilen"]) == 6, "W22: radix=True mit events.json")
@@ -5706,7 +5745,7 @@ def _selbsttest():
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
           "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5, "
-          "K2-30.09.: Geruest)")
+          "K2-30.09.: Geruest, K2-01.10.: T1, N8)")
 
 
 def _selbsttest_verify(tmp, pruefe):
