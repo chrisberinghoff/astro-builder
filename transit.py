@@ -1022,7 +1022,7 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                 wirkorb_perioden=[[x.isoformat(),y.isoformat()] for x,y in w],
                 min_orb_im_fenster=(round(mf,3) if mf is not None else None),
                 wirkorb_im_fenster=bool(mf is not None and mf<=orb),
-                orb_stichtag=round(orbs[i_asof],4),
+                orb_stichtag=float(orbs[i_asof]),   # 2026-10-03: ungerundet, gerundet wird nur bei der Ausgabe (wie JETZT)
                 selbst_transit=ist_selbst_transit(tname,rname),
                 lebensmitte=ist_lebensmitte(tname,rname,aname)))       # 2026-09-24 (T10)
             _intern.append(dict(key=(tname,rname,aname),sel=sel,kr=kr,i0=i0,i1=i1,
