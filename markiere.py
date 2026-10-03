@@ -70,7 +70,14 @@ PARTNERS = [('AUFSTEIGENDER MONDKNOTEN', 'KNOTEN'), ('MONDKNOTEN', 'KNOTEN'),
             ('SONNE', 'SONNE'), ('MERKUR', 'MERKUR'), ('MOND', 'MOND'),
             ('VENUS', 'VENUS'), ('MARS', 'MARS'), ('JUPITER', 'JUPITER'),
             ('SATURN', 'SATURN'), ('URANUS', 'URANUS'), ('NEPTUN', 'NEPTUN'),
-            ('PLUTO', 'PLUTO'), ('KNOTEN', 'KNOTEN')]
+            ('PLUTO', 'PLUTO'),
+            # Seit 2026-10-03: Paarbloecke der Spezialfaktoren untereinander
+            # (CHIRON_LILITH, CHIRON_PHOLUS, LILITH_PHOLUS, MONDKNOTEN_CHIRON/
+            # _LILITH/_PHOLUS). Die Namen stehen nur im B-Teil dieser neuen
+            # Kopfzeilen; in allen aelteren Kopfzeilen kommen sie dort nicht vor
+            # (Regression: alle 43 Dateien unveraendert etikettiert).
+            ('CHIRON', 'CHIRON'), ('LILITH', 'LILITH'), ('PHOLUS', 'PHOLUS'),
+            ('KNOTEN', 'KNOTEN')]
 
 
 def sep(s):

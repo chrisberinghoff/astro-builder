@@ -81,14 +81,19 @@ gezogen ist. Lassen sich die Abschnitte nicht eindeutig erkennen, kommt das ganz
 Kapitel (wie beim Zeichenschnitt).
 
 FEHLSTELLEN (eindeutig seit 2026-09-19, W36): Ein angeforderter Aspekt, fuer den
-die Bibliothek keinen Block fuehrt (Spezialfaktor mit Spezialfaktor, Achse mit
-Achse, ausserhalb des Systems), IST eine Fehlstelle. Sie bricht nicht ab: Die
+die Bibliothek keinen Block fuehrt (Achse mit Achse, ausserhalb des Systems),
+IST eine Fehlstelle. Sie bricht nicht ab: Die
 referenz.md wird geschrieben, ihr Kopf zaehlt die Fehlstelle, der Abschnitt
 „⚠ FEHLSTELLEN" nennt sie samt Anweisung (aus den Nachbarbloecken deuten, in der
 Referenzdatei-Liste melden), das Auswahl-Protokoll schreibt „FEHLSTELLE" und die
 Schlusszeile zaehlt sie. Vorher stand im selben Lauf „nicht als Block gefuehrt"
 neben „Fehlstellen: 0" und „keine Fehlstelle". Hart bleibt, was die Bibliothek
 fuehren MUESSTE und nicht hat (FEHLT … in …).
+Seit 2026-10-03 fuehrt die Bibliothek auch die Spezialfaktoren untereinander
+(CHIRON_LILITH, CHIRON_PHOLUS, LILITH_PHOLUS) und mit der Knotenachse
+(MONDKNOTEN_CHIRON, _LILITH, _PHOLUS); diese sechs Paare sind keine Fehlstellen
+mehr (s. resolve_aspect, SPEZ_PAARE). Fuer DC und IC nennt die Kipp-Notiz den
+Text zur Konjunktion mit dem Gegenwinkel (KIPP_PLANET, KIPP_SPEZ).
 
 NUR-LISTE-MODUS (seit 2026-09-19, W40): `--liste` sagt, welche
 Bibliotheksdateien und wie viele Bloecke das Chart braucht, und nennt die
@@ -598,22 +603,70 @@ def load_bundle(path):
 # ---------------------------------------------------------------- Ableitung
 SPEZSET = ('CHIRON', 'LILITH', 'PHOLUS')
 
+# Paarbloecke der Spezialfaktoren untereinander (seit 2026-10-03, Startprompt
+# „Bibliothek: alle Luecken schliessen", Chris-Freigabe 03.10.): ungeordnetes
+# Paar -> (Heimatfaktor, Blockschluessel). Die Heimat folgt der Reihenfolge
+# Chiron, Lilith, Pholus — Chiron-Lilith und Chiron-Pholus stehen in der
+# Chiron-Datei, Lilith-Pholus in der Lilith-Datei. Die Paare mit der
+# Knotenachse fuehrt die Mondknoten-Datei (MONDKNOTEN_<FAKTOR>, wie bei den
+# Planeten). Vorher waren alle sechs Paare Fehlstellen („nicht als Block
+# gefuehrt"), und Schritt 2 setzte die Deutung jedes Mal neu zusammen.
+SPEZ_PAARE = {
+    frozenset(('CHIRON', 'LILITH')): ('CHIRON', 'CHIRON_LILITH'),
+    frozenset(('CHIRON', 'PHOLUS')): ('CHIRON', 'CHIRON_PHOLUS'),
+    frozenset(('LILITH', 'PHOLUS')): ('LILITH', 'LILITH_PHOLUS'),
+}
+
+# Kipp-Notiz fuer DC und IC (seit 2026-10-03): Der Selektor liest einen Aspekt
+# zum DC aus dem AC-Block und einen zum IC aus dem MC-Block. Die Konjunktion mit
+# dem Gegenwinkel hat seither einen eigenen Text — bei den zehn Planeten den
+# Abschnitt „AM DESZENDENTEN" bzw. „AM IC" am Blockende (Kopfzeile mit
+# „[Ergaenzung 2026-10, Synthese]"), bei Chiron, Lilith und Pholus einen
+# Gegenpol-Satz im Block. Die Notiz nennt ihn, damit Schritt 2 ihn findet.
+KIPP_PLANET = {
+    'DC': 'für DC an der Horizontachse gekippt gelesen; Konjunktion DC: '
+          'Abschnitt „AM DESZENDENTEN“ im Block',
+    'IC': 'für IC am MC gekippt gelesen; Konjunktion IC: Abschnitt „AM IC“ '
+          'im Block',
+}
+KIPP_SPEZ = {
+    'DC': 'für DC gekippt; Konjunktion DC: Gegenpol-Satz im Block (Deszendent)',
+    'IC': 'für IC gekippt; Konjunktion IC: Gegenpol-Satz im Block (IC)',
+}
+
 
 def resolve_aspect(a, b):
-    """-> (srcfile, key, note) oder (None,None,note) fuer nicht-block-gefuehrt."""
+    """-> (srcfile, key, note) oder (None, None, note) fuer eine Fehlstelle.
+
+    Planet-Planet: kanonisch nach Planetenordnung aus der Datei des frueheren
+    Planeten. Knotenachse mit Planet, Achse ODER Spezialfaktor: Mondknoten-
+    Datei, MONDKNOTEN_<PARTNER>. Spezialfaktoren untereinander (seit
+    2026-10-03): CHIRON_LILITH, CHIRON_PHOLUS (Chiron-Datei), LILITH_PHOLUS
+    (Lilith-Datei) — die Reihenfolge im Paar ist gleichgueltig (SPEZ_PAARE).
+    Spezialfaktor bzw. Planet mit AC/MC: eigener Block; mit DC/IC: der AC- bzw.
+    MC-Block, gekippt gelesen — die Notiz nennt den Text zur Konjunktion mit dem
+    Gegenwinkel (KIPP_PLANET, KIPP_SPEZ).
+    Fehlstelle bleiben Achse mit Achse und alles ausserhalb des Systems: dann
+    (None, None, 'nicht als Block geführt (...)').
+    """
     # Planet–Planet: kanonisch nach Planetenordnung
     if a in PSET and b in PSET:
         x, y = sorted([a, b], key=PLANETS.index)
         return aspekt_file(x), '%s_%s' % (x, y), None
-    # Mondknoten mit Planet oder Achse -> reichere Achsendatei
+    # Mondknoten mit Planet, Achse oder Spezialfaktor -> reichere Achsendatei
     if 'KNOTEN' in (a, b):
         other = b if a == 'KNOTEN' else a
-        if other in PSET or other in ('AC', 'MC'):
+        if other in PSET or other in ('AC', 'MC') or other in SPEZSET:
             return SPEZFILE['MONDKNOTEN'], 'MONDKNOTEN_' + other, None
         if other in ('DC', 'IC'):
             ax2 = 'AC' if other == 'DC' else 'MC'
             return SPEZFILE['MONDKNOTEN'], 'MONDKNOTEN_' + ax2, 'für %s an der Achse gekippt' % other
         return None, None, 'nicht als Block geführt (%s-%s)' % (a, b)
+    # Spezialfaktoren untereinander (seit 2026-10-03)
+    paar = SPEZ_PAARE.get(frozenset((a, b)))
+    if paar:
+        heim, key = paar
+        return SPEZFILE[heim], key, None
     # Spezialfaktor (Chiron/Lilith/Pholus) mit Planet oder Achse
     for sp in SPEZSET:
         if sp in (a, b):
@@ -622,7 +675,7 @@ def resolve_aspect(a, b):
                 return SPEZFILE[sp], '%s_%s' % (sp, other), None
             if other in ('DC', 'IC'):
                 ax2 = 'AC' if other == 'DC' else 'MC'
-                return SPEZFILE[sp], '%s_%s' % (sp, ax2), 'für %s gekippt' % other
+                return SPEZFILE[sp], '%s_%s' % (sp, ax2), KIPP_SPEZ[other]
             return None, None, 'nicht als Block geführt (%s-%s)' % (a, b)
     # Planet mit Achse
     pl = a if a in PSET else (b if b in PSET else None)
@@ -630,9 +683,9 @@ def resolve_aspect(a, b):
     if pl and ax in ('AC', 'MC'):
         return aspekt_file(pl), '%s_%s' % (pl, ax), None
     if pl and ax == 'DC':
-        return aspekt_file(pl), '%s_AC' % pl, 'für DC an der Horizontachse gekippt gelesen'
+        return aspekt_file(pl), '%s_AC' % pl, KIPP_PLANET['DC']
     if pl and ax == 'IC':
-        return aspekt_file(pl), '%s_MC' % pl, 'für IC am MC gekippt gelesen'
+        return aspekt_file(pl), '%s_MC' % pl, KIPP_PLANET['IC']
     return None, None, 'nicht als Block geführt (Achse-Achse/außersystemisch)'
 
 
@@ -1060,9 +1113,11 @@ def assemble_md(chart, ordered, prot, missing, grenz=None, typ=None):
                    'Bibliotheksblock')
         out.append('=' * 70)
         out.append(
+            # Seit 2026-10-03 ohne „Spezialfaktor mit Spezialfaktor": diese
+            # Paare fuehrt die Bibliothek jetzt als Block (SPEZ_PAARE).
             'Fuer diese ASPEKT-Zeilen fuehrt die Bibliothek keinen Block '
-            '(Spezialfaktor mit\nSpezialfaktor, Achse mit Achse oder '
-            'ausserhalb des Systems). Jede ist eine Fehlstelle,\nkein '
+            '(Achse mit Achse oder\nausserhalb des Systems). Jede ist eine '
+            'Fehlstelle,\nkein '
             'Abbruch: aus den Nachbarbloecken deuten — die Staende beider '
             'Faktoren und,\nbei einem Spezialfaktor, seine Aspekt-Vorrede '
             '(<FAKTOR>_SEC_ASPEKT unter\n"Spezialfaktor-Methodik"; fuer diese '
@@ -1381,7 +1436,9 @@ def _selbsttest():
         'FAKTOR GLÜCKSPUNKT zeichen=Fische haus=7',
         'ACHSE AC zeichen=Widder',
         'ASPEKT SONNE MOND',
-        'ASPEKT CHIRON LILITH',
+        # bis 2026-10-02 stand hier CHIRON LILITH als Fehlstelle; das Paar ist
+        # seit 2026-10-03 ein Block (SPEZ_PAARE) — Achse-Achse bleibt Fehlstelle
+        'ASPEKT DC IC',
         'ASPEKT AC MC',
         'ASPEKT SONNE GLUECKSPUNKT',
         '@@ENDE'])
@@ -1469,11 +1526,35 @@ def _selbsttest():
     assert gruppe['CHIRON_IN_STIER'] == 'Spezialfaktor'
     # W36: angeforderter Aspekt ohne Block = Fehlstelle, eindeutig gemeldet
     assert [(a, b) for a, b, _n in chart['ohne_block']] == \
-        [('CHIRON', 'LILITH'), ('AC', 'MC')]
+        [('DC', 'IC'), ('AC', 'MC')], chart['ohne_block']
     assert sum('-> FEHLSTELLE:' in p for p in prot) == 2
     md = assemble_md(chart, [], prot, [], grenz)
     assert 'Fehlstellen: 2.' in md and '## ⚠ FEHLSTELLEN' in md
     assert 'Fehlstellen: 0' not in md
+    assert 'Spezialfaktor mit\nSpezialfaktor' not in md
+    # 2026-10-03: die sechs Paare der Spezialfaktoren untereinander und mit der
+    # Knotenachse sind Bloecke — in beiden Reihenfolgen, ohne Notiz
+    for x, y, datei, key in (
+            ('CHIRON', 'LILITH', 'CHIRON', 'CHIRON_LILITH'),
+            ('CHIRON', 'PHOLUS', 'CHIRON', 'CHIRON_PHOLUS'),
+            ('LILITH', 'PHOLUS', 'LILITH', 'LILITH_PHOLUS'),
+            ('KNOTEN', 'CHIRON', 'MONDKNOTEN', 'MONDKNOTEN_CHIRON'),
+            ('KNOTEN', 'LILITH', 'MONDKNOTEN', 'MONDKNOTEN_LILITH'),
+            ('KNOTEN', 'PHOLUS', 'MONDKNOTEN', 'MONDKNOTEN_PHOLUS')):
+        for p, q in ((x, y), (y, x)):
+            assert resolve_aspect(p, q) == (SPEZFILE[datei], key, None), \
+                (p, q, resolve_aspect(p, q))
+    # Gleicher Faktor doppelt, Achse-Achse: weiter Fehlstelle
+    assert resolve_aspect('CHIRON', 'CHIRON')[1] is None
+    assert resolve_aspect('MC', 'DC')[1] is None
+    # Kipp-Notiz nennt den Gegenpol-Text (2026-10-03)
+    assert resolve_aspect('SONNE', 'DC') == (aspekt_file('SONNE'), 'SONNE_AC',
+                                             KIPP_PLANET['DC'])
+    assert 'AM DESZENDENTEN' in resolve_aspect('DC', 'MARS')[2]
+    assert 'AM IC' in resolve_aspect('PLUTO', 'IC')[2]
+    assert resolve_aspect('IC', 'CHIRON') == (SPEZFILE['CHIRON'], 'CHIRON_MC',
+                                              KIPP_SPEZ['IC'])
+    assert 'Gegenpol' in resolve_aspect('LILITH', 'DC')[2]
     # F19: Wortlaut fuer den nicht fuehrenden Faktor je Typ
     md_t = assemble_md(chart, [], prot, [], grenz, typ='transit')
     assert 'Zeile im Rechenschaftskapitel' in md and 'Mitlaufendes' not in md
@@ -1589,7 +1670,8 @@ def _selbsttest():
           'Fehlstellen (W36), Methodik (W59), Typ-Wortlaut (F19), '
           'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
           'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II), '
-          'offene Fuehrung (K9), Blockende und ASPEKT KEINE (K2-01.10.)]')
+          'offene Fuehrung (K9), Blockende und ASPEKT KEINE (K2-01.10.), '
+          'Spezialfaktor-Paare und Kipp-Notiz (03.10.)]')
 
 
 def main():
