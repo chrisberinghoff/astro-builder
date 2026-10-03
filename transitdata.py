@@ -202,6 +202,11 @@ def exakt_anzeige(txt):
                     f'{m.group(3)}.{m.group(2)}.{m.group(1)[2:]}', ex)
         # 2026-09-26: „1 T)" VOR dem allgemeinen Ersatz — in der Vorlage lief
         # er danach und traf nie („in 1 Tagen").
+        # 2026-10-03 (Auswertung 03.10., Fehler 2): Der Report schreibt ASCII;
+        # „vor dem Rueckblick" stand so im Transit-Anhang (Stichtagstabelle,
+        # Pruefbericht Transit Schritt 3+4 vom 03.10.). Dieselbe Luecke traf
+        # „Annaeherung" — beide Woerter kommen aus transit._jetzt_exakt().
+        ex = ex.replace('Rueckblick', 'Rückblick').replace('Annaeherung', 'Annäherung')
         return re.sub(r'\b1 T\)', '1 Tag)', ex).replace(' T)', ' Tagen)')
     ex = re.sub(r'\bexakt war (\S+) \(vor (\d+) T\)', r'last exact \1 (\2 days ago)', ex)
     ex = re.sub(r'\bexakt (\S+) \(in (\d+) T\)', r'exact \1 (in \2 days)', ex)
@@ -706,8 +711,32 @@ def _selbsttest(still=False):
         import swisseph as swe
     except ImportError as e:
         print("Selbsttest transitdata.py: transit.py/pyswisseph nicht ladbar (%s) — "
-              "nur F22 geprueft" % e)
+              "nur F22 und F24 geprueft" % e)
         return not fehler
+    # U03 (2026-10-03, Auswertung 03.10., Fehler 2; Gegenpruefung desselben
+    # Tages): die deutsche Exakt-Anzeige ohne ASCII-Umlaute. Die Rohtexte
+    # erzeugt transit._jetzt_exakt() selbst — alle vier Textbausteine, dazu die
+    # Einzahl „1 Tag" —, damit eine Wortaenderung dort hier auffaellt. Werte
+    # erfunden, keine Personendaten.
+    if SPRACHE != 'en':
+        _res = {'asof': '2031-06-01', 'end': '2033-06-01',
+                'lookback_start': '2030-12-01'}
+        for _x, _soll in (
+                ({'exakt_gewesen': ['2030-11-13']},
+                 'zuletzt 13.11.30 (vor 200 Tagen) vor dem Rückblick'),
+                ({'exakt_kommend': ['2031-06-02']},
+                 '02.06.31 (in 1 Tag)'),
+                ({'exakt_kommend': ['2033-07-01']},
+                 '01.07.33 (in 761 Tagen) nach dem Fenster'),
+                ({'annaeherung_kommend': [('2032-02-10', 0.03)]},
+                 'kein Exaktkontakt, Annäherung bis 1.8′ am 10.02.32'),
+                ({'min_orb_ab_stichtag': 0.42,
+                  'min_orb_ab_stichtag_datum': '2032-04-05'},
+                 'kein Exaktkontakt (engster Orb ab Stichtag 0.42° am 05.04.32)')):
+            _roh = T._jetzt_exakt(_x, _res)
+            _ist = exakt_anzeige(_roh)
+            pruefe(_ist == _soll and not re.search(r'(?i)ae|oe|ue', _ist),
+                   "U03: exakt_anzeige(%r) = %r, erwartet %r" % (_roh, _ist, _soll))
     FL = T.MOSEPH
     jg = 2440000.5
     lon = lambda pl, jd: swe.calc_ut(jd, pl, FL)[0][0]
@@ -792,7 +821,7 @@ def _selbsttest(still=False):
             for f_ in fehler:
                 print("  - " + f_)
         else:
-            print("Selbsttest transitdata.py: alle Faelle gruen (W11, W45, W3, W46, F22, F24)")
+            print("Selbsttest transitdata.py: alle Faelle gruen (W11, W45, W3, W46, F22, F24, U03)")
     return not fehler
 
 

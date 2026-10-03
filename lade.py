@@ -222,8 +222,17 @@ def ephemeriden_pfad():
 #
 # `flatlib` wird nur wegen der mitgelieferten swefiles installiert (sepl_*,
 # semo_*, seas_*), nicht als Bibliothek — daher `--no-deps`.
+#
+# `--use-pep517` fuer pyswisseph (neu 2026-10-03, Auswertung 03.10., W1): Fuer
+# Python 3.13 gibt es kein fertiges Rad; pip baut aus dem Quellpaket ueber
+# setup.py, und das setuptools 68 aus Debian/Ubuntu bricht dabei mit
+# `AttributeError: install_layout` ab — in jedem frischen Container, in allen
+# fuenf Schritt-1-Laeufen vom 02./03.10. Mit dem Schalter baut pip in einer
+# isolierten Umgebung mit aktuellem setuptools; nachgeprueft unter Python
+# 3.13.16 / setuptools 68.1.2 (pyswisseph 2.10.03 importierbar). Gibt es ein
+# fertiges Rad, nimmt pip es wie bisher; der Schalter aendert dann nichts.
 PAKETE = (
-    ("pyswisseph", ()),
+    ("pyswisseph", ("--use-pep517",)),
     ("flatlib", ("--no-deps",)),
 )
 
@@ -291,6 +300,11 @@ def ephemeriden(still=False):
     Versionsforderung an pyswisseph spielt hier keine Rolle. Sie war bis dahin
     unerklaert und stand als Befund in der Klasse-2-Liste.
 
+    PYTHON 3.13 OHNE FERTIGES RAD (2026-10-03): pyswisseph wird mit
+    `--use-pep517` installiert (s. PAKETE) — ohne den Schalter bricht der Bau im
+    frischen Container an Debians setuptools ab (`install_layout`), und die
+    alte Meldung schob das auf einen Timeout.
+
     Wirft, wenn die Dateien auch nach der Installation nicht auffindbar sind.
     Nicht abfangen: Ohne sie rechnet der Builder auf Moshier (bis zu einer
     Bogensekunde bei den Langsamen, ein Exaktpunkt nahe Mitternacht kann auf den
@@ -324,15 +338,19 @@ def ephemeriden(still=False):
         # nachfassen", Werkzeuge-Modul): Ein Timeout des Proxys ist meist vorbei.
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "pyswisseph",
-             "--break-system-packages", "-q"],
+             *dict(PAKETE)["pyswisseph"], "--break-system-packages", "-q"],
             check=False,
         )
     if not _swisseph_importierbar():
+        # Meldung neu 2026-10-03 (W1): Sie nannte nur den Timeout, und ihr
+        # Handbefehl ohne `--use-pep517` scheiterte genauso wie der Lauf.
         raise RuntimeError(
             "pyswisseph ist nach zwei Installationsversuchen nicht importierbar "
-            "(`import swisseph` schlaegt fehl) — pip hat den Download vermutlich "
-            "abgebrochen (Timeout). Von Hand: "
-            + sys.executable + " -m pip install pyswisseph --break-system-packages"
+            "(`import swisseph` schlaegt fehl). Die Ursache steht in der "
+            "pip-Ausgabe darueber: ein abgebrochener Download (Timeout des "
+            "Proxys) oder ein gescheiterter Bau aus dem Quellpaket. Von Hand: "
+            + sys.executable + " -m pip install pyswisseph "
+            + " ".join(dict(PAKETE)["pyswisseph"]) + " --break-system-packages"
         )
 
     pfad = ephemeriden_pfad()

@@ -44,8 +44,8 @@ ist vektorscharf, im Cover-Stil einfärbbar und quellen-unabhängig.
         2026-09-19 die Verweise auf Getriebe, Instrument und Typmodul weg.
 
     hausherrscher(factors, cusps, aspects=None) -> list
-    haus_kreise(factors, cusps, klassisch=False) -> dict
-    herrscher_einlauf(factors, cusps) -> dict
+    haus_kreise(factors, cusps, klassisch=False, offen=None) -> dict
+    herrscher_einlauf(factors, cusps, klassisch=False, offen=None) -> dict
     herrscher_spitzen_kontakt(factors, cusps, orb=3.0) -> list
     kippminuten(jd, lat, lon, hsys=b"K") -> list | None
         Die Hausherrscher-Ebene (Strukturbild §3). Seit 2026-09-12 markiert
@@ -1673,7 +1673,7 @@ ACHSE_GRENZE = 1.0              # Grad: AC oder MC naeher an einer Zeichengrenze
                                 #   beide Grenzen gelten, der Builder schreibt beide)
 
 
-def haus_kreise(factors, cusps, klassisch=False):
+def haus_kreise(factors, cusps, klassisch=False, offen=None):
     """Zyklen der Haus-Herrscher: Haus A -> sein Herrscher steht in Haus B ->
     dessen Herrscher steht in Haus A ... (neu 2026-09-12).
 
@@ -1684,25 +1684,43 @@ def haus_kreise(factors, cusps, klassisch=False):
 
     klassisch=True rechnet mit den klassischen Herrschern (Mars fuer Skorpion,
     Saturn fuer Wassermann, Jupiter fuer Fische) — die Gegenrechnung, die das
-    Datenblatt-Modul verlangt.
+    Datenblatt-Modul verlangt. Die Klassisch-Zeile in §3 vergleicht nur die
+    rechnerischen Kreise ('kreise'); 'kreise_nur_fuehrend' wird mitgerechnet,
+    dort aber nicht ausgegeben.
+
+    offen (neu 2026-10-03) Namen der Faktoren mit OFFENER FUEHRUNG
+    (fuehrung_offen(), verglichen ueber _offen_schluessel()). Bei ihnen fuehrt
+    keins der beiden Haeuser — beide gleich stark —, und 'ziel_fuehrend' nimmt
+    fuer einen solchen Herrscher das Nebenhaus, auch wenn er mehr als 2° vor
+    der Spitze steht: So stehen beide gleich starken Lesarten in §3.
 
     Rueckgabe:
       'ziel'          {haus: haus_in_dem_sein_herrscher_steht} (rechnerisch)
       'ziel_fuehrend' dieselbe Abbildung nach dem FUEHRENDEN Haus (bei einer
-                      Schwellenlage <= 2° fuehrt das Nebenhaus, haus_spalte())
+                      Schwellenlage <= 2° fuehrt das Nebenhaus, haus_spalte();
+                      bei offener Fuehrung, offen=, das gleich starke Nebenhaus)
       'kreise'        [{'haeuser', 'laenge', 'wechselseitig', 'glieder',
                        'grenzlagen', 'haelt_bei_schwellenlage'}], laengste zuerst;
                       'glieder' je Haus {haus, spitzenzeichen, herrscher,
-                      steht_in_haus, haus_spalte, grenzlage, nebenhaus, abstand}
+                      steht_in_haus, haus_spalte, grenzlage, nebenhaus, abstand,
+                      offen}
       'wechselseitig' die Haus-Paare der Zweier-Kreise
       'selbst'        Haeuser, deren Herrscher im eigenen Haus steht
       'ohne_herrscher' Haeuser, deren Herrscher nicht in `factors` ist
+      'kreise_nur_fuehrend' (neu 2026-10-03) Kreise, die sich NUR nach dem
+                      FUEHRENDEN Haus schliessen (bei offener Fuehrung ueber das
+                      gleich starke Nebenhaus), Form wie 'kreise' mit
+                      'nur_fuehrend': True; rechnerisch gibt es sie nicht
+      'verschoben'    (neu 2026-10-03) {haus: glied} der Haeuser, deren
+                      Herrscher nach 'ziel_fuehrend' woanders steht als
+                      rechnerisch — der Grund steht in glied['offen']
     'haelt_bei_schwellenlage' sagt, ob derselbe Kreis auch nach der fuehrenden
     Hausangabe besteht — steht ein Glied in Schwellenlage, kann der Kreis an
     zwei Grad haengen, und das gehoert in die Befundzeile.
     """
     tab = HERRSCHER_KLASSISCH if klassisch else HERRSCHER
     pos = {f['name']: f['lon'] for f in factors}
+    _off = {_offen_schluessel(x) for x in (offen or ())}
     ziel, ziel_f, glied, ohne = {}, {}, {}, []
     for n in range(1, 13):
         zsp = SIGN_NAMES[zeichen_index(cusps[n - 1])]
@@ -1711,14 +1729,20 @@ def haus_kreise(factors, cusps, klassisch=False):
             ohne.append(n)
             continue
         hg = haus_und_grenzlage(pos[hr], cusps)
+        # OFFENE FUEHRUNG (neu 2026-10-03, Gegenpruefung des Wartungslaufs):
+        # Keins der beiden Haeuser fuehrt; die zweite Lesart ist das Nebenhaus,
+        # auch ueber 2°. Sonst fehlte sie dort, und bis 2° nannten die Zeilen
+        # in §3 „Nebenhaus fuehrt" statt „gleich stark".
+        ist_offen = bool(hg['grenzlage']) and _offen_schluessel(hr) in _off
         ziel[n] = hg['haus']
-        ziel_f[n] = int(haus_spalte(pos[hr], cusps).split('/')[0])
+        ziel_f[n] = (hg['nebenhaus'] if ist_offen else
+                     int(haus_spalte(pos[hr], cusps).split('/')[0]))
         glied[n] = {'haus': n, 'spitzenzeichen': zsp, 'herrscher': hr,
                     'steht_in_zeichen': zeichen_name(pos[hr]),
                     'steht_in_haus': hg['haus'],
                     'haus_spalte': haus_spalte(pos[hr], cusps),
                     'grenzlage': hg['grenzlage'], 'nebenhaus': hg['nebenhaus'],
-                    'abstand': hg['abstand_spitze']}
+                    'abstand': hg['abstand_spitze'], 'offen': ist_offen}
 
     def _zyklen(abb):
         gefunden, gesehen = [], set()
@@ -1749,13 +1773,38 @@ def haus_kreise(factors, cusps, klassisch=False):
             'grenzlagen': [h for h in z if glied[h]['grenzlage']],
             'haelt_bei_schwellenlage': frozenset(z) in kreise_f})
     kreise.sort(key=lambda k: (-k['laenge'], k['haeuser']))
+    # NUR NACH DEM FUEHRENDEN HAUS (neu 2026-10-03, Auswertung der Pruefberichte
+    # vom 03.10., Fehler 1; Pruefbericht Geburtshoroskop Schritt 1 vom 02.10.,
+    # dritter Lauf). 'kreise' ist rechnerisch gerechnet und traegt, ob ein Kreis
+    # nach der Schwellenlage-Regel haelt. Den umgekehrten Fall — ein Kreis, der
+    # sich NUR nach dem fuehrenden Haus schliesst — gab die Funktion nicht aus,
+    # obwohl bei einer Schwellenlage (bis 2°) laut Datenblatt-Modul das
+    # Nebenhaus die Deutung fuehrt; der Lauf musste ihn von Hand finden. Eine
+    # Grenzlage von 2-5° fuehrt rechnerisch und bekommt keinen eigenen Kreis
+    # ueber das Nebenhaus (Auswertung 03.10.: nur die fuehrende Fassung); bei
+    # offener Fuehrung (offen=) zaehlt das Nebenhaus gleich stark.
+    # Additiv unter eigenem Schluessel: 'kreise' und der Zeitscan bleiben, wie
+    # sie waren.
+    _rech = {frozenset(k['haeuser']) for k in kreise}
+    nur_f = []
+    for z in _zyklen(ziel_f):
+        if frozenset(z) in _rech:
+            continue
+        nur_f.append({
+            'haeuser': z, 'laenge': len(z), 'wechselseitig': len(z) == 2,
+            'glieder': [glied[h] for h in z],
+            'grenzlagen': [h for h in z if glied[h]['grenzlage']],
+            'haelt_bei_schwellenlage': True, 'nur_fuehrend': True})
+    nur_f.sort(key=lambda k: (-k['laenge'], k['haeuser']))
     return {'ziel': ziel, 'ziel_fuehrend': ziel_f, 'kreise': kreise,
+            'kreise_nur_fuehrend': nur_f,
+            'verschoben': {n: glied[n] for n in ziel if ziel_f[n] != ziel[n]},
             'wechselseitig': [k['haeuser'] for k in kreise if k['laenge'] == 2],
             'selbst': sorted(n for n, m in ziel.items() if n == m),
             'ohne_herrscher': ohne}
 
 
-def herrscher_einlauf(factors, cusps, klassisch=False):
+def herrscher_einlauf(factors, cusps, klassisch=False, offen=None):
     """Je Haus: welche Herrscher zeigen hinein? (neu 2026-09-12)
 
     'einlauf'      {haus: [Haeuser, deren Herrscher hier stehen]} — Haus 8 mit
@@ -1770,27 +1819,51 @@ def herrscher_einlauf(factors, cusps, klassisch=False):
                    8 und 9" —, mit ihrer Summe
     Gerechnet ueber das rechnerische Haus (wie haus_kreise); die Grenzlage steht
     in den Gliedern von haus_kreise() und wird hier nicht ein zweites Mal
-    gefuehrt.
+    gefuehrt. Seit 2026-10-03 zusaetzlich nach dem FUEHRENDEN Haus:
+    'einlauf_fuehrend', 'ohne_einlauf_fuehrend', 'schwerpunkt_fuehrend' und
+    'abweichend' (True, wenn ein Herrscher in Schwellenlage oder mit offener
+    Fuehrung — offen= wie bei haus_kreise() — den Einlauf verschiebt), dazu
+    'verschoben' aus haus_kreise().
     """
-    hk = haus_kreise(factors, cusps, klassisch=klassisch)
+    hk = haus_kreise(factors, cusps, klassisch=klassisch, offen=offen)
     ziel = hk['ziel']
     einlauf = {m: sorted(n for n, z in ziel.items() if z == m)
                for m in range(1, 13)}
     anzahl = {m: len(v) for m, v in einlauf.items()}
     buendel = sorted(((m, k) for m, k in anzahl.items() if k),
                      key=lambda x: (-x[1], x[0]))
-    gesamt = sum(anzahl.values())
-    schwer, summe = [], 0
-    for m, k in buendel:
-        if summe * 2 >= gesamt and gesamt:
-            break
-        schwer.append(m)
-        summe += k
+
+    def _schwerpunkt(anz):
+        bu = sorted(((m, k) for m, k in anz.items() if k),
+                    key=lambda x: (-x[1], x[0]))
+        ges = sum(anz.values())
+        hs, su = [], 0
+        for m, k in bu:
+            if su * 2 >= ges and ges:
+                break
+            hs.append(m)
+            su += k
+        return {'haeuser': hs, 'anzahl': su, 'von': ges}
+
+    # NACH DEM FUEHRENDEN HAUS (neu 2026-10-03, Auswertung 03.10., Fehler 1):
+    # Steht ein Herrscher in Schwellenlage, empfaengt nach der Fuehrungsregel
+    # das Nebenhaus ihn; „Ohne Einlauf" nannte sonst ein Haus, das nach dem
+    # fuehrenden Haus einen Verwalter hat. Additiv; die Schluessel oben bleiben
+    # rechnerisch.
+    ziel_f = hk['ziel_fuehrend']
+    einlauf_f = {m: sorted(n for n, z in ziel_f.items() if z == m)
+                 for m in range(1, 13)}
     return {'einlauf': einlauf, 'anzahl': anzahl,
             'ohne_einlauf': [m for m in range(1, 13) if not einlauf[m]],
             'buendelung': buendel,
-            'schwerpunkt': {'haeuser': schwer, 'anzahl': summe, 'von': gesamt},
-            'ohne_herrscher': hk['ohne_herrscher']}
+            'schwerpunkt': _schwerpunkt(anzahl),
+            'ohne_herrscher': hk['ohne_herrscher'],
+            'einlauf_fuehrend': einlauf_f,
+            'ohne_einlauf_fuehrend': [m for m in range(1, 13) if not einlauf_f[m]],
+            'schwerpunkt_fuehrend': _schwerpunkt(
+                {m: len(v) for m, v in einlauf_f.items()}),
+            'verschoben': hk['verschoben'],
+            'abweichend': einlauf_f != einlauf}
 
 
 def herrscher_spitzen_kontakt(factors, cusps, orb=SPITZEN_ORB, klassisch=False):
@@ -5689,6 +5762,16 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
             sb['haus_kipp_warnungen'] = haus_kipp_warnungen(_hk)
             sb['haus_kipp_ohne_fuehrung'] = haus_kipp_ohne_fuehrung(_hk)
             sb['fuehrung_offen'] = fuehrung_offen(_hk)      # 2026-09-30, K9
+            # 2026-10-03 (Gegenpruefung des Wartungslaufs): Haeuser-Kreise und
+            # Einlauf mit der offenen Fuehrung neu, damit §3 bei ihr „gleich
+            # stark" sagt und beide Lesarten nennt.
+            if sb['fuehrung_offen']:
+                _of = {w['name'] for w in sb['fuehrung_offen']}
+                sb['haus_kreise'] = haus_kreise(factors, cusps, offen=_of)
+                sb['haus_kreise_klassisch'] = haus_kreise(
+                    factors, cusps, klassisch=True, offen=_of)
+                sb['herrscher_einlauf'] = herrscher_einlauf(factors, cusps,
+                                                            offen=_of)
     # Zeichengrenze der Faktoren (neu 2026-09-19, W34): braucht jd_geburt und
     # pyswisseph.
     if jd_geburt is not None:
@@ -5813,6 +5896,21 @@ _OFFEN_WOHIN_TRANSIT = ('Gehört in den ⚠-Block und den Kopf der chart_data �
                 'zur Geburtszeit; im PDF steht es nur in der Haus-Spalte („=") und '
                 'ihrer Erklärung (radix.grenzlagen_note(); Gegenprobe g, '
                 'Chris-Entscheidung 2026-10-01).')
+
+
+def _nebenhaus_grund(glieder):
+    """Klammertext der §3-Zeilen ueber das Nebenhaus (neu 2026-10-03):
+    „Schwellenlage: Nebenhaus führt", bei offener Fuehrung „Führung offen bei
+    <Herrscher>: beide Häuser gleich stark", bei beidem beides. `glieder`
+    sind verschobene Glieder aus haus_kreise() ('herrscher', 'offen')."""
+    off = sorted({g['herrscher'] for g in glieder if g.get('offen')})
+    teile = []
+    if any(not g.get('offen') for g in glieder) or not off:
+        teile.append('Schwellenlage: Nebenhaus führt')
+    if off:
+        teile.append(f"Führung offen bei {', '.join(off)}: beide Häuser "
+                     f"gleich stark")
+    return '; '.join(teile)
 
 
 def strukturbild_text(sb, typ='geburtshoroskop'):
@@ -5993,10 +6091,28 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             for _kr in (_hk0.get('kreise') or []):
                 if (_kr['laenge'] == 2 and h['haus'] in _kr['haeuser']
                         and not _kr.get('haelt_bei_schwellenlage', True)):
-                    _z += (" — hält bei Schwellenlage NICHT (s. Häuser-Kreise, "
-                           "Nebenhaus führt)")
+                    _vg = [(_hk0.get('verschoben') or {})[x]
+                           for x in _kr['haeuser']
+                           if x in (_hk0.get('verschoben') or {})]
+                    if any(g.get('offen') for g in _vg):
+                        _z += (f" — hält über das Nebenhaus NICHT (s. Häuser-"
+                               f"Kreise; {_nebenhaus_grund(_vg)})")
+                    else:
+                        _z += (" — hält bei Schwellenlage NICHT (s. Häuser-"
+                               "Kreise, Nebenhaus führt)")
                     break
             mark.append(_z)
+        # 2026-10-03 (Gegenpruefung des Wartungslaufs): Ein Zweier-Kreis, der
+        # sich nur ueber das Nebenhaus schliesst, ist derselbe Sonderfall 4;
+        # vorher fehlte hier die Marke.
+        _hkn = sb.get('haus_kreise') or {}
+        for _kr in (_hkn.get('kreise_nur_fuehrend') or []):
+            if _kr['laenge'] == 2 and h['haus'] in _kr['haeuser']:
+                _vg = [(_hkn.get('verschoben') or {})[x] for x in _kr['haeuser']
+                       if x in (_hkn.get('verschoben') or {})]
+                mark.append(f"wechselseitig mit Haus "
+                            f"{[x for x in _kr['haeuser'] if x != h['haus']][0]}"
+                            f" — nur über das Nebenhaus ({_nebenhaus_grund(_vg)})")
         if mark:
             beteiligt.add(h['haus'])
         zusatz_ = f"  ⟵ {'; '.join(mark)}" if mark else ''
@@ -6007,18 +6123,27 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     # --- Haeuser-Kreise (neu 2026-09-12): die zweite Etage der Kreise --------
     hk = sb.get('haus_kreise')
     if hk is not None:
-        def _kreis_text(kr):
+        def _kreis_text(kr, quelle=None):
+            q = quelle if quelle is not None else hk
             teile = []
             for g in kr['glieder']:
                 teile.append(f"Haus {g['haus']} ({g['spitzenzeichen']}) → "
                              f"{g['herrscher']} in Haus {g['haus_spalte']}")
             txt = ' → '.join(teile) + f" → zurück zu Haus {kr['haeuser'][0]}"
             if kr['grenzlagen']:
+                _vg = [(q.get('verschoben') or {})[x] for x in kr['haeuser']
+                       if x in (q.get('verschoben') or {})]
+                if kr['haelt_bei_schwellenlage']:
+                    _nicht = ''
+                elif any(g.get('offen') for g in _vg):
+                    # 2026-10-03: bei offener Fuehrung „gleich stark"
+                    _nicht = (f" — über das Nebenhaus ({_nebenhaus_grund(_vg)})"
+                              f" schließt sich der Kreis NICHT")
+                else:
+                    _nicht = (' — nach der Schwellenlage-Regel (Nebenhaus führt) '
+                              'schließt sich der Kreis NICHT')
                 txt += (f"; Grenzlage bei Haus "
-                        f"{', '.join(str(x) for x in kr['grenzlagen'])}"
-                        + ('' if kr['haelt_bei_schwellenlage'] else
-                           ' — nach der Schwellenlage-Regel (Nebenhaus führt) '
-                           'schließt sich der Kreis NICHT'))
+                        f"{', '.join(str(x) for x in kr['grenzlagen'])}" + _nicht)
             return txt
         if hk['kreise']:
             for kr in hk['kreise']:
@@ -6027,8 +6152,23 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                 L.append(f"- Häuser-Kreis, {art}: {_kreis_text(kr)}.")
                 beteiligt.update(kr['haeuser'])
         else:
-            L.append('- Häuser-Kreise: keine — kein Zyklus unter den Haus-Herrschern '
+            L.append('- Häuser-Kreise rechnerisch: keine (modern gerechnet).'
+                     if hk.get('kreise_nur_fuehrend') else
+                     '- Häuser-Kreise: keine — kein Zyklus unter den Haus-Herrschern '
                      '(modern gerechnet).')
+        # 2026-10-03 (Fehler 1 der Auswertung 03.10.): Kreise, die sich nur nach
+        # dem fuehrenden Haus schliessen — vorher fehlten sie in §3 ganz.
+        # Seit der Gegenpruefung desselben Tages: Zweier-Kreise heissen wie die
+        # rechnerischen „Sonderfall 4", die Klammer nennt den Grund (Schwellen-
+        # lage oder offene Fuehrung).
+        for kr in hk.get('kreise_nur_fuehrend') or []:
+            art = ('wechselseitig (Sonderfall 4)' if kr['wechselseitig']
+                   else f"{kr['laenge']} Glieder")
+            _vg = [(hk.get('verschoben') or {})[x] for x in kr['haeuser']
+                   if x in (hk.get('verschoben') or {})]
+            L.append(f"- Häuser-Kreis nur über das Nebenhaus "
+                     f"({_nebenhaus_grund(_vg)}), {art}: {_kreis_text(kr)}.")
+            beteiligt.update(kr['haeuser'])
         hkk = sb.get('haus_kreise_klassisch')
         if hkk is not None:
             mod = {frozenset(k['haeuser']) for k in hk['kreise']}
@@ -6036,12 +6176,13 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
             if mod != kla:
                 L.append('- Klassisch gerechnet (Mars/Saturn/Jupiter für Skorpion/'
                          'Wassermann/Fische) ergeben sich andere Häuser-Kreise: '
-                         + ('; '.join(_kreis_text(k) for k in hkk['kreise'])
+                         + ('; '.join(_kreis_text(k, hkk) for k in hkk['kreise'])
                             or 'keine') + '.')
 
     # --- Herrscher-Einlauf (neu 2026-09-12) ------------------------------------
     he = sb.get('herrscher_einlauf')
     if he is not None:
+        _nh_grund = _nebenhaus_grund(list((he.get('verschoben') or {}).values()))
         L.append('- Herrscher-Einlauf (welche Herrscher zeigen in ein Haus): '
                  + ' · '.join(
                      f"{m}: {he['anzahl'][m]}"
@@ -6051,12 +6192,36 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
         L.append('- Ohne Einlauf (Bereiche, die keinen Verwalter empfangen): '
                  + (', '.join(f"Haus {m}" for m in he['ohne_einlauf']) or 'keiner')
                  + '.')
-        sp = he['schwerpunkt']
-        if sp['haeuser']:
-            hs = [str(x) for x in sp['haeuser']]
+        # 2026-10-03 (Fehler 1 der Auswertung 03.10.): dieselbe Zaehlung nach dem
+        # fuehrenden Haus, nur wo ein Herrscher in Schwellenlage sie verschiebt.
+        if he.get('abweichend'):
+            _dh = [m for m in range(1, 13)
+                   if he['einlauf_fuehrend'][m] != he['einlauf'][m]]
+            L.append(f'- Über das Nebenhaus gezählt ({_nh_grund}): ' + ' · '.join(
+                         f"{m}: {len(he['einlauf_fuehrend'][m])}"
+                         + (f" (aus Haus {', '.join(str(x) for x in he['einlauf_fuehrend'][m])})"
+                            if he['einlauf_fuehrend'][m] else '')
+                         for m in _dh)
+                     + '; ohne Einlauf: '
+                     + (', '.join(f"Haus {m}" for m in he['ohne_einlauf_fuehrend'])
+                        or 'keiner') + '.')
+        def _sp_txt(sp_):
+            hs = [str(x) for x in sp_['haeuser']]
             hs_txt = hs[0] if len(hs) == 1 else ', '.join(hs[:-1]) + ' und ' + hs[-1]
-            L.append(f"- Bündelung: {sp['anzahl']} von {sp['von']} Bereichen "
-                     f"lagern nach Haus {hs_txt} aus.")
+            return (f"{sp_['anzahl']} von {sp_['von']} Bereichen lagern nach "
+                    f"Haus {hs_txt} aus")
+        sp = he['schwerpunkt']
+        spf = he.get('schwerpunkt_fuehrend')
+        if sp['haeuser']:
+            if (he.get('abweichend') and spf and spf['haeuser']
+                    and (set(spf['haeuser']) != set(sp['haeuser'])
+                         or spf['anzahl'] != sp['anzahl'])):
+                # 2026-10-03 (Gegenpruefung des Wartungslaufs): dieselbe Luecke
+                # wie bei „Ohne Einlauf" — die Buendelung blieb rechnerisch.
+                L.append(f"- Bündelung rechnerisch: {_sp_txt(sp)}; über das "
+                         f"Nebenhaus ({_nh_grund}): {_sp_txt(spf)}.")
+            else:
+                L.append(f"- Bündelung: {_sp_txt(sp)}.")
 
     # --- Spitzen-Kontakte (neu 2026-09-12, schmale Pruefung, nur §3) -----------
     sk = sb.get('spitzen_kontakte')
@@ -7471,7 +7636,59 @@ if __name__ == '__main__':
     _zw = [k for k in _hk2['kreise'] if k['haeuser'] == [1, 2]][0]
     assert _zw['grenzlagen'] == [2] and _zw['haelt_bei_schwellenlage'] is False, _zw
 
+    assert _hk['kreise_nur_fuehrend'] == [] and _hk2['kreise_nur_fuehrend'] == []
+    # 2026-10-03: Ein Kreis, der sich NUR nach dem fuehrenden Haus schliesst.
+    # Neptun (Herrscher 12) 1°30' vor Spitze 10 -> rechnerisch Haus 9, fuehrend
+    # Haus 10; Saturn (Herrscher 10) steht in Haus 12 -> Kreis 10<->12 nur
+    # fuehrend. Erfundene Laenge, kein Chart.
+    _fk3 = [dict(f) for f in _fk]
+    _fk3[9]['lon'] = 268.5
+    _hk3 = haus_kreise(_fk3, _c)
+    assert [k['haeuser'] for k in _hk3['kreise']] == [[3, 5, 9], [1, 2]], _hk3['kreise']
+    assert [k['haeuser'] for k in _hk3['kreise_nur_fuehrend']] == [[10, 12]], _hk3
+    assert _hk3['kreise_nur_fuehrend'][0]['wechselseitig']
+    assert _hk3['kreise_nur_fuehrend'][0]['grenzlagen'] == [12]
+    _he3 = herrscher_einlauf(_fk3, _c)
+    assert _he3['ohne_einlauf'] == [6, 8, 10], _he3['ohne_einlauf']
+    assert _he3['ohne_einlauf_fuehrend'] == [6, 8], _he3['ohne_einlauf_fuehrend']
+    assert _he3['einlauf_fuehrend'][10] == [12] and 12 in _he3['einlauf'][9]
+    assert _he3['abweichend'] is True
+    _t3f = strukturbild_text(strukturbild(_fk3, _c))
+    assert 'Häuser-Kreis nur über das Nebenhaus (Schwellenlage: Nebenhaus ' \
+           'führt), wechselseitig (Sonderfall 4): Haus 10 (Steinbock)' in _t3f, _t3f
+    assert 'Über das Nebenhaus gezählt (Schwellenlage: Nebenhaus führt): ' \
+           '9: 1 (aus Haus 5) · 10: 1 (aus Haus 12); ohne Einlauf: Haus 6, Haus 8.' \
+           in _t3f, _t3f
+    assert ('Bündelung rechnerisch: 6 von 12 Bereichen lagern nach Haus 1, 5 '
+            'und 9 aus; über das Nebenhaus (Schwellenlage: Nebenhaus führt): '
+            '6 von 12 Bereichen lagern nach Haus 1, 5, 2 und 3 aus.') in _t3f, _t3f
+    assert ('wechselseitig mit Haus 12 — nur über das Nebenhaus (Schwellenlage: '
+            'Nebenhaus führt)') in _t3f and ('wechselseitig mit Haus 10 — nur '
+            'über das Nebenhaus (Schwellenlage: Nebenhaus führt)') in _t3f, _t3f
+    # 2026-10-03, offene Fuehrung (Gegenpruefung): Neptun bei 1°30' (offen)
+    # heisst „gleich stark", nicht „Nebenhaus führt"; bei 2°30' (offen) kommt
+    # die Nebenhaus-Lesart dazu, die ohne offen= fehlt. Erfundene Laengen.
+    _sb3o = strukturbild(_fk3, _c)
+    _sb3o['haus_kreise'] = haus_kreise(_fk3, _c, offen={'NEPTUN'})
+    _sb3o['herrscher_einlauf'] = herrscher_einlauf(_fk3, _c, offen={'NEPTUN'})
+    _t3o = strukturbild_text(_sb3o)
+    assert _sb3o['haus_kreise']['verschoben'][12]['offen'] is True
+    assert ('Häuser-Kreis nur über das Nebenhaus (Führung offen bei Neptun: '
+            'beide Häuser gleich stark), wechselseitig (Sonderfall 4)') in _t3o, _t3o
+    assert 'Über das Nebenhaus gezählt (Führung offen bei Neptun: beide ' \
+           'Häuser gleich stark): 9: 1' in _t3o, _t3o
+    assert 'Schwellenlage: Nebenhaus führt' not in _t3o, _t3o
+    _fk4 = [dict(f) for f in _fk]
+    _fk4[9]['lon'] = 267.5
+    assert haus_kreise(_fk4, _c)['kreise_nur_fuehrend'] == []
+    _hk4o = haus_kreise(_fk4, _c, offen={'Neptun'})
+    assert [k['haeuser'] for k in _hk4o['kreise_nur_fuehrend']] == [[10, 12]], _hk4o
+    assert list(_hk4o['verschoben']) == [12] and _hk4o['verschoben'][12]['offen']
+    assert herrscher_einlauf(_fk4, _c)['abweichend'] is False
+    assert herrscher_einlauf(_fk4, _c, offen={'Neptun'})['abweichend'] is True
+
     _he = herrscher_einlauf(_fk, _c)
+    assert _he['abweichend'] is False
     assert _he['einlauf'][1] == [2, 7, 12], _he['einlauf']
     assert _he['einlauf'][5] == [3, 6] and _he['einlauf'][3] == [9]
     assert _he['ohne_einlauf'] == [6, 8, 10], _he['ohne_einlauf']
