@@ -53,6 +53,12 @@ Chiron) fuer die Zwei-Modell-Probe. Zeitangaben ausserhalb des Fensters stehen
 NUR in diesen Abschnitten — nie selbst nachrechnen. Selbsttest:
 python3 transit.py --selbsttest.
 
+SEIT 2026-10-04 (Wartungslauf, Wiederholungshinweis): "Frühere Durchgänge mit
+Datum und Alter" fuehrt nur Durchgaenge derselben Haelfte des Umlaufs wie der im
+Fenster (Konjunktion und Opposition: alle). Vorher standen beide Haelften
+ungekennzeichnet in der Liste, und #1 war oft ein Sextil, Quadrat oder Trigon von
+der anderen Seite.
+
 Radix kommt aus der bereits gerechneten <klient>_chart_data.md (factors/achsen-
 Block) — NIE neu rechnen (Token-Oekonomie, s. Kern). Die Koch-Hausspitzen werden
 aus derselben Datei gelesen, wenn sie dort maschinenlesbar (cusps-Liste) oder als
@@ -473,6 +479,12 @@ def wrap180(x): return (x+180.0)%360.0-180.0
 def orb_for(tlon,rlon,a):
     d=wrap180(tlon-rlon)
     return min(abs(wrap180(d-a)),abs(wrap180(d+a)))
+def _seite(tlon,rlon,a):
+    """Haelfte des Umlaufs (2026-10-04): +1, wenn der Transiter nahe +a vom
+    Radixpunkt steht (der Zweig, den orb_for() fuer d-a nimmt), -1 nahe -a.
+    Nur fuer 0 < a < 180 sinnvoll; Konjunktion und Opposition haben eine Haelfte."""
+    d=wrap180(tlon-rlon)
+    return 1 if abs(wrap180(d-a))<=abs(wrap180(d+a)) else -1
 def jd_of(d,h=12.0): return swe.julday(d.year,d.month,d.day,h)
 def deg2sign(lon):
     s=int(lon//30)%12; d=lon-30*(lon//30); dd=int(d); mm=int(round((d-dd)*60))
@@ -793,7 +805,9 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     dem Rueckblick), `fortsetzung` (Passage laeuft nach dem Fenster weiter) und
     die Sammelfelder `exakt_gesamt`, `wirkorb_von_gesamt`, `wirkorb_bis_gesamt`;
     `fruehere_durchgaenge` fuehrt je Wirkorb-Kontakt der langsamen Transiter die
-    frueheren Durchgaenge mit Datum und Alter. Schema:
+    frueheren Durchgaenge mit Datum und Alter — seit 2026-10-04 nur die in
+    derselben Haelfte des Umlaufs wie der Durchgang, der den Kontakt in die Liste
+    bringt (bei Konjunktion und Opposition alle; s. _seite()). Schema:
     log/SCHNITTSTELLE_events_json.md des Wartungslaufs 2026-09-19.
 
     `selbst_transit` / `lebensmitte` (2026-09-24): `selbst_transit` steht an JEDEM
@@ -1217,10 +1231,15 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     # (c) fuer jeden Langlaeufer und jeden Selbst-Transit (Rang 1, W55) mit
     # Wirkorb im Fenster — dieselbe Menge in Report und JSON.
     fruehere=[]
-    fr_keys={(e['transit'],e['ziel'],e['aspekt']) for e in events
-             if _ist_langlaeufer(e) or (e['selbst_transit'] and not e['spiegel']
-                                         and e['transit']!='Mars'
-                                         and e['wirkorb_im_fenster'])}
+    # 2026-10-04: je Kontakt der frueheste Durchgang, der ihn in die Liste bringt —
+    # an ihm haengt die Haelfte des Umlaufs (seite0 unten). Dieselbe Menge wie bisher.
+    fr_erst={}
+    for e in sorted(events, key=lambda e: e['weit_von']):
+        if _ist_langlaeufer(e) or (e['selbst_transit'] and not e['spiegel']
+                                   and e['transit']!='Mars'
+                                   and e['wirkorb_im_fenster']):
+            fr_erst.setdefault((e['transit'],e['ziel'],e['aspekt']), e)
+    fr_keys=set(fr_erst)
     reihenfolge=[t for t,_,_ in transiters]
     for k in sorted(fr_keys, key=lambda k:(0 if k[1] in primary else 1,
                                            reihenfolge.index(k[0]), k[1], k[2])):
@@ -1229,6 +1248,19 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
         if hist_start<t0:
             H,o_h=hist_orbs(k); nh=len(H)
             e0=events[erstes[k]]
+            # 2026-10-04 (Chris-Entscheidung zum Wiederholungshinweis: gleiche
+            # Zyklushaelfte): Ein Aspekt ausser Konjunktion und Opposition kommt je
+            # Umlauf zweimal vor, bei +w und -w; orb_for() misst beide gleich, und die
+            # Liste fuehrte beide Haelften — "#1 = der juengste" (Transit-Modul) nahm
+            # so oft die andere (Prueflauf Transit Schritt 2 vom 04.10., FFU). Jetzt
+            # nur Durchgaenge auf derselben Seite wie der Durchgang, der den Kontakt
+            # in die Liste bringt (fr_erst). Im 24-Monats-Fenster mit Rueckblick
+            # liegen nie beide Haelften im Rechenzeitraum (knappster Fall Chiron im
+            # Quincunx am Perihel, wieder um 2046); bei laengerem Fenster gilt die
+            # Liste fuer den ersten solchen Durchgang.
+            seite0=(None if w_%180==0 else
+                    _seite(swe.calc_ut(jd_of(date.fromisoformat(fr_erst[k]['weit_von'])),
+                                       pl,flag)[0][0], rl,w_))
             grenze=((date.fromisoformat(e0['vorlauf']['von'])-hist_start).days-1
                     if e0['vorlauf'] else nh-2)
             pas=[]
@@ -1242,6 +1274,8 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
                 if (ia==0 and geb is not None and an=='Konjunktion'
                         and ist_selbst_transit(tn,rn)):
                     continue            # Rueckkehr-Konjunktion bei der Geburt = Radix selbst
+                if seite0 is not None and _seite(H[ia][1],rl,w_)!=seite0:
+                    continue            # andere Haelfte des Umlaufs (2026-10-04)
                 s=_abschnitt(pl,flag,rl,w_,H,hist_start,ia,ib,orb,orb_weit)
                 if s['min_orb']>orb:
                     continue                                    # kein Wirkorb-Durchgang
@@ -1766,6 +1800,9 @@ def format_report(res):
         out.append(f"  Je Langlaeufer und Selbst-Transit mit Wirkorb im Fenster: fruehere "
                    f"Durchgaenge durch den Wirkorb ({res['orb_wirk']}°), #1 = der juengste, "
                    f"getrennt durch ' · '. Datum = Nulldurchgang.")
+        out.append("  Nur Durchgaenge in derselben Haelfte des Umlaufs wie der im Fenster; die "
+                   "andere Haelfte zaehlt nicht als Wiederholung (Konjunktion und Opposition "
+                   "haben nur eine).")
         if alter:
             out.append("  Alter = vollendete Lebensjahre am Datum (das „n. Lebensjahr\" ist "
                        "Alter + 1). Rueckgerechnet bis zur Geburt.")
@@ -2306,6 +2343,36 @@ def _selbsttest(still=False):
                        for g in f0['durchgaenge'] for x in g['exakt']),
                    "W3: ohne --geburt darf kein Alter stehen")
 
+        # --- Z04 (2026-10-04): fruehere Durchgaenge nur dieselbe Haelfte ------
+        # Jupiter im Sextil zum eigenen Geburtsort: zunehmend (+60) und abnehmend
+        # (-60) kommen je Umlauf einmal. Je ein Fenster um einen zunehmenden und
+        # um einen abnehmenden Durchgang; gemessen wird unabhaengig von _seite()
+        # am Vorzeichen des Abstands, und die Liste muss genau die erwarteten
+        # Durchgaenge fuehren (Alter auf Moshier, konstruierter Geburts-JD; die
+        # alte Fassung lieferte beide Haelften gemischt).
+        for vz, von, erw_alter in ((+1, 8500, [13, 1]), (-1, 11500, [21, 9])):
+            rz = [(jg + von + k, lon(swe.JUPITER, jg + von + k),
+                   swe.calc_ut(jg + von + k, swe.JUPITER, FL)[0][3]) for k in range(2000)]
+            kz = _nulldurchgaenge(swe.JUPITER, FL, (jup0 + vz * 60.0) % 360.0, rz)
+            pruefe(bool(kz), f"Z04: Jupiter-Sextil (Seite {vz:+d}) im Testaufbau nicht gefunden")
+            if not kz:
+                continue
+            res = run({'Jupiter': jup0}, start=d_from_jd(kz[0]), months=3, lookback_months=3,
+                      ohne_chiron=True, moseph=True, jd_geburt=jg)
+            fr = {(f['transit'], f['aspekt'], f['ziel']): f for f in res['fruehere_durchgaenge']}
+            f = fr.get(('Jupiter', 'Sextil', 'Jupiter'))
+            dg = f['durchgaenge'] if f else []
+            vorz = [1 if wrap180(lon(swe.JUPITER, jd_of(date.fromisoformat(g['min_orb_datum'])))
+                                 - jup0) > 0 else -1 for g in dg]
+            pruefe(bool(dg) and all(v == vz for v in vorz),
+                   f"Z04: Seite {vz:+d} — gelistet {vorz}")
+            pruefe([g['min_orb_alter'] for g in dg] == erw_alter,
+                   f"Z04: Seite {vz:+d} — Alter {[g['min_orb_alter'] for g in dg]} statt {erw_alter}")
+            pruefe([g['nr'] for g in dg] == list(range(1, len(dg) + 1)),
+                   "Z04: Nummern nicht fortlaufend")
+            pruefe('derselben Haelfte des Umlaufs' in format_report(res),
+                   "Z04: Report-Kopf nennt die Haelfte nicht")
+
         # --- W46 / F20: Zusatz-Zeitmasse --------------------------------------
         ERZWINGE_MOSEPH = True
         s0 = lon(swe.SUN, jg)
@@ -2442,7 +2509,7 @@ def _selbsttest(still=False):
                 print("  - " + f_)
         else:
             print("Selbsttest transit.py: alle Faelle gruen (W1, W3, W45, W46, W55, F20, F21, "
-                  "Glueckspunkt ausgemustert, Zwei-Modell-Probe)")
+                  "Glueckspunkt ausgemustert, Zwei-Modell-Probe, Z04 Zyklushaelfte)")
     return not fehler
 
 
