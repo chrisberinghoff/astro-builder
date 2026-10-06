@@ -44,7 +44,9 @@ wandert das GANZE Sonnenzeichen-Kapitel in die gelesene Gruppe 'Sonnenzeichen'
 statt nur seiner Kernabschnitte in die ueberspringbare 'Sonnenzeichen-Hintergrund'
 (s. SONNENZEICHEN-KERN); (b) der Grenzlagen-Warnblock
 sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob beide nur angegeben
-werden (Registerzeile). Ohne das Feld verhaelt sich alles wie zuvor — das Feld
+werden (Registerzeile); (c) seit 2026-10-06 bei Chiron, Lilith und Pholus: ihr
+Haus (und Grenzlagen-Nebenhaus) bekommt die allgemeine Hausbeschreibung HAUS_n_ALLG
+wie ein Planetenhaus. Ohne das Feld verhaelt sich alles wie zuvor — das Feld
 ist optional und additiv.
 Die Methoden-Segmente der Spezialfaktoren (_ALLG/_SEC_*) bleiben seit dem
 2026-09-19 (W59, Chris-Entscheidung Frage 16) AUCH bei `fuehrt=ja` in der
@@ -768,13 +770,17 @@ def build_requests(chart, typ=None):
             if h:
                 add('Spezialfaktor', src, '%s_HAUS_%s' % (nm, h))
                 got.append('%s_HAUS_%s' % (nm, h))
-                if nm == 'MONDKNOTEN':
+                # 2026-10-06 (Auswertung 05.10., Chris: ja): Fuehrt ein Spezialfaktor
+                # ein Thema (`fuehrt=ja`), bekommt sein Haus die allgemeine
+                # Hausbeschreibung HAUS_n_ALLG wie ein Planetenhaus — vorher nur der
+                # Mondknoten, und ein Haus mit nur Chiron/Lilith/Pholus blieb ohne sie.
+                if nm == 'MONDKNOTEN' or f.get('fuehrt'):
                     haeuser.add(int(h))
             if nh:
                 add('Spezialfaktor', src, '%s_HAUS_%s' % (nm, nh),
                     'Grenzlage aus Haus %s' % h)
                 got.append('%s_HAUS_%s [Grenzlage]' % (nm, nh))
-                if nm == 'MONDKNOTEN':
+                if nm == 'MONDKNOTEN' or f.get('fuehrt'):
                     haeuser.add(int(nh))
         else:
             # Weder Planet noch bekannter Spezialfaktor: FRUEHER fiel dieser
@@ -1452,6 +1458,19 @@ def _selbsttest():
     assert 'GLUECKSPUNKT' not in SPEZFILE and 'GLUECKSPUNKT' not in SPEZSET
     req, prot, grenz = build_requests(chart)
     g = dict((x['faktor'], x) for x in grenz)
+    # 2026-10-06: Spezialfaktor mit `fuehrt=ja` bringt HAUS_n_ALLG mit, ohne nicht.
+    # Konstruiert: Chiron (fuehrt=ja) allein in Haus 2; Lilith/Pholus ohne Fuehrung.
+    _blk_h = '\n'.join(['@@SELEKTOR',
+                        'FAKTOR SONNE zeichen=Widder haus=1',
+                        'FAKTOR LILITH zeichen=Krebs haus=4 fuehrt=ja',
+                        'FAKTOR PHOLUS zeichen=Schütze haus=9 nebenhaus=10 abstand=1.20',
+                        'FAKTOR CHIRON zeichen=Stier haus=2',
+                        'ACHSE AC zeichen=Widder',
+                        '@@ENDE'])
+    _keys_h = [k for _g, _s, k, _n in build_requests(parse_chart(_blk_h))[0]]
+    assert 'HAUS_1_ALLG' in _keys_h and 'HAUS_4_ALLG' in _keys_h, _keys_h
+    assert not ({'HAUS_2_ALLG', 'HAUS_9_ALLG', 'HAUS_10_ALLG'} & set(_keys_h)), _keys_h
+    assert 'HAUS_2_ALLG' in [k for _g, _s, k, _n in req], 'Chiron fuehrt=ja in Haus 2'
     # W35: Wortform, echte Umlaute, keine Gradzahl; fuehrendes Haus vorn
     assert signatur_notation(g['MOND']) == \
         'Mond im zwölften Haus, dicht an der Schwelle aus dem elften'
@@ -1671,7 +1690,8 @@ def _selbsttest():
           'Nur-Liste-Modus (W40), Glueckspunkt ausgemustert, '
           'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II), '
           'offene Fuehrung (K9), Blockende und ASPEKT KEINE (K2-01.10.), '
-          'Spezialfaktor-Paare und Kipp-Notiz (03.10.)]')
+          'Spezialfaktor-Paare und Kipp-Notiz (03.10.), '
+          'Hausbeschreibung bei fuehrendem Spezialfaktor (06.10.)]')
 
 
 def main():

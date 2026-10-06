@@ -6822,10 +6822,24 @@ _P18_ZWISCHEN_RE = re.compile(_P18_GRENZ + r"zwischen\s+(?:dein\w*\s+)?(?P<a>%s)
                               r"(?P<b>%s)" % (_FAKTOR_RE, _FAKTOR_RE) + _P18_ENDE)
 
 
-def _p18_dokument(p, d, satz, ort):
+# 2026-10-06 (FFU aus dem Pruefbericht Geburtshoroskop 3+4 vom 05.10.): „Beide stehen
+# vollstaendig in der Aspekttabelle." nannte die Paare nur im Satz davor — die Probe
+# fand im Satz selbst kein Paar und schwieg. Jetzt gilt: Nennt die Klausel kein Paar
+# und verweist mit „beide", „sie", „diese" oder „es" zurueck, nimmt die Probe die
+# Paare des Satzes davor (nur im selben Absatz, wie `vorher`). Still bleiben eine
+# Verneinung in derselben Klausel („In der Aspekttabelle stehen beide nicht") und
+# Saetze ueber die UEBRIGEN Verbindungen („Alle anderen stehen in der Aspekttabelle").
+_P18_RUECKVERWEIS_RE = re.compile(_P18_GRENZ + r"(?:[Bb]eide|[Ss]ie|[Dd]iese|[Ee]s)" + _P18_ENDE)
+_P18_DOK_STILL_RE = re.compile(_P18_GRENZ + r"(?:nicht|kein\w*|übrig\w*|ander\w*|weiter\w*|sonstig\w*|"
+                               r"restlich\w*)" + _P18_ENDE)
+
+
+def _p18_dokument(p, d, satz, ort, vorher=""):
     """„… in der Aspekttabelle: <Paare>" — jedes Paar muss in den
     Tabellen stehen, die das Dokument zeigt (voll, einseitig, neben; Untergrund nur
-    mit gedeutet=ja). Ein „nicht in der Aspekttabelle" bleibt still."""
+    mit gedeutet=ja). Ein „nicht in der Aspekttabelle" bleibt still.
+    Seit 2026-10-06: Ohne Paar in der Klausel und mit Rueckverweis („Beide stehen
+    vollstaendig in der Aspekttabelle.") gelten die Paare des Satzes davor."""
     n = 0
     for m in _P18_TABELLE_RE.finditer(satz):
         if m.group("neg"):
@@ -6839,6 +6853,12 @@ def _p18_dokument(p, d, satz, ort):
             bereich = satz[a:m.start()]
         paare = [(kanon(x.group("a")), kanon(x.group("b"))) for x in _P18_ZWISCHEN_RE.finditer(bereich)]
         paare += [(fa[0], fb[0]) for fa, _art, fb, _t in _konstellationen(bereich) if fa and fb]
+        if not paare and vorher:
+            ka, ke = _p18_klausel(satz, m.start())
+            klausel = satz[ka:ke]
+            if _P18_RUECKVERWEIS_RE.search(klausel) and not _P18_DOK_STILL_RE.search(klausel):
+                paare = [(kanon(x.group("a")), kanon(x.group("b"))) for x in _P18_ZWISCHEN_RE.finditer(vorher)]
+                paare += [(fa[0], fb[0]) for fa, _art, fb, _t in _konstellationen(vorher) if fa and fb]
         befunde = []
         for a_, b_ in dict.fromkeys(paare):
             paar = frozenset((a_, b_))
@@ -7756,7 +7776,7 @@ def _p18_satzarten(chapters, typ, txt, themen, tabelle, events=None, sprache_ana
         _p18_herrscher(p, d, satz, satzliste, i, ort)
         _p18_kapitelverweis(p, d, satz, ort, eigenes, chapters)
         _p18_modulwort(p, chapters, satz, ort)
-        _p18_dokument(p, d, satz, ort)
+        _p18_dokument(p, d, satz, ort, vorher)
         _p18_rang(p, d, satz, vorher, ort)
         _p18_anteil(p, d, satz, ort)
         if transit and events:
@@ -9650,6 +9670,28 @@ def _selbsttest(still=False):
     berichte.append("Lauf 12 (P18 Geburtshoroskop): stimmige Sätze still, je Satzart der Widerspruch "
                     "gemeldet (Leere, Herrscher, Kapitelverweis, Titel, Abschnitt, Signatur, Modulwort, "
                     "Dokument, Rang, Anteil)")
+    # 12b) 2026-10-06 (FFU 05.10.): Rueckverweis auf die Paare des Satzes davor. Konstruiert.
+    _c12b = c12.replace("| 0°20′ | ja |", "| 0°20′ | nein |")
+
+    def _p18_12b(rechenschaft):
+        return lauf(_c12b, _a12([], [], [], rechenschaft, []))["proben"]["P18"]
+    _r = _p18_12b(["Im Untergrund liegen Spannungen zwischen Mond und Mars und zwischen Merkur und Saturn. "
+                   "Beide stehen vollständig in der Aspekttabelle."])
+    _dok = [z for z in _r["pruefen"] if "— Dokument:" in z]
+    assert len(_dok) == 1 and "Mond Anderthalbquadrat Mars 1°30′ steht nur im Untergrund" in _dok[0] \
+        and "Merkur Halbquadrat Saturn 0°20′ steht nur im Untergrund" in _dok[0], ("Lauf 12b Beide", _r["pruefen"])
+    _r = _p18_12b(["Im Untergrund liegt eine Spannung zwischen Mond und Mars. Sie steht in der Aspekttabelle."])
+    assert [z for z in _r["pruefen"] if "— Dokument:" in z], ("Lauf 12b Sie", _r["pruefen"])
+    for _still in ("Im Untergrund liegen Spannungen zwischen Mond und Mars und zwischen Merkur und Saturn. "
+                   "In der Aspekttabelle stehen beide nicht.",
+                   "Im Untergrund liegt eine Spannung zwischen Mond und Mars. "
+                   "Alle anderen Verbindungen stehen in der Aspekttabelle.",
+                   "Im Untergrund liegt eine Spannung zwischen Mond und Mars.\n\n"
+                   "Sie steht vollständig in der Aspekttabelle."):
+        _r = _p18_12b([_still])
+        assert not [z for z in _r["pruefen"] if "— Dokument:" in z], ("Lauf 12b still", _still, _r["pruefen"])
+    berichte.append("Lauf 12b (P18 Dokument, Rückverweis): „Beide/Sie … in der Aspekttabelle“ hält die Paare "
+                    "des Satzes davor; Verneinung, „alle anderen“ und neuer Absatz bleiben still")
     # 13) P18 Transit: Zeit, Zugleich, Station, Anzahl, Wiederholung, Zeichenaufenthalt
     tc13, ta13, tev13, w13 = _transit_fall()
     for _x in tev13["jetzt"]["im_orb"]:
