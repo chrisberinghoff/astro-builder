@@ -1816,8 +1816,18 @@ def format_report(res):
             kopf=(f"  [{'P' if k['primaer'] else ' '}] {k['transit']:7s} "
                   f"{k['aspekt']:11s} {k['ziel']:12s} ")
             if not k['durchgaenge']:
-                out.append(kopf + ("keiner seit der Geburt" if alter
-                                   else f"keiner seit {rr.get('horizont')}"))
+                # 2026-10-07b (Auswertung der Pruefberichte vom 07.10., zweite Runde): Bei
+                # Aspekten mit zwei Haelften heisst eine leere Liste nur „keiner in DIESER
+                # Haelfte". Ein Transit-Text machte aus „keiner seit der Geburt" ein „gab es
+                # seit deiner Geburt nicht", obwohl es den Aspekt aus der anderen Haelfte des
+                # Umlaufs schon gegeben hatte. inhaltsprobe P18 prueft die Verneinung seither
+                # mit (_p18_nie_seit_geburt). transitdata liest nur den Anfang „keiner".
+                seit = "der Geburt" if alter else str(rr.get('horizont'))
+                if k['aspekt'] in ('Konjunktion', 'Opposition'):
+                    out.append(kopf + f"keiner seit {seit}")
+                else:
+                    out.append(kopf + f"keiner in dieser Haelfte seit {seit} "
+                                      f"(die andere Haelfte fuehrt dieser Abschnitt nicht)")
             else:
                 out.append(kopf + " · ".join(_frueher_text(g, alter)
                                              for g in k['durchgaenge']))

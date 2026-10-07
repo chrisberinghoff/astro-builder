@@ -5855,7 +5855,8 @@ def _p17_subjekt(chapters, typ, sprache_analyse="de"):
 #                  engen Wirkbereich" — gegen THEMA-Zeile bzw. Jetzt-Liste.
 #   Wiederholung   „zuletzt …, als du n warst" — gegen die frueheren Durchgaenge
 #                  GENAU DIESES Kontakts (P11 haelt das Alter nur gegen alle Alter);
-#                  seit 2026-10-07 bei Aspekten mit zwei Haelften auch die Stellung.
+#                  seit 2026-10-07 bei Aspekten mit zwei Haelften auch die Stellung;
+#                  seit 2026-10-07b auch die Verneinung („seit deiner Geburt nie").
 # Was nur ein Leser pruefen kann (falsche Praemissen, Deutung, „so eng wie kaum
 # sonst"), bleibt draussen.
 
@@ -7769,6 +7770,90 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
 
 
 
+# --- Transit: verneinter Wiederholungshinweis --------------------------------------
+# 2026-10-07b (Auswertung der Pruefberichte vom 07.10., zweite Runde): Ein Transit-Text
+# schrieb „Keine dieser Verbindungen gab es seit deiner Geburt" — zwei der Verbindungen
+# hatte es aus der ANDEREN Haelfte des Umlaufs schon gegeben. `fruehere_durchgaenge` fuehrt
+# seit dem transit.py-Stand vom 2026-10-04 nur dieselbe Haelfte; eine leere Liste heisst
+# nicht, dass es den Aspekt seit der Geburt nie gab. Die Verneinung frueherer Durchgaenge
+# („… gab es seit deiner Geburt nicht", „zum ersten Mal in deinem Leben") braucht deshalb
+# bei Aspekten mit zwei Haelften die Stellung (_p18_stellung_genannt), und sie ist falsch,
+# sobald in derselben Haelfte schon ein Durchgang lief. Bezug: Kontakte im Satzteil; ohne
+# sie bei einem Plural („dieser Verbindungen") alle Kontakte des Kapitels, sonst der
+# Satzteil oder Satz davor, sonst der fuehrende Kontakt (wie in _p18_wiederholung). Ohne „seit deiner Geburt"/„in deinem Leben" bleibt die
+# Probe still — „wird zum ersten Mal genau" meint die laufende Passage.
+_P18_NIE_ANKER_RE = re.compile(
+    _P18_GRENZ + r"(?:seit\s+deiner\s+Geburt|in\s+deinem\s+(?:ganzen\s+|bisherigen\s+)?Leben)"
+    + _P18_ENDE, re.I)
+_P18_NIE_VERNEINUNG_RE = re.compile(
+    _P18_GRENZ + r"(?:kein(?:e|er|en|em|es)?|nicht|nie|niemals|zum\s+ersten\s+Mal|erstmals"
+    r"|das\s+erste\s+Mal)" + _P18_ENDE, re.I)
+_P18_NIE_BEZUG_RE = re.compile(
+    _P18_GRENZ + r"(?:Verbindung\w*|Durchg[aä]ng\w*|Kontakt\w*|Runde\w*|Berührung\w*|Rückkehr"
+    r"|stand|standen|gab\s+es|gegeben)" + _P18_ENDE, re.I)
+_P18_NIE_PLURAL_RE = re.compile(
+    _P18_GRENZ + r"(?:Verbindungen|Durchgänge|Kontakte|Berührungen|Runden)" + _P18_ENDE, re.I)
+
+
+def _p18_nie_seit_geburt(p, d, satz, vorher, ort, kapitel_kontakte):
+    """„Keine dieser Verbindungen gab es seit deiner Geburt", „… zum ersten Mal in deinem
+    Leben" — die Verneinung frueherer Durchgaenge (s. Kommentar oben). PRUEFEN, wenn ein
+    gemeinter Kontakt in derselben Haelfte schon einen frueheren Durchgang hat (mit Alter),
+    oder wenn er nur Aspekte mit zwei Haelften hat und der Satzteil die Stellung nicht
+    nennt — die andere Haelfte fuehrt der Report nicht."""
+    if not d["frueher"] or not _P18_NIE_ANKER_RE.search(satz):
+        return 0
+    befunde = []
+    teile = satz.split(";")
+    for i_t, teil in enumerate(teile):
+        if not (_P18_NIE_ANKER_RE.search(teil) and _P18_NIE_VERNEINUNG_RE.search(teil)
+                and (_P18_NIE_BEZUG_RE.search(teil) or ASPEKT_RE.search(teil))):
+            continue
+        paare, _ls = _p18_kontakte(teil, d["frueher"])
+        if not paare and _P18_NIE_PLURAL_RE.search(teil):      # „Keine dieser Verbindungen …“
+            paare = [(t, z) for (t, _a, z, _f) in kapitel_kontakte if (t, z) in d["frueher"]]
+        davor = teile[i_t - 1] if i_t else vorher
+        if not paare and davor:
+            paare, _l = _p18_kontakte(davor, d["frueher"])
+        arten = {_art(m.group(1)) if m.group(1) else _ASP_GLYPH.get(m.group(2))
+                 for m in ASPEKT_RE.finditer(teil)}
+        arten.discard(None)
+        if not paare:
+            paare = [(t, z) for (t, _a, z, f) in kapitel_kontakte
+                     if f == "fuehrt" and (t, z) in d["frueher"]]
+        paare = list(dict.fromkeys(paare))
+        if not paare:
+            continue
+        p.geprueft += 1
+        stellung = _p18_stellung_genannt(teil)
+        gewesen, zwei = [], []
+        for t, z in paare:
+            arten_k = arten or {art for (tt, art, zz, _f) in kapitel_kontakte if (tt, zz) == (t, z)}
+            eintraege = d["frueher"][(t, z)]
+            gefiltert = [f for f in eintraege if not arten_k or f.get("aspekt") in arten_k] or eintraege
+            for f in gefiltert:
+                name = "%s %s %s" % (ANZEIGE.get(t, t), f.get("aspekt"), ANZEIGE.get(z, z))
+                alter = set()
+                for dg in f.get("durchgaenge") or []:
+                    alter |= {x.get("alter") for x in dg.get("exakt") or [] if x.get("alter") is not None}
+                    if dg.get("min_orb_alter") is not None:
+                        alter.add(dg["min_orb_alter"])
+                if f.get("durchgaenge"):
+                    gewesen.append("%s (Alter %s)" % (name, ", ".join(map(str, sorted(alter))) or "?"))
+                elif f.get("aspekt") not in _P18_EINE_HAELFTE and not stellung:
+                    zwei.append(name)
+        if gewesen:
+            befunde.append("verneint frühere Durchgänge, aber in derselben Hälfte des Umlaufs lief "
+                           "schon einer — %s" % ", ".join(dict.fromkeys(gewesen)))
+        if zwei:
+            befunde.append("verneint frühere Durchgänge ohne Stellung — %s: der Report führt nur "
+                           "Durchgänge derselben Hälfte des Umlaufs; aus der anderen kann es seit "
+                           "der Geburt schon einen gegeben haben. Die Stellung nennen („so wie "
+                           "jetzt“) oder den Satz streichen (Transit-Modul, Wiederholungshinweis)"
+                           % ", ".join(dict.fromkeys(zwei)))
+    return _p18_melde(p, ort, satz, "Wiederholung", befunde)
+
+
 # --- P18: Zusammenbau -----------------------------------------------------------
 
 def _p18_daten(chapters, typ, txt, themen, tabelle, events):
@@ -7828,6 +7913,7 @@ def _p18_satzarten(chapters, typ, txt, themen, tabelle, events=None, sprache_ana
             _p18_station(p, d, satz, ort, vorher)
             _p18_anzahl(p, d, satz, ort, kapitel_kontakte)
             _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte)
+            _p18_nie_seit_geburt(p, d, satz, vorher, ort, kapitel_kontakte)
     _p18_signatur(p, d, chapters)
     if p.geprueft == 0 and not p.pruefen:
         p.hinweise.append("keine Aussage der geprüften Satzarten im Text gefunden")
@@ -9809,6 +9895,32 @@ def _selbsttest(still=False):
         ("Lauf 13c: stimmige Wiederholung gemeldet", r13c["pruefen"])
     berichte.append("Lauf 13c (P18 Wiederholung, Stellung): Quadrat ohne Stellung gemeldet, auch mit "
                     "richtigem Alter; „so wie jetzt“, „vom … aus“, „Dieselbe Frage“ und Konjunktion still")
+    # 13d) 2026-10-07b: verneinter Wiederholungshinweis („seit deiner Geburt nie“)
+    tev13d = json.loads(json.dumps(tev13c))
+    tev13d["fruehere_durchgaenge"] += [
+        {"transit": "Uranus", "aspekt": "Trigon", "ziel": "Mond", "primaer": True,
+         "selbst_transit": False, "durchgaenge": []},
+        {"transit": "Pluto", "aspekt": "Konjunktion", "ziel": "Mond", "primaer": True,
+         "selbst_transit": False, "durchgaenge": []}]
+    falsch13d = ["Uranus stand seit deiner Geburt noch nie im Trigon zu deinem Mond.",
+                 "Der Mondknoten stand seit deiner Geburt nie auf deinem Merkur.",
+                 "Keine dieser Verbindungen gab es seit deiner Geburt."]
+    still13d = ["Uranus stand seit deiner Geburt noch nie so wie jetzt im Trigon zu deinem Mond.",
+                "Pluto stand seit deiner Geburt nie auf deinem Mond.",
+                "Seit deiner Geburt hat sich viel verändert.",
+                "Im Juni wird das Trigon des Uranus zu deinem Mond zum ersten Mal genau."]
+    r13d = lauf(tc13, _a13(falsch13d + still13d), dict(tev13d, stations=_st13(0.2)))["proben"]["P18"]
+    _st13d = [z for z in r13d["pruefen"] if "verneint frühere Durchgänge" in z]
+    assert len(_st13d) == 3 and all(any("„%s“" % f in z for z in _st13d) for f in falsch13d), \
+        ("Lauf 13d: Verneinung nicht gemeldet", r13d["pruefen"])
+    assert any("ohne Stellung — Uranus Trigon Mond" in z for z in _st13d), ("Lauf 13d: Stellung", _st13d)
+    assert any("Konjunktion Merkur (Alter 18)" in z for z in _st13d), ("Lauf 13d: Alter", _st13d)
+    assert not [z for z in _st13d for f in still13d if "„%s“" % f in z], \
+        ("Lauf 13d: stimmige Verneinung gemeldet", _st13d)
+    berichte.append("Lauf 13d (P18 Wiederholung, Verneinung): „seit deiner Geburt nie“ bei zwei Hälften "
+                    "ohne Stellung gemeldet, ebenso bei einem früheren Durchgang derselben Hälfte und für "
+                    "„Keine dieser Verbindungen“; mit „so wie jetzt“, bei Konjunktion ohne Durchgang, "
+                    "ohne Verneinung und ohne „seit deiner Geburt“ still")
 
     if not still:
         print("\n".join(berichte))
@@ -10018,7 +10130,10 @@ P18 SATZARTEN (analyse gegen chart_data und events.json) — nur PRÜFEN (2026-1
   (dieselbe Hälfte des Umlaufs). Bei jedem Aspekt außer Konjunktion und Opposition
   nennt der Satz die Stellung („so wie jetzt", „in derselben Stellung", „vom <Zeichen>
   aus") — dazwischen lag immer ein Durchgang aus der anderen Hälfte; „Dieselbe Frage
-  stand zuletzt an …" ohne Aspektwort braucht keine (seit 2026-10-07).
+  stand zuletzt an …" ohne Aspektwort braucht keine (seit 2026-10-07). Verneint ein
+  Satz frühere Durchgänge („gab es seit deiner Geburt nicht", „zum ersten Mal in
+  deinem Leben"), gilt dasselbe: Stellung nennen, denn die Liste führt nur dieselbe
+  Hälfte — und lief dort schon einer, ist die Verneinung falsch (seit 2026-10-07b).
 """
 
 
