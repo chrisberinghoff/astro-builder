@@ -4534,7 +4534,8 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
         'drachen_figuren': [{'drachen','meldungen'[,'orbsumme','konj_ecke']}],
         'drachen_meldungen': n, 'drachen_anzahl': m,
         'drachen_nebenlesarten': [{'fuehrt': i, 'neben': [j, ...],
-                                   'orbsummen': [s_i, s_j, ...]}]}
+                                   'orbsummen': [s_i, s_j, ...]}],
+        'drachen_grosstrigon_pruefen': [{'drachen': i, 'grosstrigon': j}]}
 
     DRACHEN, seit 2026-09-29: dieselbe Figur, wenn Kopf und alle drei
     Trigon-Ecken paarweise identisch oder konjunkt sind; 'drachen' ist die
@@ -4544,6 +4545,18 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
     Grosstrigone (L9): EIN Befund, der engere fuehrt (dieselbe Orbsumme), der
     andere ist Nebenlesart — 'drachen_nebenlesarten', Indizes in
     'drachen_figuren'.
+
+    DRACHEN UND GROSSTRIGON, seit 2026-10-06 (Wartungslauf nach der Auswertung
+    vom 06.10., FFU Geburtshoroskop Schritt 1, Befund 1.1): Ein Drachen nimmt
+    sein Trigon aus der Grosstrigon-Liste. Steht dort ein Grosstrigon, dessen
+    drei Ecken mit den Trigon-Ecken des Drachens paarweise identisch oder
+    konjunkt sind (zwei gemeinsame Ecken, die dritten in Konjunktion), ist es
+    nach der harten Regel der Grosstrigone womoeglich dieselbe Figur mit
+    doppelt besetzter Ecke; bis dahin standen beide ohne jede Zeile in §6. Die
+    Funktion entscheidet nicht: 'drachen_grosstrigon_pruefen' nennt das Paar
+    (Indizes in 'drachen_figuren' bzw. 'grosstrigon_figuren'), §6 schreibt
+    eine „Zu prüfen“-Zeile, und ob es eine Figur ist und welche fuehrt, wird
+    im Datenblatt entschieden.
     """
     tq = konf.get('t_quadrat', [])
     konj = set()
@@ -4915,6 +4928,24 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
                          'orbsummen': [_dr_orbsumme(dr_figuren[i]['drachen'])
                                        for i in glieder]})
 
+    # DRACHEN UND GROSSTRIGON MIT KONJUNKTEN DRITTEN ECKEN (2026-10-06,
+    # Wartungslauf nach der Auswertung vom 06.10., FFU GH Schritt 1, Befund
+    # 1.1): Der Drachen nimmt sein Trigon aus der Grosstrigon-Liste; ein
+    # zweites Grosstrigon, dessen drei Ecken mit den Trigon-Ecken paarweise
+    # identisch oder konjunkt sind, blieb darin, und zwischen beiden Listen lief
+    # kein Vergleich — im Prueffall zwei Befunde fuer eine Figur, ohne Hinsehen
+    # zwei Kapitel. Die Funktion legt das Paar vor, sie fasst nicht zusammen:
+    # Welche Figur fuehrt, ist Deutung und faellt im Datenblatt.
+    dr_gt_pruefen = []
+    for i, f in enumerate(dr_figuren):
+        t_ = list(f['drachen'].get('trigon') or ())
+        for j, g in enumerate(gt_figuren):
+            e_ = list(g.get('ecken') or ())
+            if (len(t_) == len(e_) == 3
+                    and all(any(gleich(x, y) for y in e_) for x in t_)
+                    and all(any(gleich(y, x) for x in t_) for y in e_)):
+                dr_gt_pruefen.append({'drachen': i, 'grosstrigon': j})
+
     # ACHSENGEOMETRIE (2026-09-29, T6): Winkel W gegen Faktor P, der am
     # Gegenwinkel von W steht — die Opposition folgt aus der Konjunktion P–W'.
     # Gemeldet nur, wenn JEDE Meldung der Figur so gebaut ist (sonst traegt
@@ -4972,6 +5003,7 @@ def gruppiere_figuren(konf, aspects, konj_orb_namen=None):
             'drachen_meldungen': len(dr),
             'drachen_anzahl': len(dr_figuren),
             'drachen_nebenlesarten': dr_neben,
+            'drachen_grosstrigon_pruefen': dr_gt_pruefen,
             'rechteck_figuren': rect_figuren,
             'rechteck_meldungen': len(rect),
             'rechteck_anzahl': len(rect_figuren),
@@ -6784,6 +6816,17 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                     if len(_dt) == 2 else
                     'sind Nebenlesarten und werden je in einem Satz genannt')
                  + ' (seit 2026-09-30).')
+    # DRACHEN UND GROSSTRIGON MIT KONJUNKTEN DRITTEN ECKEN (2026-10-06): die
+    # Funktion legt das Paar vor, die Entscheidung gehoert ins chart_data.
+    for _dg in (fg or {}).get('drachen_grosstrigon_pruefen', []):
+        _dd = fg['drachen_figuren'][_dg['drachen']]['drachen']
+        _ge = fg['grosstrigon_figuren'][_dg['grosstrigon']]['ecken']
+        L.append(f"- Zu prüfen: Drachen (Großtrigon {', '.join(_dd['trigon'])}, "
+                 f"Kopf {_dd['kopf']}) und Großtrigon {', '.join(_ge)} — alle "
+                 f"drei Ecken paarweise identisch oder konjunkt. Ob das EINE "
+                 f"Figur mit doppelt besetzter Ecke ist oder zwei, und welche "
+                 f"führt, entscheidet die Deutung; die Entscheidung gehört ins "
+                 f"chart_data (seit 2026-10-06).")
     for r in kf.get('rechteck', []):
         L.append(f"- Mystisches Rechteck: Achsen "
                  f"{' ☍ '.join(r['achsen'][0])} und {' ☍ '.join(r['achsen'][1])}"
@@ -8093,6 +8136,27 @@ if __name__ == '__main__':
         '(seit 2026-09-30).' in _td30, _td30.split('### 6')[1][:1500]
     # dieselbe Regel darf eine harte Doppelung nicht zusaetzlich zur Nebenlesart machen
     assert _gd29['drachen_nebenlesarten'] == [], _gd29['drachen_nebenlesarten']
+
+    # 2026-10-06 (FFU GH Schritt 1, Befund 1.1): Drachen (AC, Sonne, Chiron;
+    # Kopf Mond) und Grosstrigon (AC, Sonne, Pholus), Chiron ☌ Pholus 4°30′
+    # (einseitig); Mond ☍ Pholus liegt mit 8°30′ ausserhalb, das zweite Trigon
+    # bleibt also Grosstrigon -> EIN Paar zur Pruefung und eine „Zu prüfen“-
+    # Zeile; ohne Paar (zwei Drachen, kein Grosstrigon) bleibt das Feld leer.
+    _fd31 = [{'name': 'Sonne', 'lon': 120.0}, {'name': 'Chiron', 'lon': 240.0},
+             {'name': 'Pholus', 'lon': 244.5}, {'name': 'Mond', 'lon': 56.0},
+             {'name': 'Merkur', 'lon': 100.0}, {'name': 'Venus', 'lon': 165.0},
+             {'name': 'Saturn', 'lon': 200.0}]
+    _ad31 = huber_aspects(_fd31 + _ax(0.0, 270.0))
+    _kd31 = konfigurationen(_fd31 + _ax(0.0, 270.0), _ad31)
+    assert len(_kd31['drachen']) == 1 and len(_kd31['grosstrigon']) == 1, _kd31
+    _gd31 = gruppiere_figuren(_kd31, _ad31)
+    assert _gd31['drachen_grosstrigon_pruefen'] == [{'drachen': 0, 'grosstrigon': 0}], _gd31
+    _td31 = strukturbild_text(strukturbild(_fd31 + _ax(0.0, 270.0), _c))
+    assert '- Zu prüfen: Drachen (Großtrigon ' in _td31 and \
+        'alle drei Ecken paarweise identisch oder konjunkt. Ob das EINE Figur' \
+        in _td31, _td31.split('### 6')[1][:1500]
+    assert _gd30['drachen_grosstrigon_pruefen'] == [] and \
+        _gd29['drachen_grosstrigon_pruefen'] == [], _gd30
 
     # 2026-09-28 (K2): AC/MC unter 1° an der Zeichengrenze auch ueber der
     # Kippminuten-Schwelle; konstruiert, ohne Ephemeride.
