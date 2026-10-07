@@ -5854,7 +5854,8 @@ def _p17_subjekt(chapters, typ, sprache_analyse="de"):
 #   Anzahl         „n andere Planeten an dieselben Punkte", „n Beruehrungen im
 #                  engen Wirkbereich" — gegen THEMA-Zeile bzw. Jetzt-Liste.
 #   Wiederholung   „zuletzt …, als du n warst" — gegen die frueheren Durchgaenge
-#                  GENAU DIESES Kontakts (P11 haelt das Alter nur gegen alle Alter).
+#                  GENAU DIESES Kontakts (P11 haelt das Alter nur gegen alle Alter);
+#                  seit 2026-10-07 bei Aspekten mit zwei Haelften auch die Stellung.
 # Was nur ein Leser pruefen kann (falsche Praemissen, Deutung, „so eng wie kaum
 # sonst"), bleibt draussen.
 
@@ -7630,8 +7631,39 @@ def _p18_anzahl(p, d, satz, ort, kapitel_kontakte):
 
 
 # --- Transit: Wiederholungshinweis --------------------------------------------------
-_P18_ZULETZT_RE = re.compile(_P18_GRENZ + r"(?:zuletzt|davor|das\s+letzte\s+Mal|beim\s+letzten\s+Mal|"
-                             r"schon\s+einmal|vorher)" + _P18_ENDE)
+# 2026-10-07: auch am Satzanfang („Zuletzt stand …“) — vorher fiel jeder Satz, der mit
+# „Zuletzt“, „Davor“ … beginnt, ungeprüft durch (zwei der vier falschen Saetze vom 05.–07.10.).
+_P18_ZULETZT_RE = re.compile(_P18_GRENZ + r"(?:[Zz]uletzt|[Dd]avor|[Dd]as\s+letzte\s+Mal|"
+                             r"[Bb]eim\s+letzten\s+Mal|[Ss]chon\s+einmal|[Vv]orher)" + _P18_ENDE)
+
+# 2026-10-07 (FFU Transit 3+4, Wiederholungshinweis): Seit dem transit.py-Stand vom
+# 2026-10-04 fuehrt `fruehere_durchgaenge` nur Durchgaenge derselben Haelfte des
+# Umlaufs. Bei jedem Aspekt ausser Konjunktion und Opposition liegt zwischen zwei
+# solchen Durchgaengen immer einer aus der anderen Haelfte — „zuletzt stand Jupiter
+# im Trigon zu …, als du fuenfzehn warst" ist dann falsch, auch wenn das Alter stimmt.
+# Der Satzteil muss die Stellung nennen („so wie jetzt", Transit-Modul, Bewegung
+# „Zeit", Wiederholungshinweis); gleichwertig gelten die Formen in _P18_STELLUNG_RE.
+# „Dieselbe Frage stand zuletzt an" (Innere Arbeit, Prinzip 15) nennt weder Aspekt
+# noch Stand und braucht keine, solange der Satzteil kein Aspektwort traegt.
+# Nicht erfasst (unveraendert): Selbst-Transite — _p18_kontakte() fuehrt T == Z nicht.
+_P18_EINE_HAELFTE = {"Konjunktion", "Opposition"}
+_P18_STELLUNG_RE = re.compile(
+    r"(?:[Ss]o\s+)?[Ww]ie\s+jetzt"
+    r"|[Ii]n\s+(?:derselben|dieser|der\s+gleichen|gleicher)\s+Stellung"
+    r"|[Aa]us\s+(?:derselben|dieser|der\s+gleichen)\s+Richtung"
+    r"|[Vv]on\s+(?:derselben|dieser|der\s+gleichen)\s+Seite"
+    r"|[Vv]o(?:m|n\s+den)\s+[A-ZÄÖÜ][\wäöüß]+\s+aus(?![\wäöüß])"
+    r"|[Ii]m\s+selben\s+Abschnitt\s+seiner\s+Runde"
+    r"|[Ii]n\s+derselben\s+Hälfte")
+_P18_FRAGE_RE = re.compile(r"(?:[Dd]ieselbe|[Dd]ie\s+gleiche|[Dd]iese)\s+Frage")
+
+
+def _p18_stellung_genannt(teil):
+    """Nennt der Satzteil die Stellung — oder spricht er nur von „derselben Frage“,
+    ohne Aspektwort? (s. Kommentar oben)"""
+    if _P18_STELLUNG_RE.search(teil):
+        return True
+    return bool(_P18_FRAGE_RE.search(teil)) and not ASPEKT_RE.search(teil)
 
 
 def _p18_frueher_index(events):
@@ -7667,7 +7699,9 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
     Satzteil oder Satz davor — nennt der Satzteil einen eigenen Laeufer ohne Ziel
     („…; Jupiter zuletzt, als du …"), mit dem Ziel davor —, sonst der fuehrende Kontakt
     des Kapitels; die Aspektart aus dem Satzteil, sonst aus der THEMA-Zeile. Nennt der
-    Satzteil mehrere Ziele, muss das Alter zu einem davon passen."""
+    Satzteil mehrere Ziele, muss das Alter zu einem davon passen. Seit 2026-10-07: Hat ein
+    Kontakt nur Aspekte mit zwei Haelften (alles ausser Konjunktion und Opposition), muss
+    der Satzteil die Stellung nennen (_p18_stellung_genannt), auch wenn das Alter stimmt."""
     if not d["frueher"] or not _P18_ZULETZT_RE.search(satz):
         return 0
     befunde = []
@@ -7696,11 +7730,15 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
         paare = list(dict.fromkeys(paare))
         if not paare or len({t for t, _z in paare}) > 1:
             continue                                 # Bezug nicht eindeutig
-        je = []
+        je, zwei_haelften = [], []
         for t, z in paare:
             eintraege = d["frueher"][(t, z)]
             arten_k = arten or {art for (tt, art, zz, _f) in kapitel_kontakte if (tt, zz) == (t, z)}
             gefiltert = [f for f in eintraege if not arten_k or f.get("aspekt") in arten_k] or eintraege
+            arten_g = {f.get("aspekt") for f in gefiltert} - {None}
+            if arten_g and not (arten_g & _P18_EINE_HAELFTE):
+                zwei_haelften.append("%s %s %s" % (ANZEIGE.get(t, t), "/".join(sorted(arten_g)),
+                                                   ANZEIGE.get(z, z)))
             bekannt = set()
             for f in gefiltert:
                 for dg in f.get("durchgaenge") or []:
@@ -7710,6 +7748,11 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
             je.append(("/".join("%s %s %s" % (ANZEIGE.get(t, t), f.get("aspekt"), ANZEIGE.get(z, z))
                                 for f in gefiltert), bekannt))
         p.geprueft += 1
+        if zwei_haelften and not _p18_stellung_genannt(teil):
+            befunde.append("ohne Stellung — %s: zwischen diesem Durchgang und heute lag einer aus "
+                           "der anderen Hälfte des Umlaufs, „zuletzt“ stimmt so nicht; die Stellung "
+                           "nennen („so wie jetzt“, Transit-Modul, Wiederholungshinweis)"
+                           % ", ".join(dict.fromkeys(zwei_haelften)))
         falsch = [(roh, n) for roh, n in alter if not any(abs(n - a) <= 1 for _k, b in je for a in b)]
         if not falsch:
             continue
@@ -9711,13 +9754,14 @@ def _selbsttest(still=False):
             "Saturn und Jupiter stehen zugleich an deinem Merkur und deinem Mond.",
             "Im %s kommt Saturn genau im Quadrat zu deiner Sonne zum Stillstand." % w13["m130"],
             "Am Stichtag liegen drei Kontakte im engen Wirkorb.",
-            "Im Quadrat zu deiner Sonne war Saturn zuletzt, als du zwölf warst.",
+            "Zuletzt stand Saturn so wie jetzt im Quadrat zu deiner Sonne, als du zwölf warst.",
             "Ab %s steht Saturn im Krebs." % w13["m300"],
             "Saturn beginnt im %s die rückläufige Strecke im Quadrat zu deiner Sonne." % w13["m110"],
             "Im %s kommt Saturn zum Stillstand, im Quadrat zu deiner Sonne, und im %s wird das Quadrat "
             "noch einmal genau." % (w13["m130"], w13["m200"]),
             "In deinem Geburtsbild stehen Neptun und Jupiter zugleich nah bei deinem Mars.",
-            "Saturn stand zuletzt so zu deiner Sonne, als du zwölf warst; Jupiter zuletzt, als du "
+            "Saturn stand zuletzt in derselben Stellung zu deiner Sonne, als du zwölf warst; "
+            "Jupiter zuletzt, als du "
             "vierzig warst."]
     r13 = lauf(tc13, _a13(ok13), dict(tev13, stations=_st13(0.2)))["proben"]["P18"]
     assert r13["status"] == "OK" and r13["geprueft"] >= 8, ("Lauf 13: P18 nicht still", r13["geprueft"],
@@ -9742,6 +9786,29 @@ def _selbsttest(still=False):
     berichte.append("Lauf 13 (P18 Transit): stimmige Sätze still, je Satzart der Widerspruch gemeldet "
                     "(Zeit: läuft schon, beginnt, zum ersten Mal genau, Zeichen; Zugleich, Station, "
                     "Anzahl, Wiederholung)")
+    # 13c) 2026-10-07: Wiederholungshinweis ohne Stellung (Aspekt mit zwei Haelften)
+    tev13c = json.loads(json.dumps(tev13))
+    tev13c["fruehere_durchgaenge"].append(
+        {"transit": "Knoten", "aspekt": "Konjunktion", "ziel": "Merkur", "primaer": True,
+         "selbst_transit": False,
+         "durchgaenge": [{"nr": 1, "von": w13["dM2500"], "bis": w13["dM2500"],
+                          "exakt": [{"datum": w13["dM2500"], "alter": 18}], "annaeherung": [],
+                          "min_orb_grad": 0.0, "min_orb_datum": w13["dM2500"], "min_orb_alter": 18,
+                          "ab_rechenbeginn": False}]})
+    falsch13c = ["Zuletzt stand Saturn im Quadrat zu deiner Sonne, als du zwölf warst.",
+                 "Dieselbe Verbindung, Saturn im Quadrat zu deiner Sonne, lief zuletzt, als du zwölf warst."]
+    still13c = ["Zuletzt stand Saturn so wie jetzt zu deiner Sonne, als du zwölf warst.",
+                "Dieselbe Frage stand zuletzt an, als du zwölf warst.",
+                "Zuletzt stand Saturn vom Krebs aus im Quadrat zu deiner Sonne, als du zwölf warst.",
+                "Zuletzt stand der Mondknoten auf deinem Merkur, als du achtzehn warst."]
+    r13c = lauf(tc13, _a13(falsch13c + still13c), dict(tev13c, stations=_st13(0.2)))["proben"]["P18"]
+    _st13c = [z for z in r13c["pruefen"] if "ohne Stellung" in z]
+    assert len(_st13c) == 2 and all(any(f[:40] in z for z in _st13c) for f in falsch13c), \
+        ("Lauf 13c: ohne Stellung nicht gemeldet", r13c["pruefen"])
+    assert not [z for z in r13c["pruefen"] for f in still13c if f[:40] in z], \
+        ("Lauf 13c: stimmige Wiederholung gemeldet", r13c["pruefen"])
+    berichte.append("Lauf 13c (P18 Wiederholung, Stellung): Quadrat ohne Stellung gemeldet, auch mit "
+                    "richtigem Alter; „so wie jetzt“, „vom … aus“, „Dieselbe Frage“ und Konjunktion still")
 
     if not still:
         print("\n".join(berichte))
@@ -9947,6 +10014,11 @@ P18 SATZARTEN (analyse gegen chart_data und events.json) — nur PRÜFEN (2026-1
   Phase") ist kein Beginn; „genau … Stillstand" zählt nur im selben Kommaabschnitt
   und höchstens sechs Wörter auseinander; Sätze über das Geburtsbild („In deinem
   Geburtsbild stehen …") laufen nicht durch „zugleich".
+  Wiederholung: Das Alter muss unter den früheren Durchgängen DIESES Kontakts stehen
+  (dieselbe Hälfte des Umlaufs). Bei jedem Aspekt außer Konjunktion und Opposition
+  nennt der Satz die Stellung („so wie jetzt", „in derselben Stellung", „vom <Zeichen>
+  aus") — dazwischen lag immer ein Durchgang aus der anderen Hälfte; „Dieselbe Frage
+  stand zuletzt an …" ohne Aspektwort braucht keine (seit 2026-10-07).
 """
 
 
