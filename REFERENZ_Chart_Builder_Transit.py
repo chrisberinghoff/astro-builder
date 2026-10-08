@@ -487,14 +487,16 @@ UHR_LEAD = [
     'berührt über Wochen oder Monate hinweg eine Stelle deines Geburtsbildes. '
     'Die Linien stehen nicht einzeln nebeneinander, sondern in Themenblöcken — '
     'jeder Block trägt oben den Namen, unter dem der Text ihn später behandelt, '
-    'und darunter einen dicken Bogen über die gesamte Laufzeit des Themas. So '
+    'und darunter einen dicken Bogen über die Laufzeit des Themas im gezeigten '
+    'Zeitraum. So '
     'liest man erst die großen Zeiten und geht dann ins Einzelne.',
 
     'Die Beschriftung am Zeilenanfang nennt beide Seiten in dieser Reihenfolge '
     '— zuerst den laufenden Planeten, dann den Winkel, den er bildet, dann die '
     'Stelle deines Geburtsbildes, die er trifft. Der Balken rechts daneben '
-    'zeigt, wann das geschieht: blass die volle Berührungszeit, kräftig die '
-    'Strecke, in der die Linie wirklich arbeitet, und die kleinen weißen '
+    'zeigt, wann das geschieht: blass die Zeit vom ersten bis zum letzten Tag, '
+    'an dem die Linie arbeitet, mit den Pausen dazwischen, kräftig die '
+    'Strecken, in denen sie wirklich arbeitet, und die kleinen weißen '
     'Punkte die einzelnen Tage, an denen der Winkel exakt steht. Blass '
     'gesetzte Zeilen — wo es sie gibt — sind Nebenlinien: Sie berühren keinen '
     'der Punkte, die dieses Dokument durchgehend verfolgt, und stehen hier, '
@@ -512,15 +514,17 @@ if SPRACHE == 'en':
         'point of your birth chart over weeks or months. The lines do not '
         'stand side by side one by one but in theme blocks — each block '
         'carries at the top the name under which the text later deals with '
-        'it, and beneath it a thick arc over the whole running time of the '
-        'theme. So one reads the large periods first and then goes into '
+        'it, and beneath it a thick arc over the running time of the theme '
+        'within the period shown. So one reads the large periods first and '
+        'then goes into '
         'detail.',
 
         'The label at the start of each line names both sides in this order '
         '— first the moving planet, then the angle it forms, then the point '
         'of your birth chart that it meets. The bar beside it shows when this '
-        'happens: pale for the full time of contact, strong for the stretch '
-        'in which the line is really at work, and the small white dots for '
+        'happens: pale for the time from the first to the last day on which '
+        'the line is at work, pauses included, strong for the stretches in '
+        'which it is really at work, and the small white dots for '
         'the single days on which the angle is exact. Lines set in pale type '
         '— where there are any — are side lines: they touch none of the '
         'points this document follows throughout, and they stand here because '
@@ -574,14 +578,16 @@ def dt(d, kurz=False):
 _ANH = {
     'de': {
         'lang_lead': ('Alle {n} Langläufer des Fensters mit\nSpanne, Dauer, '
-                      'sämtlichen Exaktdaten und den Stationen des laufenden '
+                      'den Exaktdaten vom Beginn des Rückblicks bis zum '
+                      'Fensterende und den Stationen des laufenden '
                       'Planeten.\nGrau gesetzt sind die sekundären Linien — sie '
                       'berühren keinen der primären\nZielpunkte; im Text kommen '
                       'sie nur vor, wo ein Kapitel sie zu seinem Thema zählt.'),
         'lang_kopf': ('Transit', 'Aspekt', 'Ziel', 'Spanne', 'Mon.', 'exakt',
                       'Stationen'),
-        'lang_note': ('Dauer in Monaten über die volle Berührung\n(Snapshot-Orb '
-                      '3,0°). Datumsangaben TT.MM.JJ. <span class="mk">←</span> '
+        'lang_note': ('Spanne und Dauer in Monaten vom ersten bis zum letzten '
+                      'Tag\nim Wirk-Orb (1,5°), Pausen eingeschlossen. '
+                      'Datumsangaben TT.MM.JJ. <span class="mk">←</span> '
                       'vor der\nSpanne heißt: die Linie lief schon vor Beginn des '
                       'Fensters; <span class="mk">→</span>\ndahinter: sie reicht '
                       'über das Fenster hinaus.'),
@@ -601,15 +607,17 @@ _ANH = {
         'kehrt': ', kehrt zurück', 'tage': '{n} Tage', 'komma': True},
     'en': {
         'lang_lead': ('All {n} long-running lines of the window with\ntheir '
-                      'span, duration, every exact date and the stations of the '
+                      'span, duration, the exact dates from the start of the '
+                      'look-back to the end of the window and the stations of the '
                       'moving planet.\nSecondary lines are set in grey — they '
                       'touch none of the primary\ntarget points; the text '
                       'mentions them only where a chapter counts them as part '
                       'of its theme.'),
         'lang_kopf': ('Transit', 'Aspect', 'Target', 'Span', 'Mo.', 'exact',
                       'Stations'),
-        'lang_note': ('Duration in months over the full contact\n(snapshot orb '
-                      '3.0°). Dates as D Mon YY. <span class="mk">←</span> '
+        'lang_note': ('Span and duration in months from the first to the last '
+                      'day\nwithin the working orb (1.5°), pauses included. '
+                      'Dates as D Mon YY. <span class="mk">←</span> '
                       'before the\nspan means: the line was already running '
                       'before the window began; <span class="mk">→</span>\n'
                       'after it: it reaches beyond the window.'),

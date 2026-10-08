@@ -1379,7 +1379,11 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
     nachhall=[]; anmarsch=[]
     for e in events:
         k=(e['transit'],e['ziel'],e['aspekt'])
-        if e['weit_von']<=asof.isoformat()<=e['weit_bis']: continue   # steht jetzt im Orb
+        # 2026-10-08 (Auswertung 07.10.c, 3.2): "steht jetzt im Orb" heisst der Orb AM
+        # STICHTAG, wie in der Stichtag-Tabelle (im_orb). Vorher galt die ganze
+        # 3°-Spanne der Passage; ein kuerzlich exakter Kontakt, der spaeter rueckl.
+        # wieder in 3° kommt, fiel damit aus Nachhall UND Stichtag-Tabelle.
+        if orbcache[k][i_asof]<=orb_weit: continue   # steht jetzt im Orb (Stichtag-Tabelle)
         ex=[date.fromisoformat(x) for x in e['exakt']]
         prev=[d for d in ex if d<=asof]; nxt=[d for d in ex if d>asof]
         lb_max=min(NACHWIRK.get(e['transit'], 10**6), int(lookback_months*30.4375))
@@ -1421,7 +1425,10 @@ def run(radix, start=None, months=24, primary_extra=None, orb=ORB, orb_weit=ORB_
              'min_orb_grad','fenster_von','fenster_bis','dauer_tage','dauer_monate',
              'perioden','kontakte','mehrfach','quartale','primaer','wird_exakt')},
             stationen=[s['datum'] for s in st],
-            laeuft_ueber_ende=(e['fenster_bis']>=end.isoformat()),
+            # 2026-10-08 (Auswertung 07.10.c, 3.3): auch, wenn die Linie am Fensterende
+            # pausiert und in der Fortsetzung wieder im Wirkorb steht.
+            laeuft_ueber_ende=(e['fenster_bis']>=end.isoformat()
+                               or bool((e.get('fortsetzung') or {}).get('wirkorb_perioden'))),
             lief_vor_start=(e['fenster_von']<start.isoformat()),
             # 2026-09-19 (W1, W3, W55): Verweis aufs Ereignis und Kurzfelder
             event_nr=idx, annaeherung=e['annaeherung'],
@@ -1689,7 +1696,13 @@ def format_report(res):
         if v and v.get('wirkorb_von'): flags.append('Wirkorb-Beginn vor dem Rueckblick')
         if x['laeuft_ueber_ende']: flags.append('reicht ueber das Fenster hinaus')
         if x['mehrfach']: flags.append(f"{x['kontakte']}x exakt (rueckl.)")
-        if x['stationen']: flags.append('Station '+', '.join(x['stationen']))
+        if x['stationen']:
+            # 2026-10-08 (Auswertung 07.10.c, 3.5): Eine Station in einer Pause der
+            # Linie wirkt nicht auf diesen Kontakt — markiert (transitdata liest nur
+            # die Daten).
+            flags.append('Station '+', '.join(
+                d_ + ('' if any(a_<=d_<=b_ for a_,b_ in x['perioden']) else ' (in einer Pause)')
+                for d_ in x['stationen']))
         out.append(f"  [{tag}] {x['transit']:7s} {x['aspekt']:11s} {x['ziel']:12s} "
                    f"{x['fenster_von']} .. {x['fenster_bis']} ({x['dauer_monate']} Mon, "
                    f"Q{'/'.join(str(q) for q in x['quartale'])})")
@@ -1763,8 +1776,14 @@ def format_report(res):
     out.append(f"\n=== STATIONEN nahe Radix ({len(res['stations'])}) ===")
     for s in res['stations']:
         pre='(vor Start) ' if s['vor_start'] else f"Q{s['quartal']} "
+        # 2026-10-08 (Auswertung 07.10.c, 3.5): Orb je Ziel; "nahe" heisst hier
+        # Erfassungsorb, nicht Wirkung — ein Ziel ueber dem Wirkorb ist markiert.
+        _nd=[n for n in (s.get('nahe_detail') or []) if not n.get('spiegel')]
+        _ziele=(', '.join(f"{n['aspekt']} {n['ziel']} {n['orb']}°"
+                          + (' (ausserhalb Wirkorb)' if n['orb']>res['orb_wirk'] else '')
+                          for n in _nd) if _nd else ', '.join(s['nahe']))
         out.append(f"  {pre}{s['datum']} {s['transit']} {s['richtung']} "
-                   f"{s['stand']} -> {', '.join(s['nahe'])}")
+                   f"{s['stand']} -> {_ziele}")
     out.append(f"\n=== INGRESSE ({len(res['ingress'])}) ===")
     for g in res['ingress']:
         out.append(f"  Q{g['quartal']} {g['datum']} {g['transit']}: {g['von']} -> {g['nach']}")
@@ -2472,6 +2491,74 @@ def _selbsttest(still=False):
             pruefe(all(haus_fuehrung(30.0 - b, cz)['spalte'] == _r.haus_spalte(30.0 - b, cz)
                        for b in (1.99996, 2.00004, 2.003, 2.0049, 2.0051)),
                    "F20: Stufe an der 2°-Schwelle weicht von radix ab")
+        # --- N08 (2026-10-08, Auswertung 07.10.c): Nachhall nach dem Orb am
+        # Stichtag; Pfeil "reicht ueber das Fenster hinaus" bei Rueckkehr nach
+        # einer Pause; Station in einer Pause markiert. Konstruiert aus Jupiter-
+        # und Uranus-Schleifen ab J2000+400, keine Personendaten.
+        spd = lambda pl, jd: swe.calc_ut(jd, pl, FL)[0][3]
+        def _station(pl, j0, r):            # r -1: wird rueckl., +1: wird direkt
+            s0 = spd(pl, j0)
+            for k in range(1, 900):
+                s1 = spd(pl, j0 + k)
+                if (r < 0 and s0 > 0 >= s1) or (r > 0 and s0 < 0 <= s1):
+                    return j0 + k
+                s0 = s1
+            return None
+        jx = 2451545.0 + 400.0
+        # (a) Jupiter exakt, 28 Tage spaeter ueber 3°, Rueckkehr in der Schleife bis
+        #     1,6° — die Passage umfasst den Stichtag, der Orb am Stichtag nicht.
+        jD = _station(swe.JUPITER, jx, +1)
+        pruefe(jD is not None, "N08a: keine Jupiter-Station gefunden")
+        if jD:
+            L0 = (lon(swe.JUPITER, jD) - 1.6) % 360.0
+            t1 = next(jD - k for k in range(1, 400) if wrap180(lon(swe.JUPITER, jD - k) - L0) < 0)
+            d_a = d_from_jd(t1 + 28)
+            res = run({'Sonne': L0}, start=d_a, months=12, lookback_months=3, asof=d_a,
+                      ohne_chiron=True, moseph=True)
+            ev = [e for e in res['events'] if (e['transit'], e['ziel'], e['aspekt']) == ('Jupiter', 'Sonne', 'Konjunktion')]
+            pruefe(abs(wrap180(lon(swe.JUPITER, t1 + 28) - L0)) > res['jetzt']['orb_weit']
+                   and any(e['weit_von'] <= d_a.isoformat() <= e['weit_bis'] for e in ev),
+                   "N08a: Konstruktion traegt nicht (Orb am Stichtag / Passage)")
+            pruefe(len([x for x in res['jetzt']['nachhall'] if (x['transit'], x['ziel']) == ('Jupiter', 'Sonne')]) == 1
+                   and not [x for x in res['jetzt']['im_orb'] if (x['transit'], x['ziel']) == ('Jupiter', 'Sonne')],
+                   "N08a: kuerzlich exakter Kontakt fehlt im Nachhall")
+            pruefe(all(x['orb_grad'] > res['jetzt']['orb_weit'] for x in res['jetzt']['nachhall']),
+                   "N08a: Nachhall fuehrt einen Kontakt, der am Stichtag im Orb steht")
+        # (b) Uranus exakt, Fensterende in der Pause, Wirkorb-Rueckkehr danach.
+        jU = _station(swe.URANUS, jx, +1)
+        pruefe(jU is not None, "N08b: keine Uranus-Station gefunden")
+        if jU:
+            L0u = (lon(swe.URANUS, jU) - 1.0) % 360.0
+            t1u = next(jU - k for k in range(1, 900) if wrap180(lon(swe.URANUS, jU - k) - L0u) < 0)
+            kz = next(k for k in range(1, 400) if abs(wrap180(lon(swe.URANUS, t1u + k) - L0u)) > 3.5)
+            d_s = d_from_jd(t1u - 40)
+            q0 = d_s.replace(month=3 * ((d_s.month - 1) // 3) + 1, day=1)
+            d_z = d_from_jd(t1u + kz)
+            m_ = (d_z.year - q0.year) * 12 + (d_z.month - q0.month) + 1
+            res2 = run({'Sonne': L0u}, start=d_s, months=m_, lookback_months=1, asof=d_s,
+                       ohne_chiron=True, moseph=True)
+            ll = [x for x in res2['langlaeufer'] if (x['transit'], x['ziel'], x['aspekt']) == ('Uranus', 'Sonne', 'Konjunktion')]
+            e2 = [e for e in res2['events'] if (e['transit'], e['ziel'], e['aspekt']) == ('Uranus', 'Sonne', 'Konjunktion')]
+            pruefe(len(ll) == 1 and ll[0]['fenster_bis'] < res2['end']
+                   and any((e.get('fortsetzung') or {}).get('wirkorb_perioden') for e in e2),
+                   "N08b: Konstruktion traegt nicht (Pause am Fensterende / Rueckkehr)")
+            pruefe(len(ll) == 1 and ll[0]['laeuft_ueber_ende']
+                   and 'reicht ueber das Fenster hinaus' in format_report(res2),
+                   "N08b: Pfeil fehlt bei Rueckkehr nach dem Fenster")
+        # (c) Uranus-Station rueckl. 2° hinter dem Ziel: in 3°, nicht im Wirkorb.
+        jR = _station(swe.URANUS, jx, -1)
+        pruefe(jR is not None, "N08c: keine Uranus-Station gefunden")
+        if jR:
+            L0c = (lon(swe.URANUS, jR) - 2.0) % 360.0
+            d_c = d_from_jd(jR - 200)
+            res3 = run({'Sonne': L0c}, start=d_c, months=14, lookback_months=1, asof=d_c,
+                       ohne_chiron=True, moseph=True)
+            ll3 = [x for x in res3['langlaeufer'] if (x['transit'], x['ziel'], x['aspekt']) == ('Uranus', 'Sonne', 'Konjunktion')]
+            rep3 = format_report(res3)
+            pruefe(ll3 and any(not any(a <= d_ <= b for a, b in ll3[0]['perioden']) for d_ in ll3[0]['stationen']),
+                   "N08c: Konstruktion traegt nicht (keine Station in einer Pause)")
+            pruefe('(in einer Pause)' in rep3, "N08c: Station in einer Pause nicht markiert")
+            pruefe('(ausserhalb Wirkorb)' in rep3, "N08c: Stationsziel ueber dem Wirkorb nicht markiert")
     finally:
         ERZWINGE_MOSEPH = alt_mo
         ZEITZONE = alt_zz
@@ -2519,7 +2606,8 @@ def _selbsttest(still=False):
                 print("  - " + f_)
         else:
             print("Selbsttest transit.py: alle Faelle gruen (W1, W3, W45, W46, W55, F20, F21, "
-                  "Glueckspunkt ausgemustert, Zwei-Modell-Probe, Z04 Zyklushaelfte)")
+                  "Glueckspunkt ausgemustert, Zwei-Modell-Probe, Z04 Zyklushaelfte, "
+                  "N08 Nachhall/Pfeil/Station)")
     return not fehler
 
 

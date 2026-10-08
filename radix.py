@@ -5974,7 +5974,10 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     L.append('### 1 · Elemente und Modi')
     for titel, key in (('zehn klassische Planeten', 'verteilung_planeten'),
                        ('alle Faktoren inkl. Achsen', 'verteilung_alle'),
-                       ('gewichtet (Lichter/Winkel ×2, Spezialfaktoren ×0,5)',
+                       # 2026-10-08 (Auswertung 07.10.c, 3.1): „Winkel“ waren hier alle vier,
+                       # gerechnet wird aber nach GEWICHT — DC und IC zaehlen 0. Der Text
+                       # uebernahm das Etikett („die Lichter und Achsen doppelt“).
+                       ('gewichtet (Lichter, AC und MC ×2, Spezialfaktoren ×0,5, DC und IC 0)',
                         'verteilung_gewichtet')):
         v = sb[key]
         el, mo = _vert_zeile(v)
@@ -8605,3 +8608,10 @@ if __name__ == '__main__':
           'zwei Kuerzel, Gruppe ueber die Ringnaht, fuenf in fuenf Grad; '
           'groesster Versatz %.2f°' % max(abs(z['versatz'])
                                          for z in _s1 + _s2 + _s3 + _s4))
+    # Etikett der gewichteten Zeile in §1 (2026-10-08, Auswertung 07.10.c, 3.1):
+    # nennt die Gewichte, mit denen verteilung(gewichtet=True) rechnet.
+    _t1 = strukturbild_text(_sbh).split('### 1 ·')[1].split('### 2')[0]
+    assert 'gewichtet (Lichter, AC und MC ×2, Spezialfaktoren ×0,5, DC und IC 0)' in _t1, _t1
+    assert GEWICHT['AC'] == GEWICHT['MC'] == GEWICHT['Sonne'] == 2.0 \
+        and GEWICHT['DC'] == GEWICHT['IC'] == 0.0 and GEWICHT['Chiron'] == 0.5, GEWICHT
+    print('Etikett-Test §1 (2026-10-08): OK — Gewichte und Beschriftung stimmen ueberein')
