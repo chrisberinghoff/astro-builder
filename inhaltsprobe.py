@@ -2894,9 +2894,15 @@ _P11_DEKADE = re.compile(r"(?<![\wäöüß])(?:(?P<wo>Anfang|Mitte|Ende)|um\s+di
 # vom 29.09.d, Archiv 23.09. und 25.09.): „um die zweiundvierzig" — die Form, die
 # das Typmodul fuer die zeitliche Einordnung selbst vorgibt — lief an P11 vorbei;
 # _P11_DEKADE kennt nur Zehner („um die dreißig"). Im Pruffall pruefte P11 3 von
-# 11 Altersangaben. Gezaehlt wird n ± 1; ein folgendes Substantiv („um die zwölf
-# Monate") ist keine Altersangabe, ein Zehner bleibt bei _P11_DEKADE.
-_P11_UM_DIE = re.compile(r"(?<![\wäöüß])um\s+die\s+(?P<n>%s)(?![\wäöüß])(?!\s+[A-ZÄÖÜ])"
+# 11 Altersangaben. Ein folgendes Substantiv („um die zwölf Monate") ist keine
+# Altersangabe, ein Zehner bleibt bei _P11_DEKADE.
+# 2026-10-09 (Klasse-2-Sammelliste Z. 385 und 1012, Chris-Freigabe): Gezaehlt wird
+# genau n, nicht mehr n ± 1 — zusammen mit den ±1,5 Jahren am Zyklusfenster
+# (_alter_gedeckt) ergab das ±2,5 Jahre, und „um die zweiundvierzig" gegen ein Fenster
+# ~43,9 blieb still. „Um die …" am Satzanfang zaehlt jetzt mit ([Uu]m), bewusst ohne
+# re.I: Mit re.I traefe der Grossbuchstaben-Riegel (?!\s+[A-ZÄÖÜ]) auch jedes klein
+# geschriebene Folgewort, und fast jede Altersangabe fiele heraus.
+_P11_UM_DIE = re.compile(r"(?<![\wäöüß])[Uu]m\s+die\s+(?P<n>%s)(?![\wäöüß])(?!\s+[A-ZÄÖÜ])"
                          % _ZAHL)
 
 def _zahlen_index(txt, events=None):
@@ -3106,7 +3112,7 @@ def _p11_zahlen(chapters, txt, events=None, sprache_analyse="de"):
                     continue
                 n = _zahl_wert(m.group("n"))
                 if n is not None and n >= 5:
-                    funde.append((m.group(0), n - 1, n + 1))
+                    funde.append((m.group(0), n, n))         # 2026-10-09: genau n (s. _P11_UM_DIE)
             gesehen = set()
             for roh, lo, hi in funde:
                 if (roh, lo) in gesehen:
@@ -7646,7 +7652,8 @@ _P18_ZULETZT_RE = re.compile(_P18_GRENZ + r"(?:[Zz]uletzt|[Dd]avor|[Dd]as\s+letz
 # „Zeit", Wiederholungshinweis); gleichwertig gelten die Formen in _P18_STELLUNG_RE.
 # „Dieselbe Frage stand zuletzt an" (Innere Arbeit, Prinzip 15) nennt weder Aspekt
 # noch Stand und braucht keine, solange der Satzteil kein Aspektwort traegt.
-# Nicht erfasst (unveraendert): Selbst-Transite — _p18_kontakte() fuehrt T == Z nicht.
+# Nicht erfasst (unveraendert): Selbst-Transite — _p18_kontakte() fuehrt T == Z nicht;
+# seit 2026-10-09 bleibt ein Rueckkehr-Satzteil ohne eigenes Paar still (_P18_RUECKKEHR_RE).
 _P18_EINE_HAELFTE = {"Konjunktion", "Opposition"}
 _P18_STELLUNG_RE = re.compile(
     r"(?:[Ss]o\s+)?[Ww]ie\s+jetzt"
@@ -7657,6 +7664,19 @@ _P18_STELLUNG_RE = re.compile(
     r"|[Ii]m\s+selben\s+Abschnitt\s+seiner\s+Runde"
     r"|[Ii]n\s+derselben\s+Hälfte")
 _P18_FRAGE_RE = re.compile(r"(?:[Dd]ieselbe|[Dd]ie\s+gleiche|[Dd]iese)\s+Frage")
+# 2026-10-09 (Klasse-2-Sammelliste Z. 669, 694, 702, 719, 875; Chris-Freigabe): Ein
+# Satzteil ueber eine Rueckkehr — meist die Knotenrueckkehr, ein Selbst-Transit, den
+# _p18_kontakte() nicht fuehrt — fand kein eigenes Paar und fiel auf den Satzteil oder
+# Satz davor bzw. den fuehrenden Kontakt des Kapitels zurueck; der Hinweis nannte das
+# Alter eines fremden Kontakts und verleitete dazu, eine richtige Zahl zu ersetzen.
+# Traegt der Satzteil „Rückkehr", „Wiederkehr" oder „kehrt … zurück" (auch „zurückkehrt",
+# „Knotenrückkehr") und kein eigenes Paar aus Transiter und Ziel, bleibt er still —
+# Regel (a) oben: Bezug unklar, also still. „wiederkehrend" zaehlt nicht.
+_P18_RUECKKEHR_RE = re.compile(
+    r"(?:R(?:ü|ue)ckkehr|Wiederkehr)(?:en)?(?![\wäöüÄÖÜß])"
+    r"|(?<![\wäöüÄÖÜß])zur(?:ü|ue)ck(?:ge)?kehr\w*"
+    r"|(?<![\wäöüÄÖÜß])kehr(?:t|en|te|ten)(?![\wäöüÄÖÜß])(?:\s+[\wäöüÄÖÜß-]+){0,8}?"
+    r"\s+zur(?:ü|ue)ck(?![\wäöüÄÖÜß])", re.I)
 
 
 def _p18_stellung_genannt(teil):
@@ -7702,7 +7722,9 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
     des Kapitels; die Aspektart aus dem Satzteil, sonst aus der THEMA-Zeile. Nennt der
     Satzteil mehrere Ziele, muss das Alter zu einem davon passen. Seit 2026-10-07: Hat ein
     Kontakt nur Aspekte mit zwei Haelften (alles ausser Konjunktion und Opposition), muss
-    der Satzteil die Stellung nennen (_p18_stellung_genannt), auch wenn das Alter stimmt."""
+    der Satzteil die Stellung nennen (_p18_stellung_genannt), auch wenn das Alter stimmt.
+    Seit 2026-10-09: Ein Satzteil mit „Rückkehr“, „Wiederkehr“ oder „kehrt … zurück“ ohne
+    eigenes Paar bleibt still (_P18_RUECKKEHR_RE) — kein Rueckfall auf andere Kontakte."""
     if not d["frueher"] or not _P18_ZULETZT_RE.search(satz):
         return 0
     befunde = []
@@ -7712,6 +7734,8 @@ def _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte):
         if not alter:
             continue
         paare, ls = _p18_kontakte(teil, d["frueher"])
+        if not paare and _P18_RUECKKEHR_RE.search(teil):
+            continue                                 # 2026-10-09: Rueckkehr ohne eigenes Paar — still
         davor = teile[i_t - 1] if i_t else vorher
         if not paare and davor:
             paare_d, _l = _p18_kontakte(davor, d["frueher"])
@@ -9686,6 +9710,27 @@ def _selbsttest(still=False):
     assert not any("Altersangabe „um die zwölf" in t for t in r10f["proben"]["P11"]["pruefen"]), (
         "Lauf 10f: Zeitspanne als Alter gemeldet: %s" % r10f["proben"]["P11"]["pruefen"])
     berichte.append("Lauf 10 („um die N“): gedeckt still, ungedeckt gemeldet, Zeitspanne still")
+    # 10g) 2026-10-09: „um die N" zaehlt genau N (nicht mehr N ± 1), „Um die …" auch am
+    #      Satzanfang; ein folgendes Substantiv bleibt keine Altersangabe. Das Fenster
+    #      ~43,9 steht als zusaetzliche Zeile in §7, die Saetze sind erfunden.
+    c10g = ersetze(_TEST_CHART, "zweite Saturn-Opposition ~44.2 [bevorstehend]",
+                   "zweite Saturn-Opposition ~44.2 [bevorstehend]\n"
+                   "  - Uranus: Uranus-Opposition ~43.9 [bevorstehend]")
+    _alt10 = "Saturn kehrt um die dreißig an seinen Ort zurück"
+    r10g = lauf(c10g, ersetze(_TEST_ANALYSE, _alt10, _alt10 + ". Uranus steht seinem eigenen Stand "
+                              "um die zweiundvierzig gegenüber"))
+    erwarte(r10g, (("P11", "pruefen", "Altersangabe „um die zweiundvierzig“ (Alter 42)"),), "Lauf 10g")
+    assert len(r10g["proben"]["P11"]["pruefen"]) == 1, ("Lauf 10g", r10g["proben"]["P11"]["pruefen"])
+    r10h = lauf(c10g, ersetze(_TEST_ANALYSE, _alt10, _alt10 + ". Uranus steht seinem eigenen Stand "
+                              "um die vierundvierzig gegenüber. Um die vierundvierzig steht Uranus "
+                              "seinem eigenen Stand gegenüber. Um die zwölf Monate danach wird es ruhiger"))
+    assert not r10h["proben"]["P11"]["pruefen"], ("Lauf 10h", r10h["proben"]["P11"]["pruefen"])
+    assert r10h["proben"]["P11"]["geprueft"] == r["proben"]["P11"]["geprueft"] + 2, (
+        "Lauf 10h: „Um die …“ am Satzanfang nicht gezählt oder „Um die zwölf Monate“ als Alter "
+        "gezählt (%d gegen %d)" % (r10h["proben"]["P11"]["geprueft"], r["proben"]["P11"]["geprueft"]))
+    berichte.append("Lauf 10g (um die N genau N, 2026-10-09): „um die zweiundvierzig“ gegen ~43,9 "
+                    "gemeldet, „um die vierundvierzig“ still, „Um die …“ am Satzanfang gezählt und "
+                    "still, „Um die zwölf Monate“ keine Altersangabe")
 
     # 11) Altersreihe (2026-10-01b, Pruefbericht Transit 1+2 vom 01.10., K1): jedes
     #     Glied von „als du X und Y warst“ gezaehlt und geprueft; „im …jährigen Umlauf“
@@ -9921,6 +9966,24 @@ def _selbsttest(still=False):
                     "ohne Stellung gemeldet, ebenso bei einem früheren Durchgang derselben Hälfte und für "
                     "„Keine dieser Verbindungen“; mit „so wie jetzt“, bei Konjunktion ohne Durchgang, "
                     "ohne Verneinung und ohne „seit deiner Geburt“ still")
+    # 13e) 2026-10-09: Rueckkehr-Satzteil ohne eigenes Paar bleibt still, statt auf den
+    #      fuehrenden Kontakt des Kapitels (hier Saturn □ Sonne, Alter 12) zurueckzufallen;
+    #      mit eigenem Paar und ohne Rueckkehr-Wort wird weiter gemeldet. Saetze erfunden.
+    still13e = ["Die Knotenrückkehr stand zuletzt an, als du achtzehn warst.",
+                "Zuletzt kehrte er an seinen Ausgangspunkt zurück, als du achtzehn warst.",
+                "Die Wiederkehr dieser Achse stand zuletzt an, als du achtzehn warst."]
+    falsch13e = ["Bei der Rückkehr dieses Quadrats stand Saturn zuletzt so wie jetzt zu deiner Sonne, "
+                 "als du zwanzig warst.",
+                 "Dieselbe Frage stand zuletzt an, als du zwanzig warst."]
+    r13e = lauf(tc13, _a13(still13e + falsch13e), dict(tev13c, stations=_st13(0.2)))["proben"]["P18"]
+    assert not [z for z in r13e["pruefen"] for s in still13e if s[:40] in z], \
+        ("Lauf 13e: Rückkehr ohne eigenes Paar gemeldet", r13e["pruefen"])
+    for f in falsch13e:
+        assert any(f[:40] in z and "„zwanzig“ (20) — Saturn Quadrat Sonne" in z for z in r13e["pruefen"]), \
+            ("Lauf 13e: falsches Alter nicht gemeldet", f, r13e["pruefen"])
+    berichte.append("Lauf 13e (P18 Wiederholung, Rückkehr, 2026-10-09): „Rückkehr“, „Wiederkehr“, "
+                    "„kehrt … zurück“ ohne eigenes Paar still; mit eigenem Paar und ohne Rückkehr-Wort "
+                    "das falsche Alter weiter gemeldet")
 
     if not still:
         print("\n".join(berichte))
@@ -10134,6 +10197,9 @@ P18 SATZARTEN (analyse gegen chart_data und events.json) — nur PRÜFEN (2026-1
   Satz frühere Durchgänge („gab es seit deiner Geburt nicht", „zum ersten Mal in
   deinem Leben"), gilt dasselbe: Stellung nennen, denn die Liste führt nur dieselbe
   Hälfte — und lief dort schon einer, ist die Verneinung falsch (seit 2026-10-07b).
+  Ein Satzteil über eine Rückkehr („Rückkehr", „Wiederkehr", „kehrt … zurück") ohne
+  eigenes Paar aus Transiter und Ziel bleibt still — Selbst-Transite wie die
+  Knotenrückkehr führt die Liste nicht (seit 2026-10-09).
 """
 
 
