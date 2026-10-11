@@ -25,8 +25,8 @@ SECHS DINGE, DIE HIER BEWUSST SO STEHEN:
     abgetippt: `build.lies_deckblatt()` holt sie aus dem @@DECKBLATT-Block am
     Ende der chart_data.md. Fehlt der Block, bricht der Lauf ab.
   * Der Builder ZEICHNET SEINE GRAFIKEN SELBST, bei jedem Lauf (rad_zeichnen,
-    uhr_zeichnen). Ein PNG, das vom letzten Direktaufruf herumliegt, rendert
-    still einen alten Datenstand.
+    uhr_zeichnen, uhr_ausschnitte_zeichnen). Ein PNG, das vom letzten
+    Direktaufruf herumliegt, rendert still einen alten Datenstand.
   * Radbreite, Uhrbreite, Aspektskala UND die Skala der Konstellationsseite
     werden EINGEMESSEN, nicht gesetzt — am FRONTMATTER allein
     (build_html(nur_frontmatter=True): Cover, Inhalt, Chartbild-Strecke, dazu
@@ -421,6 +421,27 @@ def rad_zeichnen():
 def uhr_zeichnen():
     """Transit-Uhr in der Themenfassung."""
     return tuhr.bauen('/home/claude/' + UHRPNG, TD)
+
+
+# Uhr-Ausschnitte am Kapitelanfang (2026-10-11, Design-Zeitebene-Modul, Punkt 4):
+# je Themenkapitel sein Block der Uhr, mit dem Kapitelkopf verbunden
+# (tuhr.kopf_mit_ausschnitt; ohne Ausschnitt bleibt der Kopf unveraendert).
+# Gefuellt in __main__ hinter uhr_zeichnen(); {Kapiteltitel: Dateiname}.
+AUSSCHNITTE = {}
+
+
+def uhr_ausschnitte_zeichnen():
+    """Die Uhr-Ausschnitte der Themenkapitel. Kein Ausschnitt fuer ein Thema
+    ohne Block oder ohne seinen fuehrenden Kontakt in der Uhr — der Bericht sagt
+    je Thema, warum; eine Zeile mit ⚠ ist eine kaputte Sache. Bricht ab, wenn ein
+    Name in tuhr.THEMEN kein Kapiteltitel ist."""
+    aus, bericht = tuhr.ausschnitte(
+        TD, [it['title'] for it in items], tuhr.fuehrende_kontakte(CHARTDATA),
+        stamm=UHRPNG.rsplit('.', 1)[0] + '_kapitel')
+    print('Uhr-Ausschnitte:', len(aus), 'von', len(tuhr.THEMEN), 'Themen')
+    for z in bericht:
+        print('  Uhr-Ausschnitt:', z)
+    return aus
 
 
 def konst_zeilen():
@@ -847,7 +868,8 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
     # lang= folgt SPRACHE: die Silbentrennung laeuft nach den Mustern der
     # Sprache des Dokuments.
     parts = [f'<!doctype html><html lang="{SPRACHE}"><head><meta charset="utf-8">'
-             '<style>', BASE_CSS, chartdoc.struktur_css(), COVER_CSS,
+             '<style>', BASE_CSS, chartdoc.struktur_css(), tuhr.AUSSCHNITT_CSS,
+             COVER_CSS,
              '</style></head><body>',
              cover_html(),
              chartdoc.inhalt_page(items, SEITEN,
@@ -876,7 +898,8 @@ def build_html(breaks=(), skala=1.0, uhr_breite=None, rad_breite=None,
         elif it.get('kicker') in OPEN_PAGE:
             cls.append('chapter-first')
         head = (chartdoc.build_part_head(it) if is_part
-                else chartdoc.build_head(it))
+                else tuhr.kopf_mit_ausschnitt(chartdoc.build_head(it),
+                                              AUSSCHNITTE.get(it['title'])))
         # Den Kapitelkoerper baut chartdoc: build_bloecke() bindet Zwischentitel
         # und Folgeabsatz in einen `.subwrap`-Block (`break-after: avoid` wirkt
         # in WeasyPrint nicht). Signatur und Beleg rendern am KAPITELENDE;
@@ -916,6 +939,7 @@ if __name__ == '__main__':
     #    herumliegendes PNG benutzen.
     rad_zeichnen()
     uhr_zeichnen()
+    AUSSCHNITTE.update(uhr_ausschnitte_zeichnen())
     if COVER_BILD:
         cover_bild_rechnen()
 
