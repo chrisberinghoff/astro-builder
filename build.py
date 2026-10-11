@@ -591,7 +591,7 @@ def render_sentence_safe(build_html, pdf_path, colon_pairs=None,
       dessen letzter Satz auf : oder ; endet, das id seines letzten Satzes und
       das id des ersten Satzes des unmittelbar folgenden Absatzes (nur wenn der
       auch ein Textabsatz ist).
-    doctype: 'transit' | 'hdgk' | 'themen' | 'vertiefung' | None — schaltet die typ-eigenen
+    doctype: 'transit' | 'hdgk' | 'themen' | 'vertiefung' | 'beziehung' | None — schaltet die typ-eigenen
       Pflicht-Bausteine im Preflight scharf (s. PFLICHT_BAUSTEINE).
 
     Greedy von oben: pro Runde wird nur der oberste noch offene Umbruch gesetzt,
@@ -1436,6 +1436,23 @@ PFLICHT_BAUSTEINE = {
         "text": [("Inhalt", "Inhaltsverzeichnis-Seite nach dem Deckblatt")],
         "html": [],
     },
+    # Beziehungshoroskop (neu 2026-10-11, Erweiterung Beziehung): zwei Bilder
+    # nebeneinander, Paar oder Eltern-Kind. Kein einzelnes Radix-Rad und keine
+    # Aspekttabelle EINES Bildes — statt der Chart-Basis das Doppelrad, die
+    # Staende beider und die Verbindungen zwischen beiden samt Legende. Die
+    # Titel stehen wortgleich in beziehung.py (DOPPELRAD_TITEL, STAENDE_TITEL,
+    # KREUZ_TITEL); wer dort einen aendert, zieht ihn hier und in
+    # PFLICHT_GLEICHWERTIG nach.
+    "beziehung": {
+        "basis": False,
+        "text": [("Inhalt", "Inhaltsverzeichnis-Seite nach dem Deckblatt"),
+                 ("Das Doppelrad", "Doppelrad-Seite (beziehung.doppelrad)"),
+                 ("Die Stände beider Bilder", "Ständeseite beider Personen"),
+                 ("Die Verbindungen zwischen beiden Bildern",
+                  "Tabelle der Verbindungen zwischen beiden Bildern"),
+                 ("Die Aspekte und was sie bedeuten", "Aspekt-Legende")],
+        "html": [("_doppelrad.png", "Doppelrad-Grafik (beziehung.doppelrad)")],
+    },
 }
 
 
@@ -1454,6 +1471,9 @@ PFLICHT_GLEICHWERTIG = (
     ('Der Stichtag im Überblick', 'The Reference Date at a Glance'),
     ('Die tragenden Konstellationen', 'The Constellations That Carry Them'),
     ('Die Zeitfenster im Überblick', 'The Time Windows at a Glance'),
+    ('Das Doppelrad', 'The Double Wheel'),
+    ('Die Stände beider Bilder', 'The Positions in Both Charts'),
+    ('Die Verbindungen zwischen beiden Bildern', 'The Connections Between Both Charts'),
 )
 
 
@@ -1523,7 +1543,7 @@ def assert_render_ready(html_str: str, base_dir: str = None, must_contain=None,
       FELDER     required_fields={'Name': wert, ...} alle nicht-leer
       VOLLTEXT   must_contain=[(text,label)|text, ...]: jeder Block ist
                  wirklich im HTML gelandet (gegen still verlorene Absätze)
-      PFLICHT    doctype='transit'|'hdgk'|'themen'|'gegenprobe'|'vertiefung'|None: die
+      PFLICHT    doctype='transit'|'hdgk'|'themen'|'gegenprobe'|'vertiefung'|'beziehung'|None: die
                  Pflicht-Bausteine aus
                  PFLICHT_BAUSTEINE sind im Dokument vorhanden (Inhalts-
                  verzeichnis, Radix, Aspekttabelle, Legende + typ-eigene)
@@ -5354,6 +5374,18 @@ def _selbsttest():
         _vt = pflicht_bausteine("vertiefung")
         pruefe([t for t, _b in _vt["text"]] == ["Inhalt"] and _vt["html"] == [],
                "PFLICHT: Vertiefungs-Liste %r" % (_vt,))
+        # 2026-10-11 (Erweiterung Beziehung): eigene Liste ohne Chart-Basis —
+        # Doppelrad, Staende beider, Verbindungen und Legende; die englischen
+        # Titel gelten gleich.
+        _bz = pflicht_bausteine("beziehung")
+        pruefe([t for t, _b in _bz["text"]][:4] == [
+            "Inhalt", "Das Doppelrad", "Die Stände beider Bilder",
+            "Die Verbindungen zwischen beiden Bildern"]
+            and [n for n, _b in _bz["html"]] == ["_doppelrad.png"]
+            and "_radix.png" not in str(_bz),
+            "PFLICHT: Beziehungs-Liste %r" % (_bz,))
+        pruefe(_pflicht_kandidaten("Das Doppelrad") == ("Das Doppelrad", "The Double Wheel"),
+               "PFLICHT: englischer Titel des Doppelrads gleichwertig")
         pruefe([n for n, _b in pflicht_bausteine(None)["html"]] == ["_radix.png"],
                "PFLICHT: Chart-Basis unveraendert")
         block, _ = still(transit_rechenschaft_block, t1, evj)

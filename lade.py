@@ -119,6 +119,8 @@ BEKANNT = {
     "hd", "REFERENZ_Chart_Builder_Transit",      # bis 2026-09-23: REFERENZ_Chart_Builder_Ultimativ
     "REFERENZ_Chart_Builder_Geburtshoroskop",   # seit 2026-09-20 (D3, K7): schlanke Vorlage fuer das Geburtshoroskop
     "REFERENZ_Chart_Builder_Vertiefung",        # seit 2026-10-10: Vorlage fuer das PDF der Vertiefung
+    "beziehung",             # seit 2026-10-11: Rechnung, Datenblatt, Doppelrad und Probe des Beziehungshoroskops
+    "REFERENZ_Chart_Builder_Beziehung",         # seit 2026-10-11: Vorlage fuer das PDF des Beziehungshoroskops
     "inhaltsprobe",          # seit 2026-09-16: Analyse gegen chart_data (Schritt 2 und 3+4)
     "lade",
 }
@@ -173,6 +175,15 @@ SCHRITTE = {
     # `selektor`, weil inhaltsprobe.py es importiert. Der Text-Chat nimmt "2".
     "vertiefung": ("build", "chartdoc", "selektor", "inhaltsprobe",
                    "REFERENZ_Chart_Builder_Vertiefung"),
+    # 2026-10-11 (Erweiterung Beziehung): Chat 1 rechnet aus zwei Datenblaettern
+    # (beziehung, radix; die Zeitprobe braucht pyswisseph: ephemeriden()),
+    # baut den Referenzschnitt (selektor), prueft Schema, Kicker und Wortscan
+    # (build, chartdoc, inhaltsprobe). Chat 2 rendert mit der eigenen Vorlage
+    # und zeichnet das Doppelrad (beziehung, radix).
+    "beziehung": ("beziehung", "radix", "selektor", "build", "inhaltsprobe",
+                  "chartdoc"),
+    "beziehung-design": ("build", "chartdoc", "radix", "selektor", "inhaltsprobe",
+                         "beziehung", "REFERENZ_Chart_Builder_Beziehung"),
 }
 
 # Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
@@ -185,6 +196,8 @@ _SCHRITT_TEXT = {
     "hdgk":     "Human Design / Gene Keys",
     "bibliothek": "Bibliotheks-Umbau und Selektor-Pflege",
     "vertiefung": "Design-Chat der Vertiefung (eigene Vorlage, kein Rad; der Text-Chat nimmt Schritt 2)",
+    "beziehung": "Chat 1 des Beziehungshoroskops: Datenblatt der Beziehung, Referenzschnitt, Text und Probe (Zeitprobe braucht ephemeriden())",
+    "beziehung-design": "Chat 2 des Beziehungshoroskops: Doppelrad, Staende, Verbindungen, Render (eigene Vorlage)",
 }
 
 
@@ -653,6 +666,12 @@ def _selbsttest():
                 assert "REFERENZ_Chart_Builder_Geburtshoroskop.py" in namen, namen
                 namen = lade_schritt("transit", ziel=tmp, still=True, repo=True)
                 assert "REFERENZ_Chart_Builder_Transit.py" in namen, namen
+                # 2026-10-11 (Erweiterung Beziehung): beide Chats ziehen beziehung,
+                # der Design-Chat dazu seine Vorlage
+                namen = lade_schritt("beziehung", ziel=tmp, still=True, repo=True)
+                assert "beziehung.py" in namen and "radix.py" in namen, namen
+                namen = lade_schritt("beziehung-design", ziel=tmp, still=True, repo=True)
+                assert "REFERENZ_Chart_Builder_Beziehung.py" in namen, namen
             (pathlib.Path(tmp) / "radix.py").write_text("", encoding="utf-8")
             try:
                 lade("radix", ziel=tmp, still=True)
