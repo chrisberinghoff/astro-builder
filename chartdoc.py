@@ -377,6 +377,11 @@ section.cover {{ margin: -8px 0 0 -8px; }}
 @page inhalt {{
   @top-right {{ content: "{KOL_INHALT}"; font-family:"EB Garamond";
                font-size:7.2pt; letter-spacing:0.16em; color:{PETROL_L}; }}
+  /* 2026-10-10: auf der Inhaltsseite steht unten die Datenschutz-Zeile statt
+     der Seitenzahl (DATENSCHUTZ_ZEILE, folgt der Sprache). Seitenfuss statt
+     Textfluss: Sie verschiebt keinen Umbruch. */
+  @bottom-center {{ content: "{DATENSCHUTZ_ZEILE}"; font-family:"EB Garamond";
+               font-size:7.6pt; letter-spacing:0.03em; color:{STONE}; }}
 }}
 @page anhang {{
   @top-right {{ content: "{KOL_ANHANG}"; font-family:"EB Garamond";
@@ -1710,6 +1715,13 @@ KOLUMNEN = {'front': 'DAS CHARTBILD', 'inhalt': 'INHALT', 'anhang': 'ANHANG',
 # damit sie mit der Sprache wechseln und nicht in jedem Chart-Builder stehen.
 CHARTBILD_TITEL = 'Das Chartbild'
 INHALT_KOPF = 'Horoskop für {name}'
+# 2026-10-10 (Wartungslauf Vertiefung, Beifang A): Die Datenschutzerklaerung
+# der Website verspricht Beschenkten: „Im Horoskop selbst steht außerdem, wo
+# sie diese Erklaerung findet.“ Die Zeile steht deshalb als Code im
+# Seitenfuss der Inhaltsseite JEDES Dokuments (@page inhalt, statt der
+# Seitenzahl) — kein Satz im Text, den ein Lauf vergessen koennte.
+DATENSCHUTZ_ZEILE = ('Wie ich mit den Angaben zu deinem Horoskop umgehe: '
+                     'himmelsgrundriss.de/#datenschutz')
 UHR_TITEL_KURZ = 'Die Transit-Uhr'
 ANHANG_KICKER = 'Anhang'
 ANH_LANG_TITEL = 'Die langen Linien im Überblick'
@@ -1727,7 +1739,7 @@ _LABEL_NAMEN = ('LEGEND_ROWS', 'LEGEND_TITEL', 'ORBIS_ZEILE', 'ZEITLEISTE_TITEL'
                 # 2026-09-26
                 'LINIEN_LEGENDE', 'FUSS_LABEL', 'ASP_EINSEITIG', 'ZUSATZ_TEXT',
                 'ZUSATZ_NICHT_IM_RAD', 'KOLUMNEN', 'CHARTBILD_TITEL',
-                'INHALT_KOPF', 'UHR_TITEL_KURZ', 'UHR_TITEL_JAHR',
+                'INHALT_KOPF', 'DATENSCHUTZ_ZEILE', 'UHR_TITEL_KURZ', 'UHR_TITEL_JAHR',
                 'UHR_TITEL_JAHRE', 'JAHRWORT', 'UHR_LEAD_TEXT',
                 'ZEITLEISTE_KICKER', 'ZL_KOPF', 'ZL_LEER', 'ANHANG_KICKER',
                 'ANH_LANG_TITEL', 'ANH_JETZT_TITEL', 'ANZEIGE',
@@ -1828,6 +1840,8 @@ _LABELS = {
         'KOLUMNEN': {'front': 'THE CHART IN PICTURES', 'inhalt': 'CONTENTS',
                      'anhang': 'APPENDIX', 'zeit': 'TIMELINE'},
         'CHARTBILD_TITEL': 'The Chart in Pictures',
+        'DATENSCHUTZ_ZEILE': ('How I handle the details behind your horoscope: '
+                              'himmelsgrundriss.de/#datenschutz'),
         'INHALT_KOPF': 'Horoscope for {name}',
         'UHR_TITEL_KURZ': 'The Transit Clock',
         'UHR_TITEL_JAHR': 'The Transit Clock — the coming year',
@@ -3321,10 +3335,23 @@ def _selbsttest():
     _treffer = [t for n_ in _LABEL_NAMEN + ('ZUSATZ_LEGENDE',)
                 for t in _strings(globals().get(n_)) if _umschrieben.search(t)]
     assert not _treffer, 'umschriebene Umlaute im Seitentext: %r' % _treffer[:3]
+    # 2026-10-10 (Beifang A): Datenschutz-Zeile im Seitenfuss der Inhaltsseite,
+    # in beiden Sprachen, und nur dort.
+    _css = struktur_css()
+    _inh = _css[_css.index('@page inhalt'):_css.index('@page anhang')]
+    assert 'himmelsgrundriss.de/#datenschutz' in _inh and 'deinem Horoskop' in _inh, _inh
+    assert _css.count('himmelsgrundriss.de') == 1, 'Datenschutz-Zeile mehrfach im CSS'
+    try:
+        konfiguriere(sprache='en', signaturen_en={}, belege_en={})
+        _en = struktur_css()
+        assert 'behind your horoscope: himmelsgrundriss.de/#datenschutz' in _en, 'EN fehlt'
+    finally:
+        konfiguriere(sprache='de', signaturen_en={}, belege_en={})
+    assert 'deinem Horoskop' in struktur_css(), 'Rueckwechsel auf deutsch'
     print('[chartdoc-Selbsttest bestanden: lies_zeitleiste(), Marke der '
           'Zeitleiste (W12), kopf-Pruefung von inhalt_page() (W61), '
           'Orb der Aspektseite (W2), Sprachfassung (2026-09-26), '
-          'Umlaute im Seitentext (2026-10-01b)]')
+          'Umlaute im Seitentext (2026-10-01b), Datenschutz-Zeile (2026-10-10)]')
 
 
 # ---------------------------------------------------------------------------

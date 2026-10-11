@@ -591,7 +591,7 @@ def render_sentence_safe(build_html, pdf_path, colon_pairs=None,
       dessen letzter Satz auf : oder ; endet, das id seines letzten Satzes und
       das id des ersten Satzes des unmittelbar folgenden Absatzes (nur wenn der
       auch ein Textabsatz ist).
-    doctype: 'transit' | 'hdgk' | 'themen' | None — schaltet die typ-eigenen
+    doctype: 'transit' | 'hdgk' | 'themen' | 'vertiefung' | None — schaltet die typ-eigenen
       Pflicht-Bausteine im Preflight scharf (s. PFLICHT_BAUSTEINE).
 
     Greedy von oben: pro Runde wird nur der oberste noch offene Umbruch gesetzt,
@@ -1425,6 +1425,17 @@ PFLICHT_BAUSTEINE = {
         "html": [('class="zeitleiste"', "Zeitleiste als HTML (kein SVG-Text)"),
                  ('class="vergleich"', "Vergleichstabelle")],
     },
+    # Vertiefung (neu 2026-10-10, Erweiterung Vertiefung): eigenes PDF zu einer
+    # Frage oder bis zu zwei Lebensbereichen, gelesen aus einem schon
+    # gelieferten Horoskop. Wie die Themen-Analyse OHNE Radix-Rad und
+    # Aspekttabelle — beide stehen im Hauptdokument —, aber ohne deren
+    # Transit-Uhr und Zeitfenster-Tabelle: Eine Vertiefung kann ganz ohne
+    # Transit-Anteil sein. Pflicht bleibt das Inhaltsverzeichnis.
+    "vertiefung": {
+        "basis": False,
+        "text": [("Inhalt", "Inhaltsverzeichnis-Seite nach dem Deckblatt")],
+        "html": [],
+    },
 }
 
 
@@ -1512,7 +1523,7 @@ def assert_render_ready(html_str: str, base_dir: str = None, must_contain=None,
       FELDER     required_fields={'Name': wert, ...} alle nicht-leer
       VOLLTEXT   must_contain=[(text,label)|text, ...]: jeder Block ist
                  wirklich im HTML gelandet (gegen still verlorene Absätze)
-      PFLICHT    doctype='transit'|'hdgk'|'themen'|'gegenprobe'|None: die
+      PFLICHT    doctype='transit'|'hdgk'|'themen'|'gegenprobe'|'vertiefung'|None: die
                  Pflicht-Bausteine aus
                  PFLICHT_BAUSTEINE sind im Dokument vorhanden (Inhalts-
                  verzeichnis, Radix, Aspekttabelle, Legende + typ-eigene)
@@ -5320,6 +5331,13 @@ def _selbsttest():
                 pass
         pruefe("Die Transit-Uhr" in [t for t, _b in pflicht_bausteine("transit")["text"]],
                "PFLICHT: Transit-Liste")
+        # 2026-10-10 (Erweiterung Vertiefung): eigene Liste ohne Chart-Basis —
+        # Inhaltsverzeichnis ja, Radix-Rad und Aspekttabelle nein.
+        _vt = pflicht_bausteine("vertiefung")
+        pruefe([t for t, _b in _vt["text"]] == ["Inhalt"] and _vt["html"] == [],
+               "PFLICHT: Vertiefungs-Liste %r" % (_vt,))
+        pruefe([n for n, _b in pflicht_bausteine(None)["html"]] == ["_radix.png"],
+               "PFLICHT: Chart-Basis unveraendert")
         block, _ = still(transit_rechenschaft_block, t1, evj)
         pruefe(block.startswith("TRANSIT-RECHENSCHAFT: 8 primaere Wirkorb-Kontakte "
                                 "im Fenster 01.01.2031–31.12.2032, 3 tragen"),

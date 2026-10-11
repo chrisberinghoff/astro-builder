@@ -118,6 +118,7 @@ BEKANNT = {
     "transituhr_fusion", "transituhr", "selektor", "markiere", "restyle",
     "hd", "REFERENZ_Chart_Builder_Transit",      # bis 2026-09-23: REFERENZ_Chart_Builder_Ultimativ
     "REFERENZ_Chart_Builder_Geburtshoroskop",   # seit 2026-09-20 (D3, K7): schlanke Vorlage fuer das Geburtshoroskop
+    "REFERENZ_Chart_Builder_Vertiefung",        # seit 2026-10-10: Vorlage fuer das PDF der Vertiefung
     "inhaltsprobe",          # seit 2026-09-16: Analyse gegen chart_data (Schritt 2 und 3+4)
     "lade",
 }
@@ -167,6 +168,11 @@ SCHRITTE = {
     "restyle":  ("build", "chartdoc", "radix", "restyle"),
     "hdgk":     ("hd",),
     "bibliothek": ("markiere", "selektor"),
+    # 2026-10-10 (Erweiterung Vertiefung): der Design-Chat der Vertiefung —
+    # ohne radix (kein Rad, keine Chartbild-Seiten), mit der eigenen Vorlage;
+    # `selektor`, weil inhaltsprobe.py es importiert. Der Text-Chat nimmt "2".
+    "vertiefung": ("build", "chartdoc", "selektor", "inhaltsprobe",
+                   "REFERENZ_Chart_Builder_Vertiefung"),
 }
 
 # Was ein Schritt bedeutet — nur fuer die Ausgabe von uebersicht().
@@ -178,6 +184,7 @@ _SCHRITT_TEXT = {
     "restyle":  "Schreibweise-Wechsel einer fertigen Analyse",
     "hdgk":     "Human Design / Gene Keys",
     "bibliothek": "Bibliotheks-Umbau und Selektor-Pflege",
+    "vertiefung": "Design-Chat der Vertiefung (eigene Vorlage, kein Rad; der Text-Chat nimmt Schritt 2)",
 }
 
 
