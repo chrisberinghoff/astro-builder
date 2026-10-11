@@ -46,8 +46,11 @@ statt nur seiner Kernabschnitte in die ueberspringbare 'Sonnenzeichen-Hintergrun
 sagt je Faktor, ob beide Haeuser auszudeuten sind oder ob beide nur angegeben
 werden (Registerzeile); (c) seit 2026-10-06 bei Chiron, Lilith und Pholus: ihr
 Haus (und Grenzlagen-Nebenhaus) bekommt die allgemeine Hausbeschreibung HAUS_n_ALLG
-wie ein Planetenhaus. Ohne das Feld verhaelt sich alles wie zuvor — das Feld
-ist optional und additiv.
+wie ein Planetenhaus; (d) seit 2026-10-11 bei den Achsen: Fuehrt eine Achse
+laut Themenliste ein Thema (`| fuehrt=IC, …`), bekommt ihr Haus (AC 1, IC 4,
+DC 7, MC 10) HAUS_n_ALLG — die ACHSE-Zeile selbst traegt kein `fuehrt=`, der
+Selektor liest dafuer die Themenliste. Ohne das Feld verhaelt sich alles wie
+zuvor — das Feld ist optional und additiv.
 Die Methoden-Segmente der Spezialfaktoren (_ALLG/_SEC_*) bleiben seit dem
 2026-09-19 (W59, Chris-Entscheidung Frage 16) AUCH bei `fuehrt=ja` in der
 ueberspringbaren 'Spezialfaktor-Methodik'. Vorher zog `fuehrt=ja` sie in die
@@ -176,6 +179,11 @@ SCHWELLE_ORB = 2.0   # bis hierher fuehrt das Nebenhaus die Deutung
 # 2026-09-30 (K9): die ⚠-Zeile „Führung offen" aus Strukturbild §3
 # (radix.strukturbild_text()) und das Merkmal eines §3, das sie schon kennt.
 OFFEN_ZEILE_RE = re.compile(r'^\s*-\s*⚠ Führung offen:\s*([A-Za-zÄÖÜäöüß]+)', re.M)
+# 2026-10-11 (Auswertung der Pruefberichte vom 11.10., 3.1): eine Achse, die laut
+# Themenliste ein Thema FUEHRT (`| fuehrt=IC, Krebs, Haus 4`). Im Transit traegt
+# `fuehrt=` einen Kontakt (`T-Saturn □ R-Sonne`) und trifft hier nie.
+FUEHRT_ACHSE_RE = re.compile(r'\|\s*fuehrt=\s*(AC|IC|DC|MC)(?![A-Za-z0-9ÄÖÜäöüß])')
+ACHSEN_HAUS = {'AC': 1, 'IC': 4, 'DC': 7, 'MC': 10}
 OFFEN_STAND_RE = re.compile(r'die Führung prüfen die Zeilen darunter in beide '
                             r'Richtungen|früherer oder späterer Geburt das '
                             r'führende Haus')
@@ -555,7 +563,12 @@ def parse_chart(text):
     # 2026-09-30 (K9): die Faktoren, die Strukturbild §3 (radix) mit offener
     # Fuehrung meldet — gegen `fuehrung=offen` gehalten in _pruefe_hart().
     offen_s3 = sorted({norm_faktor(m.group(1)) for m in OFFEN_ZEILE_RE.finditer(text)})
+    # 2026-10-11 (3.1): die Achsen, die laut Themenliste ein Thema fuehren —
+    # build_requests() gibt ihrem Haus die allgemeine Hausbeschreibung.
+    achsen_fuehrend = sorted({m.group(1) for m in FUEHRT_ACHSE_RE.finditer(text)},
+                             key=list(ACHSEN_HAUS).index)
     return {'faktoren': faktoren, 'achsen': achsen, 'aspekte': aspekte,
+            'achsen_fuehrend': achsen_fuehrend,
             'aspekte_keine': aspekte_keine,
             'spiegel': spiegel, 'unbekannt': [], 'hinweise': hinweise,
             'offen_strukturbild': offen_s3,
@@ -791,6 +804,17 @@ def build_requests(chart, typ=None):
             prot.append('FAKTOR %-13s -> UNBEKANNT (keine Bloecke gezogen!)' % nm)
             continue
         prot.append('FAKTOR %-13s -> %s' % (nm, ', '.join(got) or '(nur ALLG/SEC)'))
+
+    # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., 3.1; Chris: ja):
+    # Fuehrt eine Achse laut Themenliste ein Thema, bekommt ihr Haus die
+    # allgemeine Hausbeschreibung, auch ohne Planet darin. Vorher blieb ein
+    # solches Haus ohne HAUS_n_ALLG, und der Kopf meldete trotzdem
+    # „Fehlstellen: 0“ (Chris 2026-10-01: Hausdeutungen immer aus der Bibliothek).
+    for ax in chart.get('achsen_fuehrend', ()):
+        n = ACHSEN_HAUS[ax]
+        prot.append('ACHSE %-13s -> fuehrt ein Thema: HAUS_%d_ALLG%s'
+                    % (ax, n, ' (Haus schon belegt)' if n in haeuser else ''))
+        haeuser.add(n)
 
     # Haus-Allgemein je belegtem Haus (Grenzlagen-Nebenhaeuser eingeschlossen)
     for n in sorted(haeuser):
@@ -1471,6 +1495,30 @@ def _selbsttest():
     assert 'HAUS_1_ALLG' in _keys_h and 'HAUS_4_ALLG' in _keys_h, _keys_h
     assert not ({'HAUS_2_ALLG', 'HAUS_9_ALLG', 'HAUS_10_ALLG'} & set(_keys_h)), _keys_h
     assert 'HAUS_2_ALLG' in [k for _g, _s, k, _n in req], 'Chiron fuehrt=ja in Haus 2'
+    # 2026-10-11 (3.1): Fuehrt eine Achse laut Themenliste ein Thema, bekommt ihr
+    # Haus HAUS_n_ALLG, auch leer. Konstruiert: IC fuehrt (Haus 4 leer), DC klingt
+    # nur (Haus 7 leer, bleibt ohne), die Sonne fuehrt in Haus 1 (wie bisher).
+    _blk_a = '\n'.join(['## Themenliste', '',
+                        'THEMA 1 | titel=Probe eins',
+                        '  | fuehrt=IC, Krebs, Haus 4',
+                        '  | klingt=DC (Skorpion, Haus 7)',
+                        'THEMA 2 | titel=Probe zwei | fuehrt=Sonne, Widder, Haus 1',
+                        '', '@@SELEKTOR',
+                        'FAKTOR SONNE zeichen=Widder haus=1 fuehrt=ja',
+                        'ACHSE AC zeichen=Widder',
+                        'ACHSE IC zeichen=Krebs',
+                        '@@ENDE'])
+    _ch_a = parse_chart(_blk_a)
+    assert _ch_a['achsen_fuehrend'] == ['IC'], _ch_a['achsen_fuehrend']
+    _req_a, _prot_a, _g_a = build_requests(_ch_a)
+    _keys_a = [k for _g, _s, k, _n in _req_a]
+    assert 'HAUS_4_ALLG' in _keys_a and 'HAUS_1_ALLG' in _keys_a, _keys_a
+    assert 'HAUS_7_ALLG' not in _keys_a, _keys_a
+    assert any('ACHSE IC' in _p and 'HAUS_4_ALLG' in _p for _p in _prot_a), _prot_a
+    assert parse_chart(_blk_h)['achsen_fuehrend'] == []
+    # Transit: `fuehrt=` traegt einen Kontakt, keine Achse
+    assert parse_chart('THEMA 1 | titel=X | fuehrt=T-Saturn □ R-MC\n@@SELEKTOR\n'
+                       '@@ENDE')['achsen_fuehrend'] == []
     # W35: Wortform, echte Umlaute, keine Gradzahl; fuehrendes Haus vorn
     assert signatur_notation(g['MOND']) == \
         'Mond im zwölften Haus, dicht an der Schwelle aus dem elften'
@@ -1691,7 +1739,8 @@ def _selbsttest():
           'Transit-Schnitt (Block D), Sonnenzeichen-Kern (Block D II), '
           'offene Fuehrung (K9), Blockende und ASPEKT KEINE (K2-01.10.), '
           'Spezialfaktor-Paare und Kipp-Notiz (03.10.), '
-          'Hausbeschreibung bei fuehrendem Spezialfaktor (06.10.)]')
+          'Hausbeschreibung bei fuehrendem Spezialfaktor (06.10.), '
+          'Hausbeschreibung bei fuehrender Achse (11.10.)]')
 
 
 def main():

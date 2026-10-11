@@ -2280,14 +2280,19 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
       englischen Fassung eine Kapitelseite.
 
     Die Grenzen kommen aus den Ankern, die chartdoc ins PDF schreibt: Ende des
-    Bogens `PG_uhr`, sonst `PG_asp`; Radseite `PG_rad`. Fehlt einer davon,
-    bricht die Funktion ab — das PDF kommt dann nicht aus
-    `chartdoc.render_mit_inhalt()`. Braucht pypdf, Pillow und pdftoppm.
+    Bogens `PG_uhr`, sonst `PG_asp`; Radseite `PG_rad`. Traegt das PDF KEINEN
+    dieser drei Anker (Typ ohne Rad-, Aspekt- und Uhrseite, etwa die
+    Vertiefung), zeigt der Bogen Deckblatt, Inhaltsseite und erste
+    Kapitelseite (bis `PG_inhalt` + 1); `rad` und `rad_seite` sind dann None
+    (seit 2026-10-11, vorher brach jede Vertiefung hier ab). Fehlt nur einer
+    der drei — oder ohne alle drei auch `PG_inhalt` —, bricht die Funktion ab:
+    Das PDF kommt dann nicht aus `chartdoc.render_mit_inhalt()`. Braucht pypdf,
+    Pillow und pdftoppm.
 
     out_prefix  Vorgabe `<pdf ohne .pdf>_bogen` daneben.
-    -> {'bogen': Pfad, 'rad': Pfad, 'uhr': Pfad|None, 'extra': [Pfade],
+    -> {'bogen': Pfad, 'rad': Pfad|None, 'uhr': Pfad|None, 'extra': [Pfade],
         'seiten': [1, …, n]
-        (die Seiten im Bogen), 'rad_seite': n} — alle Bilder PNG.
+        (die Seiten im Bogen), 'rad_seite': n|None} — alle Bilder PNG.
     """
     try:
         import pypdf
@@ -2305,7 +2310,19 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
         except Exception:                               # noqa: BLE001
             continue
     ende = anker.get("PG_uhr", anker.get("PG_asp"))
-    if ende is None or "PG_rad" not in anker:
+    # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., F1): Ein Typ ohne
+    # Rad-, Aspekt- und Uhrseite (Vertiefung) traegt keinen der drei Anker. Der
+    # Bogen zeigt dann Deckblatt, Inhaltsseite und erste Kapitelseite — vorher
+    # brach die Funktion bei jeder Vertiefung ab, und der Lauf baute den Bogen
+    # von Hand. Fehlt nur einer der drei, bleibt es beim Abbruch.
+    ohne_rad = not ({"PG_rad", "PG_asp", "PG_uhr"} & set(anker))
+    if ohne_rad:
+        if "PG_inhalt" not in anker:
+            raise BuildError("kontaktbogen(): %s traegt weder PG_rad/PG_asp/"
+                             "PG_uhr noch PG_inhalt — das PDF kommt nicht aus "
+                             "chartdoc.render_mit_inhalt()." % pdf_pfad)
+        ende = min(anker["PG_inhalt"] + 1, len(leser.pages) - 1)
+    elif ende is None or "PG_rad" not in anker:
         raise BuildError("kontaktbogen(): %s traegt die Anker PG_asp/PG_uhr oder "
                          "PG_rad nicht — das PDF kommt nicht aus "
                          "chartdoc.render_mit_inhalt()." % pdf_pfad)
@@ -2343,9 +2360,10 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
         subprocess.run(["pdftoppm", "-png", "-r", str(rad_dpi), "-f", str(seite),
                         "-l", str(seite), "-singlefile", pdf_pfad, ziel], check=True)
         return ziel + ".png"
-    rad_seite = anker["PG_rad"] + 1
+    rad_seite = anker["PG_rad"] + 1 if "PG_rad" in anker else None
     uhr_seite = anker["PG_uhr"] + 1 if "PG_uhr" in anker else None
-    return {"bogen": bogen_pfad, "rad": _einzeln(rad_seite, "_rad"),
+    return {"bogen": bogen_pfad,
+            "rad": _einzeln(rad_seite, "_rad") if rad_seite else None,
             "uhr": _einzeln(uhr_seite, "_uhr") if uhr_seite else None,
             "extra": [_einzeln(int(s), "_s%d" % int(s)) for s in extra
                       if int(s) != uhr_seite],
@@ -5682,12 +5700,23 @@ def _selbsttest():
                                         "PG_konst", "PG_asp", "PG_uhr", "", ""]),
                                extra=[6, 7])
             pruefe(len(_ku["extra"]) == 1, "T12: Uhrseite doppelt %r" % _ku)
-            try:
-                kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "", "", "", "",
-                                      "", ""]))
-                fehler.append("T4: PDF ohne Anker nicht abgewiesen")
-            except BuildError:
-                pass
+            # F1 (2026-10-11): ohne Rad-, Aspekt- und Uhranker (Vertiefung)
+            # Bogen aus Deckblatt, Inhaltsseite und erster Kapitelseite.
+            _kv = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "", "", "", "",
+                                        "", ""]))
+            pruefe(_kv["seiten"] == [1, 2, 3] and _kv["rad"] is None
+                   and _kv["rad_seite"] is None and _kv["uhr"] is None
+                   and os.path.exists(_kv["bogen"]),
+                   "F1: Vertiefungs-Bogen %r" % _kv)
+            for _namen, _was in (
+                    (["", "", "", "", "", "", "", ""], "PDF ohne jeden Anker"),
+                    (["PG_cover", "PG_inhalt", "PG_rad", "", "", "", "", ""],
+                     "Rad ohne Aspektseite")):
+                try:
+                    kontaktbogen(_kb_pdf(_namen))
+                    fehler.append("T4/F1: %s nicht abgewiesen" % _was)
+                except BuildError:
+                    pass
         finally:
             shutil.rmtree(_kb_tmp, ignore_errors=True)
     else:
@@ -5790,7 +5819,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, GP, K2-29.09.: T2, T11, T12, K5, "
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, F1-11.10. Bogen ohne Rad, GP, K2-29.09.: T2, T11, T12, K5, "
           "K2-30.09.: Geruest, K2-01.10.: T1, N8, K1-01.10.b: Fuss-Schraegstrich, "
           "Zeitunsicherheit)")
 
