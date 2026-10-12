@@ -209,6 +209,13 @@ P12 Rangwoerter      (2026-09-19, U1 b) „die engste", „eine der engsten", �
                      wird/als („… bilden eine einzige Figur“; nicht nach einer
                      Ortsangabe: „In deinem Bild ist …“) und „alle vier Ecken“
                      zaehlen nicht.
+                     Seit 2026-10-12 (W1): Einzigkeit ueber ein Element oder einen
+                     Modus in beiden Sprachen („die einzige im Feuer“, „die
+                     einzige in einem Zeichen der Anpassung“, „the only one in
+                     fire“, „the only carrier of fire“, auch „single“/„sole“),
+                     gegen die Zaehlung, die der Satz nennt („zehn Hauptkräfte“,
+                     „ten main forces“ = gezaehlt); still nur, wenn dort 1 steht
+                     und der genannte Planet der Traeger ist (LESEFORMATE).
                      Nur PRUEFEN; englisch mit eigenen Wortlisten (seit 2026-09-22).
 P13 Beleg-Deckung    (2026-09-19, U1 c; Klartext-Regel, Chris-Entscheidung Frage
                      4 = 1) jede im Fliesstext benannte Konstellation — Aspektwort
@@ -3253,6 +3260,123 @@ def _modus_name(mm):
     if mm.group(1):
         return {"beweglich": "veränderlich"}.get(mm.group(1).lower(), mm.group(1).lower())
     return _MODUS_KLAR[" ".join(mm.group(2).split())]
+
+
+# 2026-10-12 (Nacharbeiten Englisch, W1): Element und Modus der EINZIGKEITSAUSSAGE, in
+# beiden Sprachen gleich — „die einzige im Feuer“, „der einzige Träger des Feuers“, „die
+# einzige in einem Zeichen der Anpassung“; „the only one in fire“, „the only carrier of
+# fire“, „the only one in a sign of adaptation“, auch mit „single“ und „sole“. Die
+# Zeichen-Form der Modi steht bewusst NICHT in _MODUS_RE: dort liest sie P18 mit und
+# meldete „…, alles andere in Zeichen des Anfangs und des Haltens“ (Zweitpruefung).
+# Englisch liest nur diese Aussage ein Element; die uebrigen englischen Rang- und
+# Anteilswoerter („half“, „all four“ …) nicht — Grenze des Auftrags.
+_MODUS_ZEICHEN_RE = re.compile(r"(?<![\wäöüß])Zeichen\s+(der\s+Anpassung|des\s+Anfang(?:en)?s"
+                               r"|des\s+Haltens)(?![\wäöüß])")
+_MODUS_ZEICHEN = {"der Anpassung": "veränderlich", "des Anfangs": "kardinal",
+                  "des Anfangens": "kardinal", "des Haltens": "fix"}
+_ELEMENT_EN_RE = re.compile(r"(?<!\w)(fire|earth|air|water|fiery|earthy|airy|watery)"
+                            r"(?:\s+(?:signs?|element))?(?!\w)", re.I)
+_ELEMENT_EN = {"fire": "Feuer", "fiery": "Feuer", "earth": "Erde", "earthy": "Erde",
+               "air": "Luft", "airy": "Luft", "water": "Wasser", "watery": "Wasser"}
+_MODUS_EN_RE = re.compile(r"(?<!\w)(cardinal|fixed|mutable)(?!\w)"
+                          r"|(?<!\w)power,?\s+to\s+(begin|hold|adapt)(?!\w)"
+                          r"|(?<!\w)signs?\s+of\s+(beginning|holding|adaptation)(?!\w)", re.I)
+_MODUS_EN = {"cardinal": "kardinal", "fixed": "fix", "mutable": "veränderlich",
+             "begin": "kardinal", "hold": "fix", "adapt": "veränderlich",
+             "beginning": "kardinal", "holding": "fix", "adaptation": "veränderlich"}
+# Was zwischen dem Einzigkeitswort und der Praeposition vor dem Element oder Modus stehen
+# darf — „die einzige Kraft im Feuer“, „die einzige deiner Kräfte, die im Feuer steht“,
+# „the only one of your ten main forces in fire“, „the only force that stands in fire“.
+# Sonst gehoert das Element zu etwas anderem: „the only planet in a square to your Moon in
+# water“, „einen einzigen tiefen Atemzug Luft“ (Zweitpruefung).
+_EM_ZWISCHEN_DE = frozenset((
+    "kraft", "kräfte", "kräften", "hauptkraft", "hauptkräfte", "hauptkräften", "planet",
+    "planeten", "träger", "faktor", "faktoren", "deiner", "deinen", "von", "unter", "den",
+    "zehn", "die", "der", "das", "welche", "welcher", "welches"))
+_EM_ZWISCHEN_EN = frozenset((
+    "one", "ones", "planet", "planets", "force", "forces", "main", "carrier", "carriers",
+    "factor", "factors", "of", "your", "the", "ten", "among", "that", "which", "who",
+    "stands", "stand", "lies", "lie", "sits", "sit", "is", "are"))
+_EM_VOR_RE = re.compile(r"(?<![\wäöüß])(?:im|ins|in|des|der|vom|of)\s+(?:(?:a|an|the|your|der|dem|"
+                        r"den|des|einem|einer|eines|deinem|deiner|deines)\s+)?$", re.I)
+
+
+def _em_treffer(text, englisch=False):
+    """(anfang, element, modus) des ERSTEN Element- oder Modus-Ausdrucks im Text, kanonisch
+    deutsch („Feuer“, „veränderlich“), der jeweils andere None; None ohne Treffer.
+    englisch: die englischen Muster (2026-10-12, W1)."""
+    t = text or ""
+    if englisch:
+        kand = [(x.start(), "e", x) for x in (_ELEMENT_EN_RE.search(t),) if x] + \
+               [(x.start(), "m", x) for x in (_MODUS_EN_RE.search(t),) if x]
+    else:
+        kand = [(x.start(), "e", x) for x in (_ELEMENT_RE.search(t),) if x] + \
+               [(x.start(), "m", x) for x in (_MODUS_RE.search(t),) if x] + \
+               [(x.start(), "z", x) for x in (_MODUS_ZEICHEN_RE.search(t),) if x]
+    if not kand:
+        return None
+    a0, art_, x = min(kand, key=lambda k: k[0])
+    if art_ == "e":
+        if englisch:
+            return a0, _ELEMENT_EN[x.group(1).lower()], None
+        w = x.group(1) or x.group(2)
+        return a0, {"Erd": "Erde"}.get(w, w), None
+    if art_ == "z":
+        return a0, None, _MODUS_ZEICHEN[" ".join(x.group(1).split())]
+    if englisch:
+        return a0, None, _MODUS_EN[next(g for g in x.groups() if g).lower()]
+    return a0, None, _modus_name(x)
+
+
+def _element_modus(text, englisch=False):
+    """(element, modus) des ersten Element- oder Modus-Ausdrucks im Text (_em_treffer);
+    (None, None) ohne Treffer."""
+    t = _em_treffer(text, englisch)
+    return (None, None) if t is None else (t[1], t[2])
+
+
+def _em_hinter(hinter, englisch=False):
+    """(element, modus) im Satzglied HINTER einem Einzigkeitswort — nur, wenn direkt davor
+    eine Praeposition steht (hoechstens mit Artikel, _EM_VOR_RE) und dazwischen nur Woerter
+    aus _EM_ZWISCHEN_DE bzw. _EM_ZWISCHEN_EN, hoechstens acht; sonst (None, None)
+    (2026-10-12, W1)."""
+    t = _em_treffer(hinter, englisch)
+    if t is None:
+        return None, None
+    vor = hinter[:t[0]]
+    mv = _EM_VOR_RE.search(vor)
+    if not mv:
+        return None, None
+    erlaubt = _EM_ZWISCHEN_EN if englisch else _EM_ZWISCHEN_DE
+    zwischen = re.findall(r"[\wäöüÄÖÜß’'-]+", vor[:mv.start()])
+    if len(zwischen) > 8 or any(w.casefold() not in erlaubt for w in zwischen):
+        return None, None
+    return t[1], t[2]
+
+
+# Pronomen vor dem Einzigkeitswort — deutsch mit Genus (2026-10-12, W1)
+_EINZIG_PRONOMEN_GENUS = {"er": "m", "sie": "f", "dieser": "m", "diese": "f", "jener": "m",
+                          "jene": "f"}
+
+
+def _einzig_bezug(pron, vorher, englisch=False):
+    """Kandidaten eines Pronomens vor dem Einzigkeitswort: ALLE Faktoren des Vorsatzes,
+    deutsch nach dem Genus des Pronomens (Faktoren ohne Genus, etwa MC und IC, passen immer);
+    englisch ohne Filter. Still bleibt die Probe nur, wenn alle der Traeger sind — anders als
+    `_pronomen_bezug()`, das ohne Genus nur den letzten Faktor nimmt (Zweitpruefung
+    2026-10-12: „Mars squares Saturn. … it is the only one in fire.“ blieb still)."""
+    fs = list(dict.fromkeys(f for _a, _e, f in _faktoren_im_satz(vorher or "")))
+    g = None if englisch else _EINZIG_PRONOMEN_GENUS.get((pron or "").casefold())
+    return [f for f in fs if g is None or _GENUS.get(f, g) == g]
+
+
+# Die Einzigkeitsaussage ueber ein Element oder einen Modus in ihrer englischen Form —
+# oeffnet P12 einen Satz ohne Faktor („It is the only one in fire.“), wie im Deutschen
+# das Element selbst („Er ist die einzige im Feuer.“) es tut (2026-10-12, W1).
+_EINZIG_EM_EN_RE = re.compile(
+    r"(?<!\w)(?:the\s+(?:only|single|sole)|only\s+one)\s+(?:(?:%s)\s+)*?(?:in|of)\s+"
+    r"(?:(?:a|an|the|your)\s+)?(?:%s|%s)" % ("|".join(sorted(_EM_ZWISCHEN_EN)),
+                                         _ELEMENT_EN_RE.pattern, _MODUS_EN_RE.pattern), re.I)
 _REFERENT_RE = re.compile(
     r"(?<![\wäöüß])(?:Planet\w*|Punkt\w*|Aspekt\w*|Verbindung\w*|Kontakt\w*|Faktor\w*|"
     r"Zeichen|Element\w*|Häuser\w*|Haus|Hauses|Figur\w*|Stellium\w*|Achse\w*|Winkel\w*|"
@@ -3268,6 +3392,17 @@ _CHART_VERB = r"(?:verbunden|verschaltet|vernetzt|angebunden|besetzt|aspektiert|
 _EINZIG_NOMEN = (r"(?:Planet|Punkt|Aspekt|Verbindung|Kontakt|Faktor|Zeichen|Element"
                  r"|Haus|Häuser|Figur|Träger|Winkel|Konjunktion|Opposition|Quadrat"
                  r"|Trigon|Sextil|Quincunx|Halbsextil|Stellium|Hauptkraft|Hauptkräfte)\w*")
+# 2026-10-12 (W1): Element oder Modus hinter „einzig…“ und einer Praeposition, dazwischen nur
+# Woerter aus _EM_ZWISCHEN_DE — „die einzige im Feuer“, „die einzige Kraft in einem Zeichen
+# der Anpassung“, „die einzige deiner Kräfte, die im Feuer steht“
+_EINZIG_EM_DE = (r"(?:(?:Kraft|Kräfte|Kräften|Hauptkraft|Hauptkräfte|Hauptkräften|Planet|Planeten"
+                 r"|Träger|Faktor|Faktoren|deiner|deinen|von|unter|den|zehn|die|der|das|welche[rs]?)"
+                 r"\s*,?\s+){0,6}?(?:im|ins|in|des|der|vom)\s+(?:(?:der|dem|den|des|einem|einer|eines"
+                 r"|deinem|deiner|deines)\s+)?"
+                 r"(?:(?:Feuer|Erde|Luft|Wasser)(?:s|zeichen\w*|element\w*)?|Erd(?:zeichen|element)\w*"
+                 r"|(?:kardinal|fix|veränderlich|beweglich)(?:e|en|er|es|em)?"
+                 r"|Kraft,?\s+(?:anzufangen|zu\s+halten|sich\s+anzupassen)"
+                 r"|Zeichen\s+(?:der\s+Anpassung|des\s+Anfang(?:en)?s|des\s+Haltens))(?![\wäöüß])")
 _RANG_MUSTER = (
     ("engste", re.compile(
         r"(?<![\wäöüß])(?:(?P<eine>(?:eine[rnms]?|einer)\s+der\s+(?:(?P<n>%s)\s+)?engst\w*)"
@@ -3291,10 +3426,14 @@ _RANG_MUSTER = (
     # Bewegung, die traegt": 20 von 40 PRUEFEN-Zeilen eines Laufs ohne jeden
     # Zahlengehalt. Verlangt wird jetzt dasselbe Chart-Nomen wie im zweiten
     # Zweig, hoechstens zwei Woerter dahinter.
+    # 2026-10-12 (Nacharbeiten Englisch, W1): oder hinter einer Praeposition ein Element
+    # oder ein Modus (_EINZIG_EM_DE) — „die einzige im Feuer“ fiel vorher ganz durch und
+    # waere auch falsch still geblieben.
     ("einzig", re.compile(r"(?<![\wäöüß])einzig(?:e|en|er|es|em)?(?![\wäöüß])"
-                          r"(?=\s+(?:[\wäöüß]+\s+){0,2}%s)"
+                          r"(?=\s+(?:(?:[\wäöüß]+\s+){0,2}%s|%s))"
                           r"|(?<![\wäöüß])nur\s+(?:ein|eine|einen|einem|einer)\s+"
-                          r"(?=(?:einzig\w*\s+)?%s)" % (_EINZIG_NOMEN, _EINZIG_NOMEN), re.I)),
+                          r"(?=(?:einzig\w*\s+)?%s)" % (_EINZIG_NOMEN, _EINZIG_EM_DE, _EINZIG_NOMEN),
+                          re.I)),
     ("kein_anderer", re.compile(r"(?<![\wäöüß])(?:kein(?:e|en|em|er)?\s+(?:andere[rnms]?|weitere[rnms]?)"
                                 r"|sonst\s+kein\w*)(?![\wäöüß])", re.I)),
     ("x_von_y", re.compile(r"(?<![\wäöüß])(?P<x>%s|eine[rns]?|ein)\s+von\s+(?P<y>%s)(?![\wäöüß])"
@@ -3620,8 +3759,11 @@ _P12_TEILMENGE_RE = re.compile(
     r"(?![\wäöüß])", re.I)
 
 
-def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
+def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None, englisch=False):
     """None, wenn die Rangzeile die Aussage traegt; sonst der Befundtext.
+    englisch: der Satz stammt aus einer englischen Fassung — dann liest die
+    Einzigkeitsaussage Element und Modus englisch, und die Zaehlung kennt die
+    englischen Woerter (2026-10-12, W1).
     vorher: der Satz davor (Bezug von „Das ist die engste Verbindung …").
     eigen: die Planeten im eigenen Zeichen aus Strukturbild §3 (`_eigenes_zeichen()`,
     None: §3 fehlt), Fundstelle fuer „der Planet, der keinem anderen folgt" (2026-09-24).
@@ -3675,6 +3817,17 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
     element = ({"Erd": "Erde"}.get(me.group(1) or me.group(2), me.group(1) or me.group(2))
                if me else None)
     modus = _modus_name(mm) if mm else None
+    # 2026-10-12 (Nacharbeiten Englisch, W1): Bei der Einzigkeit gilt zuerst das Element
+    # oder der Modus HINTER dem Einzigkeitswort (_em_hinter) — im Glied bis Semikolon,
+    # Doppelpunkt, Gedankenstrich oder einem Komma, hinter dem kein Relativsatz beginnt.
+    # Deutsch sonst wie bisher das ganze Glied; englisch NUR dieser Ausdruck.
+    if art == "einzig":
+        _hinter = re.split(r"[;:]|\s[—–]\s|[—–]|,(?!\s*(?:die|der|das|welche\w*|that|which|who)"
+                           r"(?![\wäöüß]))", satz[m.end():len(satz) if _k1 < 0 else _k1],
+                           maxsplit=1, flags=re.I)[0]
+        _em = _em_hinter(_hinter, englisch)
+        if _em != (None, None) or englisch:
+            element, modus = _em
 
     def liste(schl):
         return [e for e in rz.get(schl, {}).get("eintraege", []) if "rang" in e]
@@ -3686,15 +3839,39 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
         # Satz — vorher fiel das eine auf „gezählt" durch, das andere auf
         # „Planet". „Gewichtet ist X der am dichtesten verschaltete …" bleibt
         # wie bisher (das Adverb gilt dort dem Rang, nicht jedem Satzglied).
-        s_ = (klausel if re.search(r"gewichtet|gezählt|von\s+zehn|Planet|Faktor|Punkt|Stelle",
+        # 2026-10-12 (W1): Bei der Einzigkeit („einzig“, „kein anderer“) nennt auch
+        # „Hauptkraft“/„zehn Hauptkräfte“ die Zählmenge der Planeten — eine Teilmenge der zehn
+        # ist gezählt wie gewichtet dieselbe; bei Anteilen nicht, dort bleibt es wie bisher
+        # (Zweitprüfung: „Gewichtet steht die Hälfte deiner zehn Hauptkräfte …“). Englisch
+        # dieselben Wörter.
+        _einz = art in ("einzig", "kein_anderer")
+        _en_gew = r"(?<!\w)weighted(?!\w)"
+        _en_gez = r"(?<!\w)(?:counted|of\s+ten|planets?" + (r"|main\s+forces?" if _einz else "") + r")(?!\w)"
+        _en_fak = r"(?<!\w)factors?(?!\w)"
+        _de_gez = r"gezählt|von\s+zehn|Planet" + (r"|Hauptkr[aä]ft" if _einz else "")
+        s_ = (klausel if re.search(r"gewichtet|gezählt|von\s+zehn|Planet|Faktor|Punkt|Stelle"
+                                   + (r"|Hauptkr[aä]ft" if _einz else "")
+                                   + ("|" + "|".join((_en_gew, _en_gez, _en_fak)) if englisch else ""),
                                    klausel, re.I) else satz)             # 2026-09-30 (K1)
+        # Bei der Einzigkeit geht die genannte Planetenmenge vor „gewichtet“: Unter den zehn
+        # ist der Träger gezählt wie gewichtet derselbe („Gewichtet, ist Saturn unter deinen
+        # zehn Hauptkräften die einzige im Feuer“ — Zweitprüfung).
+        if _einz and (re.search(r"Planet|Hauptkr[aä]ft", s_)
+                      or englisch and re.search(r"(?<!\w)(?:planets?|main\s+forces?)(?!\w)", s_, re.I)):
+            return ["gezaehlt"]
         if re.search(r"^\W*Gewichtet(?:\s+gezählt)?\s*,|[Gg]ewichtet\s+gezählt", s_):
             return ["gewichtet"]
         if re.search(r"gewichtet", s_):
             return ["gewichtet"]
-        if re.search(r"gezählt|von\s+zehn|Planet", s_):
+        if englisch and re.search(_en_gew, s_, re.I):
+            return ["gewichtet"]
+        if re.search(_de_gez, s_):
+            return ["gezaehlt"]
+        if englisch and re.search(_en_gez, s_, re.I):
             return ["gezaehlt"]
         if re.search(r"Faktor|Punkt|Stelle", s_):
+            return ["gewichtet"]
+        if englisch and re.search(_en_fak, s_, re.I):
             return ["gewichtet"]
         return ["gezaehlt", "gewichtet"]
 
@@ -3808,14 +3985,41 @@ def _rang_befund(art, m, satz, rz, typ, vorher="", eigen=None, struktur=None):
             werte = [(a, e) for a, e in verteilung(name, fam) if e]
             if not werte:
                 return "keine Rangzeile für %s gefunden" % name
+            # 2026-10-12 (W1): Still nur, wenn der genannte Planet der Träger ist — nennt
+            # der Satz mehrere Faktoren, müssen sie genau der Träger sein. Vorher genügte bei
+            # zwei Faktoren irgendeiner („Neben Venus ist Saturn die einzige im Feuer“, „Venus
+            # ist die einzige im Feuer und Saturn die einzige …“ blieben still). Ohne Faktor
+            # im Satz holt ein Pronomen vor dem Einzigkeitswort („er“, „sie“, „dieser“,
+            # „it“, „this“, „That …“) seinen Bezug aus dem Vorsatz; mehrere Kandidaten
+            # müssen alle der Träger sein. Ohne Faktor und ohne Pronomen genügt die Zählung 1.
+            # Eine Achse neben einem Planeten („Saturn … am MC“) ist kein zweiter Kandidat:
+            # In der gezählten Zeile steht nie eine Achse (Zweitprüfung).
+            genannt, pron = (set(fak) - set(ACHSEN)) or set(fak), None
+            if not genannt:
+                _vp = satz[:m.start()]
+                _pm = (re.search(r"(?<!\w)(it|he|she|this)(?!\w)|^\W*(That)(?!\w)", _vp, re.I)
+                       if englisch else
+                       re.search(r"(?<![\wäöüß])(er|sie|dieser|diese|jener|jene)(?![\wäöüß])", _vp, re.I))
+                if _pm:
+                    pron = next(g for g in _pm.groups() if g)
+                    _kand = set(_einzig_bezug(pron, vorher, englisch))
+                    genannt = (_kand - set(ACHSEN)) or _kand
             falsch = []
             for a, e in werte:
                 traeger = [kanon(n_) for n_, _ in e["traeger"]]
                 ok = (not traeger) if null else (
-                    len(traeger) == 1 and (not fak or traeger[0] in fak or len(set(fak)) > 1))
-                if not ok:
-                    falsch.append("%s-%s: %s — %d Träger" % (fam, a, _rang_txt(e).split(". ", 1)[1],
-                                                            len(traeger)))
+                    len(traeger) == 1 and (genannt == {traeger[0]} if (genannt or pron) else True))
+                if ok:
+                    continue
+                _rt = _rang_txt(e).split(". ", 1)[1]
+                if not null and len(traeger) == 1 and genannt:
+                    falsch.append("%s-%s: %s — der Satz nennt %s" % (
+                        fam, a, _rt, ", ".join(ANZEIGE.get(x, x) for x in sorted(genannt))))
+                elif not null and len(traeger) == 1 and pron:
+                    falsch.append("%s-%s: %s — „%s“ findet im Satz davor keinen Planeten"
+                                  % (fam, a, _rt, pron))
+                else:
+                    falsch.append("%s-%s: %s — %d Träger" % (fam, a, _rt, len(traeger)))
             if not falsch:
                 return None
             gilt = [a for a, e in werte if "%s-%s:" % (fam, a) not in " ".join(falsch)]
@@ -4038,10 +4242,17 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                         or _kapitelart(ch, typ, chapters) == "Rechenschaft")
         saetze = _saetze_pos(text)
         for i, (_a, _e, satz) in enumerate(saetze):
+            # 2026-10-12 (W1): Englisch öffnet die Einzigkeit über ein Element oder einen
+            # Modus den Satz auch ohne Faktor („It is the only one in fire.“) — dann zählt
+            # nur sie, keine andere Art im Satz (die übrigen lesen englisch kein Element).
+            nur_einzig = False
             if not _hat_referent(satz):
-                continue
+                if not (englisch and _EINZIG_EM_EN_RE.search(satz)):
+                    continue
+                nur_einzig = True
             treffer = sorted(((m.start(), m.end(), art, m) for art, rx in MUSTER
-                              for m in rx.finditer(satz)), key=lambda t: (t[0], -t[1]))
+                              for m in rx.finditer(satz) if not nur_einzig or art == "einzig"),
+                             key=lambda t: (t[0], -t[1]))
             belegt = []
             for a, e, art, m in treffer:
                 if any(not (e <= x or a >= y) for x, y in belegt):
@@ -4049,7 +4260,7 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                 belegt.append((a, e))
                 p.geprueft += 1
                 befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "",
-                                      eigen=eigen, struktur=struktur)
+                                      eigen=eigen, struktur=struktur, englisch=englisch)
                 if befund:
                     if ist_getriebe and befund.startswith(("Zählaussage", "Count statement")):
                         getriebe_zahlen += 1
@@ -9187,6 +9398,129 @@ def _selbsttest(still=False):
         assert _p12_satz(_s, "", txt_rz=_rz29), "K1b P12 Figur: %r" % _s
     assert _p12_satz("Mars, Venus und Saturn bilden eine einzige Figur.", "",
                      txt_rz=_rz29) == [], "K1b P12 Gleichsetzung"
+    # 2026-10-12 (Nacharbeiten Englisch, W1): Einzigkeit über ein Element oder einen
+    # Modus, in beiden Sprachen gleich. Konstruierte Rangzeilen und Sätze (Saturn im
+    # Widder als einziger im Feuer, Venus in den Zwillingen als einzige veränderlich);
+    # gewichtet tragen Feuer und „veränderlich“ je zwei Träger — die genannte Zählmenge
+    # („zehn Hauptkräfte“, „ten main forces“, „planets“) muss die gezählte Zeile wählen.
+    _txtw1 = ("- RANG elemente-gezaehlt [zehn Planeten]: 1. Erde 4 von 10 = 40 % (Sonne, Mond, "
+              "Merkur, Uranus) · 2. Luft 3 von 10 = 30 % (Venus, Mars, Jupiter) · 3. Wasser 2 von "
+              "10 = 20 % (Neptun, Pluto) · 4. Feuer 1 von 10 = 10 % (Saturn)\n"
+              "- RANG elemente-gewichtet [Lichter ×2]: 1. Erde 6 von 13 = 46 % (Sonne ×2, Mond ×2, "
+              "Merkur, Uranus) · 2. Luft 3 von 13 = 23 % (Venus, Mars, Jupiter) · 3. Wasser 2.5 von "
+              "13 = 19 % (Neptun, Pluto, Chiron ×0.5) · 4. Feuer 1.5 von 13 = 12 % (Saturn, "
+              "Lilith ×0.5)\n"
+              "- RANG modi-gezaehlt [zehn Planeten]: 1. kardinal 6 von 10 = 60 % (Saturn, Neptun, "
+              "Sonne, Merkur, Mars, Uranus) · 2. fix 3 von 10 = 30 % (Mond, Jupiter, Pluto) · "
+              "3. veränderlich 1 von 10 = 10 % (Venus)\n"
+              "- RANG modi-gewichtet [Lichter ×2]: 1. kardinal 7.5 von 13 = 58 % (Saturn, Neptun, "
+              "Sonne ×2, Merkur, Mars, Uranus, Lilith ×0.5) · 2. fix 4 von 13 = 31 % (Mond ×2, "
+              "Jupiter, Pluto) · 3. veränderlich 1.5 von 13 = 12 % (Venus, Chiron ×0.5)\n")
+    _rzw1 = _rangzeilen_lesen(_txtw1)
+
+    def _p12_w1(satz, vorher="", englisch=False):
+        out = []
+        for art, rx in (_RANG_MUSTER_EN if englisch else _RANG_MUSTER):
+            for m_ in rx.finditer(satz):
+                b = _rang_befund(art, m_, satz, _rzw1, "geburt", vorher, englisch=englisch)
+                if b:
+                    out.append((art, b))
+        return out
+    assert _element_modus("in einem Zeichen der Anpassung") == (None, "veränderlich")
+    assert _element_modus("in den Zeichen des Haltens") == (None, "fix")
+    assert _element_modus("im Zeichen des Anfangs") == (None, "kardinal")
+    assert _element_modus("one in a sign of adaptation", True) == (None, "veränderlich")
+    assert _element_modus("the sole carrier of fire", True) == ("Feuer", None)
+    assert _element_modus("in einem Zeichen der Anpassung", True) == (None, None), \
+        "W1: englische Muster lesen kein Deutsch"
+    assert _p18_modus_im("in Zeichen des Anfangs und des Haltens") is None, \
+        "W1: die Zeichen-Form gehört nur der Einzigkeit, nicht P18"
+    for _s, _v, _en in (
+            # deutsch: stimmig — still
+            ("Saturn steht im Widder und ist damit von den zehn Hauptkräften die einzige im Feuer.",
+             "", False),
+            ("Deine Venus ist von den zehn Hauptkräften die einzige in einem Zeichen der Anpassung.",
+             "", False),
+            ("Von den zehn Hauptkräften ist Venus die einzige Kraft in einem Zeichen der Anpassung.",
+             "", False),
+            ("Venus ist die einzige Hauptkraft in einem Zeichen der Anpassung.", "", False),
+            ("Saturn ist von den zehn Hauptkräften die einzige Kraft, die im Feuer steht.", "", False),
+            ("Unter den Planeten ist dein Saturn der einzige Träger des Feuers.", "", False),
+            ("Er ist von den zehn Hauptkräften der einzige im Feuer.", "Saturn steht im Widder.",
+             False),
+            # englisch: dieselben Aussagen — still, auch mit „single“ und „sole“
+            ("Saturn is the single one in fire among your ten main forces.", "", True),
+            ("Venus is the sole one in a sign of adaptation among your ten main forces.", "", True),
+            ("Saturn, in Aries, is the only carrier of fire among your planets.", "", True),
+            ("Of your ten main forces, Venus is the single one in a mutable sign.", "", True),
+            ("Saturn is the only force of your ten main forces that stands in fire.", "", True),
+            ("It is the single one in fire among your planets.", "Saturn stands in Aries.", True),
+            # eine Achse daneben; „gewichtet“ mit genannter Planetenmenge
+            ("Saturn steht im Widder am MC und ist von den zehn Hauptkräften die einzige im Feuer.",
+             "", False),
+            ("Gewichtet, ist Saturn von den zehn Hauptkräften die einzige im Feuer.", "", False),
+            ("Weighted, Saturn is the single one in fire among your ten main forces.", "", True)):
+        assert _p12_w1(_s, _v, _en) == [], "W1 P12 still: %r -> %r" % (_s, _p12_w1(_s, _v, _en))
+    for _s, _v, _en in (
+            # falscher Planet, Zählung nicht 1, Träger nur als Partner, Pronomen mit falschem
+            # oder doppeltem Bezug
+            ("Merkur ist von den zehn Hauptkräften die einzige im Feuer.", "", False),
+            ("Dein Merkur ist von den zehn Hauptkräften die einzige in einem Zeichen der Anpassung.",
+             "", False),
+            ("Merkur ist von den zehn Hauptkräften die einzige Kraft in einem Zeichen der Anpassung.",
+             "", False),
+            ("Merkur ist von den zehn Hauptkräften die einzige Kraft, die im Feuer steht.", "", False),
+            ("Neptun ist von den zehn Hauptkräften die einzige im Wasser.", "", False),
+            ("Neben Venus ist Mars von den zehn Hauptkräften die einzige im Feuer.", "", False),
+            ("Mars bildet eine Opposition zu Saturn und ist von den zehn Hauptkräften die einzige im "
+             "Feuer.", "", False),
+            ("Von den zehn Hauptkräften ist er der einzige im Feuer.", "Merkur steht im dritten Haus.",
+             False),
+            ("Er ist von den zehn Hauptkräften der einzige im Feuer.",
+             "Saturn steht im Widder, neben Merkur.", False),
+            ("Dieser ist von den zehn Hauptkräften der einzige im Feuer.",
+             "Merkur steht im dritten Haus.", False),
+            ("Mercury is the single one in fire among your ten main forces.", "", True),
+            ("Mercury is the sole one in a sign of adaptation among your ten main forces.", "", True),
+            ("Neptune is the single one in water among your ten main forces.", "", True),
+            ("Mars opposes Saturn and is the single one in fire among your ten main forces.", "",
+             True),
+            ("Of your ten main forces, it is the single one in fire.",
+             "Mercury stands in the third house.", True),
+            ("Of your ten main forces, it is the single one in fire.", "Mars opposes Saturn.", True),
+            ("Jener ist von den zehn Hauptkräften der einzige im Feuer.",
+             "Mars steht in Opposition zu Saturn.", False),
+            # ohne genannte Zählmenge gelten beide Zeilen; gewichtet trägt das Feuer zwei
+            ("Saturn ist die einzige Kraft im Feuer.", "", False),
+            ("Saturn is the only force in fire.", "", True)):
+        assert [a for a, _b in _p12_w1(_s, _v, _en)] == ["einzig"], \
+            "W1 P12 muss melden: %r -> %r" % (_s, _p12_w1(_s, _v, _en))
+    for _s, _en in (
+            # vertauschte Zuordnung — beide Aussagen falsch
+            ("Von den zehn Hauptkräften ist Venus die einzige im Feuer und Saturn die einzige in "
+             "einem Zeichen der Anpassung.", False),
+            ("Of your ten main forces, Venus is the single one in fire and Saturn the single one "
+             "in a sign of adaptation.", True)):
+        assert [a for a, _b in _p12_w1(_s, "", _en)] == ["einzig", "einzig"], \
+            "W1 vertauschte Zuordnung: %r -> %r" % (_s, _p12_w1(_s, "", _en))
+    # Anteile: „Hauptkräfte“ wählt dort keine Zählung (Gewichtet am Satzanfang ohne Komma;
+    # gezählt 30 %, gewichtet 23 %)
+    assert [a for a, _b in _p12_w1("Gewichtet stehen 30 Prozent deiner zehn Hauptkräfte in der "
+                                   "Luft.")] == ["haelfte"], "W1: Anteil mit „Gewichtet“ bleibt PRÜFEN"
+    # englisch öffnet die Einzigkeit über Element/Modus einen Satz ohne Faktor — nur sie
+    assert _EINZIG_EM_EN_RE.search("It is the single one in fire.") and \
+        not _hat_referent("It is the single one in fire."), "W1 Tor englisch"
+    assert not _EINZIG_EM_EN_RE.search("The only thing that matters is fresh air."), \
+        "W1 Tor: Element ohne Einzigkeitsform"
+    # das Element zählt nur hinter einer Präposition, dazwischen nur erlaubte Wörter
+    _allg = "Einzigkeitsaussage ohne passende Rangzeile — gegen Tabellen und Strukturbild halten"
+    for _s in ("Mars is the only planet that faces Venus.",
+               "Saturn is the only planet that brings air into your work.",
+               "Saturn is the only planet in a square to your Moon in water."):
+        assert [b for _a, b in _p12_w1(_s, "", True)] == [_allg], "W1: kein Element in %r" % _s
+    assert _p12_w1("Du holst einen einzigen tiefen Atemzug Luft.") == [], "W1: Bild ohne Präposition"
+    assert _p12_w1("Die einzige Wahl im Feuer der Begeisterung fällt dir leicht.") == [], \
+        "W1: Bild mit Präposition, aber ohne Chart-Wort davor"
     # P13-Satzformen (Regeln 12 bis 18)
     for _s, _soll in (
             ("Die Verbindungen zum Aszendenten und zu Jupiter reiben: Im Quadrat zu ihnen "
@@ -10225,7 +10559,7 @@ def _main(argv):
 # Geburtshoroskop 1+2 vom 23.09.: 15 Aufrufe/77.349 B): Die Modultexte sagen, WAS die
 # Proben pruefen, nicht, WORAN sie es erkennen. Das steht hier, an einer Stelle:
 # `inhaltsprobe.hilfe('LESEFORMATE')`. Wer einen Leser aendert, zieht diesen Text nach.
-LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-10-04).
+LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-10-12).
 
 THEMENLISTE (chart_data) — P3, P6, P7, P15; build.aspekt_heimat() liest gleich.
   Beginn an der ersten Zeile `THEMA <n> |`; Ende am ersten Vorkommen von
@@ -10334,6 +10668,30 @@ STRUKTURBILD §3 (chart_data) — P12.
   anderen"), wenn der genannte dort steht. Fehlen beide Zeilen, meldet P12 „§3
   nicht gefunden".
 
+EINZIGKEIT ÜBER ELEMENT ODER MODUS (gegen RANG elemente-/modi-…) — P12, seit 2026-10-12.
+  Deutsch „die einzige im Feuer", „der einzige Träger des Feuers", „die einzige
+  (Kraft) in einem Zeichen der Anpassung", „die einzige Kraft, die im Feuer steht";
+  englisch „the only one in fire", „the only carrier of fire", „the only one in a sign
+  of adaptation", auch mit „single" und „sole". Es gilt das Element oder der Modus
+  hinter dem Einzigkeitswort, direkt nach einer Präposition (im, in, des, der, of …,
+  höchstens mit Artikel); dazwischen nur Wörter wie Kraft, Hauptkräfte, Planet,
+  Träger, deiner zehn, die/der (Relativsatz) bzw. one, force, planet, carrier, of your
+  ten main forces, that stands. Das Glied endet an Semikolon, Doppelpunkt,
+  Gedankenstrich und an einem Komma, hinter dem kein Relativsatz beginnt. Deutsch gilt
+  sonst wie bisher das Element oder der Modus im Glied; englisch liest NUR diese
+  Aussage ein Element oder einen Modus („half", „all four" … nicht). Die Zeichen-Form
+  („Zeichen der Anpassung / des Anfangs / des Haltens") gilt nur hier, nicht in P18.
+  Gehalten gegen die Zählung, die der Satz nennt — „Planet", „gezählt", „zehn
+  Hauptkräfte", „planets", „counted", „ten main forces": gezählt; „gewichtet",
+  „Faktor", „weighted", „factors": gewichtet; die Planetenmenge geht dabei vor
+  „gewichtet" (unter den zehn ist der Träger in beiden Zählungen derselbe); nennt der
+  Satz keine Menge, gegen beide. Still nur, wenn dort die Zählung 1 steht und der
+  genannte Planet der Träger ist: Nennt der Satz mehrere Faktoren, müssen sie genau der
+  Träger sein (eine Achse daneben zählt nicht mit); nennt er keinen, nimmt ein Pronomen
+  vor dem Einzigkeitswort („er", „sie", „dieser", „jene", „it", „this", „That …") ALLE
+  Faktoren des Satzes davor als Kandidaten — deutsch nach Genus —, und sie müssen alle
+  der Träger sein; ohne Faktor und ohne Pronomen genügt die Zählung 1.
+
 P18 SATZARTEN (analyse gegen chart_data und events.json) — nur PRÜFEN (2026-10-04).
   Gemeldet wird nur ein WIDERSPRUCH zu den Daten, nie eine Aussage, die sich nicht
   prüfen lässt; jeder Hinweis nennt den Datenwert. Gelesen: die Ständetabelle mit
@@ -10427,7 +10785,7 @@ def _alternativen(muster):
 
 def _englisch_text():
     L = ["Englische Fassung: die Wortlaute, nach denen die Proben lesen "
-         "(Stand 2026-09-26; gebaut aus den Konstanten dieser Datei).", "",
+         "(Stand 2026-10-12; gebaut aus den Konstanten dieser Datei).", "",
          "KICKER einer neuen englischen Fassung (`## <Kicker> · <Titel>`):"]
     for de, en in KICKER_EN:
         L.append("  %-26s -> %s" % (de, en))
@@ -10465,6 +10823,13 @@ def _englisch_text():
     L.append("ASPEKT-ANKER im Fliesstext: square, trine, opposition, conjunction, "
              "sextile, quincunx, semisextile oder semi-sextile, semi-square, "
              "sesquiquadrate.")
+    # 2026-10-12 (W1)
+    L.append("ELEMENT UND MODUS (nur die Einzigkeit in P12: „the only one in fire“, „the "
+             "only carrier of fire“, „the only one in a sign of adaptation“, auch „single“, "
+             "„sole“): " + ", ".join(sorted(_ELEMENT_EN)) + "; cardinal, fixed, mutable; "
+             "the power to begin / hold / adapt; sign of beginning / holding / adaptation. "
+             "Zählmenge: „ten main forces“, „planets“, „counted“ = gezählt; „weighted“, "
+             "„factors“ = gewichtet.")
     L.append("")
     L.append("SIGNATUR UND BELEG bleiben in der analyse.md DEUTSCH, samt Inhalt "
              "(Kopfzeilen **Signatur:** / **Beleg:**, Zeichen-, Aspekt- und "
