@@ -262,6 +262,13 @@ P18 Satzarten        (2026-10-04, Wartungslauf Satzarten-Probe; Chris-Entscheidu
                      bleibt still; jeder Hinweis nennt den Datenwert. Englische
                      Fassung uebersprungen; ohne events.json die Transit-Satzarten
                      teilweise uebersprungen. Lesart: hilfe('LESEFORMATE').
+P19 Wiederholung     (2026-10-11, Chris-Entscheidung 2026-10-11: „höchstens zweimal
+                     gleich“) Ein Satz, der wortgleich mehr als zweimal im Dokument
+                     steht, oder ein Satzanfang, der an derselben Stelle (Bewegung)
+                     in mehr als zwei Kapiteln steht. Ausgenommen sind die Wegweiser,
+                     die gleich bleiben (WEGWEISER_RE), und die Rechenschaft. Nur
+                     PRUEFEN; in einer englischen Fassung nur der wortgleiche Satz.
+                     Dieselbe Zaehlung fuer andere Builder: wiederholungen().
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
 Fall ohne reales Geburtsdatum, ohne Uhrzeit, ohne Namen, ohne Staende eines realen
@@ -7944,6 +7951,136 @@ def _p18_satzarten(chapters, typ, txt, themen, tabelle, events=None, sprache_ana
     return p.abschluss()
 
 
+# ---------------------------------------------------------------------------
+# P19 Wiederholung (2026-10-11, Auswertung der Pruefberichte vom 11.10., Teil 2)
+#
+# Chris-Entscheidung 2026-10-11 (Pruefbericht Beziehung Design Paar, „Chris-Ansagen“;
+# Antwort auf die Auswertung): Immer gleich wiederkehrende Saetze, die Inhalt von
+# Kapiteln sind, sind im End-PDF nicht gut — kein Satz soll oefter als zweimal gleich
+# vorkommen. Ausgenommen sind die WEGWEISER, die in jedem Kapitel gleich bleiben
+# (Chris: „3, 4 , 5 und 7 bleiben gleich als Wegweiser“): die Anfaenge der zwei
+# Formen und des Dazwischen, die Etiketten der Uebungen, „Gut genug ist es, wenn …“,
+# im Geburtshoroskop „Die Schattenseite in einem Satz:“, „Zusammen ergibt das …“ und
+# „Abrufen kannst du es, indem …“; dazu der Wiederholungssatz des Transits, dessen
+# Wortlaut Chris am 07.10. festgelegt hat, und der Satz zum realen Problem des
+# Kinder-Bausteins (Chris' Wortlaut vom 11.10.; Setzung dieses Laufs, Chris im Chat
+# genannt). Nach der Leseprobe im selben Lauf dazu: die Formen der Ressourcen-Bauform
+# („In der genutzten/verschleuderten Form“), die drei Formen des Transit-
+# Wiederholungshinweises (auch „Zuletzt stand der Saturn …“) und der zweite Satz der
+# Kinder-Vorlage („Dann sprich möglichst bald darüber mit einem Erwachsenen …“).
+# „Gleich“ heisst: derselbe GANZE Satz irgendwo im Dokument, oder derselbe
+# Satzanfang (das Etikett vor dem Doppelpunkt, sonst die ersten vier Woerter) an
+# derselben Stelle (Bewegung) in mehr als zwei Kapiteln. So trifft die Probe die
+# Formeln, nicht jedes „Dein Mond steht …“ in verschiedenen Zusammenhaengen.
+# ---------------------------------------------------------------------------
+
+WEGWEISER_RE = re.compile(
+    r"^(?:In der reifen Form|In ihrer reifen Form|In der regressiven Form|"
+    r"In ihrer regressiven Form|Dazwischen liegt der Normalfall|"
+    r"Das Dazwischen ist der Normalfall|"
+    r"Das (?:Erste|Zweite|Dritte|Vierte):|Was du nicht tun solltest:|"
+    r"Was du lassen solltest:|Was ihr lassen solltet:|Was ihr nicht tun solltet:|"
+    r"Etwas zu tun:|Etwas zu lassen:|Nicht tun:|Gemeinsam:|Für [A-ZÄÖÜ][\w’'-]*:|"
+    r"Gut genug ist(?: es)?\b|Was gut genug ist:|"
+    r"Die Schattenseite in einem Satz:|Zusammen ergibt das\b|Abrufen kannst du es\b|"
+    r"In (?:der|ihrer) (?:genutzten|verschleuderten) Form\b|"
+    r"Zuletzt stand (?:der |die |das )?[A-ZÄÖÜ]\w+ so wie jetzt\b|"
+    r"Dieselbe Frage stand zuletzt an\b|Der Durchgang davor (?:in derselben Stellung )?lief\b|"
+    r"Vorweg ein Satz, der nichts mit Astrologie zu tun hat\b|"
+    r"Dann sprich möglichst bald darüber mit einem Erwachsenen\b)")
+WIEDERHOLUNG_GRENZE = 2          # hoechstens zweimal gleich (Chris, 11.10.)
+
+
+def _wh_satz(s):
+    return " ".join(s.split()).strip()
+
+
+def _wh_anfang(s):
+    """Schluessel des Satzanfangs: das Etikett vor einem Doppelpunkt in den ersten
+    sechs Woertern, sonst die ersten vier Woerter — klein, ohne Satzzeichen."""
+    t = _wh_satz(s)
+    vor = t.split(":", 1)[0] if ":" in t else None
+    if vor is not None and len(vor.split()) <= 6:
+        return vor.casefold() + ":"
+    w = re.findall(r"[\wÄÖÜäöüß’'-]+", t)
+    return " ".join(w[:4]).casefold() if len(w) >= 3 else None
+
+
+def wiederholungen(einheiten, wegweiser=None, grenze=WIEDERHOLUNG_GRENZE,
+                   satzanfaenge=True):
+    """Die Zaehlung der Probe P19, auch fuer andere Builder (beziehung.probe, B21).
+
+    einheiten  Liste von (kapitel, bewegung, text): kapitel ein Name fuer die
+               Meldung (Kicker), bewegung der Titel der Bewegung oder None (Text
+               ohne Bewegung: nur der wortgleiche Satz zaehlt), text ein Absatz.
+    wegweiser  Regex der Satzanfaenge, die ausgenommen sind (Vorgabe WEGWEISER_RE).
+    -> Liste von dicts {'art': 'satz'|'anfang', 'text', 'bewegung', 'orte': [kapitel],
+       'anzahl'} — nur, was die Grenze ueberschreitet.
+    """
+    weg = WEGWEISER_RE if wegweiser is None else wegweiser
+    saetze, anfaenge, folge = {}, {}, []
+    for kap, bew, text in einheiten:
+        for satz in _saetze(text):
+            t = _wh_satz(satz)
+            if len(t) < 12 or weg.match(t):
+                continue
+            if t not in saetze:
+                folge.append(("satz", t))
+            saetze.setdefault(t, []).append(kap)
+            if satzanfaenge and bew:
+                k = _wh_anfang(t)
+                if k:
+                    if (bew, k) not in anfaenge:
+                        folge.append(("anfang", (bew, k)))
+                    anfaenge.setdefault((bew, k), {"orte": [], "beispiel": t})
+                    if kap not in anfaenge[(bew, k)]["orte"]:
+                        anfaenge[(bew, k)]["orte"].append(kap)
+    out = []
+    for art, k in folge:
+        if art == "satz" and len(saetze[k]) > grenze:
+            out.append({"art": "satz", "text": k, "bewegung": None,
+                        "orte": saetze[k], "anzahl": len(saetze[k])})
+        elif art == "anfang" and len(anfaenge[k]["orte"]) > grenze:
+            out.append({"art": "anfang", "text": anfaenge[k]["beispiel"], "bewegung": k[0],
+                        "orte": anfaenge[k]["orte"], "anzahl": len(anfaenge[k]["orte"])})
+    return out
+
+
+def wiederholung_zeile(w):
+    """Meldetext eines Treffers von wiederholungen() — gleich in P19 und B21."""
+    orte = ", ".join(dict.fromkeys(w["orte"]))
+    if w["art"] == "satz":
+        return ("wortgleich %d-mal: „%s“ (%s) — höchstens zweimal; Wortlaut wechseln"
+                % (w["anzahl"], _kurz(w["text"], 110), orte))
+    return ("Satzanfang „%s …“ in %d Kapiteln an derselben Stelle („%s“: %s) — höchstens "
+            "zweimal; Einleitung wechseln" % (_kurz(" ".join(w["text"].split()[:5]), 60),
+                                             w["anzahl"], w["bewegung"], orte))
+
+
+def _p19_wiederholung(chapters, typ, sprache_analyse="de"):
+    p = _Probe("P19", "Wiederholung (höchstens zweimal gleich)")
+    p.einheit = "Sätze"
+    einheiten = []
+    for ch in chapters:
+        if _ist_kicker(ch, "Rechenschaft", "Account"):
+            continue
+        bew = None
+        for b in ch["blocks"]:
+            if b.get("type") == "subhead":
+                bew = _ws(b["text"])
+                continue
+            if b.get("type") in ("p", "li") and b.get("text"):
+                einheiten.append((ch.get("kicker") or _bezeichnung(ch), bew, b["text"]))
+                p.geprueft += len(_saetze(b["text"]))
+    englisch = sprache_analyse == "en"
+    if englisch:
+        p.hinweise.append("englische Fassung — nur der wortgleiche Satz geprüft, die "
+                          "Wegweiser-Liste ist deutsch")
+    for w in wiederholungen(einheiten, satzanfaenge=not englisch):
+        p.pruefen.append(wiederholung_zeile(w))
+    return p.abschluss()
+
+
 class InhaltsprobeFehler(Exception):
     """Eingabe nicht lesbar (fehlende Datei, SchemaError der Analyse)."""
 
@@ -8008,7 +8145,10 @@ def pruefe(analyse_pfad, chart_data_pfad, typ=None, events_pfad=None):
     p17 = _p17_subjekt(chapters, typ, sprache_analyse)
     # 2026-10-04 (Wartungslauf Satzarten-Probe): P18
     p18 = _p18_satzarten(chapters, typ, txt, themen, tabelle, events, sprache_analyse)
-    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18]
+    # 2026-10-11 (Chris-Entscheidung 2026-10-11): P19
+    p19 = _p19_wiederholung(chapters, typ, sprache_analyse)
+    proben = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18,
+              p19]
 
     fehler = sum(len(p.fehler) for p in proben)
     pruefen_n = sum(len(p.pruefen) for p in proben)
@@ -8247,7 +8387,7 @@ Dieses Thema ist die Vorderseite von Kapitel 3. Es ist groß in deinem Bild, abe
 
 ### Woran du es merkst
 
-Du bleibst, wo andere längst gegangen sind. Und ein Letztes, das schwerer zuzugeben ist: Manchmal bleibst du aus Bequemlichkeit.
+Du bleibst, wo andere längst gegangen sind. Schwerer auszusprechen ist dies: Manchmal bleibst du aus Bequemlichkeit.
 
 ### Was da arbeitet
 
@@ -9985,6 +10125,48 @@ def _selbsttest(still=False):
                     "„kehrt … zurück“ ohne eigenes Paar still; mit eigenem Paar und ohne Rückkehr-Wort "
                     "das falsche Alter weiter gemeldet")
 
+    # Lauf 14 (P19 Wiederholung, 2026-10-11): Formel in drei Kapiteln am selben Ort
+    # und ein wortgleicher Satz dreimal -> PRUEFEN; die Wegweiser und eine Formel in nur
+    # zwei Kapiteln still. Saetze erfunden.
+    _e14 = []
+    for _k, _w, _v in (("Kapitel 1", "Abend", "Abends merkst du es."),
+                       ("Kapitel 2", "Morgen", "Beim Aufstehen fällt es dir auf."),
+                       ("Kapitel 3", "Mittag", "Zwischendurch spürst du es.")):
+        _e14 += [(_k, "Woran du es merkst", "%s Und ein Letztes, das schwerer "
+                  "zuzugeben ist: Am %s ist es dir manchmal recht." % (_v, _w)),
+                 (_k, "Die zwei Formen und das Dazwischen", "In der reifen Form wird daraus am "
+                  "%s Ruhe. In der regressiven Form wird daraus am %s Starre. Dazwischen liegt "
+                  "der Normalfall." % (_w, _w)),
+                 (_k, "Womit du arbeiten kannst", "Das Erste: einmal am %s bemerken. Was du nicht "
+                  "tun solltest: dich am %s zwingen. Gut genug ist es, wenn du es am %s einmal "
+                  "merkst." % (_w, _w, _w)),
+                 (_k, "Wie so etwas zur Regel wird", "Prüf an dir, ob dir das bekannt vorkommt.")]
+    _e14 += [("Kapitel 4", "Wohin das gehört", "Zur Größenordnung: Das ist kein Randthema."),
+             ("Kapitel 5", "Wohin das gehört", "Zur Größenordnung: Das ist ein leises Thema.")]
+    _w14 = wiederholungen(_e14)
+    _arten = sorted((w["art"], w["text"][:20]) for w in _w14)
+    assert _arten == [("anfang", "Prüf an dir, ob dir "), ("anfang", "Und ein Letztes, das"),
+                      ("satz", "Prüf an dir, ob dir ")], ("Lauf 14: P19", _w14)
+    assert all(not WEGWEISER_RE.match(w["text"]) for w in _w14), ("Lauf 14: Wegweiser gemeldet", _w14)
+    assert wiederholungen(_e14, satzanfaenge=False) and all(
+        w["art"] == "satz" for w in wiederholungen(_e14, satzanfaenge=False)), "Lauf 14: nur Satz"
+    # Nachtrag nach der Leseprobe (2026-10-11): Ressourcen-Formen, Transit-Wiederholungshinweis
+    # in drei Formen, zweiter Satz der Kinder-Vorlage; ein Etikett mit Zusatz ist kein Wegweiser.
+    for _s in ("In der genutzten Form bleibt es leicht.", "In ihrer verschleuderten Form wird es laut.",
+               "Zuletzt stand Jupiter so wie jetzt, als du fünfzehn warst.",
+               "Zuletzt stand der Saturn so wie jetzt, als du neunundzwanzig warst.",
+               "Dieselbe Frage stand zuletzt an, als du zwölf warst.",
+               "Der Durchgang davor in derselben Stellung lief, als du acht warst.",
+               "Dann sprich möglichst bald darüber mit einem Erwachsenen, dem du vertraust."):
+        assert WEGWEISER_RE.match(_s), ("Lauf 14: Wegweiser nicht erkannt", _s)
+    for _s in ("Das Zweite, allein: einmal bemerken.", "Zuletzt war es leichter als jetzt.",
+               "Dieselbe Frage kommt wieder."):
+        assert not WEGWEISER_RE.match(_s), ("Lauf 14: kein Wegweiser", _s)
+    berichte.append("Lauf 14 (P19 Wiederholung, 2026-10-11): Formel in drei Kapiteln am selben Ort "
+                    "und wortgleicher Satz dreimal gemeldet; Wegweiser und eine Formel in zwei "
+                    "Kapiteln still; Ressourcen-Formen, Transit-Wiederholungshinweis und "
+                    "Kinder-Vorlage ausgenommen, Etikett mit Zusatz nicht")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
@@ -9994,7 +10176,7 @@ def _selbsttest(still=False):
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
               "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; Lauf 10 „um die N“; "
               "Lauf 11 Altersreihe; Lauf 12 und 13 P18 Satzarten mit erfundenen Sätzen; "
-              "P16 und P17 als Einzelproben]")
+              "Lauf 14 P19 Wiederholung; P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):

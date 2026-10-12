@@ -700,6 +700,18 @@ def haus_und_grenzlage(lon, cusps, orb=HAUS_ORB, name=None):
                 label = f"Haus {haus}"
             return {'haus': haus, 'nebenhaus': neben, 'grenzlage': grenz,
                     'abstand_spitze': ab, 'label': label}
+    # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, F7;
+    # Pruefbericht Geburtshoroskop Schritt 1 vom 11.10.c, K1): Ein Punkt, der
+    # nur um Rechenrauschen (1e-14°) vor einer Spitze liegt, fiel durch alle
+    # zwoelf Vergleiche — `rel` war gleich `span`, im naechsten Haus 360 — und
+    # bekam „Haus ?“. Er steht AUF der Spitze und gehoert zu dem Haus, das dort
+    # beginnt (wie rel == 0).
+    for k in range(12):
+        if abs((lon - cusps[k] + 180.0) % 360 - 180.0) < 1e-9:
+            haus = k + 1
+            return {'haus': haus, 'nebenhaus': None, 'grenzlage': False,
+                    'abstand_spitze': round((cusps[(k + 1) % 12] - cusps[k]) % 360, 4),
+                    'label': f"Haus {haus}"}
     return {'haus': None, 'nebenhaus': None, 'grenzlage': False,
             'abstand_spitze': None, 'label': 'Haus ?'}
 
@@ -3002,6 +3014,20 @@ def _zs_figuren(fac, asp, cusps):
     return frozenset(out)
 
 
+def _engster_schluessel(z):
+    """Sortierschluessel fuer den engsten Aspekt im Zeitscan.
+
+    2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, Kosten 6;
+    Pruefbericht Geburtshoroskop Schritt 1 vom 11.10.c): Zwei Spiegelaspekte
+    an einer Achse (etwa Halbsextil zum AC und Quincunx zum DC) haben denselben
+    Orb; im Rechenrauschen (1e-13°) tauschten sie bei jedem Zeitschritt den
+    Rang, und §3 trug rund 25 Zeilen „engster Aspekt X → Y → X“. Der Orb wird
+    deshalb auf 1e-6° (0,004″) gerundet verglichen; bei Gleichstand entscheiden
+    die Namen, immer gleich.
+    """
+    return (round(z['orb'], 6), z['a'], z['b'])
+
+
 def _zs_merkmale(fac, cusps):
     """Das Bild zu EINEM Zeitpunkt: {schluessel: wert}, alle Werte hashbar.
 
@@ -3034,7 +3060,7 @@ def _zs_merkmale(fac, cusps):
             B[('achsenaspekt', (z['a'], z['name'], z['b']))] = (
                 z['strength'], z.get('spiegel'))
     if zeilen:
-        e = min(zeilen, key=lambda z: (z['orb'], z['a'], z['b']))
+        e = min(zeilen, key=_engster_schluessel)
         B[('engster',)] = (e['a'], e['name'], e['b'], e.get('spiegel'))
     ac = next((f['lon'] for f in fac if f['name'] == 'AC'), cusps[0])
     zac = SIGN_NAMES[zeichen_index(ac)]
@@ -4052,6 +4078,10 @@ def spezialfaktor_netz(factors, aspects):
             'ohne_netz': [s for s in spez if s not in beteiligt]}
 
 
+AUF_WINKEL = 1 / 120   # Grad (eine halbe Bogenminute): leere Spitze „auf“
+                       #   einem Winkel, s. leere_spitze() (2026-10-11, F7)
+
+
 def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
                  apex_name=None, aspects=None):
     """Die leere Spitze eines T-Quadrats: der Punkt GEGENUEBER dem Brennpunkt.
@@ -4095,8 +4125,28 @@ def leere_spitze(apex_lon, factors, cusps=None, orb=HAUS_ORB,
     out = {'lon': lon, 'zeichen': zeichen_name(lon), 'haus': None,
            'haus_spalte': None, 'besetzt': [], 'achsenende': []}
     if cusps:
-        out['haus'] = haus_und_grenzlage(lon, cusps)['haus']
-        out['haus_spalte'] = haus_spalte(lon, cusps)
+        # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, F7;
+        # Pruefbericht Geburtshoroskop Schritt 1 vom 11.10.c, K1): Liegt die
+        # leere Spitze AUF einem Winkel — der Brennpunkt ist dann der
+        # Gegenwinkel —, gilt das feste Haus des Winkels ohne Grenzlage, wie in
+        # haus_und_grenzlage(…, name=) seit 2026-10-01. Vorher lag der Punkt
+        # mit sechsstelligen Faktoren rechnerisch 4e-7° vor der Spitze und bekam
+        # eine Schein-Schwellenlage („Haus 4/3“, „10/9“), die Schritt 2 als
+        # Grenzlage gelesen haette. „Auf“ heisst: naeher als eine halbe
+        # Bogenminute (AUF_WINKEL); ein fehlender DC/IC wird aus AC/MC abgeleitet.
+        _w_lon = {f['name']: f['lon'] for f in factors if f['name'] in WINKEL}
+        for _w in WINKEL:
+            if _w not in _w_lon and GEGENWINKEL[_w] in _w_lon:
+                _w_lon[_w] = (_w_lon[GEGENWINKEL[_w]] + 180.0) % 360
+        _auf = next((_w for _w in WINKEL if _w in _w_lon and
+                     abs((_w_lon[_w] - lon + 180.0) % 360 - 180.0) < AUF_WINKEL),
+                    None)
+        if _auf:
+            out['haus'] = _ACHSEN_HAUS[_auf]
+            out['haus_spalte'] = str(out['haus'])
+        else:
+            out['haus'] = haus_und_grenzlage(lon, cusps)['haus']
+            out['haus_spalte'] = haus_spalte(lon, cusps)
     per_opposition = set()
     if apex_name and aspects:
         for a in aspects:
@@ -7395,6 +7445,26 @@ if __name__ == '__main__':
                               {'name': 'Y', 'lon': 186.0}], _c)
     assert _ls2['zeichen'] == 'Waage' and _ls2['haus'] == 7, _ls2
     assert [b['name'] for b in _ls2['besetzt']] == ['X'], _ls2
+    # 2026-10-11 (F7): Brennpunkt MC, sechsstellig knapp unter der Spitze
+    # gerundet — die leere Spitze liegt AUF dem IC: Haus 4, keine Grenzlage.
+    _cf7 = [10.0, 40.0, 70.0, 100.0, 130.0, 160.0, 190.0, 220.0, 250.0,
+            280.0, 310.0, 340.0]
+    _ls3 = leere_spitze(279.9999997, [{'name': 'MC', 'lon': 279.9999997},
+                                      {'name': 'AC', 'lon': 10.0}], _cf7,
+                        apex_name='MC')
+    assert _ls3['haus'] == 4 and _ls3['haus_spalte'] == '4', _ls3
+    _ls4 = leere_spitze(97.0 + 180.0, [{'name': 'MC', 'lon': 280.0}], _cf7)
+    assert _ls4['haus_spalte'] == '3/4', _ls4      # echter Punkt 3° vor der Spitze: Grenzlage bleibt
+    _h = haus_und_grenzlage(100.0 - 2.4e-14, _cf7)
+    assert _h['haus'] in (3, 4) and _h['label'] != 'Haus ?', _h
+    _h0 = haus_und_grenzlage(_cf7[3] - 1e-15, _cf7)
+    assert _h0['haus'] is not None, _h0
+    # Kosten 6 (2026-10-11): gleicher Orb bis auf Rauschen -> immer dieselbe Zeile
+    _za = {'orb': 0.5, 'a': 'Sonne', 'b': 'AC'}
+    _zb = {'orb': 0.5 + 1e-13, 'a': 'Sonne', 'b': 'DC'}
+    _zc = {'orb': 0.5 - 1e-13, 'a': 'Sonne', 'b': 'DC'}
+    assert min([_za, _zb], key=_engster_schluessel) is _za
+    assert min([_za, _zc], key=_engster_schluessel) is _za
 
     # Winkel stehen nicht in der Dichte-Rangliste (Orb 9 -> bauartbedingt vorn)
     for _w in ('AC', 'MC', 'DC', 'IC'):

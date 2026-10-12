@@ -211,7 +211,8 @@ _CFG = {'gr': _orb_text, 'name_of': lambda n: n}
 def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                  name_of=None, kopfzeile=None, aspektfarben=None,
                  balken=None, part_ornament=None, beleg_platz=None,
-                 sprache=None, signaturen_en=None, belege_en=None):
+                 sprache=None, signaturen_en=None, belege_en=None,
+                 anrede=None):
     """Einmal je Chart aufrufen, vor dem ersten Seitenaufbau.
 
     pal           Palette (Schluessel s. PAL oben). Rollen der Schluessel
@@ -272,9 +273,19 @@ def konfiguriere(pal=None, part_kicker=None, glyphen=None, gr=None,
                   mechanische Uebersetzung (beleg_segment_en()) nicht schafft,
                   typisch der Getriebe-Beleg im Struktur-Format. Schluessel
                   ist der GANZE deutsche Beleg des Kapitels.
+    anrede        'du' (Vorgabe) oder 'ihr' — nur fuer die Datenschutz-Zeile
+                  der Inhaltsseite: beim Paar-Beziehungshoroskop „zu eurem
+                  Horoskop“ (seit 2026-10-11; die Vorlage des Typs setzt es).
     """
+    global ANREDE
+    if anrede is not None:            # 2026-10-11 (F3): 'du' | 'ihr'
+        if anrede not in ('du', 'ihr'):
+            raise ValueError("anrede: 'du' oder 'ihr', nicht %r" % (anrede,))
+        ANREDE = anrede
     if sprache is not None:
         setze_sprache(sprache)
+    else:
+        _anrede_anwenden()
     if signaturen_en is not None:
         SIGNATUREN_EN.clear()
         SIGNATUREN_EN.update({_ws(k): v for k, v in dict(signaturen_en).items()})
@@ -1722,6 +1733,14 @@ INHALT_KOPF = 'Horoskop für {name}'
 # Seitenzahl) — kein Satz im Text, den ein Lauf vergessen koennte.
 DATENSCHUTZ_ZEILE = ('Wie ich mit den Angaben zu deinem Horoskop umgehe: '
                      'himmelsgrundriss.de/#datenschutz')
+# 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, F3; Pruefbericht
+# Beziehung Design Paar 1.3): Das Beziehungshoroskop eines Paars redet beide
+# mit „ihr“ an (Beziehungsmodul, „Anrede“); die Zeile stand dort in der
+# Du-Form. konfiguriere(anrede='ihr') setzt sie im Deutschen auf „eurem“; die
+# englische Zeile („your“) passt fuer beide. Ohne Angabe bleibt „du“.
+DATENSCHUTZ_ZEILE_IHR = ('Wie ich mit den Angaben zu eurem Horoskop umgehe: '
+                         'himmelsgrundriss.de/#datenschutz')
+ANREDE = 'du'                               # 'du' | 'ihr' — nur die Datenschutz-Zeile
 UHR_TITEL_KURZ = 'Die Transit-Uhr'
 ANHANG_KICKER = 'Anhang'
 ANH_LANG_TITEL = 'Die langen Linien im Überblick'
@@ -1918,6 +1937,15 @@ _PFLICHT_PAARE = (
 )
 
 
+def _anrede_anwenden():
+    """Datenschutz-Zeile nach ANREDE (2026-10-11, F3): im Deutschen „eurem“ bei
+    'ihr', sonst die Zeile der Sprachtafel."""
+    global DATENSCHUTZ_ZEILE
+    if SPRACHE == 'de':
+        DATENSCHUTZ_ZEILE = (DATENSCHUTZ_ZEILE_IHR if ANREDE == 'ihr'
+                             else _LABELS['de']['DATENSCHUTZ_ZEILE'])
+
+
 def setze_sprache(code='de'):
     """Sprache aller sichtbaren Labels setzen ('de' oder 'en').
 
@@ -1944,6 +1972,7 @@ def setze_sprache(code='de'):
         raise ValueError("sprache: 'de' oder 'en', nicht %r" % code)
     globals().update(_LABELS[code])
     SPRACHE = code
+    _anrede_anwenden()
     _pflicht_baustein_angleichen()
     # Die Transit-Uhr ist eine eigene Datei mit eigener Labeltafel; ohne diesen
     # Zug blieb die Grafik im englischen PDF deutsch beschriftet (W57). Fehlt
@@ -3348,10 +3377,21 @@ def _selbsttest():
     finally:
         konfiguriere(sprache='de', signaturen_en={}, belege_en={})
     assert 'deinem Horoskop' in struktur_css(), 'Rueckwechsel auf deutsch'
+    # 2026-10-11 (F3): Paar — „eurem“, englisch unveraendert, zurueck auf „du“.
+    try:
+        konfiguriere(anrede='ihr')
+        assert 'zu eurem Horoskop' in struktur_css(), 'F3: ihr-Form fehlt'
+        konfiguriere(sprache='en', signaturen_en={}, belege_en={})
+        assert 'behind your horoscope' in struktur_css(), 'F3: EN mit ihr'
+        konfiguriere(sprache='de', signaturen_en={}, belege_en={})
+        assert 'zu eurem Horoskop' in struktur_css(), 'F3: ihr nach Sprachwechsel'
+    finally:
+        konfiguriere(anrede='du', sprache='de', signaturen_en={}, belege_en={})
+    assert 'deinem Horoskop' in struktur_css(), 'F3: Rueckwechsel auf du'
     print('[chartdoc-Selbsttest bestanden: lies_zeitleiste(), Marke der '
           'Zeitleiste (W12), kopf-Pruefung von inhalt_page() (W61), '
           'Orb der Aspektseite (W2), Sprachfassung (2026-09-26), '
-          'Umlaute im Seitentext (2026-10-01b), Datenschutz-Zeile (2026-10-10)]')
+          'Umlaute im Seitentext (2026-10-01b), Datenschutz-Zeile (2026-10-10), Anrede „ihr“ (2026-10-11)]')
 
 
 # ---------------------------------------------------------------------------

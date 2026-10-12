@@ -143,7 +143,10 @@ chartdoc.konfiguriere(pal=PAL, part_kicker=PART_KICKER, glyphen=dict(radix.FAKTO
                       kopfzeile=('%s %s %s' % (A_VORNAME, 'UND' if SPRACHE == 'de' else 'AND',
                                                B_VORNAME)).upper(),
                       aspektfarben=RAD_PALETTE, part_ornament=ORNAMENT,
-                      sprache=SPRACHE, signaturen_en=SIGNATUR_EN, belege_en=BELEG_EN)
+                      sprache=SPRACHE, signaturen_en=SIGNATUR_EN, belege_en=BELEG_EN,
+                      # 2026-10-11 (F3): Paar „ihr“ — die Datenschutz-Zeile der
+                      # Inhaltsseite heisst dann „zu eurem Horoskop“. Nicht aendern.
+                      anrede='ihr' if R['art'] == 'paar' else 'du')
 esc = chartdoc.esc
 
 COVER_CSS = f"""

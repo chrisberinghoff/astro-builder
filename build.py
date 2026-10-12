@@ -1984,7 +1984,27 @@ def _fuss_zeilen(plines, sig_set) -> int:
         # beginnt mit seinem Kopf auf einer neuen Seite.
         if rest and not _fuss_typ(rest[-1], einzug):
             rest = rest[:-1]
-        if not all(_fuss_typ(x, einzug) for x in rest):
+        # Korrektur 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2,
+        # F2; Pruefbericht Beziehung Design Paar 1.2): Ein Segment des
+        # Struktur-Belegs kann auch MITTEN im Beleg merkmalslos auslaufen — im
+        # Beziehungshoroskop „zwischen beiden 78, davon 37 eng“ zwischen der
+        # Ueberlagerungs-Zeile und den „–“-Zeilen. verify() meldete die Seite als
+        # Satzabbruch, obwohl sie mit dem Streifen endet. Durchgelassen werden
+        # deshalb auch merkmalslose Zeilen, auf die (nach hoechstens einer
+        # weiteren) wieder eine beleg-typische Zeile folgt: Prosa steht nie
+        # ZWISCHEN zwei Beleg-Zeilen, und der Auslauf am Ende bleibt auf genau
+        # eine Zeile begrenzt (oben).
+        _typ = [_fuss_typ(x, einzug) for x in rest]
+        _lauf, _ok = 0, True
+        for _t in _typ:
+            if _t:
+                _lauf = 0
+                continue
+            _lauf += 1
+            if _lauf > 2:
+                _ok = False
+                break
+        if not _ok or (_typ and not _typ[-1]):
             continue
         start = i if ist_label else sig_start
         if ist_label and sigs:
@@ -2300,7 +2320,9 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
       englischen Fassung eine Kapitelseite.
 
     Die Grenzen kommen aus den Ankern, die chartdoc ins PDF schreibt: Ende des
-    Bogens `PG_uhr`, sonst `PG_asp`; Radseite `PG_rad`. Traegt das PDF KEINEN
+    Bogens `PG_uhr`, sonst `PG_asp`, beim Beziehungshoroskop die Seite nach
+    `PG_kreuz` (Verbindungsseite + erste Kapitelseite, seit 2026-10-11);
+    Radseite `PG_rad`. Traegt das PDF KEINEN
     dieser drei Anker (Typ ohne Rad-, Aspekt- und Uhrseite, etwa die
     Vertiefung), zeigt der Bogen Deckblatt, Inhaltsseite und erste
     Kapitelseite (bis `PG_inhalt` + 1); `rad` und `rad_seite` sind dann None
@@ -2330,6 +2352,14 @@ def kontaktbogen(pdf_pfad: str, extra=(), dpi: int = 60, rad_dpi: int = 110,
         except Exception:                               # noqa: BLE001
             continue
     ende = anker.get("PG_uhr", anker.get("PG_asp"))
+    # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, F1): Das
+    # Beziehungshoroskop traegt Rad-, Staende- und Verbindungsseite
+    # (PG_rad, PG_staende, PG_kreuz), aber weder PG_asp noch PG_uhr; der Bogen
+    # endet dann nach der Verbindungsseite mit der ersten Kapitelseite
+    # (Beziehungsmodul, Chat 2, „Pruefen“). Vorher brach jeder Beziehungs-Lauf
+    # hier ab und baute den Bogen von Hand.
+    if ende is None and "PG_kreuz" in anker:
+        ende = min(anker["PG_kreuz"] + 1, len(leser.pages) - 1)
     # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., F1): Ein Typ ohne
     # Rad-, Aspekt- und Uhrseite (Vertiefung) traegt keinen der drei Anker. Der
     # Bogen zeigt dann Deckblatt, Inhaltsseite und erste Kapitelseite — vorher
@@ -4353,7 +4383,7 @@ ACHSE IC zeichen=<Zeichen>
 ASPEKT <A> <B>
 @@ENDE
 
-<!-- Pflicht · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
+<!-- Pflicht in Schritt 2 (in Schritt 1 weglassen) · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
 @@DECKBLATT
 LEITSATZ: <ein Satz>
 LEITACHSE: <das Leitthema>
@@ -4566,7 +4596,7 @@ ACHSE IC zeichen=<Zeichen>
 ASPEKT <A> <B>
 @@ENDE
 
-<!-- Pflicht · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
+<!-- Pflicht in Schritt 2 (in Schritt 1 weglassen) · Datenblatt-Modul „Der @@DECKBLATT-Block“ · build.lies_deckblatt · nur diese fünf Felder, Feldname am Zeilenanfang, Folgezeilen eingerückt; GLYPHEN erst die Symbole, dann „ — “ und die Begründung; mit @@ENDE schließen -->
 @@DECKBLATT
 LEITSATZ: <ein Satz>
 LEITACHSE: <das Leitthema>
@@ -5740,6 +5770,13 @@ def _selbsttest():
                    and _kv["rad_seite"] is None and _kv["uhr"] is None
                    and os.path.exists(_kv["bogen"]),
                    "F1: Vertiefungs-Bogen %r" % _kv)
+            # F1 (2026-10-11): Beziehungshoroskop — Rad, Staende, Verbindungen,
+            # kein PG_asp/PG_uhr; Bogen bis zur ersten Kapitelseite.
+            _kz = kontaktbogen(_kb_pdf(["PG_cover", "PG_inhalt", "PG_rad",
+                                        "PG_staende", "PG_kreuz", "", "", ""]))
+            pruefe(_kz["seiten"] == [1, 2, 3, 4, 5, 6] and _kz["rad_seite"] == 3
+                   and _kz["uhr"] is None and os.path.exists(_kz["rad"]),
+                   "F1: Beziehungs-Bogen %r" % _kz)
             for _namen, _was in (
                     (["", "", "", "", "", "", "", ""], "PDF ohne jeden Anker"),
                     (["PG_cover", "PG_inhalt", "PG_rad", "", "", "", "", ""],
@@ -5825,6 +5862,10 @@ def _selbsttest():
         pruefe(_s in _gt, "Geruest Transit: %r fehlt" % _s)
     pruefe(_gg.count("\n@@ENDE") == 2 and _gt.count("\n@@ENDE") == 3,
            "Geruest: @@ENDE schliesst nicht jeden Block")
+    # 2026-10-11 (Auswertung 11.10., Teil 2, W10): @@DECKBLATT entsteht in Schritt 2.
+    pruefe("Pflicht in Schritt 2 (in Schritt 1 weglassen) · Datenblatt-Modul „Der @@DECKBLATT-Block“" in _gg
+           and "Pflicht in Schritt 2 (in Schritt 1 weglassen) · Datenblatt-Modul „Der @@DECKBLATT-Block“" in _gt,
+           "Geruest: @@DECKBLATT ohne Schritt-Angabe")
     try:
         datenblatt_geruest("hdgk")
         pruefe(False, "Geruest: unbekannter Typ ohne ValueError")
@@ -5839,6 +5880,18 @@ def _selbsttest():
     pruefe(_fuss_zeilen(_pl, [_sg]) == 2, "Fuss-Anker: Signatur mit Umbruch hinter „/“")
     pruefe(_fuss_zeilen(_pl, ["Venus im fünften Haus"]) == 0,
            "Fuss-Anker: fremde Signatur zieht nichts ab")
+    # 2026-10-11 (F2, Beziehung Design Paar 1.2): merkmalslose Fortsetzung MITTEN
+    # im Beleg; Prosa hinter dem Fuss wird weiter nicht abgezogen.
+    _pb = ["Der letzte Satz der Prosa endet hier.",
+           "     B E L E G : Elemente gewichtet A Luft 9,5, B Erde 7 · Feuer gewichtet A",
+           "     Überlagerung B in A: 3. Haus · Überlagerung A in B: 3. Haus",
+           "     zwischen beiden 78, davon 37 eng",
+           "          – A: Medium Coeli (MC) Quincunx ⚻ B: Deszendent (DC), Orb 0°10′",
+           "          – A: Medium Coeli (MC) Halbsextil ⚺ B: Aszendent (AC), Orb 0°10′"]
+    pruefe(_fuss_zeilen(_pb, []) == 5, "F2: merkmalslose Zeile mitten im Beleg")
+    pruefe(_fuss_zeilen(_pb + ["Noch ein Satz Prosa hinter dem Fuss,",
+                               "der weitergeht und keiner sein darf."], []) == 0,
+           "F2: Prosa hinter dem Beleg zieht nichts ab")
     # 2026-10-01b (Gegenprobe b, abschneidende Quelle): das Geruest kennt die schiefe Form
     pruefe("−<a,a> bis +<b,b> Minuten (abschneidende Quelle)" in _gg
            and "−<a,a> bis +<b,b> Minuten (abschneidende Quelle)" in _gt,
@@ -5851,7 +5904,7 @@ def _selbsttest():
         raise SystemExit(1)
     print("Selbsttest build.py: alle Faelle gruen (W2, W7, W9, L19, W14, W22, "
           "W57, "
-          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, F1-11.10. Bogen ohne Rad, GP, K2-29.09.: T2, T11, T12, K5, "
+          "L16, F18, F2, W47, W61, T11, T12, T4-kontaktbogen, F1-11.10. Bogen ohne Rad, F1-11.10.b Beziehungs-Bogen, F2-11.10.b Beleg-Fortsetzung, W10-11.10.b Geruest-Deckblatt, GP, K2-29.09.: T2, T11, T12, K5, "
           "K2-30.09.: Geruest, K2-01.10.: T1, N8, K1-01.10.b: Fuss-Schraegstrich, "
           "Zeitunsicherheit)")
 

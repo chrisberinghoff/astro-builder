@@ -158,17 +158,24 @@ FILTER_ELTERN_KIND = re.compile(
     r'hingabe|eroberer|anziehungskraft|befriedig',
     re.I)
 
-# Kapitel, die Streit, Verletzung oder Angst zwischen beiden beruehren und
-# deshalb den Satz zum realen Problem tragen (Chris-Entscheidung 2026-10-11).
+# Woerter fuer Streit, Verletzung oder Angst. Bis 2026-10-11 trug jedes Kapitel,
+# das sie beruehrt, den Satz zum realen Problem (B13); seit Chris' Entscheidung
+# vom 11.10. (Nachtrag im Pruefbericht Beziehung Text Paar) steht er nur noch in
+# „Zur Lesart“ und in hoechstens einem Themenkapitel — B13 nutzt die Liste nicht
+# mehr; sie bleibt fuer Proben, die sie brauchen.
 STREIT_RE = re.compile(
     r'\b[Ss]treit\w*|\bstritt\w*|\bgestritten\b|\b[Vv]erletz\w*|\bAngst\w*|'
     r'\bängst\w*|\b[Gg]ewalt\b|\bgewaltsam\w*|\bWut\b|\bwütend\w*|\b[Kk]ränk\w*|'
     r'\b[Dd]rohung\w*|\b(?:be|an)?droh(?:t|en|st|te|ten)\b|\b[Hh]erabsetz\w*|'
     r'\banschrei\w*|\bangeschrien\b|\bschrei(?:e|en|st|t)\b|\bgeschrien\b|'
     r'\b[Dd]emütig\w*|\bAngriff\w*')
+# 2026-10-11 (Auswertung 11.10., Teil 2, F5/K-a): „kein Horoskop“ allein traf
+# gewoehnliche Saetze („Ob zwei Menschen zusammenpassen, sagt es nicht; das kann
+# kein Horoskop.“) und setzte sie in Chris' Stellen-Liste. Der Satz traegt nach
+# dem Modul die Wendung „kein Thema für ein Horoskop“.
 REALPROBLEM_RE = re.compile(
     r'kein Thema für ein Horoskop|nichts mit Astrologie zu tun|'
-    r'kein Horoskop|nicht für ein Horoskop|no topic for a horoscope|'
+    r'nicht für ein Horoskop|no topic for a horoscope|'
     r'nothing to do with astrology', re.I)
 VERWERF_RE = re.compile(
     r'überspring|verwerf|wiedererkennst|wiedererkennt|betrifft nicht jeden|'
@@ -179,10 +186,15 @@ VERWERF_RE = re.compile(
     r'legt das Kapitel weg|discard|skip this chapter|set this chapter aside|'
     r'put this chapter aside|does not apply to everyone|if this does not fit',
     re.I)
+# 2026-10-11 (Auswertung 11.10., Teil 2, W4): dazu die Tabellenform des
+# Klartext-Moduls fuer den Quincunx („passt nicht mit … zusammen“) und
+# „nicht zusammenpassen“ — beide gingen im Eltern-Kind-Pruefffall durch.
 PASSUNG_RE = re.compile(
     r'(?:passt|passen|gepasst)\s+(?:gut|nicht|perfekt|ideal|wunderbar)\s+'
     r'zusammen|füreinander bestimmt|seelenverwandt|Seelenverwandt|Traumpaar|'
     r'keine Zukunft|zum Scheitern|nicht zueinander passen|Trennung (?:ist|wäre)|'
+    r'(?:passt|passen)\s+nicht\s+mit\s+[^.;:!?]{1,80}?\s+zusammen|'
+    r'(?:passt|passen)\s+nicht\s+zueinander|nicht\s+zusammen(?:zu)?pass\w*|'
     r'(?:gute|schlechte) Partie|meant to be|soulmate', re.I)
 
 
@@ -848,13 +860,21 @@ def rangzeilen(r):
     na, nb = r['A']['vorname'], r['B']['vorname']
     sa, sb = _slug(na), _slug(nb)
     z = r['kreuz']
+    # 2026-10-11 (Auswertung der Pruefberichte vom 11.10., Teil 2, F4;
+    # Pruefbericht Beziehung Design Eltern-Kind, F2): Eine Verbindung mit eng*
+    # (kippt in der Zeitprobe) traegt keine Rang- oder Zaehlaussage — so sagt es
+    # der ⚠-Block desselben Datenblatts. Die Zeilen „verbindungen-eng-*“ zaehlten
+    # sie trotzdem mit, und ein Text stuetzte „die meisten engen Verbindungen“
+    # auf eine eng*-Zeile. Jetzt zaehlen dort nur feste enge Zeilen; in den
+    # Listen „engste-*“ steht bei einer solchen Zeile „eng*“ statt „eng“.
+    kipp = _kipp_ids(r) if (r.get('zeit') or {}).get('eng_kippt') else set()
     zeilen = sorted(z, key=lambda x: (_minuten(x['orb']),
                                       STUFE_RANG.get(x['strength'], 9),
                                       FAKTOR_REIHE.index(x['a']),
                                       FAKTOR_REIHE.index(x['b'])))
 
     def _asp(e, rang):
-        zus = ['eng'] if e['eng'] else []
+        zus = [('eng*' if id(e) in kipp else 'eng')] if e['eng'] else []
         if e.get('spiegel'):
             zus.append('zugleich ' + e['spiegel'])
         return '%d. %s %s %s %s (%s%s)' % (
@@ -889,7 +909,7 @@ def rangzeilen(r):
     def _je_faktor(seite, nur_eng):
         zaehl = {}
         for x in z:
-            if nur_eng and not x['eng']:
+            if nur_eng and (not x['eng'] or id(x) in kipp):
                 continue
             k = x[seite]
             zaehl[k] = zaehl.get(k, 0) + 1
@@ -899,8 +919,9 @@ def rangzeilen(r):
         return ['%d. %s %d' % (k, f, zaehl[f]) for f, k in zip(folge, rg)]
     for seite, name, slug, ander in (('a', na, sa, nb), ('b', nb, sb, na)):
         L.append(_zeile('verbindungen-eng-%s' % slug,
-                        'enge Zeilen der Tabelle je Faktor von %s, gezählt; ein '
-                        'Achsen-Spiegel zählt einmal; Faktoren ohne enge Zeile fehlen'
+                        'enge Zeilen der Tabelle je Faktor von %s, gezählt; ohne '
+                        'eng* (kippt in der Zeitprobe); ein Achsen-Spiegel zählt '
+                        'einmal; Faktoren ohne enge Zeile fehlen'
                         % name, _je_faktor(seite, True)))
         L.append(_zeile('verbindungen-alle-%s' % slug,
                         'alle Zeilen der Tabelle je Faktor von %s (voll, einseitig, '
@@ -2557,8 +2578,13 @@ def probe(analyse_pfad, datenblatt_pfad):
     der ersten drei ohne form=kurz oder form=ressource: FEHLER, wie
     inhaltsprobe P16) · B20 Subjekt-Probe (Innere Arbeit, Pruefung 1; die
     Satzmuster von inhaltsprobe P17, der Genitiv eines Vornamens gelesen wie
-    ein Possessiv: „<B>s Saturn bremst dich“; nur deutsch). FEHLER ist
-    eindeutig; PRUEFEN braucht ein Auge.
+    ein Possessiv: „<B>s Saturn bremst dich“; nur deutsch) · B21 Wiederholung
+    (seit 2026-10-11: derselbe Satz mehr als zweimal oder derselbe Satzanfang an
+    derselben Stelle in mehr als zwei Kapiteln, die Wegweiser ausgenommen —
+    dieselbe Zaehlung wie inhaltsprobe P19, inhaltsprobe.wiederholungen()).
+    B13 seit 2026-10-11: der Satz zum realen Problem in „Zur Lesart“ und in
+    hoechstens einem weiteren Kapitel. FEHLER ist eindeutig; PRUEFEN braucht
+    ein Auge.
     """
     import build
     r = lies_beziehung(datenblatt_pfad)
@@ -2765,8 +2791,11 @@ def probe(analyse_pfad, datenblatt_pfad):
     for c in kap:
         for b in text_von(c):
             for s in _saetze(_ohne_zitate(b['text'])):
+                # 2026-10-11 (W3): das Nomen „Du“ („sich im Du findet“) ist keine Anrede
+                s_nomen = re.sub(r'\b(?:im|ins|das|ein|dem|zum|vom|am|ans|ihr|sein|ihrem|seinem)\s+Du\b',
+                                 '', s)
                 if art == 'paar' and not englisch and re.search(
-                        r'\b(?:[Dd]u|[Dd]ich|[Dd]ir|[Dd]ein\w*)\b', s):
+                        r'\b(?:[Dd]u|[Dd]ich|[Dd]ir|[Dd]ein\w*)\b', s_nomen):
                     P('B9', '%s: „du“ beim Paar: %s' % (c['kicker'], s[:120]))
                 if art == 'eltern-kind' and not englisch and re.search(
                         r'\b(?:[Ee]uch|[Ee]uer|[Ee]ure[nmrs]?)\b|\b[Ii]hr beide\b|'
@@ -2804,8 +2833,11 @@ def probe(analyse_pfad, datenblatt_pfad):
     # B12 Gleichgewicht beim Paar
     if art == 'paar':
         alle = ' '.join(b['text'] for c in kap for b in text_von(c))
-        za, zb = len(re.findall(r'\b%s\b' % re.escape(na), alle)), \
-            len(re.findall(r'\b%s\b' % re.escape(nb), alle))
+        # 2026-10-11 (W3): der Genitiv auf -s zaehlt mit („<A>s“); vorher
+        # 95 : 205 statt 311 : 302 im Paar-Pruefffall
+        def _nennungen(n):
+            return len(re.findall(r'(?<!\w)%s(?=s\b|’|\'|\b)' % re.escape(n), alle))
+        za, zb = _nennungen(na), _nennungen(nb)
         if min(za, zb) and max(za, zb) / float(min(za, zb)) > 1.5:
             P('B12', '%s %d-mal, %s %d-mal genannt — sind beide Seiten gleich gewichtet?'
               % (na, za, nb, zb))
@@ -2813,7 +2845,9 @@ def probe(analyse_pfad, datenblatt_pfad):
         if abs(seiten.count(na) - seiten.count(nb)) > 1:
             P('B12', 'Themenliste seite=: %s %d, %s %d' % (na, seiten.count(na), nb,
                                                           seiten.count(nb)))
-        schuld = re.compile(r'(?:wegen|weil|durch) (?:%s|%s)\b|(?:%s|%s) (?:ist|trägt) schuld|'
+        # 2026-10-11 (W3): „weil <Name>’ Venus …“ spricht ueber einen Stand,
+        # nicht ueber die Person — Genitiv ausgenommen
+        schuld = re.compile(r'(?:wegen|weil|durch) (?:%s|%s)(?![s’\'\w])|(?:%s|%s) (?:ist|trägt) schuld|'
                             r'schuld (?:ist|hat|trägt) (?:%s|%s)' % ((re.escape(na), re.escape(nb)) * 3))
         for c in kap:
             for b in text_von(c):
@@ -2829,26 +2863,38 @@ def probe(analyse_pfad, datenblatt_pfad):
             if b['type'] == 'subhead':
                 akt = b['text']
             elif b['type'] in ('p', 'li') and REALPROBLEM_RE.search(b['text']):
+                # 2026-10-11 (BT-P): woertlich, wie das Modul es verlangt —
+                # vorher auf 160 Zeichen gekuerzt
                 fuer_chris.append('%s%s: „%s“' % (c['kicker'], (' · ' + akt) if akt else '',
-                                                   b['text'][:160]))
+                                                   ' '.join(b['text'].split())))
     if not zl or not any(REALPROBLEM_RE.search(b['text']) for b in text_von(zl[0])):
         F('B13', '„Zur Lesart“ trägt den Satz zum realen Problem nicht')
-    for c, a in zip(kap, arten):
+    # 2026-10-11 (Auswertung 11.10., Teil 2, F5; Chris-Entscheidung 11.10.,
+    # Nachtrag im Pruefbericht Beziehung Text Paar): ausser in „Zur Lesart“ steht
+    # der Satz in hoechstens EINEM Themenkapitel — dem, in dem es um Druck oder ein
+    # Nein geht, das gelten muss — als erster Absatz von „Was da arbeitet“. Welches
+    # Kapitel das ist, entscheidet der Lauf; die Probe zaehlt nur.
+    mit_satz = [(c, a) for c, a in zip(kap, arten) if a != 'Zur Lesart'
+                and any(REALPROBLEM_RE.search(b['text']) for b in text_von(c))]
+    if len(mit_satz) > 1:
+        F('B13', 'Satz zum realen Problem in %d Kapiteln (%s) — erlaubt ist neben „Zur Lesart“ '
+          'nur das eine Themenkapitel über Druck oder ein Nein, das gelten muss'
+          % (len(mit_satz), ', '.join(c['kicker'] for c, _ in mit_satz)))
+    for c, a in mit_satz:
         if a != 'Kapitel':
+            P('B13', '%s trägt den Satz zum realen Problem — er gehört in ein Themenkapitel'
+              % c['kicker'])
             continue
-        t = ' '.join(b['text'] for b in text_von(c))
-        if STREIT_RE.search(t):
-            erster = None
-            sehen = False
-            for b in c['blocks']:
-                if b['type'] == 'subhead':
-                    sehen = b['text'] == wl[1]
-                elif sehen and b['type'] == 'p':
-                    erster = b['text']
-                    break
-            if not (erster and REALPROBLEM_RE.search(erster)):
-                P('B13', '%s berührt Streit, Verletzung oder Angst — erster Absatz von „%s“ '
-                  'ohne den Satz zum realen Problem' % (c['kicker'], wl[1]))
+        erster, sehen = None, False
+        for b in c['blocks']:
+            if b['type'] == 'subhead':
+                sehen = b['text'] == wl[1]
+            elif sehen and b['type'] == 'p':
+                erster = b['text']
+                break
+        if not (erster and REALPROBLEM_RE.search(erster)):
+            P('B13', '%s: der Satz zum realen Problem steht nicht als erster Absatz von „%s“'
+              % (c['kicker'], wl[1]))
     # B14 Wortscan
     try:
         import inhaltsprobe as ip
@@ -2875,11 +2921,19 @@ def probe(analyse_pfad, datenblatt_pfad):
     rang_re = re.compile(
         r'(eng|dicht|stärk|schwäch|wenig)[a-zäöüß]*ste|einzig|die meisten|überhaupt vorkommt|'
         r'\b(zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|beide|[0-9]+) '
-        r'(von|Verbindungen|Kontakte|Fäden|Planeten|Faktoren)|Hälfte|Drittel')
+        r'(von|Verbindungen|Kontakte|Fäden|Planeten|Faktoren)|Hälfte|Drittel|'
+        r'\b(?:zwei|drei|vier|fünf|sechs)mal\b')
+    # 2026-10-11 (W3): „ein einziges Mal“, „eine einzige Übung“ (Pflichtsatz in „Zur
+    # Lesart“) und „die eine Hälfte eines Spiegels“ sind keine Rang- oder
+    # Anteilsaussagen; „zweimal“ ist eine Zahlaussage und kam vorher nicht.
+    nicht_rang = re.compile(r'\bein(?:e|en|em|er|es)? einzig\w*|\beine Hälfte\b|'
+                            r'\bHälfte (?:eines|des) Spiegels\b|\bein- oder zweimal\b|'
+                            r'\b(?:zwei|drei|vier|fünf|sechs)mal (?:in der Woche|im Monat|am Tag|'
+                            r'pro Woche|die Woche)\b')
     for c in kap:
         for b in text_von(c):
             for s in _saetze(b['text']):
-                if rang_re.search(s):
+                if rang_re.search(nicht_rang.sub('', s)):
                     P('B15', '%s: %s' % (c['kicker'], s[:140]))
     # B16 Nichtwissens-Satz
     try:
@@ -2953,6 +3007,14 @@ def probe(analyse_pfad, datenblatt_pfad):
                         continue
                     streng = bew in wl
                     for s in _saetze(b['text']):
+                        # 2026-10-11 (W3): „der Punkt dessen, was …“ ist kein
+                        # Relativsatz; die Definition einer Achse in einem Kapitel
+                        # ohne Bewegungen („Der MC ist der Punkt, …“) verortet nur.
+                        if not bew and re.match(r'(?:Der|Das|Die) (?:MC|IC|AC|DC|Aszendent|'
+                                                r'Deszendent|Medium Coeli|Imum Coeli)\b[^.]{0,40}?'
+                                                r'\bist (?:der|die|das) ', s):
+                            continue
+                        s = re.sub(r'\bdessen, was\b', 'davon, was', s)
                         kand, tok = kand_f(gen_re.sub(lambda m: m.group(1) + 'ihr', s))
                         if not streng:
                             kand = [k for k in kand if handelt_f(tok, k[1], k[2])]
@@ -2960,6 +3022,28 @@ def probe(analyse_pfad, datenblatt_pfad):
                             P('B20', '%s%s: „%s“ — %s als Satzsubjekt' % (
                                 c['kicker'], (' · ' + bew) if bew else '', s[:110],
                                 ', '.join(dict.fromkeys(k[0] for k in kand))))
+    # B21 Wiederholung (2026-10-11; Chris-Entscheidung 2026-10-11: hoechstens zweimal
+    # gleich, die Wegweiser bleiben) — dieselbe Zaehlung wie inhaltsprobe P19.
+    try:
+        import inhaltsprobe as ip
+        wh_f, wh_z = ip.wiederholungen, ip.wiederholung_zeile
+    except Exception:                          # pragma: no cover
+        wh_f = None
+        P('B21', 'inhaltsprobe nicht ladbar — Wiederholungs-Probe nicht gelaufen')
+    if wh_f is not None:
+        einheiten = []
+        for c, a in zip(kap, arten):
+            if a == 'Rechenschaft':
+                continue
+            bew = None
+            for b in c['blocks']:
+                if b['type'] == 'subhead':
+                    bew = b['text']
+                    continue
+                if b['type'] in ('p', 'li'):
+                    einheiten.append((c['kicker'], bew, b['text']))
+        for w in wh_f(einheiten, satzanfaenge=not englisch):
+            P('B21', wh_z(w))
     zeilen = ['BEZIEHUNGSPROBE — %s' % os.path.basename(str(analyse_pfad))]
     zeilen += fehler + pruefen
     zeilen.append('FÜR CHRIS — Stellen mit dem Satz zum realen Problem (nach der ersten '
@@ -3519,6 +3603,42 @@ def _selbsttest():
         pr3 = probe(ap, zp)
         check('FEHLER B4' in pr3 and 'PRÜFEN B9' in pr3,
               'Probe: Paar verlangt „ihr“-Wortlaute und kein „du“')
+        # 2026-10-11 (Auswertung 11.10., Teil 2, F5): Satz zum realen Problem in
+        # einem zweiten Kapitel -> FEHLER; FÜR CHRIS woertlich, nicht gekuerzt.
+        gut = open(ap, encoding='utf-8').read()
+        zwei = gut.replace('Deine Wärme und die Verlässlichkeit von',
+                           'Wenn daraus eine Angst wird, die bleibt, ist das kein Thema für ein '
+                           'Horoskop. Deine Wärme und die Verlässlichkeit von', 1)
+        check(zwei != gut, 'Selbsttest: Einfügestelle für den zweiten Satz fehlt')
+        ap4 = os.path.join(tmp, 'zwei_saetze_analyse.md')
+        open(ap4, 'w', encoding='utf-8').write(zwei)
+        pr4 = probe(ap4, ziel)
+        check('FEHLER B13' in pr4 and 'in 2 Kapiteln' in pr4,
+              'Probe: Satz zum realen Problem in zwei Kapiteln (B13, F5)')
+        check('B21' not in pr, 'Probe: saubere Analyse ohne Wiederholungs-Meldung (B21)')
+        check(all(len(z) > 0 for z in pr.split('FÜR CHRIS', 1)[1].splitlines()[1:3])
+              and '…' not in pr.split('FÜR CHRIS', 1)[1],
+              'Probe: „FÜR CHRIS“ ungekürzt')
+    # 2026-10-11 (F5/K-a, W3, W4): Muster ohne Datei
+    check(REALPROBLEM_RE.search('Ob zwei Menschen zusammenpassen, sagt es nicht; das kann '
+                                'kein Horoskop.') is None
+          and REALPROBLEM_RE.search('Dann ist das kein Thema für ein Horoskop, sondern eines '
+                                    'für ein Gespräch.') is not None,
+          'REALPROBLEM_RE: nur die Wendung des Moduls')
+    for _satz, _soll in (('Ihr Denken und sein Handeln passen nicht zusammen.', True),
+                         ('Sein Ernst passt nicht mit ihrer Leichtigkeit zusammen.', True),
+                         ('Zwei Kräfte, die nicht zusammenpassen, reiben sich.', True),
+                         ('Ob zwei Menschen zusammenpassen, sagt es nicht.', False),
+                         ('Die beiden Arten greifen nicht glatt ineinander.', False)):
+        check(bool(PASSUNG_RE.search(_satz)) == _soll, 'PASSUNG_RE: %s' % _satz)
+    # B15-Ausnahmen (2026-10-11, W3) — dieselbe Liste wie in probe(), hier nur als Muster
+    for _satz, _soll in (('Genau diesen Saturn berührt ihr Bild zweimal.', True),
+                         ('Wenn du es ein- oder zweimal bemerkst, reicht es.', False),
+                         ('Nimm eine einzige Übung mit.', False),
+                         ('Das ist die einzige Verbindung dieser Art.', True)):
+        _rr = re.compile(r'einzig|\b(?:zwei|drei|vier|fünf|sechs)mal\b')
+        _nr = re.compile(r'\bein(?:e|en|em|er|es)? einzig\w*|\bein- oder zweimal\b')
+        check(bool(_rr.search(_nr.sub('', _satz))) == _soll, 'B15-Muster: %s' % _satz)
     print('beziehung.py Selbsttest: %d Proben bestanden%s' % (
         len(ok), (' · übersprungen: ' + '; '.join(aus)) if aus else ''))
     return True
