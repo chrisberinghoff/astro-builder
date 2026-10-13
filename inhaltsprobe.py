@@ -146,6 +146,16 @@ P5  Rechenschaft     jeder Faktor des @@SELEKTOR-Blocks, der kein Thema fuehrt,
                      Soll-Menge mit events.json aus build.kontakt_heimat(), ohne sie
                      aus dem Block TRANSIT-RECHENSCHAFT (+ mitklingende Kontakte aus
                      `aspekte=` als PRUEFEN).
+                     KAPITELANGABEN (2026-10-13, Strang 3 des Wartungslaufs „Proben
+                     fuer Zeit, Naehe, Register und Fundstellen“): Jede Zeile nennt
+                     jedes Kapitel, dessen THEMA den Faktor in `klingt=` oder
+                     `aspekte=` traegt und dessen Signatur oder Lesetext ihn nennt —
+                     Achsen eingeschlossen; eine Angabe „klingt … in Kapitel n“,
+                     deren Kapitel den Faktor nicht nennt, ist leer; der Satz „Mit
+                     dem <Faktor> haben Kapitel … zu tun“ gilt gegen dieselbe Menge.
+                     Im Transit braucht ein `klingt=`-Kontakt, den sein Kapitel in
+                     einem Satz nennt, die Kapitelangabe, und eine Angabe ohne Satz
+                     und ohne `aspekte=` ist leer. Nur PRUEFEN.
 P6  Leitsatz         LEITSATZ aus @@DECKBLATT im Schlusswort (wortgleich nach
                      Leerraum-Normalisierung, ersatzweise vier Fuenftel der Woerter
                      in Reihenfolge); genau EINE THEMA-Zeile mit leitachse=ja.
@@ -261,10 +271,29 @@ P18 Satzarten        (2026-10-04, Wartungslauf Satzarten-Probe; Chris-Entscheidu
                      „allein von X besetzt"), Herrscher (§3, Domizil), Kapitel-,
                      Titel- und Abschnittsverweise, Buendel-Signatur, Modulwoerter
                      im Lesetext, „steht in der Aspekttabelle", Rang neben einem
-                     gedeuteten Untergrund-Aspekt, „alles andere"; im Transit
+                     gedeuteten Untergrund-Aspekt (bis 2026-10-13, s. u.), „alles
+                     andere"; im Transit
                      Zeitangaben („ab", „beginnt", „zum ersten Mal genau",
                      Zeichenwechsel), Gleichzeitigkeit, Station, Anzahl und der
-                     Wiederholungshinweis kontaktgenau. Nur PRUEFEN und nur bei
+                     Wiederholungshinweis kontaktgenau. Seit 2026-10-13 (Strang 1
+                     des Wartungslaufs „Proben fuer Zeit, Naehe, Register und
+                     Fundstellen“) dazu: Grenze („bis <Zeit>“, „von … bis …“,
+                     „über das Ende dieses Fensters hinaus“), Wechsel in Zeichen
+                     und Haus, Abstand und Reihenfolge („eine Woche nach“, „im
+                     Gefolge“, „Dazwischen“, Sonnenbogen), Buendel aus Laeufer- und
+                     Zielliste in Fliesstext und Signatur, Genau („genau <Zeiten>“,
+                     „folgt“, „geht über“), Kapitelzeit gegen die @@ZEITLEISTE,
+                     Dauer („fast die ganzen zwei Jahre“), Zugleich mit einem
+                     Laeufer und „In dieselben Wochen“ — auch im Kapitel „Die Zeit“
+                     einer Vertiefung. Seit 2026-10-13 (Strang 2) ausserhalb der
+                     Zeit-Kapitel die Naehe-, Lage- und Rangwoerter nach Chris'
+                     Schwellen: „genau am“, „am selben Punkt wie“, „exakt im
+                     <Aspekt>“ bis 1° Orb, „genau dort, wo … sich berühren“ bis 1°
+                     zur Hausspitze, Absolutformeln, „eng beieinander“ (Konjunktion
+                     je Paar), „mitten in der Ballung“ (kein Randglied), die leere
+                     Haelfte „liegt im …“, „der Knotenachse gegenüber“, und der
+                     Rang mit „deines ganzen Bildes“ samt jedem Untergrund-Aspekt;
+                     dazu „enger als jede andere“, „sonst nirgends“. Nur PRUEFEN und nur bei
                      WIDERSPRUCH zu den Daten — was sich nicht pruefen laesst,
                      bleibt still; jeder Hinweis nennt den Datenwert. Englische
                      Fassung uebersprungen; ohne events.json die Transit-Satzarten
@@ -285,7 +314,7 @@ P10 und P17, einmal mit Zugang-Kapitel; P16 und die Satzmuster von P17 als
 Einzelproben; dazu ein Transit-Fall mit konstruierter events.json
 (Daten aus Julianischen Tageszahlen gerechnet, kein Datum im Quelltext), fehlerfrei,
 mit eingebauten Fehlern und ohne events.json. P18 laeuft auf denselben konstruierten
-Faellen mit erfundenen Saetzen (Lauf 12 und 13): je Satzart eine stimmige Fassung, die
+Faellen mit erfundenen Saetzen (Lauf 12, 13 und 15): je Satzart eine stimmige Fassung, die
 still bleiben muss, und eine, die den Daten widerspricht und mit dem Datenwert
 gemeldet werden muss. Eine Probe, die ihren Testfehler nicht
 findet, ist nicht fertig. Der Selbsttest ist Teil des Moduls und laeuft bei jedem
@@ -1896,6 +1925,183 @@ def _register_eintraege(ch):
                 out.append(_ws(stueck))
     return out
 
+# --- P5: Kapitelangaben im Register (2026-10-13, Strang 3 des Wartungslaufs „Proben
+# fuer Zeit, Naehe, Register und Fundstellen“; Startprompt
+# `claude/STARTPROMPT_Probenlauf_2026-10-13.md`). Warum: Die Zweitleser vom 12.10.
+# fanden in den Rechenschaftszeilen Kapitelangaben, die fehlten (ein Faktor klingt
+# in einem Kapitel mit, weil sein Aspekt dort `aspekte=` traegt, und die Zeile nennt
+# das Kapitel nicht), Achsen-Zeilen, die nie geprueft wurden (P5 nahm Achsen aus),
+# und eine Angabe, deren Kapitel den Faktor gar nicht nennt. Regel (Datenblatt-
+# Modul, Rechenschaftsregel): „bei einem Mitklinger zusaetzlich, in welchem Kapitel
+# er vorkommt“. Gelesen wird beidseitig:
+#   SOLL  Kapitel n, wenn THEMA n den Faktor in `klingt=` (je Eintrag der erste
+#         Faktor; was in Klammern steht, beschreibt ihn nur) oder in `aspekte=`
+#         (beide Enden) traegt UND das Kapitel ihn in Signatur oder Lesetext nennt
+#         (der Beleg zaehlt nicht — er ist Datenzeile, kein Vorkommen fuer den Leser).
+#   IST   jede Kapitelnummer der Zeile; nennt die Zeile „klingt … in Kapitel n“ und
+#         das Kapitel nennt den Faktor nicht, ist die Angabe leer.
+# Dazu der Satz des Instrument-Kapitels „Mit dem MC haben Kapitel 2 und 5 zu tun“
+# gegen dieselbe Soll-Menge. Nur PRUEFEN, jeder Hinweis mit dem Datenwert.
+_P5_KAP_LISTE_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:Kapiteln|Kapitels|Kapitel|Chapters?)\s+(?P<l>\d{1,2}(?:\s*"
+                              r"(?:,|und|sowie|oder|and|&)\s*(?:(?:Kapiteln|Kapitel|Chapters?)\s+)?\d{1,2})*)(?!\d)")
+_P5_KLINGT_RE = re.compile(r"(?<![\wäöüÄÖÜß])(?:[Kk]lingt|[Kk]lingen|mitklingt|mitklingen|[Ee]choes|[Ee]choed)"
+                           r"(?![\wäöüÄÖÜß])")
+_P5_ACHSE_ALIAS = {
+    "IC": re.compile(r"(?<![\wäöüÄÖÜß])(?:Himmelstiefe|tiefste[nr]?\s+Punkt\s+deines\s+(?:Bildes|Horoskops))"),
+    "MC": re.compile(r"(?<![\wäöüÄÖÜß])höchste[nr]?\s+Punkt\s+deines\s+(?:Bildes|Horoskops)"),
+    # die Knotenachse nennt beide Enden („die Achse führt vom Vertrauten weg“)
+    "SUEDKNOTEN": re.compile(r"(?<![\wäöüÄÖÜß])(?:Knotenachse|südliche[nr]?\s+(?:Mond)?[Kk]noten)")}
+_P5_HABEN_KAPITEL_RE = re.compile(
+    r"[Mm]it\s+(?:dem|der|deinem|deiner)\s+(?P<f>%s)\w*\s+(?:haben|hat)\s+(?:auch\s+)?"
+    r"(?P<l>(?:die\s+)?Kapitel\s+\d{1,2}(?:\s*(?:,|und|sowie)\s*(?:Kapitel\s+)?\d{1,2})*)\s+(?:\w+\s+)?zu\s+tun"
+    % _FAKTOR_RE)
+
+
+def _p5_klingt_nummern(text):
+    """Die Kapitelnummern NUR aus dem Satzteil, der mit „klingt …“ beginnt (bis „;“
+    oder Satzende) — „…; ausgeführt im Kapitel Instrument, gezählt in Kapitel 1“
+    behauptet kein Mitklingen in Kapitel 1."""
+    out = set()
+    for m in _P5_KLINGT_RE.finditer(text or ""):
+        rest = re.split(r"[;.](?:\s|$)", text[m.start():], 1)[0]
+        out |= _p5_kap_nummern(rest)
+    return out
+
+
+def _p5_kap_nummern(text):
+    """Alle Kapitelnummern eines Textes („Kapitel 3 und Kapitel 5“, „Kapiteln 2, 4 und 7“)."""
+    out = set()
+    for m in _P5_KAP_LISTE_RE.finditer(text or ""):
+        out |= {int(x) for x in re.findall(r"\d{1,2}", m.group("l"))}
+    return out
+
+
+def _p5_kapitel_texte(chapters):
+    """Kapitelnummer -> Lesetext (Signatur und Fliesstext; ohne Beleg, ohne Zwischentitel)."""
+    out = {}
+    for ch in chapters:
+        n = _kicker_nr(ch.get("kicker"))
+        if n:
+            out[n] = "\n".join([ch.get("signatur") or ""] +
+                               [b.get("text") or "" for b in ch["blocks"] if b.get("type") != "subhead"])
+    return out
+
+
+def _p5_nennt(f, text):
+    """Nennt der Text den Faktor (Schreibweisen der Probe, auch gebeugt — „Plutos
+    Kraft“, „deines Mondes“ —, dazu „Himmelstiefe“ und „der tiefste/hoechste Punkt
+    deines Bildes“ fuer IC und MC, „Knotenachse“ fuer den Suedknoten)?"""
+    if _name_in_text(f, text) or any(k == f for _a, _e, k in _faktoren_im_satz(text or "")):
+        return True
+    rx = _P5_ACHSE_ALIAS.get(f)
+    return bool(rx and rx.search(text or ""))
+
+
+def _p5_eintraege(wert):
+    """Die kommagetrennten Eintraege eines THEMA-Feldes; ein Komma in Klammern trennt nicht."""
+    out, tiefe, cur = [], 0, []
+    for c in wert or "":
+        if c == "(":
+            tiefe += 1
+        elif c == ")":
+            tiefe = max(0, tiefe - 1)
+        if c == "," and tiefe == 0:
+            out.append("".join(cur).strip())
+            cur = []
+        else:
+            cur.append(c)
+    out.append("".join(cur).strip())
+    return [x for x in out if x]
+
+
+def _p5_traeger(themen):
+    """Faktor -> {THEMA-Nr: [(Feld, Eintrag)]} aus `klingt=` und `aspekte=`."""
+    out = {}
+    for th in themen or []:
+        roh = th.get("roh") or ""
+        for feld in ("klingt", "aspekte"):
+            for eintrag in _p5_eintraege(_thema_feld(roh, feld)):
+                fs = [f for _a, _e, f in _faktoren_im_satz(re.sub(r"\([^()]*\)", " ", eintrag))]
+                for f in (fs[:1] if feld == "klingt" else list(dict.fromkeys(fs[:2]))):
+                    out.setdefault(f, {}).setdefault(th["nr"], []).append((feld, eintrag))
+    return out
+
+
+def _p5_kontakt_satz(k, text):
+    """Der erste Satz des Textes, der Transiter UND Ziel des Kontakts nennt (beim
+    Selbst-Transit den Namen zweimal oder „eigen…“/„Rückkehr“), sonst None."""
+    t, _art, r = k
+    for satz in _saetze(text or ""):
+        if not (_p5_nennt(t, satz) and _p5_nennt(r, satz)):
+            continue
+        if t == r:
+            n = sum(len(re.findall(r"(?<![\wäöüÄÖÜß])" + re.escape(sw) + r"(?![\wäöüÄÖÜß])", satz))
+                    for sw, kk in _FAKTOR_SCHREIBWEISEN if kk == t)
+            if n < 2 and not re.search(r"R(?:ü|ue)ckkehr|Wiederkehr|zurück|(?<![\wäöüÄÖÜß])[Ee]igen", satz):
+                continue
+        return satz
+    return None
+
+
+def _p5_kapitelangaben(p, chapters, themen, eintraege, typ, fuehrer):
+    """Kapitelangaben der Rechenschaftszeilen und des Satzes „Mit dem <Faktor> haben
+    Kapitel … zu tun“ gegen Themenliste und Kapiteltext (s. Kommentar oben)."""
+    ab = _zaehlung_ab(chapters, typ)
+    kap_txt = _p5_kapitel_texte(chapters)
+    traeger = _p5_traeger(themen)
+
+    def soll_von(f):
+        tr = {nr + (ab - 1): v for nr, v in traeger.get(f, {}).items()}
+        nennt = {k for k, t in kap_txt.items() if _p5_nennt(f, t)}
+        return {k for k in tr if k in nennt}, nennt, tr
+
+    def grund(f, k, tr):
+        return "THEMA %d %s" % (k - (ab - 1), "; ".join("%s=: %s" % (fd, _kurz(e, 50)) for fd, e in tr[k][:2]))
+
+    for e in eintraege:
+        m = FAKTOR_RE.match(re.sub(r"^(?:[Dd](?:er|ie|as)|[Tt]he)\s+", "", e))
+        if not m:
+            continue
+        f = kanon(m.group(1))
+        if f in fuehrer:
+            continue
+        ist = _p5_kap_nummern(e)
+        soll, nennt, tr = soll_von(f)
+        fehlt = sorted(soll - ist)
+        if fehlt:
+            p.pruefen.append("%s — die Registerzeile nennt %s nicht, obwohl %s dort mitklingt (%s; das "
+                             "Kapitel nennt %s): „%s“"
+                             % (ANZEIGE.get(f, f), ", ".join("Kapitel %d" % k for k in fehlt),
+                                ANZEIGE.get(f, f), " · ".join(grund(f, k, tr) for k in fehlt),
+                                ANZEIGE.get(f, f), _kurz(e, 90)))
+        if _P5_KLINGT_RE.search(e):
+            leer = sorted(k for k in _p5_klingt_nummern(e) if k in kap_txt and k not in nennt)
+            if leer:
+                p.pruefen.append("%s — die Registerzeile nennt %s, aber dort steht %s weder in der Signatur "
+                                 "noch im Text: „%s“"
+                                 % (ANZEIGE.get(f, f), ", ".join("Kapitel %d" % k for k in leer),
+                                    ANZEIGE.get(f, f), _kurz(e, 90)))
+    for ch in chapters:
+        if _ist_kicker(ch, "Rechenschaft"):
+            continue
+        for b in ch["blocks"]:
+            for m in _P5_HABEN_KAPITEL_RE.finditer(b.get("text") or ""):
+                f = kanon(m.group("f"))
+                ist = _p5_kap_nummern(m.group("l"))
+                soll, nennt, tr = soll_von(f)
+                fehlt = sorted(soll - ist)
+                leer = sorted(k for k in ist if k in kap_txt and k not in nennt)
+                if fehlt or leer:
+                    p.pruefen.append("%s: „%s“ — %s"
+                                     % (_bezeichnung(ch), _kurz(m.group(0), 110), "; ".join(
+                                         (["es fehlt %s (%s; das Kapitel nennt %s)"
+                                           % (", ".join("Kapitel %d" % k for k in fehlt),
+                                              " · ".join(grund(f, k, tr) for k in fehlt), ANZEIGE.get(f, f))]
+                                          if fehlt else []) +
+                                         (["%s nennt %s nicht" % (", ".join("Kapitel %d" % k for k in leer),
+                                                                  ANZEIGE.get(f, f))] if leer else []))))
+
+
 def _p5_rechenschaft(chapters, chart, themen, typ=None, txt=None, events=None,
                      chart_data_pfad=None, events_pfad=None, sprache_analyse="de"):
     """Geburtshoroskop: Faktor-Register im Kapitel `Rechenschaft`.
@@ -1944,6 +2150,9 @@ def _p5_rechenschaft(chapters, chart, themen, typ=None, txt=None, events=None,
         elif not z:
             p.fehler.append("%s führt kein Thema und hat keine Zeile im Rechenschaftskapitel, "
                             "die mit seinem Namen beginnt" % ANZEIGE.get(name, name))
+    # 2026-10-13 (Strang 3): Kapitelangaben beidseitig, Achsen eingeschlossen
+    if sprache_analyse == "de":
+        _p5_kapitelangaben(p, chapters, themen, eintraege, typ, fuehrer)
     return p.abschluss()
 
 def _kontakte_in(text):
@@ -2019,6 +2228,13 @@ def _registerzeile(k, zeilen):
             if _ziele and r not in _ziele:
                 continue
         if t == r:
+            # 2026-10-13 (Strang 3): Steht vor dem ersten Namen ein ANDERER Transiter, ist
+            # es dessen Zeile („Uranus im Sextil zu deinem Neptun: …; Raum für das eigene
+            # Tempo“ ist nicht Neptun ⚹ Neptun, auch wenn „eigene“ darin steht).
+            _fs = [f for _a, _e, f in _faktoren_im_satz(z)]
+            if _fs and _fs[0] != t and _fs[0] in ("JUPITER", "SATURN", "URANUS", "NEPTUN", "PLUTO",
+                                                  "CHIRON", "MONDKNOTEN", "PHOLUS", "MARS"):
+                continue
             n = sum(len(re.findall(r"(?<![\wäöüÄÖÜß])" + re.escape(s) + r"(?![\wäöüÄÖÜß])", z))
                     for s, kk in _FAKTOR_SCHREIBWEISEN if kk == t)
             if t == "MONDKNOTEN":
@@ -2053,6 +2269,34 @@ def _tr_block(txt):
         e = _TR_ENDE_RE.search(folge)
         out.append(kopf + (folge[:e.start()] if e else folge))
     return "\n".join(out)
+
+def _p5_klingt_transit(p, k, z, klingend, aspekte_nr, kap_txt):
+    """Transit-Register (2026-10-13, Strang 3): Ein `klingt=`-Kontakt, den sein Kapitel
+    nennt, braucht die Kapitelangabe; eine Angabe „klingt … in Kapitel n“, deren
+    Kapitel den Kontakt weder nennt noch unter `aspekte=` fuehrt, ist leer. Chris-
+    Entscheidung 2026-10-13 (Fragenblock des Wartungslaufs, Frage b: „ja“): klingt= heisst
+    im Kapitel erwaehnt, nicht gedeutet; die Registerzeile traegt die Kapitelangabe, wenn
+    das Kapitel den Kontakt nennt; auf der Uhr steht er nicht. Nur PRUEFEN, mit dem Satz
+    bzw. dem Kapitel als Datenwert."""
+    nrs = _p5_kap_nummern(z)
+    if k in klingend:
+        n = klingend[k]
+        satz = _p5_kontakt_satz(k, kap_txt.get(n, ""))
+        if satz and n not in nrs:
+            p.pruefen.append("%s — klingt in Kapitel %d mit (`klingt=` von THEMA %d; das Kapitel nennt ihn: "
+                             "„%s“), die Registerzeile nennt das Kapitel nicht: „%s“"
+                             % (_kontakt_name(k), n, n, _kurz(satz, 90), _kurz(z, 80)))
+    if not _P5_KLINGT_RE.search(z):
+        return
+    leer = sorted(n for n in _p5_klingt_nummern(z) if n in kap_txt and n not in aspekte_nr.get(k, set())
+                  and not _p5_kontakt_satz(k, kap_txt[n]))
+    if leer:
+        p.pruefen.append("%s — die Registerzeile nennt %s, aber dort steht kein Satz mit %s und %s "
+                         "(und THEMA %s führt ihn nicht unter `aspekte=`): „%s“"
+                         % (_kontakt_name(k), ", ".join("Kapitel %d" % n for n in leer),
+                            ANZEIGE.get(k[0], k[0]), ANZEIGE.get(k[2], k[2]),
+                            ", ".join(str(n) for n in leer), _kurz(z, 80)))
+
 
 def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_pfad,
                      sprache_analyse="de"):
@@ -2093,6 +2337,17 @@ def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_p
         for k in _kontakte_in(_thema_feld(th.get("roh"), "aspekte")):
             if k not in fuehrend:
                 mitklingend.setdefault(k, th["nr"])
+    # 2026-10-13 (Strang 3): `klingt=`-Kontakte je THEMA, `aspekte=` je THEMA (alle
+    # Themen, nicht nur das erste) und der Lesetext je Kapitel — fuer die
+    # Kapitelangabe der klingt=-Kontakte und fuer leere Angaben (_p5_klingt_transit).
+    klingend, aspekte_nr = {}, {}
+    for th in themen:
+        for k in _kontakte_in(_thema_feld(th.get("roh"), "klingt")):
+            if k not in fuehrend and k not in mitklingend:
+                klingend.setdefault(k, th["nr"])
+        for k in _kontakte_in(_thema_feld(th.get("roh"), "aspekte")):
+            aspekte_nr.setdefault(k, set()).add(th["nr"])
+    kap_txt = _p5_kapitel_texte(chapters)
     sicher, quelle = set(), ""
     if events is not None and chart_data_pfad and events_pfad:
         try:
@@ -2158,6 +2413,8 @@ def _p5_mitlaufendes(p, chapters, themen, txt, events, chart_data_pfad, events_p
             p.pruefen.append("%s — die Registerzeile nennt das Kapitel %d nicht, in dem der "
                              "Kontakt mitklingt (Transit-Modul, Struktur 5): „%s“"
                              % (_kontakt_name(k), mitklingend[k], _kurz(z, 80)))
+        elif sprache_analyse == "de":
+            _p5_klingt_transit(p, k, z, klingend, aspekte_nr, kap_txt)
     if _mitklingend_ohne_zeile:
         _liste = ", ".join("%s (Kap. %d)" % (_kontakt_name(k), nr)
                            for k, nr in sorted(_mitklingend_ohne_zeile,
@@ -4258,6 +4515,16 @@ def _p12_rang(chapters, txt, typ=None, sprache_analyse="de"):
                 if any(not (e <= x or a >= y) for x, y in belegt):
                     continue
                 belegt.append((a, e))
+                # 2026-10-13 (Strang 2): Formen, die P18 genauer haelt — „keine andere
+                # Verbindung … so eng wie“ (Rang 1 ohne Gleichstand) und „zu einem einzigen
+                # Punkt“ (Naehe bis 1°); P12 hielt sie als Zaehlung bzw. Einzigkeit gegen
+                # die falsche Rangzeile
+                if not englisch and (
+                        (art == "kein_anderer" and any(x.start() <= a < x.end()
+                                                       for x in _P18_STRIKT_RE.finditer(satz)))
+                        or (art == "einzig" and re.match(r"einzig\w*\s+Punkt", satz[a:], re.I)
+                            and re.search(r"zu\s+einem\s+$", satz[max(0, a - 12):a], re.I))):
+                    continue
                 p.geprueft += 1
                 befund = _rang_befund(art, m, satz, rz, typ, saetze[i - 1][2] if i else "",
                                       eigen=eigen, struktur=struktur, englisch=englisch)
@@ -6064,10 +6331,18 @@ def _p17_subjekt(chapters, typ, sprache_analyse="de"):
 #   Modulwort      Werkstattwoerter der Module im Lesetext („Pflichtteil" u. a.).
 #   Dokument       „steht in der Aspekttabelle" — gegen die Tabellen der chart_data
 #                  (Untergrund nur mit gedeutet=ja).
-#   Rang           „die (zweit)engste Verbindung" ohne Untergrund-Vorbehalt, wenn
-#                  ein GEDEUTETER Untergrund-Aspekt den Rang verschiebt (P12 haelt
-#                  die Rangzeilen, die den Untergrund nicht zaehlen).
+#   Rang           seit 2026-10-13 (Strang 2, Chris-Entscheidung a4): mit „deines
+#                  ganzen Bildes“, „alle Faktoren gezählt“, „unter allen gerechneten“
+#                  zaehlt JEDER Untergrund-Aspekt, auch ungedeutet; ohne Zusatz gilt die
+#                  Rangzeile (P12) — die Regel vom 04.10. (gedeuteter Untergrund neben
+#                  „die engste Verbindung“) entfaellt. Dazu „enger als jede andere“,
+#                  „sonst nirgends“, „keine so eng wie“: Rang 1 ohne Gleichstand.
 #   Anteil         „alles andere haelt fest" — gegen die Modus-/Element-Zaehlung.
+#   Naehe (2026-10-13, Strang 2; Abschnitt vor _p18_daten): „genau am/auf“, „am selben
+#                  Punkt wie“, „zu einem Punkt“, „gradgenau/exakt im <Aspekt>“, „genau
+#                  gegenüber“, „genau dort, wo … sich berühren“, Absolutformeln, „eng
+#                  beieinander“, „mitten in der Ballung“, die leere Haelfte „liegt im …“,
+#                  „der Knotenachse gegenüber“ — gegen Orben, Laengen, Hausspitzen, §6, §8.
 #   Transit:
 #   Zeit           „ab <Zeit> steht T …", „beginnt im …", „zum ersten Mal genau im …",
 #                  „ab <Zeit> steht T in <Zeichen>" — gegen Wirkorb-Beginn,
@@ -7104,56 +7379,12 @@ def _p18_dokument(p, d, satz, ort, vorher=""):
     return n
 
 
-# --- Rang mit gedeutetem Untergrund ---------------------------------------------
-_P18_ENGSTE_RE = re.compile(_P18_GRENZ + r"(?:die|der|den)\s+(?P<ord>zweit|dritt|viert)?engste[nr]?\s+"
-                            r"(?:Verbindung|Aspekt|Kontakt)\w*" + _P18_ENDE, re.I)
-
-
-# Der Satz nennt seine Zaehlmenge selbst („unter den großen Aspekten", „ohne den
-# Untergrund") — dann traegt er, was der Hinweis verlangt.
-_P18_ZAEHLMENGE_RE = re.compile(_P18_GRENZ + r"(?:unter\s+den\s+(?:großen|Haupt\w*|vollen|klassischen|"
-                                r"wichtigen|starken)\s+(?:Aspekten|Verbindungen|Winkeln)|Hauptaspekt\w*|"
-                                r"Untergrund\w*)" + _P18_ENDE)
-
-
-def _p18_rang(p, d, satz, vorher, ort):
-    """P12 haelt „die engste Verbindung" gegen die Rangzeilen, die den Untergrund
-    NICHT zaehlen. Ein GEDEUTETER Untergrund-Aspekt steht aber in der Aspekttabelle
-    des Dokuments und zaehlt als Verbindung (Strukturbild §4). Verschiebt er den
-    Rang und nennt der Satz den Untergrund nicht, kommt ein Hinweis — nur dann,
-    wenn die Rangzeile selbst die Aussage traegt (sonst meldet P12)."""
-    if not d["rangzeilen"] or _P18_ZAEHLMENGE_RE.search(satz):
-        return 0
-    n = 0
-    for m in _P18_ENGSTE_RE.finditer(satz):
-        k = {"zweit": 2, "dritt": 3, "viert": 4}.get((m.group("ord") or "").lower(), 1)
-        planeten = bool(_P12_PLANETENMENGE_RE.search(satz))
-        schl = "engste-aspekte-planeten" if planeten else "engste-aspekte"
-        ls = [e for e in d["rangzeilen"].get(schl, {}).get("eintraege", []) if "rang" in e]
-        ls = _rang_einmal(ls)
-        fak = [f for _a, _e, f in _faktoren_im_satz(satz)]
-        paare = _paare_von(fak) or _paare_von(fak + [f for _a, _e, f in _faktoren_im_satz(vorher)])
-        treffer = [e for e in ls if _rang_paar(e) in paare]
-        if not treffer:
-            continue
-        e = min(treffer, key=lambda x: x["orb_min"])
-        rang = 1 + sum(1 for x in ls if x["orb_min"] < e["orb_min"])
-        if rang != k:
-            continue                                # P12 meldet
-        p.geprueft += 1
-        ug = [z for z in d["tabelle"] if z["stufe"] == "untergrund" and
-              re.search(r"\|\s*ja\s*\|\s*$", z["zeile"]) and z["orb"] < e["orb_min"] and
-              (not planeten or (z["a"] in _P18_PLANETEN and z["b"] in _P18_PLANETEN))]
-        if ug:
-            p.pruefen.append("%s: „%s“ — Rang: mit dem gedeuteten Untergrund (%s) stünde %s %s %s "
-                             "%s auf Rang %d — die Rangzeile %s zählt den Untergrund nicht; die "
-                             "Zählmenge im Satz nennen"
-                             % (ort, _kurz(satz, 140), "; ".join("%s %s %s %s" % (
-                                 ANZEIGE.get(z["a"], z["a"]), z["art"], ANZEIGE.get(z["b"], z["b"]),
-                                 z["orb_txt"]) for z in ug), e["a"], e["aspekt"], e["b"], e["orb"],
-                                rang + len(ug), schl))
-            n += 1
-    return n
+# --- Rang mit gedeutetem Untergrund -----------------------------------------------
+# 2026-10-13 (Strang 2, Chris-Entscheidung a4, Fragenblock des Wartungslaufs: „ja“):
+# Die Regel vom 04.10. — „die engste Verbindung“ ohne Zusatz zaehlt den GEDEUTETEN
+# Untergrund mit — entfaellt. Ohne Zusatz gilt die Rangzeile §10 (P12); mit „deines
+# ganzen Bildes“, „alle Faktoren gezählt“, „unter allen gerechneten“ zaehlt JEDER
+# gerechnete Untergrund-Aspekt (_p18_rang_ganz, Abschnitt „P18 Naehe, Lage und Rang“).
 
 
 # --- Anteil: „alles andere" -----------------------------------------------------
@@ -7208,6 +7439,7 @@ _P18_TEILSATZ_RE = re.compile(r"[;:]|\s[—–]\s|,\s+(?:und|aber|doch|sondern|w
 _P18_LISTE_ZW_RE = re.compile(r"^\s*(?:,|und|sowie|oder)\s*(?:(?:zu|zum|zur|an|am|mit|über|auf|dein\w*|der|die|"
                               r"das|dem|den|des)\s+)*$", re.I)
 _P18_BILD_DANACH_RE = re.compile(r"\s*(?:gegenüber|im\s+(?:Quadrat|Trigon|Sextil|Quincunx|Halbsextil)|"
+                                 r"(?:im|in\s+einem)\s+schrägen\s+Winkel|in\s+Spannung|"
                                  r"in\s+Konjunktion|über\s+dein)", re.I)
 _P18_WIEDER_RE = re.compile(_P18_GRENZ + r"(?:wieder|erneut|zurück|abermals|noch\s+einmal|nochmals"
                             r"|zum\s+(?:zweiten|dritten|letzten)\s+Mal|zweite[nr]?\s+(?:Durchgang|Mal)"
@@ -7229,7 +7461,7 @@ _P18_ASPEKT_BILD = (
     ("Konjunktion", re.compile(_P18_GRENZ + r"(?:verschmilzt|verschmelzen|verschmolz\w*|einen\s+einzigen\s+Strom|"
                                r"am\s+selben\s+Punkt|über\s+(?:dein\w*|den|die|das)(?![\wäöüß]))")),
     ("Opposition", re.compile(_P18_GRENZ + r"(?:gegenüber\w*|Zerreißprobe\w*|zwischen\s+zwei\s+Pole)")),
-    ("Quadrat", re.compile(_P18_GRENZ + r"(?:reibt\s+sich|reiben\s+sich|rieb\s+sich|rieben\s+sich|unter\s+Druck|"
+    ("Quadrat", re.compile(_P18_GRENZ + r"(?:reibt\s+sich|reiben\s+sich|rieb\s+sich|rieben\s+sich|gerieben|unter\s+Druck|"
                            r"drängt\s+gegen|drängen\s+gegen|Reibung\w*)")),
     ("Trigon", re.compile(_P18_GRENZ + r"(?:fließt|fließen|floss|flossen|harmonisch\w*|weiche[nmr]?\s+Winkel\w*)"
                           + _P18_ENDE)),
@@ -7266,7 +7498,15 @@ def _p18_rollen(text):
             continue
         zw = text[out[-1][1]:a] if out else ""
         neu = bool(out) and f in _P18_TRANSITER and re.fullmatch(r"\s*,\s*", zw) and \
-            _P18_NEUE_GRUPPE_RE.match(text[e:e + 40])
+            (_P18_NEUE_GRUPPE_RE.match(text[e:e + 40]) or
+             (out[-1][3] == "Z" and _P18_BILD_DANACH_RE.match(text[e:e + 50])))   # 2026-10-13
+        # 2026-10-13: „… zum Merkur und Neptun im Quadrat zu deinem Mond“, „…, Saturn im
+        # März …“ — ein Transiter mit eigenem Aspektbild oder eigener Zeit beginnt eine
+        # neue Gruppe, auch hinter „und“
+        neu = neu or (bool(out) and f in _P18_TRANSITER and out[-1][3] == "Z" and
+                      re.fullmatch(r"\s*(?:,\s*)?(?:und|sowie)?\s*", zw) and
+                      (_P18_BILD_DANACH_RE.match(text[e:e + 50]) or
+                       re.match(r"\s+im\s+(?:%s|Frühjahr|Sommer|Herbst|Winter)" % _MONAT_RE, text[e:e + 30])))
         if out and _P18_LISTE_ZW_RE.match(zw) and not neu:
             rolle = out[-1][3]
         elif neu:
@@ -7340,6 +7580,16 @@ def _p18_laeufer_vor(text, bis):
     return ls[-1] if ls else None
 
 
+def _p18_ev_index_spiegel(events):
+    """Nur die Spiegel-Ziele (Kontakt zur Gegenachse: DC zum AC, IC zum MC) — fuer das
+    Buendel „im Quadrat zu deinem MC und deinem IC“ (2026-10-13)."""
+    idx = {}
+    for e in (events or {}).get("events", []) or []:
+        if e.get("spiegel"):
+            idx.setdefault((kanon(e.get("transit", "")), kanon(e.get("ziel", ""))), []).append(e)
+    return idx
+
+
 def _p18_ev_index(events):
     """events.json -> {(Transiter, Ziel): [Kontakte]} (ohne Spiegel-Ziele)."""
     idx = {}
@@ -7354,7 +7604,7 @@ def _p18_ev_index(events):
 _P18_ZEITPHRASE_RE = re.compile(
     _P18_GRENZ + r"(?:(?P<wo>Anfang|Mitte|Ende)\s+(?:des\s+)?)?(?:(?P<mon>%s)\s+(?P<j1>(?:19|20|21)\d\d)"
     r"|(?:dem\s+|des\s+)?(?P<jz>(?:Früh|Spät|Hoch)(?:sommer|herbst|winter)|Frühjahr\w*|Frühling\w*|"
-    r"Sommer\w*|Herbst\w*|Winter\w*)\s+(?:des\s+Jahres\s+)?(?P<j2>(?:19|20|21)\d\d)"
+    r"Sommer\w*|Herbst\w*|Winter\w*)\s+(?:des\s+Jahres\s+)?(?P<j2>(?:19|20|21)\d\d)(?:/(?P<j2b>\d\d))?"
     r"|(?P<j3>(?:19|20|21)\d\d))(?!\d)" % _MONAT_RE)
 
 
@@ -7378,7 +7628,9 @@ def _p18_zeiten(text):
             mos = _JAHRESZEIT_MONATE.get(jz)
             if not mos:
                 continue
-            if jz == "winter":
+            if jz == "winter" and m.group("j2b"):       # „Winter 2026/27“ (2026-10-13)
+                von, bis = "%04d-12-01" % j, "%04d-02-28" % (j + 1)
+            elif jz == "winter":
                 von, bis = "%04d-12-01" % (j - 1), "%04d-02-28" % j
             else:
                 von = "%04d-%02d-01" % (j, mos[0])
@@ -7551,6 +7803,11 @@ def _p18_zeit(p, d, satz, ort, absatz=None):
         _a0, e0, von, bis, roh = zt[0]
         if _P18_ZEITLISTE_NACH_RE.match(hinten[e0:]):
             continue
+        # 2026-10-13 (Strang 1): Folgt der Zeit ein Haus („ab März 2031 durch dein viertes
+        # Haus“), meint die Angabe den Hausdurchgang — den prueft _p18_wechsel(); vorher
+        # band diese Stelle sie an den Zeichenaufenthalt (Fehlalarm im Transit vom 12.10.).
+        if _P18_HAUS_ORD_RE.search(satz[m.end() + e0:m.end() + e0 + 60]):
+            continue
         a, e = _p18_teilsatz(satz, m.start())
         klausel = satz[a:e]
         if _P18_WIEDER_RE.search(klausel) or _P18_NICHT_BEGINN_RE.search(satz[max(a, m.start() - 30):e]):
@@ -7698,6 +7955,8 @@ def _p18_zugleich(p, d, satz, ort, kapitel_kontakte):
     bis Juni <Jahr>") weniger als ein Viertel davon."""
     if not _P18_ZUGLEICH_RE.search(satz) or _P18_GEBURT_RE.search(satz):
         return 0                                    # Aussagen ueber das Geburtsbild laufen nicht
+    if _P18_KOPULA_ZUGLEICH_RE.search(satz):
+        return 0                                    # „ist zugleich ein …“ = ebenfalls (2026-10-13)
     gruppen = _p18_gruppen(satz)
     laeufer = list(dict.fromkeys(t for _a, _e, ls, _zs in gruppen for t in ls))
     if len(laeufer) < 2:
@@ -8096,7 +8355,1921 @@ def _p18_nie_seit_geburt(p, d, satz, vorher, ort, kapitel_kontakte):
     return _p18_melde(p, ort, satz, "Wiederholung", befunde)
 
 
+# --- Transit: Grenze, Wechsel, Abstand, Buendel, Genau, Kapitelzeit, Dauer --------
+# 2026-10-13 (Wartungslauf „Proben fuer Zeit, Naehe, Register und Fundstellen“,
+# Strang 1; Startprompt `claude/STARTPROMPT_Probenlauf_2026-10-13.md`). Warum: Nach den
+# Proben von Schritt 2 standen in jedem Transit-Text und in „Die Zeit“ der Vertiefung
+# noch Fehler in Zeitangaben, die nur ein Zweitleser fand (Auswertung der
+# Pruefberichte vom 13.10., W4 und W5; Sammelliste: „keine Probe fuer Zeitraum- und
+# Reihenfolgeaussagen ueber mehrere Kontakte“). Die Satzarten:
+#   Grenze      „bis <Zeit>“ (das Ende des Kontakts, Fortsetzung eingeschlossen),
+#               „von <Zeit> bis <Zeit>“ (eine Wirkorb-Strecke), „über das Ende dieses
+#               Fensters hinaus“ (am Fensterende im Wirkorb), dazu Haus und Zeichen.
+#   Wechsel     „rückt/wechselt/tritt <Zeit> in den <Zeichen>/ins <n>. Haus“ und
+#               „ab <Zeit> <T> in deinem <n>. (Haus)“ — gegen Zeichenaufenthalt und
+#               Hausdurchgang; kein Spielraum.
+#   Abstand     „(etwa) einen Tag/eine Woche nach/vor/später …“, „neben“, „im
+#               Gefolge“, „dazwischen“ — Exaktdaten gegen Exaktdaten (Sonnenbogen:
+#               `zusatz.sonnenbogen`).
+#   Buendel     „A, B und C im Trigon zu X und Y“ in Signatur und Fliesstext: JEDES
+#               Paar braucht den Kontakt der genannten Art (P13 laesst ein Buendel
+#               durch, sobald EIN Paar gedeckt ist).
+#   Genau       „genau <Zeit>, <Zeit> und <Zeit>“, „folgt <Zeit>“, „geht <Zeit> über
+#               deinen X“ — jede Zeit traegt ein Exaktdatum.
+#   Kapitelzeit „<n> Kapitel“ in einer Zeit, „Kapitel n“ in einer Zeit oder „diese
+#               Monate“, „Auftakt von Kapitel n“ — gegen die `@@ZEITLEISTE` (dicht=)
+#               und die Wirkorb-Zeiten der THEMA-Kontakte.
+#   Dauer       „fast die ganzen zwei Jahre“, „das ganze Fenster“, „den größten Teil“
+#               — Anteil eines Hausdurchgangs oder Zeichenaufenthalts am Fenster.
+# Dieselben zwei Regeln wie oben: nur PRUEFEN, nur bei WIDERSPRUCH, jeder Hinweis mit
+# dem Datenwert; was sich nicht lesen laesst (Pronomen ohne Bezug, kein Kontakt im
+# Satzteil), bleibt still.
+# Schwellen (Chris-Entscheidung 2026-10-13, Fragenblock des Wartungslaufs, Frage d1: „ja“): Anfang/Mitte/Ende
+# eines Monats 1.–10./11.–20./21.–Monatsende, eines Jahres Januar–April/Mai–August/
+# September–Dezember (wie _p18_zeiten); „ein Tag“ 1, „eine Woche“ 6–8, „gut eine Woche“
+# 8–10, „knapp eine Woche“ 5–7, „etwa eine Woche“ 5–9 Tage; kein Spielraum bei
+# Exaktdaten, Haus- und Zeichenwechseln. „fast ganz“ heisst mindestens P18_FAST_GANZ.
+
+P18_FAST_GANZ = 0.90
+P18_GANZ = 0.98
+P18_GROESSTER_TEIL = 0.5
+
+_P18_ZEIT_ALT = (r"(?:Anfang\s+|Mitte\s+|Ende\s+)?(?:%s|Frühjahr\w*|Frühling\w*|Sommer\w*|Herbst\w*|"
+                 r"Winter\w*|Früh\w+|Spät\w+|Hoch\w+|(?:19|20|21)\d\d)" % _MONAT_RE)
+_P18_BIS_RE = re.compile(_P18_GRENZ + r"[Bb]is\s+(?:(?:in\s+(?:den|die|das)|ins|zum|zur)\s+)?"
+                         r"(?=" + _P18_ZEIT_ALT + r")")
+_P18_VON_VOR_RE = re.compile(r"(?:(?:[Vv]on|[Zz]wischen|[Ss]eit)\s+(?:dem\s+|der\s+)?|(?:^|[,;:(]\s*|\s—\s)(?:dann\s+)?)"
+                             + _P18_ZEIT_ALT + r"(?:\s+(?:19|20|21)\d\d)?(?:\s+und)?\s*$")
+_P18_REL_HAUS_RE = re.compile(r",\s+(?:der|die|das|dem|den|durch\s+das|durch\s+den|in\s+dem|in\s+das|wo)\s|"
+                              r"Haus|Bereich|Feld")
+_P18_UEBER_FENSTER_RE = re.compile(_P18_GRENZ + r"über\s+(?:das\s+Ende\s+(?:dieses|des)\s+Fensters|"
+                                   r"(?:das|dieses)\s+Fenster|den\s+Rechenhorizont)\s+hinaus" + _P18_ENDE)
+_P18_HAUS_ORD_RE = re.compile(_P18_GRENZ + r"(?:(?:in|durch)\s+(?:dein(?:em|en)?|das|den)|im|ins)\s+"
+                              r"(?P<o>%s)(?:(?P<haus>\s+Haus\w*)|(?=\s*(?:[,.;:!?)]|$|\s[—–]\s|\s+(?:und|oder|bis|"
+                              r"ab|seit|dann)\s)))" % _P18_ORD_RE + _P18_ENDE)
+_P18_IN_ZEICHEN_RE = re.compile(_P18_GRENZ + r"(?:in\s+(?:den|die|das)|ins)\s+(?P<z>%s)" % ZEICHEN_RE
+                                + _P18_ENDE)
+_P18_IN_HAUS_RE = re.compile(_P18_GRENZ + r"(?:ins|in\s+(?:das|dein|deinen))\s+(?P<o>%s)\s+Haus"
+                             % _P18_ORD_RE + _P18_ENDE)
+_P18_WECHSEL_RE = re.compile(_P18_GRENZ + r"(?:rückt|rücken|rückte|wechselt|wechseln|wechselte|tritt|treten|"
+                             r"trat|zieht|ziehen|zog|wandert|wandern|wanderte|kommt|kommen|kam|gelangt|gelangen)"
+                             + _P18_ENDE)
+_P18_HAELFTE_RE = re.compile(_P18_GRENZ + r"(?P<n>erst|zweit)en?\s+(?P<mon>%s)hälfte(?:\s+(?P<j>(?:19|20|21)"
+                             r"\d\d))?" % _MONAT_RE, re.I)
+_P18_GENITIV_LAEUFER_RE = re.compile(_P18_GRENZ + r"(?P<t>Jupiter|Saturn|Uranus|Neptun|Pluto|Chiron)s\s+"
+                                     r"(?:%s)" % "|".join(w for w, _g in ASPEKTE) + _P18_ENDE)
+
+
+def _p18_perioden_gesamt(evs):
+    """Wirkorb-Perioden samt Vorlauf UND Fortsetzung -> sortiert [(von, bis)]."""
+    out = list(_p18_perioden(evs))
+    for e in evs:
+        out += [tuple(x) for x in ((e.get("fortsetzung") or {}).get("wirkorb_perioden") or [])]
+    return sorted(set(out))
+
+
+def _p18_ende_gesamt(evs, fenster_ende=None):
+    """(Ende des letzten Wirkorbs, offen?) — offen, wenn die Fortsetzung den
+    Rechenhorizont erreicht und das Ende also nicht bekannt ist; ebenso, wenn eine
+    aeltere events.json keine Fortsetzung fuehrt und der Wirkorb am Fensterende
+    abbricht (Gegenpruefung 2026-10-13)."""
+    ends = [y for _x, y in _p18_perioden_gesamt(evs)]
+    ends += [e.get("wirkorb_bis_gesamt") for e in evs if e.get("wirkorb_bis_gesamt")]
+    offen = any((e.get("fortsetzung") or {}).get("horizont_erreicht") for e in evs)
+    ende = max(ends) if ends else None
+    if not offen and ende and fenster_ende and ende >= fenster_ende and \
+            not any("fortsetzung" in e or "wirkorb_bis_gesamt" in e for e in evs):
+        offen = True
+    return ende, offen
+
+
+_P18_MONAT_NACKT_RE = re.compile(_P18_GRENZ + r"(?:(?P<wo>Anfang|Mitte|Ende)\s+)?(?P<mon>%s)(?!\s+(?:19|20|21)\d\d)"
+                                 % _MONAT_RE + _P18_ENDE)
+
+
+def _p18_zeiten_plus(text, jahr_text=None):
+    """_p18_zeiten, dazu die Monatshaelften („in der ersten Märzhälfte 2031“) und
+    Monate ohne Jahr in einer Aufzaehlung („im März und im Oktober 2031“) — das Jahr
+    aus der naechsten Jahreszahl dahinter, sonst der davor."""
+    import calendar
+    out = list(_p18_zeiten(text))
+    for m in _P18_MONAT_NACKT_RE.finditer(text or ""):
+        if any(a <= m.start() < e for a, e, _v, _b, _r in out):
+            continue
+        hinter = re.search(r"(?:19|20|21)\d\d", text[m.end():m.end() + 60])
+        davor = re.findall(r"(?:19|20|21)\d\d", text[max(0, m.start() - 80):m.start()])
+        mo = _MONATE[m.group("mon").casefold()]
+        # Gegenpruefung 2026-10-13: Jahreswechsel — „im November und im Februar 2032“ ist
+        # November 2031, „im Dezember 2031 und im März“ ist März 2032.
+        z_hinter = [z for z in _p18_zeiten(text[m.end():m.end() + 60]) if z[2][5:7] == z[3][5:7]]
+        z_davor = [z for z in _p18_zeiten(text[max(0, m.start() - 80):m.start()]) if z[2][5:7] == z[3][5:7]]
+        if hinter:
+            j = int(hinter.group(0))
+            if z_hinter and int(z_hinter[0][2][:4]) == j and mo > int(z_hinter[0][2][5:7]):
+                j -= 1
+        elif davor:
+            j = int(davor[-1])
+            if z_davor and int(z_davor[-1][2][:4]) == j and mo < int(z_davor[-1][2][5:7]):
+                j += 1
+        else:
+            continue
+        letzt = calendar.monthrange(j, mo)[1]
+        t1, t2 = {"": (1, letzt), "anfang": (1, 10), "mitte": (11, 20),
+                  "ende": (21, letzt)}[(m.group("wo") or "").casefold()]
+        out.append((m.start(), m.end(), "%04d-%02d-%02d" % (j, mo, t1), "%04d-%02d-%02d" % (j, mo, t2),
+                    m.group(0)))
+    for m in _P18_HAELFTE_RE.finditer(text or ""):
+        j = m.group("j")
+        if not j:
+            jj = re.findall(r"(?:19|20|21)\d\d", text) or re.findall(r"(?:19|20|21)\d\d", jahr_text or "")
+            if not jj:
+                continue
+            j = jj[0]
+        j, mo = int(j), _MONATE[m.group("mon").casefold()]
+        letzt = calendar.monthrange(j, mo)[1]
+        t1, t2 = (1, 15) if m.group("n").casefold() == "erst" else (16, letzt)
+        out = [z for z in out if not (z[0] >= m.start() and z[1] <= m.end())]
+        out.append((m.start(), m.end(), "%04d-%02d-%02d" % (j, mo, t1), "%04d-%02d-%02d" % (j, mo, t2),
+                    m.group(0)))
+    return sorted(out)
+
+
+def _p18_laeufer_plus(text):
+    """Laeufer eines Textes wie _p18_rollen, dazu der Genitiv vor einem Aspektwort
+    („Saturns Quadrat zu deinem Merkur“)."""
+    ls = [f for _a, _e, f, r in _p18_rollen(text) if r == "L"]
+    ls += [kanon(m.group("t")) for m in _P18_GENITIV_LAEUFER_RE.finditer(text or "")]
+    return list(dict.fromkeys(ls))
+
+
+def _p18_ziele(text):
+    return list(dict.fromkeys(f for _a, _e, f, r in _p18_rollen(text) if r == "Z"))
+
+
+def _p18_lz(text, d):
+    """(Laeufer, Ziele) eines Textes. Rueckfall, wenn die Rollen keinen Laeufer finden
+    („… mit Chiron, der im Sextil zu Mond und Venus steht“): ein Transiter unter
+    den Zielen, den die Rechnung mit einem der anderen Ziele fuehrt."""
+    ls, zs = _p18_laeufer_plus(text), _p18_ziele(text)
+    if not ls:
+        kand = [f for f in zs if f in _P18_TRANSITER and
+                any((f, z) in d["ev"] for z in zs if z != f)]
+        if kand:
+            ls = kand[:1]
+            zs = [z for z in zs if z not in ls]
+    return ls, zs
+
+
+def _p18_ohne_floskeln(text):
+    """Text ohne die Wendungen, die ein Aspektbild vortaeuschen („über das Ende dieses
+    Fensters hinaus“ ist keine Konjunktion)."""
+    return _P18_UEBER_FENSTER_RE.sub(" ", text or "")
+
+
+def _p18_kontakte_von(d, laeufer, ziele, klausel):
+    """[(T, Z, evs)] fuer jedes Paar Laeufer x Ziel, das die Rechnung fuehrt — gefiltert
+    nach der Aspektart, die die Klausel nennt."""
+    out = []
+    for t in laeufer:
+        for z in ziele:
+            if z == t and not re.search(r"(?:dein\w*|R-)\s+%s" % re.escape(ANZEIGE.get(t, t)), klausel or ""):
+                continue
+            evs = _p18_aspekt_filter(d["ev"].get((t, z), []), _p18_ohne_floskeln(klausel))
+            if evs:
+                out.append((t, z, evs))
+    return out
+
+
+def _p18_zeitraum_txt(von, bis):
+    return "%s–%s" % (_de(von), _de(bis))
+
+
+_P18_SAMMEL_RE = re.compile(_P18_GRENZ + r"(?:in\s+(?:zwei|drei|vier|fünf|mehreren|einigen)\s+Wellen|nacheinander|"
+                            r"der\s+Reihe\s+nach|einer\s+nach\s+dem\s+anderen|insgesamt|zusammengenommen|"
+                            r"zusammen\s+genommen|alles\s+in\s+allem)" + _P18_ENDE, re.I)
+_P18_LAEUFIG_RE = re.compile(_P18_GRENZ + r"(?:rückläufig\w*|direktläufig\w*|Rückläufigkeit|Stillstand\w*|"
+                             r"Station\w*)" + _P18_ENDE, re.I)
+_P18_HAUS_NACH_ZEIT_RE = re.compile(r"\s*(?:(?:durch|in)\s+(?:dein(?:em|en)?|das|den)\s+|im\s+|ins\s+)"
+                                    r"(?P<o>%s)\s+Haus" % _P18_ORD_RE)
+
+
+def _p18_grenze_paare(d, satz, a, m_start, nxt):
+    """(Paare, Ziele_im_Segment?) einer „bis“-Stelle: Ziele im Segment vor dem ersten
+    Laeufer des Segments gehoeren zur letzten Laeufergruppe davor; jede weitere Gruppe
+    im Segment bringt ihre eigenen Paare mit („Saturn steht bis … deinem Merkur
+    gegenüber und Uranus im Trigon zu deinem Mond“ — das „bis“ gilt in der Ellipse
+    fuer beide). Ohne Ziel im Segment die Ziele davor, wenn kein Relativsatz und kein
+    Haus dazwischen steht („…, das er bis zum Herbst durchquert“ meint das Haus)."""
+    segment = satz[m_start:nxt]
+    vorn = satz[a:m_start]
+    gr_vorn = [g for g in _p18_gruppen(vorn) if g[2]]
+    ls_vorn = gr_vorn[-1][2] if gr_vorn else []
+    rollen = _p18_rollen(segment)
+    erste_l = next((i for i, r in enumerate(rollen) if r[3] == "L"), len(rollen))
+    ziele_vor = [r[2] for r in rollen[:erste_l] if r[3] == "Z"]
+    paare = []
+    if not ls_vorn and ziele_vor:
+        ls_lz, _zs = _p18_lz(vorn + " " + segment, d)
+        ls_vorn = ls_lz
+        ziele_vor = [z for z in ziele_vor if z not in ls_lz]
+    paare += [(t, z) for t in ls_vorn for z in ziele_vor if z != t]
+    if erste_l < len(rollen):
+        for _ga, _ge, ls_g, zs_g in _p18_gruppen(segment[rollen[erste_l][0]:]):
+            paare += [(t, z) for t in ls_g for z in zs_g if z != t]
+    im_segment = bool(paare)
+    if not paare:
+        zs = _p18_ziele(vorn)
+        if not ls_vorn:                             # „die Welle der Opposition von Saturn zu …“
+            ls_vorn, zs = _p18_lz(vorn, d)
+        letzt = max((r[1] for r in _p18_rollen(vorn) if r[3] == "Z"), default=0)
+        if zs and ls_vorn and not _P18_REL_HAUS_RE.search(vorn[letzt:]):
+            paare = [(t, z) for t in ls_vorn for z in zs if z != t]
+    return list(dict.fromkeys(paare)), im_segment, ls_vorn
+
+
+def _p18_grenze(p, d, satz, ort):
+    """„bis <Zeit>“, „von <Zeit> bis <Zeit>“, „über das Ende dieses Fensters hinaus“.
+    Mehrere Ziele hinter EINEM „bis“ werden je Paar geprueft — „bis März im Quadrat
+    zu Merkur und Mond“ ist falsch, wenn das Quadrat zum Merkur im Januar endet (so
+    werteten es die Zweitleser vom 12.10.) —, als Sammelaussage nur mit einem Sammelwort („in
+    drei Wellen“, „nacheinander“). Eine Teilstrecke („die zweite Welle … bis …“)
+    braucht nur EIN Wirkorb-Ende in der Zeit; ein Haus direkt hinter der Zeit macht
+    das „bis“ zur Aussage ueber den Hausdurchgang (Gegenpruefung 2026-10-13)."""
+    befunde = []
+    treffer = list(_P18_BIS_RE.finditer(satz))
+    for i, m in enumerate(treffer):
+        zt = _p18_zeiten_plus(satz[m.end():m.end() + 40], satz)
+        if not zt or zt[0][0] > 2:
+            continue
+        _a0, e0, von, bis, roh = zt[0]
+        if _P18_ZEITLISTE_NACH_RE.match(satz[m.end() + e0:m.end() + e0 + 40]):
+            continue
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        nxt = treffer[i + 1].start() if i + 1 < len(treffer) and treffer[i + 1].start() < e else e
+        segment = satz[m.start():nxt]
+        mvon = _P18_VON_VOR_RE.search(satz[max(a, m.start() - 70):m.start()])
+        vorn = satz[a:m.start()]
+        paare, im_segment, ls_vorn = _p18_grenze_paare(d, satz, a, m.start(), nxt)
+        ls = list(dict.fromkeys([t for t, _z in paare] or ls_vorn or _p18_laeufer_plus(segment)))
+        mh_direkt = _P18_HAUS_NACH_ZEIT_RE.match(satz[m.end() + e0:m.end() + e0 + 50])
+        kont = []
+        if not mh_direkt:
+            kont = []
+            for t, z in paare:
+                evs = _p18_aspekt_filter(d["ev"].get((t, z), []), _p18_ohne_floskeln(klausel))
+                if evs:
+                    kont.append((t, z, evs))
+        if kont and not _p18_aspektarten(_p18_ohne_floskeln(klausel)):
+            # ohne Aspektwort nur eindeutige Paare (eine Aspektart je Paar)
+            kont = [k for k in kont if len({x.get("aspekt") for x in k[2]}) == 1]
+        if not kont:
+            mh = mh_direkt or _P18_HAUS_ORD_RE.search(segment) or _P18_HAUS_ORD_RE.search(vorn)
+            if mh and ls and d.get("haeuser_durch"):
+                h = _p18_ord_wert(mh.group("o"))
+                hs = [x for x in d["haeuser_durch"] if kanon(x.get("transit", "")) == ls[0]
+                      and x.get("haus") == h]
+                if hs:
+                    p.geprueft += 1
+                    ende = max(x["bis"] for x in hs)
+                    weiter = any(x.get("laeuft_weiter") for x in hs)
+                    if weiter and bis >= (d["ende"] or ""):
+                        continue
+                    if not (von <= ende <= bis):
+                        befunde.append("„bis %s“ — %s in Haus %d bis %s%s (Hausdurchgang)"
+                                       % (roh, ANZEIGE.get(ls[0], ls[0]), h, _de(ende),
+                                          ", läuft über das Fenster hinaus" if weiter else ""))
+            continue
+        if _P18_LAEUFIG_RE.search(vorn):
+            continue                                # Lauf-Phase (Station, Rueckläufigkeit): eigene Satzart
+        p.geprueft += 1
+        if mvon:
+            # Zeitraum „(von) X bis Y“: der Kontakt steht irgendwann darin im Wirkorb
+            zv = _p18_zeiten_plus(_ws(mvon.group(0)) + " bis " + roh)
+            v1 = zv[0][2] if zv and zv[0][0] < len(_ws(mvon.group(0))) else None
+            if v1:
+                for t, z, evs in kont:
+                    ps = _p18_perioden_gesamt(evs)
+                    if ps and not any(x <= bis and y >= v1 for x, y in ps):
+                        befunde.append("„%s bis %s“ — %s: Wirkorb %s"
+                                       % (_ws(mvon.group(0)), roh, _p18_kontakt_txt(t, z, evs),
+                                          ", ".join(_p18_zeitraum_txt(x, y) for x, y in ps[:4])))
+                continue
+        if _P18_PHASE_RE.search(vorn):
+            # Teilstrecke: EIN Wirkorb-Ende in der Zeit genuegt
+            for t, z, evs in kont:
+                ps = _p18_perioden_gesamt(evs)
+                if ps and not any(von <= y <= bis for _x, y in ps):
+                    befunde.append("„bis %s“ — %s: keine Wirkorb-Strecke endet darin (%s)"
+                                   % (roh, _p18_kontakt_txt(t, z, evs),
+                                      ", ".join(_p18_zeitraum_txt(x, y) for x, y in ps[:4])))
+            continue
+        einzeln = not _P18_SAMMEL_RE.search(klausel)
+        if einzeln:
+            pruef = [(t, z, evs) for t, z, evs in kont]
+        else:                                       # Sammelaussage: das letzte Ende zaehlt
+            pruef = [(kont[0][0], kont[0][1], [x for _t, _z, evs in kont for x in evs])]
+        for t, z, evs in pruef:
+            ende, offen = _p18_ende_gesamt(evs, d.get("ende"))
+            if not ende:
+                continue
+            if offen and bis >= ende:
+                continue
+            if not (von <= ende <= bis):
+                wer = _p18_kontakt_txt(t, z, evs) if einzeln else "die genannten Kontakte (%s)" % ", ".join(
+                    _p18_kontakt_txt(t_, z_, e_) for t_, z_, e_ in kont)
+                if not einzeln:
+                    letzte = max(kont, key=lambda k: _p18_ende_gesamt(k[2], d.get("ende"))[0] or "")
+                    wer += ", zuletzt %s" % _p18_kontakt_txt(*letzte)
+                befunde.append("„bis %s“ — %s: Wirkorb bis %s%s"
+                               % (roh, wer, _de(ende), " (Rechenhorizont, läuft weiter)" if offen else ""))
+    for m in _P18_UEBER_FENSTER_RE.finditer(satz):
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        ls, zs = _p18_lz(klausel, d)
+        kont = _p18_kontakte_von(d, ls, zs, klausel)
+        ende_f = d["ende"] or ""
+        if not kont or not ende_f:
+            continue
+        p.geprueft += 1
+        rueckkehr = bool(_P18_WIEDER_RE.search(klausel))
+        for t, z, evs in kont:
+            ps = _p18_perioden_gesamt(evs)
+            # Gegenpruefung 2026-10-13: Mit einem Wiederkehr-Wort („kehrt … zurück“,
+            # „wieder“) genuegt eine Strecke NACH dem Fensterende; sonst heisst „über das
+            # Ende hinaus“, dass der Kontakt am Fensterende im Wirkorb steht.
+            if ps and not (any(y >= ende_f for _x, y in ps) if rueckkehr
+                           else any(x <= ende_f <= y for x, y in ps)):
+                vorher_p = [q for q in ps if q[1] <= ende_f]
+                spaeter = [x for x, _y in ps if x > ende_f]
+                befunde.append("„%s“ — %s: am Fensterende (%s) nicht im Wirkorb — Wirkorb %s%s"
+                               % (_ws(m.group(0)), _p18_kontakt_txt(t, z, evs), _de(ende_f),
+                                  _p18_zeitraum_txt(*vorher_p[-1]) if vorher_p else "erst danach",
+                                  "; wieder ab %s" % _de(spaeter[0]) if spaeter else ""))
+    return _p18_melde(p, ort, satz, "Grenze", befunde)
+
+
+def _p18_wechsel_daten(d, t, art, wert):
+    """[(von, bis, angeschnitten)] der Zeichenaufenthalte (art 'z') bzw. Hausdurchgaenge
+    (art 'h') des Laeufers t."""
+    if art == "z":
+        rows = [x for x in d["zeichen"] if kanon(x.get("transit", "")) == t and
+                _zeichen_norm(x.get("zeichen", "")) == wert]
+    else:
+        rows = [x for x in d.get("haeuser_durch") or [] if kanon(x.get("transit", "")) == t
+                and x.get("haus") == wert]
+    return [(x.get("von"), x.get("bis"), bool(x.get("angeschnitten")) or x.get("von") == d["start"])
+            for x in rows]
+
+
+def _p18_wechsel(p, d, satz, ort):
+    """„rückt/wechselt/tritt <Zeit> in den <Zeichen>/ins <n>. Haus“; „ab <Zeit> <T> in deinem
+    <n>. Haus“ — der Eintritt liegt in der genannten Zeit, ohne Spielraum."""
+    befunde = []
+    for m in _P18_WECHSEL_RE.finditer(satz):
+        a, e = _p18_teilsatz(satz, m.start())
+        vor = satz[a:m.start()]
+        nach = satz[m.end():e]
+        # Gegenpruefung 2026-10-13: Der Laeufer steht im eigenen Satzteil des Verbs
+        # („Während Jupiter noch im Krebs steht, wechselt der progressive Mond …“ ist
+        # nicht Jupiter); progressive Faktoren und Sonnenbogen sind keine Transite.
+        if re.search(r"progressiv\w*|Sonnenbogen", satz[max(a, m.start() - 40):m.end() + 40]):
+            continue
+        vor_eigen = vor[vor.rfind(",") + 1:]
+        ls = [f for _x, _y, f, r in _p18_rollen(vor_eigen) if r == "L"][-1:]
+        if not ls:
+            erst = _p18_rollen(nach[:40])
+            ls = [erst[0][2]] if erst and erst[0][3] == "L" else []
+        if not ls:
+            mrel = re.match(r"\s*(?:(?:Der|Die)\s+laufende\s+)?(?P<f>%s)\s*,\s*(?:der|die|das)\s" % _P18_T_NAME, vor)
+            ls = [kanon(mrel.group("f"))] if mrel else []
+        if not ls:
+            continue
+        t = ls[0]
+        zt = [z for z in _p18_zeiten(nach) if not _P18_BIS_VOR_RE.search(nach[max(0, z[0] - 25):z[0]])]
+        zt_vor = _p18_zeiten(vor)
+        ziele = [("z", _zeichen_norm(x.group("z")), x.start()) for x in _P18_IN_ZEICHEN_RE.finditer(nach)]
+        ziele += [("h", _p18_ord_wert(x.group("o")), x.start()) for x in _P18_IN_HAUS_RE.finditer(nach)]
+        for art, wert, pos in ziele:
+            # die letzte Zeit vor dem Ziel, sonst die vor dem Verb, sonst die erste danach
+            # (Gegenpruefung 2026-10-13: „… im März in dein viertes und im Juli zurück in
+            # dein drittes Haus“)
+            zeit = [z for z in zt if z[0] < pos][-1:] or zt_vor[-1:] or [z for z in zt if z[0] > pos][:1]
+            if not zeit:
+                continue
+            _a0, _e0, von, bis, roh = zeit[0]
+            rows = _p18_wechsel_daten(d, t, art, wert)
+            if not rows:
+                continue
+            if d["ende"] and von > d["ende"]:
+                continue
+            if d["start"] and bis < d["start"] and all(ang for _v, _b, ang in rows):
+                continue                            # vor dem Fenster: dazu sagen die Daten nichts
+            p.geprueft += 1
+            if any(v and von <= v <= bis and not ang for v, _b, ang in rows):
+                continue
+            was = (_P18_ZEICHEN_ANZEIGE.get(wert, wert) if art == "z" else "Haus %d" % wert)
+            wo = "Zeichenaufenthalt" if art == "z" else "Hausdurchgang"
+            if all(ang for _v, _b, ang in rows):
+                befunde.append("„%s … %s“ — %s steht schon ab Fensteranfang (%s) in %s (%s)"
+                               % (roh, _ws(m.group(0)), ANZEIGE.get(t, t), _de(d["start"]), was, wo))
+            else:
+                befunde.append("„%s“ — %s in %s ab %s (%s)"
+                               % (roh, ANZEIGE.get(t, t), was,
+                                  ", ".join(_de(v) for v, _b, ang in rows if not ang), wo))
+    # „ab <Zeit> <T> in deinem <n>.“ (auch ohne Verb: „…, ab Mitte März Saturn in deinem vierten“)
+    for m in _P18_AB_RE.finditer(satz):
+        zt = _p18_zeiten(satz[m.end():m.end() + 40])
+        if not zt or zt[0][0] > 12:
+            continue
+        _a0, e0, von, bis, roh = zt[0]
+        rest = satz[m.end() + e0:m.end() + e0 + 70]
+        mh = re.match(r"\s*(?:(?:steht|stehen|läuft|laufen|ist|sind|wandert|geht|bleibt)\s+)?(?:(?:der\s+|die\s+)?"
+                      r"(?P<t>Jupiter|Saturn|Uranus|Neptun|Pluto|Chiron|Mars|Mondknoten)\s+)?(?:(?:steht|läuft|"
+                      r"ist|wandert|geht)\s+)?(?:in\s+deinem|im|durch\s+dein(?:en)?)\s+(?P<o>%s)"
+                      r"(?:\s+Haus|(?=\s*(?:[,.;:!?)]|$|\s[—–]\s|\s+(?:und|oder)\s)))" % _P18_ORD_RE, rest)
+        if not mh:
+            continue
+        a, _e = _p18_teilsatz(satz, m.start())
+        t = kanon(mh.group("t")) if mh.group("t") else \
+            ([f for _x, _y, f, r in _p18_rollen(satz[a:m.start()]) if r == "L"][-1:] or [None])[0]
+        h = _p18_ord_wert(mh.group("o"))
+        if not t or not h:
+            continue
+        rows = _p18_wechsel_daten(d, t, "h", h)
+        if not rows:
+            continue
+        p.geprueft += 1
+        if any(v and von <= v <= bis and not ang for v, _b, ang in rows):
+            continue
+        if all(ang for _v, _b, ang in rows) and von <= (d["start"] or ""):
+            continue                                # beginnt vor dem Fenster: kein Widerspruch
+        befunde.append("„ab %s“ — %s in Haus %d ab %s (Hausdurchgang)"
+                       % (roh, ANZEIGE.get(t, t), h, ", ".join(_de(v) for v, _b, _ang in rows)))
+    return _p18_melde(p, ort, satz, "Wechsel", befunde)
+
+
+# Abstand: Zahl, Einheit, Richtung
+_P18_ABSTAND_RE = re.compile(
+    _P18_GRENZ + r"(?P<vor>etwa|rund|ungefähr|gut|knapp|nur|kaum)?\s*(?P<n>ein(?:en)?|eine|zwei|drei|vier|fünf|sechs|"
+    r"sieben|acht|neun|zehn|elf|zwölf|dreizehn|vierzehn|\d{1,2})(?:\s+(?:oder|bis)\s+(?P<n2>zwei|drei|vier|fünf|"
+    r"sechs|sieben|acht|neun|zehn|\d{1,2}))?\s+(?P<einheit>Tag(?:e|en)?|Woche(?:n)?)\s+(?P<richtung>nach|vor|"
+    r"später|früher|danach|davor|darauf|vorher|neben)" + _P18_ENDE, re.I)
+_P18_GEFOLGE_RE = re.compile(_P18_GRENZ + r"mit\s+(?:der|dem|deiner|deinem)?\s*(?P<f>%s)\s+(?:im\s+Gefolge|dicht\s+"
+                             r"dahinter|knapp\s+dahinter|hinterher)" % _FAKTOR_RE + _P18_ENDE)
+_P18_DAZWISCHEN_RE = re.compile(r"^\W*Dazwischen\s+(?!liegt\s+der\s+Normalfall)(?P<v>\w+)")
+_P18_ERSTER_DURCHGANG_RE = re.compile(_P18_GRENZ + r"(?:nach|vor)\s+dem\s+(?P<o>ersten|zweiten|dritten|letzten)\s+"
+                                      r"(?:genauen\s+)?(?:Durchgang|Mal)" + _P18_ENDE)
+_P18_KONTAKT_ZU_RE = re.compile(_P18_GRENZ + r"(?:nach|vor|neben)\s+dem\s+(?:Kontakt|Quadrat|Trigon|Sextil|"
+                                r"Quincunx|Durchgang|Übergang|Konjunktion|Opposition)\s+(?:zu|über|mit)\s+"
+                                r"(?:dein(?:em|er|en)?\s+)?(?P<z>%s)" % _FAKTOR_RE + _P18_ENDE)
+_P18_SONNENBOGEN_RE = re.compile(_P18_GRENZ + r"Sonnenbogen" + _P18_ENDE)
+
+
+def _p18_zahl(w):
+    w = (w or "").casefold()
+    if w.isdigit():
+        return int(w)
+    return {"ein": 1, "einen": 1, "eine": 1}.get(w) or _zahl_wert(w)
+
+
+def _p18_abstand_spanne(vor, n, n2, einheit):
+    """(min, max) Tage nach Chris' Entscheidung d1 (Kopf dieses Abschnitts)."""
+    vor = (vor or "").casefold()
+    woche = einheit.casefold().startswith("woche")
+    lo_n, hi_n = n, (n2 or n)
+    if woche:
+        lo, hi = 7 * lo_n - 1, 7 * hi_n + 1
+        if vor == "gut":
+            lo, hi = 7 * lo_n + 1, 7 * hi_n + 3
+        elif vor in ("knapp", "kaum"):
+            lo, hi = 7 * lo_n - 2, 7 * hi_n
+        elif vor in ("etwa", "rund", "ungefähr"):
+            lo, hi = 7 * lo_n - 2, 7 * hi_n + 2
+    else:
+        lo, hi = lo_n, hi_n
+        if vor in ("etwa", "rund", "ungefähr"):
+            lo, hi = max(0, lo_n - 1), hi_n + 1
+        elif vor == "gut":
+            hi = hi_n + 1
+        elif vor in ("knapp", "kaum"):
+            lo = max(0, lo_n - 1)
+    return lo, hi
+
+
+def _p18_exakte(d, t, z, klausel=None):
+    evs = _p18_aspekt_filter(d["ev"].get((t, z), []), klausel) if klausel is not None else d["ev"].get((t, z), [])
+    return _p18_exakt(evs), evs
+
+
+def _p18_sonnenbogen_daten(d, satz):
+    sb = ((d.get("zusatz") or {}).get("sonnenbogen") or [])
+    fs = [f for _a, _e, f in _faktoren_im_satz(satz)]
+    out = []
+    for x in sb:
+        pk, zk = kanon(x.get("punkt", "")), kanon(x.get("ziel", ""))
+        if pk in fs and zk in fs and x.get("exakt"):
+            out.append(x["exakt"])
+    return sorted(set(out))
+
+
+def _p18_in_zeiten(daten, zeiten):
+    if not zeiten:
+        return daten
+    return [x for x in daten if any(v <= x <= b for _a, _e, v, b, _r in zeiten)]
+
+
+def _p18_abstand(p, d, satz, ort, vorher, chapter_fuehrt, frueher=None):
+    """Abstand und Reihenfolge zweier Ereignisse (Exaktdaten)."""
+    befunde = []
+    zeiten = _p18_zeiten_plus(satz)
+    abst = list(_P18_ABSTAND_RE.finditer(satz))
+    for i_m, m in enumerate(abst):
+        n = _p18_zahl(m.group("n"))
+        if not n:
+            continue
+        n2 = _p18_zahl(m.group("n2")) if m.group("n2") else None
+        lo, hi = _p18_abstand_spanne(m.group("vor"), n, n2, m.group("einheit"))
+        richtung = m.group("richtung").casefold()
+        vorzeichen = 0 if richtung == "neben" else (-1 if richtung in ("vor", "früher", "davor", "vorher") else 1)
+        a, e = _p18_teilsatz(satz, m.start())
+        hinten = satz[m.end():m.end() + 80]
+        # Bezug
+        bezug, bez_txt = [], ""
+        mk = _P18_KONTAKT_ZU_RE.match(satz[m.end() - len(m.group("richtung")):m.end() + 60])
+        me = _P18_ERSTER_DURCHGANG_RE.match(satz[m.end() - len(m.group("richtung")):m.end() + 60])
+        ls_satz = _p18_laeufer_plus(satz) or _p18_laeufer_plus(vorher)[-1:]
+        if mk:
+            zb = kanon(mk.group("z"))
+            for t in ls_satz or ([chapter_fuehrt[0]] if chapter_fuehrt else []):
+                ex, _evs = _p18_exakte(d, t, zb)
+                if ex:
+                    bezug, bez_txt = ex, "%s–%s" % (ANZEIGE.get(t, t), ANZEIGE.get(zb, zb))
+                    break
+        elif me and chapter_fuehrt:
+            t, art, z = chapter_fuehrt
+            ex = [x for x in _p18_exakt([x for x in d["ev"].get((t, z), []) if x.get("aspekt") == art])]
+            ex_z = _p18_in_zeiten(ex, [zz for zz in zeiten if zz[0] < m.start()]) or ex
+            o = me.group("o").casefold()
+            idx = {"ersten": 0, "zweiten": 1, "dritten": 2, "letzten": -1}[o]
+            if ex:
+                try:
+                    bezug, bez_txt = [ex_z[idx] if o != "letzten" else ex[-1]], "%s %s %s" % (
+                        ANZEIGE.get(t, t), art, ANZEIGE.get(z, z))
+                except IndexError:
+                    bezug = []
+        elif richtung in ("später", "früher", "danach", "darauf", "vorher", "davor"):
+            # Gegenpruefung 2026-10-13: Bezug ist, was im SELBEN Satz davor steht
+            # („… im Trigon zu deinem Mond und drei Tage danach im Quadrat …“); nur ohne
+            # Ziel dort der Satz davor. Das Pronomen („er“) nimmt den letzten Laeufer.
+            vorn = satz[:m.start()]
+            ls_v = _p18_laeufer_plus(vorn) or _p18_laeufer_plus(vorher)[-1:]
+            zs_v = _p18_ziele(vorn)
+            if not zs_v:
+                vorn, ls_v, zs_v = vorher, _p18_laeufer_plus(vorher), _p18_ziele(vorher)
+            for t in ls_v:
+                for z in zs_v:
+                    ex, _evs = _p18_exakte(d, t, z, vorn)
+                    bezug += ex
+            bezug = sorted(set(bezug))
+            bez_txt = "der Satzteil davor"
+        if not bezug:
+            continue
+        # Gegenstand — bis zum naechsten Glied einer Aufzaehlung („zwei Tage später …,
+        # knapp eine Woche später …“)
+        ende_t = min(e, abst[i_m + 1].start()) if i_m + 1 < len(abst) else e
+        teil = satz[m.end():ende_t] if richtung in ("später", "früher", "danach", "darauf", "vorher", "davor") \
+            else satz
+        gegen = []
+        if _P18_SONNENBOGEN_RE.search(satz):
+            gegen = _p18_sonnenbogen_daten(d, satz)
+            geg_txt = "Sonnenbogen"
+        else:
+            ls = _p18_laeufer_plus(teil) or ls_satz
+            zs = [z for z in _p18_ziele(teil) if not (mk and z == kanon(mk.group("z")))] or \
+                 [z for z in _p18_ziele(satz) if not (mk and z == kanon(mk.group("z")))]
+            for t in ls:
+                for z in zs:
+                    ex, _evs = _p18_exakte(d, t, z, teil)
+                    gegen += ex
+            geg_txt = "%s–%s" % ("/".join(ANZEIGE.get(t, t) for t in ls), "/".join(ANZEIGE.get(z, z) for z in zs))
+        gegen = _p18_in_zeiten(sorted(set(gegen)), [zz for zz in zeiten if not (m.start() <= zz[0] <= m.end())])
+        if not gegen:
+            continue
+        p.geprueft += 1
+        falsch = []
+        for g in gegen:
+            # jeder Bezug im Umkreis zaehlt; gemeldet wird nur, wenn KEINER passt
+            nah = sorted((r for r in bezug if abs(_tage(r, g)) <= 45), key=lambda r: abs(_tage(r, g)))
+            if not nah:
+                continue
+            werte = [(abs(_tage(r, g)) if vorzeichen == 0 else _tage(r, g) * vorzeichen) for r in nah]
+            if any(lo <= w <= hi for w in werte):
+                continue
+            r = nah[0]
+            delta = _tage(r, g)
+            falsch.append("%s: %s (Bezug %s: %s, %+d Tage)" % (geg_txt, _de(g), bez_txt, _de(r), delta))
+        if falsch:
+            befunde.append("„%s“ (%d–%d Tage %s) — %s" % (_ws(m.group(0)), lo, hi, richtung,
+                                                        " · ".join(falsch[:4])))
+    # „mit der Venus im Gefolge“: der Folgende liegt jedes Mal NACH dem Fuehrenden
+    for m in _P18_GEFOLGE_RE.finditer(satz):
+        fz = kanon(m.group("f"))
+        ls = _p18_laeufer_plus(satz) or ([chapter_fuehrt[0]] if chapter_fuehrt else [])
+        if not ls:
+            continue
+        t = ls[0]
+        ex_f, _e1 = _p18_exakte(d, t, fz)
+        # Gegenpruefung 2026-10-13: der Fuehrende ist der Kontakt, den der Satz davor
+        # nennt („im Quadrat zu deinem Merkur, mit dem Mond im Gefolge“), erst ohne
+        # ihn der fuehrende Kontakt des Kapitels
+        vorn = satz[:m.start()]
+        ziele_v = [z for z in _p18_ziele(vorn) if z != fz]
+        if ziele_v:
+            fz0 = ziele_v[-1]
+            fuehr = _p18_exakte(d, t, fz0, vorn)[0]
+        elif chapter_fuehrt and chapter_fuehrt[0] == t and chapter_fuehrt[2] != fz:
+            fz0 = chapter_fuehrt[2]
+            fuehr = _p18_exakt([x for x in d["ev"].get((t, chapter_fuehrt[2]), [])
+                                if x.get("aspekt") == chapter_fuehrt[1]])
+        else:
+            continue
+        fuehr = _p18_in_zeiten(fuehr, zeiten)
+        if not ex_f or not fuehr:
+            continue
+        p.geprueft += 1
+        falsch = []
+        for r in fuehr:
+            g = min(ex_f, key=lambda x: abs(_tage(r, x)))
+            if abs(_tage(r, g)) <= 30 and _tage(r, g) <= 0:
+                falsch.append("%s–%s %s vor %s–%s %s" % (ANZEIGE.get(t, t), ANZEIGE.get(fz, fz), _de(g),
+                                                         ANZEIGE.get(t, t), ANZEIGE.get(fz0, fz0), _de(r)))
+        if falsch:
+            befunde.append("„%s“ — Reihenfolge: %s" % (_ws(m.group(0)), " · ".join(falsch[:3])))
+    # „Dazwischen geht …“: die Exaktdaten liegen zwischen denen des Satzes davor
+    md = _P18_DAZWISCHEN_RE.match(satz)
+    if md and (vorher or frueher):
+        bezug = []
+        for s_ in ([vorher] if vorher else []) + list(reversed(frueher or [])):
+            for t in _p18_laeufer_plus(s_):
+                for z in _p18_ziele(s_):
+                    ex, _evs = _p18_exakte(d, t, z, s_)
+                    bezug += _p18_in_zeiten(ex, _p18_zeiten_plus(s_)) or ex
+            if len(set(bezug)) >= 2:
+                break
+        gegen, perioden = [], []
+        ls_d = _p18_laeufer_plus(satz) or _p18_laeufer_plus(vorher or "")[-1:]   # „Dazwischen steht er …“
+        for t in ls_d:
+            for z in _p18_ziele(satz):
+                ex, evs = _p18_exakte(d, t, z, satz)
+                gegen += _p18_in_zeiten(ex, zeiten) if zeiten else []
+                perioden += _p18_perioden_gesamt(evs)
+        kontakt = bool(ls_d and _p18_ziele(satz))
+        if len(bezug) >= 2 and zeiten and not gegen and kontakt and \
+                any(z[3] < min(bezug) or z[2] > max(bezug) for z in zeiten):
+            p.geprueft += 1
+            befunde.append("„Dazwischen“ — %s liegt nicht zwischen %s (Exaktdaten des Satzes davor)"
+                           % (", ".join(z[4] for z in zeiten if z[3] < min(bezug) or z[2] > max(bezug)),
+                              _p18_zeitraum_txt(min(bezug), max(bezug))))
+        elif len(bezug) >= 2 and (gegen or (not zeiten and perioden)):
+            p.geprueft += 1
+            lo_b, hi_b = min(bezug), max(bezug)
+            if zeiten:
+                aussen = [g for g in gegen if not (lo_b <= g <= hi_b)]
+                if aussen:
+                    befunde.append("„Dazwischen“ — %s außerhalb %s (Exaktdaten des Satzes davor)"
+                                   % (", ".join(_de(g) for g in sorted(aussen)), _p18_zeitraum_txt(lo_b, hi_b)))
+            elif not any(x <= hi_b and y >= lo_b for x, y in perioden):
+                # ohne Zeitangabe (Gegenpruefung 2026-10-13): irgendein Wirkorb dazwischen genuegt
+                befunde.append("„Dazwischen“ — kein Wirkorb zwischen %s (Exaktdaten des Satzes davor); "
+                               "Wirkorb %s" % (_p18_zeitraum_txt(lo_b, hi_b), ", ".join(
+                                   _p18_zeitraum_txt(x, y) for x, y in perioden[:3])))
+    return _p18_melde(p, ort, satz, "Abstand", befunde)
+
+
+_P18_T_NAME = r"(?:Jupiter|Saturn|Uranus|Neptun|Pluto|Chiron|Mondknoten|Knoten)"
+_P18_T_LISTE = (r"(?:(?:der|die)\s+(?:laufende\s+)?)?%s(?:\s*,\s*(?:(?:der|die)\s+(?:laufende\s+)?)?%s)*"
+                r"(?:\s+und\s+(?:(?:der|die)\s+(?:laufende\s+)?)?%s)?" % (_P18_T_NAME, _P18_T_NAME, _P18_T_NAME))
+_P18_BUENDEL_RE = re.compile(
+    _P18_GRENZ + r"(?P<ls>%s)\s+(?:(?:steht|stehen|läuft|laufen)\s+)?"
+    r"(?:(?P<a1>im\s+(?:Trigon|Quadrat|Sextil|Quincunx|Halbsextil))\s+(?:zu|zum|zur)|"
+    r"(?P<a2>in\s+(?:Konjunktion|Opposition))\s+(?:zu|zum|zur|mit)|(?P<a3>gegenüber))\s+" % _P18_T_LISTE)
+# 2026-10-13 (Gegenpruefung): die haeufigste Wortstellung, Ziele VOR „gegenüber“
+_P18_BUENDEL_GEGEN_RE = re.compile(
+    _P18_GRENZ + r"(?P<ls>%s)\s+(?:steht|stehen|stand|standen)\s+(?P<zs>(?:(?:dein\w*|der|dem|den)\s+)?"
+    r"[\wäöüÄÖÜß-]+(?:\s*(?:,|und)\s*(?:(?:dein\w*|der|dem|den)\s+)?[\wäöüÄÖÜß-]+){1,5})\s+gegenüber"
+    % _P18_T_LISTE + _P18_ENDE)
+_P18_ZIELLISTE_ZW_RE = re.compile(r"^\s*(?:,|und|sowie)\s*(?:(?:zu|zum|zur|mit)\s+)?(?:(?:dein\w*|der|dem|den)\s+)?$")
+_P18_ZIELLISTE_ANF_RE = re.compile(r"^\s*(?:(?:dein\w*|der|dem|den)\s+)?$")
+
+
+def _p18_zielliste(text, ganz):
+    """[(Schluessel, Ende)] der Zielaufzaehlung am Anfang von `text`: Faktoren, getrennt
+    nur durch Komma/„und“ (mit Artikel oder „dein…“); sie endet am naechsten Laeufer mit
+    eigenem Aspektbild („…, Uranus im Trigon …“) oder an allem anderen."""
+    out, pos = [], 0
+    for a_, e_, f in _faktoren_im_satz(text):
+        zw = text[pos:a_]
+        if not (_P18_ZIELLISTE_ANF_RE.match(zw) if not out else _P18_ZIELLISTE_ZW_RE.match(zw)):
+            break
+        if out and f in _P18_TRANSITER and (_P18_BILD_DANACH_RE.match(text[e_:e_ + 50]) or
+                                            _P18_NEUE_GRUPPE_RE.match(text[e_:e_ + 40])):
+            break                                   # „…, Uranus steht im Trigon …“: der naechste Laeufer
+        out.append((f, e_))
+        pos = e_
+    return out
+
+
+def _p18_buendel(p, d, text, ort, ist_signatur=False):
+    """„A, B und C im Trigon zu X und Y“, „A und B stehen X und Y gegenüber“ — eine
+    Aufzaehlung von Laeufern und eine von Zielen um EIN Aspektwort: Jedes Paar braucht
+    den Kontakt dieser Art in der Rechnung (P13 laesst ein Buendel durch, sobald EIN
+    Paar gedeckt ist). Gelesen werden nur diese festen Formen, mehrere je Satz; ein
+    Paar, das als Radix-Aspekt dieser Art in den Tabellen steht, bleibt still (die
+    Aussage kann das Geburtsbild meinen), ebenso der Suedknoten, wenn der
+    Mondknoten-Kontakt besteht, und alles in Klammern. Der Kontakt zur Gegenachse
+    (DC, IC) zaehlt mit seinem Spiegel-Eintrag (Gegenpruefung 2026-10-13)."""
+    befunde = []
+    if _P18_GEBURT_RE.search(text or ""):
+        return 0
+    rein = re.sub(r"\([^()]*\)", " ", text or "")
+    buendel = []
+    pos = 0
+    while True:
+        m = _P18_BUENDEL_RE.search(rein, pos)
+        if not m:
+            break
+        zl = _p18_zielliste(rein[m.end():m.end() + 160], rein)
+        wort = m.group("a1") or m.group("a2") or m.group("a3")
+        buendel.append((m.group("ls"), wort, [f for f, _e in zl]))
+        pos = m.end() + (zl[-1][1] if zl else 0)       # ein zweites Buendel im selben Satz
+    for m in _P18_BUENDEL_GEGEN_RE.finditer(rein):
+        fs = _faktoren_im_satz(m.group("zs"))
+        teile = [t for t in re.split(r"\s*(?:,|\bund\b)\s*", m.group("zs")) if t.strip()]
+        if len(fs) == len(teile):                   # jedes Glied ist ein Faktor
+            buendel.append((m.group("ls"), "gegenüber", [f for _a, _e, f in fs]))
+    for ls_txt, wort, zs in buendel:
+        ls = [kanon(x) for x in re.findall(_P18_T_NAME, ls_txt)]
+        if len(ls) < 2 and len(zs) < 2:
+            continue
+        art = "Opposition" if wort == "gegenüber" else _art(wort.split()[-1])
+        geprueft = False
+        for t in ls:
+            for z in zs:
+                if z == t:
+                    continue
+                if not any(k[0] == t for k in d["ev"]):
+                    continue
+                geprueft = True
+                alle = d["ev"].get((t, z), []) + d.get("ev_spiegel", {}).get((t, z), [])
+                if z == "SUEDKNOTEN" and d["ev"].get((t, "MONDKNOTEN")):
+                    continue
+                if any(x.get("aspekt") == art for x in alle):
+                    continue
+                if any(r["art"] == art and {r["a"], r["b"]} == {t, z} for r in d["tabelle"]):
+                    continue
+                andere = sorted({x.get("aspekt") for x in alle if x.get("aspekt")})
+                befunde.append("%s %s %s: kein solcher Kontakt in der Rechnung%s"
+                               % (ANZEIGE.get(t, t), art, ANZEIGE.get(z, z),
+                                  " (nur %s)" % ", ".join(andere) if andere else ""))
+        if geprueft:
+            p.geprueft += 1
+    return _p18_melde(p, ort, text, "Bündel", list(dict.fromkeys(befunde)))
+
+
+_P18_GENAU_LISTE_RE = re.compile(_P18_GRENZ + r"(?:genau|exakt)\s+(?=(?:im\s+|am\s+|in\s+der\s+)?" + _P18_ZEIT_ALT +
+                                 r"|(?:im\s+|in\s+der\s+)?(?:erst|zweit)en?\s+\w+hälfte)")
+_P18_FOLGT_RE = re.compile(_P18_GRENZ + r"(?:folgt|folgen|folgte)" + _P18_ENDE)
+_P18_GEHT_UEBER_RE = re.compile(_P18_GRENZ + r"(?:geht|gehen|läuft|laufen|zieht|ziehen)\s+(?:(?:der\s+|die\s+|das\s+)?"
+                                r"(?P<t>%s)\s+)?(?P<zw>(?:(?:im|am|Anfang|Mitte|Ende)\s+(?:%s|Frühjahr|Sommer|Herbst|"
+                                r"Winter)(?:\s+(?:19|20|21)\d\d)?\s+)?(?:(?:einmal|zweimal|dreimal|mehrmals|noch\s+einmal|"
+                                r"erneut|wieder)\s+)?)über\s+(?:dein(?:en|e|em)?|den|die|das)\s+(?P<z>%s)"
+                                % (_FAKTOR_RE, _MONAT_RE, _FAKTOR_RE) + _P18_ENDE)
+
+
+def _p18_genau(p, d, satz, ort, kapitel_kontakte):
+    """„genau Anfang März 2031, Ende Juli 2031 und Mitte November 2031“: jede Zeit
+    traegt ein Exaktdatum des Kontakts; „folgt <Zeit>“ ebenso; „geht im <Zeit> über
+    deinen X“: ein Nulldurchgang in der Zeit."""
+    befunde = []
+    for m in list(_P18_GENAU_LISTE_RE.finditer(satz)) + list(_P18_FOLGT_RE.finditer(satz)):
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        if _P18_STILL_RE.search(klausel):
+            continue                                # Station: eigene Satzart
+        if m.re is _P18_FOLGT_RE and not _P18_GENAU_RE.search(satz):
+            continue                                # „folgt“ ohne „genau“ im Satz kann den Beginn meinen (2026-10-13)
+        hinten = satz[m.end():e]
+        zeiten = [z for z in _p18_zeiten_plus(hinten) if z[0] <= 70]
+        if m.re is _P18_FOLGT_RE:
+            zeiten = [z for z in _p18_zeiten_plus(klausel, satz)]
+        if not zeiten:
+            continue
+        ls_k = _p18_laeufer_plus(klausel)
+        ls = ls_k or _p18_laeufer_plus(satz[:a])[-1:]
+        zs = _p18_ziele(klausel)
+        mp = re.search(_P18_GRENZ + r"mit\s+(?:seinen|ihren)\s+(?:eigenen\s+)?(?P<art>Quadrat|Trigon|Sextil|Quincunx|"
+                       r"Opposition|Konjunktion)(?:e|en)?" + _P18_ENDE, klausel)
+        alle_eigenen = bool(ls_k and mp)
+        if not zs and ls:
+            zs = [z for (tt, art_, z, _f) in kapitel_kontakte if tt in ls and (not mp or art_ == mp.group("art"))]
+        if not ls or not zs:
+            continue
+        ex_alle = []
+        for t in ls:
+            for z in zs:
+                if mp:
+                    ex = _p18_exakt([x for x in d["ev"].get((t, z), []) if x.get("aspekt") == mp.group("art")])
+                else:
+                    ex, _evs = _p18_exakte(d, t, z, klausel if _p18_aspektarten(klausel) else None)
+                ex_alle += [(x, t, z) for x in ex]
+        if not ex_alle:
+            continue
+        p.geprueft += 1
+        for _a0, _e0, von, bis, roh in zeiten:
+            if d["start"] and bis < (d.get("lookback") or d["start"]):
+                continue
+            if not any(von <= x <= bis for x, _t, _z in ex_alle):
+                nah = min(ex_alle, key=lambda q: min(abs(_tage(von, q[0])), abs(_tage(bis, q[0]))))
+                befunde.append("„%s“ — kein Exaktdatum in %s; nächstes: %s–%s %s"
+                               % (roh, _p18_zeitraum_txt(von, bis), ANZEIGE.get(nah[1], nah[1]),
+                                  ANZEIGE.get(nah[2], nah[2]), _de(nah[0])))
+        if m.re is _P18_FOLGT_RE and (_p18_ziele(klausel) or alle_eigenen):
+            aussen = [(x, t, z) for x, t, z in ex_alle
+                      if any(abs(_tage(von, x)) <= 31 for _a0, _e0, von, _b, _r in zeiten)
+                      and not any(von <= x <= bis for _a0, _e0, von, bis, _r in zeiten)]
+            if aussen:
+                befunde.append("„%s“ — %s" % (_ws(m.group(0)), " · ".join(
+                    "%s–%s exakt %s" % (ANZEIGE.get(t, t), ANZEIGE.get(z, z), _de(x)) for x, t, z in aussen[:3])))
+    for m in _P18_GEHT_UEBER_RE.finditer(satz):
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        vor_z = [z for z in _p18_zeiten(satz[a:m.start()])]
+        nach_z = [z for z in _p18_zeiten(satz[m.end():m.end() + 30]) if z[0] <= 12]
+        zw_z = _p18_zeiten(m.group("zw") or "")
+        zeiten = zw_z[:1] or vor_z[-1:] or nach_z[:1]
+        if not zeiten:
+            continue
+        t = kanon(m.group("t")) if m.group("t") else \
+            ([f for _x, _y, f, r in _p18_rollen(satz[a:m.start()]) if r == "L"][-1:] or
+             [f for _x, _y, f, r in _p18_rollen(satz[m.end():e]) if r == "L"][:1] or [None])[0]
+        z = kanon(m.group("z"))
+        if not t or t == z:
+            continue
+        evs = [x for x in d["ev"].get((t, z), []) if x.get("aspekt") == "Konjunktion"]
+        if not evs:
+            continue
+        ex = _p18_exakt(evs)
+        p.geprueft += 1
+        for _a0, _e0, von, bis, roh in zeiten:
+            if not any(von <= x <= bis for x in ex):
+                ann = [aa for x in evs for aa in (x.get("annaeherung") or [])]
+                befunde.append("„über“ (%s) — %s Konjunktion %s: kein Nulldurchgang in %s%s%s"
+                               % (roh, ANZEIGE.get(t, t), ANZEIGE.get(z, z), _p18_zeitraum_txt(von, bis),
+                                  "; Annäherung bis %s° am %s" % (str(round(ann[0][1], 2)).replace(".", ","),
+                                                                  _de(ann[0][0])) if ann else "",
+                                  "; exakt %s" % ", ".join(_de(x) for x in ex[:3]) if ex else "; nie exakt"))
+    return _p18_melde(p, ort, satz, "Genau", befunde)
+
+
+_P18_KAPITEL_VERB_RE = re.compile(_P18_GRENZ + r"(?:laufen|läuft|stehen|steht|liegen|liegt|überlagern|überlagert|"
+                                  r"überschneiden|überschneidet|kreuzen|gehören|gehört|teilen|teilt|drängen|"
+                                  r"nebeneinander|gleichzeitig|zugleich|parallel)" + _P18_ENDE)
+_P18_KAPITEL_LAUF_RE = re.compile(
+    _P18_GRENZ + r"(?:(?:läuft|laufen|kommt|kommen|tritt|treten|steht|stehen)\s+(?:auch\s+|zugleich\s+|parallel\s+|"
+    r"noch\s+|schon\s+|bereits\s+|dann\s+|wieder\s+)*(?:das\s+|die\s+)?Kapitel(?:s|n)?\s+\d{1,2}|"
+    r"(?:brauchen|braucht|gehören|gehört)\s+(?:\w+\s+){0,5}?(?:das\s+|die\s+)?Kapitel(?:s|n)?\s+\d{1,2}|"
+    r"Kapitel(?:s|n)?\s+\d{1,2}(?:\s*(?:,|und|oder)\s*(?:Kapitel\s+)?\d{1,2})*\s+(?:läuft|laufen|kommt|kommen|"
+    r"tritt|treten|steht|stehen|ist|sind|liegt|liegen)\s+(?:auch\s+|zugleich\s+|parallel\s+|mit|dicht|im\s+"
+    r"Vordergrund|dazu))" + _P18_ENDE)
+_P18_N_KAPITEL_RE = re.compile(_P18_GRENZ + r"(?P<n>zwei|drei|vier|fünf|sechs|sieben|acht|\d)\s+(?:der\s+)?"
+                               r"(?:Kapitel|Kapiteln|Themen)" + _P18_ENDE)
+_P18_DIESE_ZEIT_RE = re.compile(_P18_GRENZ + r"(?:diese[n]?\s+(?:Monate|Wochen|Zeit|Jahre)|in\s+dieser\s+Zeit|"
+                                r"in\s+diesen\s+(?:Monaten|Wochen|Jahren))" + _P18_ENDE)
+_P18_AUFTAKT_RE = re.compile(_P18_GRENZ + r"(?:Auftakt|Beginn|Start)\s+(?:von\s+|des\s+)?Kapitel(?:s)?\s+"
+                             r"(?P<n>\d{1,2})" + _P18_ENDE)
+
+
+def _p18_zl_quartale(d, von, bis):
+    """Die Quartalsnummern der Zeitleiste, die [von, bis] beruehren."""
+    qb = list(d.get("quartal_grenzen") or [])
+    if len(qb) > 1 and d["ende"] and qb[-1] > d["ende"]:
+        qb = qb[:-1]                                # die letzte Grenze schliesst das Fenster
+    out = []
+    for i, a in enumerate(qb):
+        b = qb[i + 1] if i + 1 < len(qb) else _p18_plus(d["ende"] or "9999-12-30", 1)
+        if a <= bis and b > von:
+            out.append(i + 1)
+    return out
+
+
+def _p18_kapitelzeit(p, d, satz, ort, eigenes):
+    """Kapitel in einer Zeit — gegen die `@@ZEITLEISTE` (dicht=) und die Wirkorb-Zeiten
+    der THEMA-Kontakte."""
+    befunde = []
+    dicht = d.get("dicht") or {}
+    if not dicht:
+        return 0
+    zeiten = _p18_zeiten(satz)
+    # (a) „<n> Kapitel“ in einer Zeit
+    for m in _P18_N_KAPITEL_RE.finditer(satz):
+        n = _p18_zahl(m.group("n"))
+        a, e = _p18_teilsatz(satz, m.start())
+        zt = _p18_zeiten(satz[a:e]) or zeiten
+        if not n or not zt or re.match(r"\s*(?:davon|von\s+ihnen)", satz[m.end():m.end() + 12]):
+            continue
+        # Gegenpruefung 2026-10-13: „zwei der sechs Kapitel“, „die nächsten drei Kapitel
+        # erzählen …“ — gezaehlt wird nur „<n> Kapitel laufen/stehen/…“ in einer Zeit
+        if re.search(r"(?:der|die|den|nächsten|folgenden|ersten|letzten|beiden|übrigen|anderen|vorigen)\s+$",
+                     satz[max(0, m.start() - 15):m.start()]):
+            continue
+        if not _P18_KAPITEL_VERB_RE.search(satz):
+            continue
+        qs = sorted({q for z in zt for q in _p18_zl_quartale(d, z[2], z[3])})
+        if not qs:
+            continue
+        kap = sorted({k for q in qs for k in dicht.get(q, ())})
+        p.geprueft += 1
+        if len(kap) != n:
+            befunde.append("„%s“ (%s) — dicht in Q%s: Kapitel %s (%d)"
+                           % (_ws(m.group(0)), ", ".join(z[4] for z in zt), "–Q".join(map(str, (qs[0], qs[-1])))
+                              if len(qs) > 1 else qs[0], ", ".join(map(str, kap)), len(kap)))
+    # (b) „Kapitel n“ in einer Zeit oder in „diesen Monaten“
+    for m in _P18_KAPITEL_LISTE_RE.finditer(satz):
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        if not _P18_KAPITEL_LAUF_RE.search(satz[max(a, m.start() - 40):min(e, m.end() + 40)]):
+            continue                                # Verweis, keine Aussage über die Zeit (2026-10-13)
+        nrs = [int(x) for x in re.findall(r"\d{1,2}", m.group(0))]
+        zt = _p18_zeiten(klausel)
+        if zt:
+            qs = sorted({q for z in zt for q in _p18_zl_quartale(d, z[2], z[3])})
+            woher = ", ".join(z[4] for z in zt)
+        elif _P18_DIESE_ZEIT_RE.search(klausel) and eigenes and eigenes in d.get("kap_dicht", {}):
+            qs = sorted(d["kap_dicht"][eigenes])
+            woher = "Kapitel %d (Q%s)" % (eigenes, ",".join(map(str, qs)))
+        else:
+            continue
+        if not qs:
+            continue
+        for n in nrs:
+            if n == eigenes or n not in d.get("kap_dicht", {}):
+                continue
+            p.geprueft += 1
+            if not set(d["kap_dicht"][n]) & set(qs):
+                befunde.append("Kapitel %d in %s — dicht nur in Q%s"
+                               % (n, woher, ",".join(map(str, sorted(d["kap_dicht"][n])))))
+    # (c) „Auftakt von Kapitel n“
+    for m in _P18_AUFTAKT_RE.finditer(satz):
+        n = int(m.group("n"))
+        th = d["thema"].get(d["kap2thema"](n))
+        if not th:
+            continue
+        a_, _e = _p18_teilsatz(satz, m.start())
+        zt = _p18_zeiten(satz[a_:m.start()]) or _p18_zeiten(satz[:m.start()])
+        if not zt:
+            continue                                # ohne eigene Zeitangabe keine Aussage (2026-10-13)
+        von = zt[-1][2]
+        fruehe = []
+        for (t, art, z, feld) in th["kontakte"]:
+            if feld not in ("fuehrt", "aspekte"):
+                continue
+            ps = _p18_perioden([x for x in d["ev"].get((t, z), []) if x.get("aspekt") == art])
+            if ps:
+                fruehe.append((ps[0][0], t, art, z))
+        if not fruehe:
+            continue
+        p.geprueft += 1
+        x, t, art, z = min(fruehe)
+        if x < _p18_plus(von, -31):
+            befunde.append("„%s“ (%s) — Kapitel %d läuft schon: %s %s %s im Wirkorb ab %s"
+                           % (_ws(m.group(0)), zt[-1][4], n, ANZEIGE.get(t, t), art, ANZEIGE.get(z, z), _de(x)))
+    return _p18_melde(p, ort, satz, "Kapitelzeit", befunde)
+
+
+_P18_DAUER_RE = re.compile(_P18_GRENZ + r"(?P<q>fast\s+(?:die\s+)?ganze[n]?|die\s+ganze[n]?|das\s+ganze|den\s+größten\s+Teil"
+                           r"(?:\s+der|\s+des)?)\s+(?:zwei\s+Jahre|Fenster\w*|Jahre|Zeit)" + _P18_ENDE)
+
+
+def _p18_dauer(p, d, satz, ort):
+    befunde = []
+    if not d["start"] or not d["ende"]:
+        return 0
+    gesamt = _tage(d["start"], d["ende"]) + 1
+    for m in _P18_DAUER_RE.finditer(satz):
+        a, e = _p18_teilsatz(satz, m.start())
+        klausel = satz[a:e]
+        ls = _p18_laeufer_plus(klausel)
+        # Gegenpruefung 2026-10-13: ALLE genannten Häuser bzw. Zeichen zusammen („die
+        # ganzen zwei Jahre im dritten und dann im vierten Haus“)
+        hs = [_p18_ord_wert(x.group("o")) for x in _P18_HAUS_ORD_RE.finditer(klausel)]
+        zs = [_zeichen_norm(x.group("z")) for x in re.finditer(
+            _P18_GRENZ + r"(?:im|in\s+der|in\s+den)\s+(?P<z>%s)" % ZEICHEN_RE + _P18_ENDE, klausel)]
+        if not ls or not (hs or zs):
+            continue
+        t = ls[0]
+        rows = [r for h in hs for r in _p18_wechsel_daten(d, t, "h", h)] if hs else \
+            [r for z in zs for r in _p18_wechsel_daten(d, t, "z", z)]
+        if not rows:
+            continue
+        tage = sum(max(0, _tage(max(v, d["start"]), min(b, d["ende"])) + 1) for v, b, _ang in rows if v and b)
+        anteil = min(1.0, tage / float(gesamt))
+        q = m.group("q").lower()
+        soll = P18_FAST_GANZ if q.startswith("fast") else (P18_GROESSTER_TEIL if "größten" in q else P18_GANZ)
+        p.geprueft += 1
+        if (q.startswith("fast") and not (P18_FAST_GANZ <= anteil < 1.0 + 1e-9)) or \
+                (not q.startswith("fast") and anteil < soll):
+            befunde.append("„%s“ — %s in %s: %d von %d Tagen des Fensters (%d %%)"
+                           % (_ws(m.group(0)), ANZEIGE.get(t, t),
+                              (" und ".join("Haus %d" % h for h in hs)) if hs else
+                              " und ".join(_P18_ZEICHEN_ANZEIGE.get(z, z) for z in zs),
+                              tage, gesamt, round(100 * anteil)))
+    return _p18_melde(p, ort, satz, "Dauer", befunde)
+
+
+_P18_DIESELBEN_RE = re.compile(r"^\W*(?:In\s+(?:die|den)selben\s+(?:Wochen|Monate|Monaten|Tage|Tagen)|"
+                               r"Zur\s+selben\s+Zeit)" + _P18_ENDE)
+_P18_KOPULA_ZUGLEICH_RE = re.compile(_P18_GRENZ + r"(?:ist|sind|war|waren|bleibt|bleiben|wird|werden)\s+"
+                                     r"zugleich\s+(?:ein|eine|einer|der|die|das|dein\w*|auch|selbst)" + _P18_ENDE)
+
+
+def _p18_dieselben(p, d, satz, ort, frueher, kapitel_kontakte):
+    """„In dieselben Wochen fallen …“ — die Kontakte des Satzes ueberlappen die
+    Wirkorb-Zeit der Kontakte des naechsten Satzes davor, der welche nennt; „… und
+    zugleich im Trigon zu deinem X“ mit EINEM Laeufer — gegen dessen uebrige Ziele im
+    Kapitel."""
+    befunde = []
+    md = _P18_DIESELBEN_RE.search(satz)
+    if md and not _P18_GEBURT_RE.search(satz):
+        gegen = _p18_kontakte_von(d, _p18_laeufer_plus(satz), _p18_ziele(satz), satz)
+        bezug = []
+        for s in reversed(frueher or []):
+            bezug = _p18_kontakte_von(d, _p18_laeufer_plus(s), _p18_ziele(s), s)
+            if bezug:
+                break
+        if gegen and bezug:
+            ref = _p18_perioden_gesamt([x for _t, _z, evs in bezug for x in evs])
+            # nur die Strecken nahe beieinander (ein Kontakt kehrt Jahre spaeter wieder)
+            p.geprueft += 1
+            def luecke(x, y, rx, ry):                # Tage zwischen zwei Strecken, 0 bei Ueberlappung
+                return max(0, _tage(ry, x), _tage(y, rx))
+            for t, z, evs in gegen:
+                ps = _p18_perioden_gesamt(evs)
+                nah = [(x, y) for x, y in ps if any(luecke(x, y, rx, ry) <= 120 for rx, ry in ref)]
+                if nah and not any(luecke(x, y, rx, ry) == 0 for x, y in nah for rx, ry in ref):
+                    befunde.append("„%s“ — %s: Wirkorb %s, der Satz davor (%s): %s"
+                                   % (_ws(md.group(0)), _p18_kontakt_txt(t, z, evs),
+                                      ", ".join(_p18_zeitraum_txt(x, y) for x, y in nah[:2]),
+                                      _p18_namen(list(dict.fromkeys(q[0] for q in bezug))),
+                                      ", ".join(_p18_zeitraum_txt(rx, ry) for rx, ry in ref
+                                                if any(luecke(x, y, rx, ry) <= 120 for x, y in nah))[:120]))
+    mz = re.search(_P18_GRENZ + r"(?:zugleich|gleichzeitig)" + _P18_ENDE, satz)
+    if mz and not _P18_GEBURT_RE.search(satz) and not _P18_KOPULA_ZUGLEICH_RE.search(satz):
+        laeufer = _p18_laeufer_plus(satz[:mz.start()])
+        if len(laeufer) == 1 and len(_p18_laeufer_plus(satz)) == 1:
+            t = laeufer[0]
+            nach = satz[mz.end():]
+            zs = _p18_ziele(nach)
+            if re.search(_P18_GRENZ + r"(?:zurückkehrt|zurückkehren|Rückkehr|kehrt\s+\w+\s+zurück|an\s+seinen\s+eigenen"
+                         r"\s+Platz|an\s+seine\s+eigene\s+Stelle)", satz[:mz.start()]) and (t, t) in d["ev"]:
+                andere = [(t, "Konjunktion")]       # „… zurückkehrt und zugleich …“: die Rueckkehr
+            else:
+                andere = [(z, art) for (tt, art, z, _f) in kapitel_kontakte if tt == t and z not in zs]
+                andere += [(z, None) for z in _p18_ziele(satz[:mz.start()]) if z not in zs]
+            kont = _p18_kontakte_von(d, [t], zs, nach)
+            if kont and andere:
+                ref = []
+                for z, art in andere:
+                    ref += [q for q in d["ev"].get((t, z), []) if art is None or q.get("aspekt") == art]
+                rp = _p18_perioden_gesamt(ref)
+                if rp:
+                    p.geprueft += 1
+                    ueber = [k for k in kont if any(x <= ry and y >= rx for x, y in _p18_perioden_gesamt(k[2])
+                                                    for rx, ry in rp)]
+                    if not ueber:
+                        tt, z, evs = kont[0]
+                        befunde.append("„%s“ — %s und %s an %s: kein gemeinsamer Tag im Wirkorb"
+                                       % (_ws(mz.group(0)), _p18_kontakt_txt(tt, z, evs), ANZEIGE.get(t, t),
+                                          _p18_namen(list(dict.fromkeys(z_ for z_, _a in andere)))))
+    return _p18_melde(p, ort, satz, "Zugleich", befunde)
+
+
 # --- P18: Zusammenbau -----------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# P18 Naehe, Lage und Rang im Geburtshoroskop (2026-10-13, Strang 2 des Wartungslaufs
+# „Proben fuer Zeit, Naehe, Register und Fundstellen“). In den Geburtshoroskopen vom 10.
+# bis 12.10. ersetzten die Zweitleser je Lauf mehrere Saetze, deren Lage-, Naehe- oder
+# Rangwort mehr sagte als die Daten; keine Probe sah sie.
+#
+# Chris-Entscheidung 2026-10-13 (Fragenblock des Wartungslaufs, Fragen a1–a4: „ja“):
+# a1  „genau am/auf“, „exakt“, „gradgenau“, „auf den Grad“, „am selben Punkt wie“, „zu
+#     einem Punkt“ tragen hoechstens 1° Orb (P18_NAEHE_ORB); „genau dort, wo … sich
+#     berühren“ hoechstens 1° Abstand zur Hausspitze. „fast/nahezu genau“ ist frei.
+# a2  „eng/dicht beieinander“ verlangt eine Konjunktion zwischen JEDEM Paar der genannten
+#     Faktoren; „mitten in der Ballung“ trifft kein Randglied — das erste oder letzte
+#     Glied nach der Laenge in JEDEM Stellium aus §6, das den Faktor enthaelt.
+# a3  Absolutformeln („so eng, wie es überhaupt vorkommen kann“, „enger geht es
+#     nicht“) bekommen immer einen Hinweis mit Orb und Rang; „kaum enger“ nur, wenn der
+#     Orb ueber 1° liegt oder das Paar nicht auf Rang 1 der Rangzeile steht.
+# a4  „deines ganzen Bildes“, „alle Faktoren gezählt“, „unter allen gerechneten …“
+#     zaehlen JEDEN gerechneten Untergrund-Aspekt mit, auch ungedeutete; ohne diesen
+#     Zusatz zaehlt der Rang ohne Untergrund (Rangzeile §10, P12) — die Regel vom
+#     04.10., die neben „die engste Verbindung“ den gedeuteten Untergrund mitzaehlte,
+#     entfaellt. Nennt der Satz den Untergrund, ist er ausgenommen.
+# Dazu zwei Lagewoerter, die die Daten nur auf eine Weise tragen: Die leere Haelfte und
+# der leere Bogen „liegen“ nicht in einem Zeichen oder Haus — dort liegt nur ihre Mitte
+# (Strukturbild §8); einer Achse steht kein Faktor „gegenüber“, er steht einem Ende
+# gegenueber. Wie ueberall in P18: nur PRUEFEN, nur bei Widerspruch, mit dem Datenwert;
+# was sich nicht lesen laesst (kein Paar, kein Stellium), bleibt still. Nicht im Transit
+# und nicht im Kapitel „Die Zeit“ einer Vertiefung — dort heisst „genau“ das Exaktdatum.
+# ---------------------------------------------------------------------------
+P18_NAEHE_ORB = 60                       # a1: hoechstens 1° — in Bogenminuten
+_P18_Z12 = ("WIDDER", "STIER", "ZWILLINGE", "KREBS", "LOEWE", "JUNGFRAU", "WAAGE", "SKORPION",
+            "SCHUETZE", "STEINBOCK", "WASSERMANN", "FISCHE")
+
+
+def _p18_laengen(txt):
+    """{Faktor: Laenge in Grad} aus der Staendetabelle (Grad und Zeichen)."""
+    out = {}
+    for f, (mi, z) in (_staende_lesen(txt or "") or {}).items():
+        if z in _P18_Z12:
+            out[f] = _P18_Z12.index(z) * 30 + mi / 60.0
+    return out
+
+
+def _p18_spitzen(txt):
+    """Die zwoelf Hausspitzen in Grad — eine Tabelle „## … Hausspitzen …“ („| 1 | 7°54′ Löwe |“
+    oder „| 1 (AC) | 16°35′ | Waage | … |“), sonst die Liste `cusps = [...]` des Rechenblocks;
+    None, wenn keins von beiden vollstaendig lesbar ist."""
+    sp = {}
+    m = re.search(r"\n## [^\n]*Hausspitzen[^\n]*\n(.*?)(?=\n## |\Z)", txt or "", re.S)
+    if m:
+        for mm in re.finditer(r"^\|\s*(\d{1,2})(?:\s*\([^)|]*\))?\s*\|\s*(\d{1,2})°\s*(\d{1,2})[′']\s*\|?\s*(%s)"
+                              % ZEICHEN_RE, m.group(1), re.M):
+            z, h = _zeichen_norm(mm.group(4)), int(mm.group(1))
+            if z in _P18_Z12 and 1 <= h <= 12:
+                sp[h] = _P18_Z12.index(z) * 30 + int(mm.group(2)) + int(mm.group(3)) / 60.0
+    if sorted(sp) == list(range(1, 13)):
+        return [sp[h] for h in range(1, 13)]
+    mc = re.search(r"(?<![\w])cusps\s*=\s*\[([^\]]*)\]", txt or "", re.I)
+    if mc:
+        try:
+            ws = [float(x) % 360.0 for x in mc.group(1).split(",") if x.strip()]
+        except ValueError:
+            ws = []
+        if len(ws) == 12:
+            return ws
+    return None
+
+
+def _p18_bogen(a, b):
+    """Kleinster Abstand zweier Laengen in Grad."""
+    x = abs(a - b) % 360.0
+    return min(x, 360.0 - x)
+
+
+def _p18_grad_txt(grad):
+    """Bogen in Grad als „4°14′“."""
+    mi = int(round(grad * 60))
+    return "%d°%02d′" % (mi // 60, mi % 60)
+
+
+def _p18_lage_txt(lon):
+    """„9°41′ Krebs“ aus einer Laenge in Grad."""
+    mi = int(round((lon % 360.0) * 60)) % (360 * 60)
+    z, rest = divmod(mi, 1800)
+    return "%d°%02d′ %s" % (rest // 60, rest % 60, _P18_ZEICHEN_ANZEIGE.get(_P18_Z12[z], _P18_Z12[z]))
+
+
+def _p18_haus_von(lon, spitzen):
+    for h in range(12):
+        a, b = spitzen[h], spitzen[(h + 1) % 12]
+        if (lon - a) % 360.0 < (b - a) % 360.0:
+            return h + 1
+    return None
+
+
+def _p18_stellien(txt):
+    """[(Name, [Faktoren])] aus Strukturbild §6 („- Stellium in Krebs: Mars, Merkur, …“);
+    ein Zusatz hinter dem Gedankenstrich („— dieselbe Gruppe wie …“) gehoert nicht dazu."""
+    out = []
+    for m in re.finditer(r"^- Stellium in ([^:\n]+):\s*([^\n]*)$", txt or "", re.M):
+        glieder = re.split(r"\s+[—–]\s+", m.group(2), maxsplit=1)[0]
+        fs = [kanon(x.strip()) for x in glieder.split(",") if x.strip()]
+        out.append((m.group(1).strip(), [f for f in fs if f]))
+    return out
+
+
+def _p18_reihe(lons):
+    """Glieder einer Gruppe nach der Laenge, geschnitten an der groessten Luecke — eine
+    Gruppe ueber 0° Widder bleibt zusammen. lons: [(Laenge, Faktor)] -> [Faktor]."""
+    xs = sorted(lons)
+    n = len(xs)
+    if n < 2:
+        return [f for _l, f in xs]
+    _g, i = max(((xs[(j + 1) % n][0] - xs[j][0]) % 360.0, j) for j in range(n))
+    return [xs[(i + 1 + j) % n][1] for j in range(n)]
+
+
+def _p18_rang_eintrag(d, z, schl):
+    """(Eintraege der Rangzeile, Eintrag der Tabellenzeile oder None)."""
+    roh = [e for e in d["rangzeilen"].get(schl, {}).get("eintraege", []) if "rang" in e]
+    paar = frozenset((_achs_norm(z["a"]), _achs_norm(z["b"])))
+    return roh, next((x for x in roh if _rang_paar(x) == paar and x["orb_min"] == z["orb"]), None)
+
+
+def _p18_rangtext(d, z, schl="engste-aspekte"):
+    """Rang einer Tabellenzeile, wie ihn die Rangzeile §10 druckt — als Text fuer den Hinweis."""
+    if z["stufe"] == "untergrund":
+        return "Untergrund (ohne Rang in der Rangzeile)"
+    roh, e = _p18_rang_eintrag(d, z, schl)
+    if not roh:
+        return "ohne Rangzeile %s" % schl
+    if not e:
+        return "nicht unter den ersten %d Rängen der Rangzeile %s" % (max(x["rang"] for x in roh), schl)
+    gleich = [x for x in _rang_einmal(roh) if x["orb_min"] == e["orb_min"] and _rang_paar(x) != _rang_paar(e)]
+    return "Rang %d der Rangzeile %s%s" % (e["rang"], schl, (" (gleichauf: %s)" % "; ".join(
+        _rang_txt(x).split(". ", 1)[1] for x in gleich)) if gleich else "")
+
+
+def _p18_rang_nr(d, z, schl="engste-aspekte"):
+    """Rang der Zeile, wie ihn die Rangzeile §10 druckt; None ohne Eintrag."""
+    _roh, e = _p18_rang_eintrag(d, z, schl)
+    return e["rang"] if e else None
+
+
+def _p18_zeile_txt(z):
+    return "%s %s %s %s" % (ANZEIGE.get(z["a"], z["a"]), z["art"], ANZEIGE.get(z["b"], z["b"]), z["orb_txt"])
+
+
+def _p18_formel_zeilen(d, satz, vorher, pos):
+    """Die Tabellenzeilen, denen eine Formel an `pos` gilt: Art aus dem Text kurz davor
+    (Name oder Bild), beide Faktoren im Satz — sonst einer im Satz, einer im Satz davor,
+    sonst beide im Satz davor, sonst einer im Satz; das Paar mit dem Faktor naechst vor der
+    Formel zuerst. Achsen-Spiegelzeilen zaehlen mit („gegenüber dem IC“ = Opposition IC)."""
+    arten = _p18_aspektarten(satz[max(0, pos - 90):pos])
+    fs = _p18_faktoren(satz)
+    im = {f for _a, _e, f in fs}
+    davor = {f for _a, _e, f in _p18_faktoren(vorher or "")}
+    zeilen = [z for z in d["tabelle"] if not arten or z["art"] in arten]
+    kand = [z for z in zeilen if z["a"] in im and z["b"] in im]
+    if not kand:
+        kand = [z for z in zeilen if (z["a"] in im and z["b"] in davor) or (z["b"] in im and z["a"] in davor)]
+    if not kand and not im:
+        kand = [z for z in zeilen if z["a"] in davor and z["b"] in davor]
+    if not kand and arten:
+        kand = [z for z in zeilen if z["a"] in im or z["b"] in im]
+
+    def naehe(z):
+        ps = [a for a, _e, f in fs if f in (z["a"], z["b"]) and a < pos]
+        return -(max(ps) if ps else -10 ** 6)
+    return sorted(kand, key=lambda z: (naehe(z), z["spiegel"], z["orb"]))
+
+
+def _p18_rang_schl(satz):
+    return "engste-aspekte-planeten" if _P12_PLANETENMENGE_RE.search(satz) else "engste-aspekte"
+
+
+# --- Absolutformeln (a3) ------------------------------------------------------------
+_P18_ABSOLUT_RE = re.compile(
+    _P18_GRENZ + r"(?:wie\s+es\s+(?:[\wäöüß]+\s+){0,6}?überhaupt\s+(?:vorkommt|vorkommen\s+kann|möglich\s+ist|"
+    r"geht|gibt|sein\s+kann)"
+    r"|so\s+eng\s*,?\s+wie\s+(?:es\s+)?(?:nur\s+)?(?:irgend\s+)?(?:möglich|denkbar)"
+    r"|enger\s+(?:geht|ginge)\s+es\s+(?:gar\s+|überhaupt\s+)?nicht"
+    r"|(?:enger|genauer)\s+(?:kann|könnte)\s+(?:eine\s+Verbindung|ein\s+Aspekt|ein\s+Winkel|es|sie|er)\s+"
+    r"(?:gar\s+|überhaupt\s+)?nicht\s+(?:sein|werden|stehen|ausfallen)"
+    r"|wie\s+es\s+(?:enger|genauer)\s+nicht\s+(?:geht|sein\s+kann))" + _P18_ENDE, re.I)
+_P18_SO_ENG_RE = re.compile(_P18_GRENZ + r"(?:so|ebenso)\s+(?:eng|genau|exakt|dicht|nah)" + _P18_ENDE, re.I)
+_P18_KAUM_ENGER_RE = re.compile(
+    _P18_GRENZ + r"(?:kaum\s+enger\s+(?:sein\s+)?(?:kann|könnte|ginge|geht|wäre)"
+    r"|enger\s+(?:geht|ginge)\s+es\s+kaum"
+    r"|(?:enger|genauer)\s+(?:kann|könnte)\s+(?:eine\s+Verbindung|ein\s+Aspekt|es|sie|er)\s+kaum\s+"
+    r"(?:sein|stehen|ausfallen))" + _P18_ENDE, re.I)
+
+
+def _p18_absolut(p, d, satz, vorher, ort):
+    n = 0
+    schl = _p18_rang_schl(satz)
+    for m in _P18_ABSOLUT_RE.finditer(satz):
+        w = m.group(0).casefold()
+        if w.startswith("wie") and "überhaupt" in w and \
+                not _P18_SO_ENG_RE.search(satz[max(0, m.start() - 120):m.start()]):
+            continue
+        # „so eng wie möglich“ nur, wenn davor eine Aspektart steht — sonst eine Anleitung
+        if w.startswith("so") and not _p18_aspektarten(satz[max(0, m.start() - 90):m.start()]):
+            continue
+        p.geprueft += 1
+        zs = _p18_formel_zeilen(d, satz, vorher, m.start())
+        wert = ("%s, %s" % (_p18_zeile_txt(zs[0]), _p18_rangtext(d, zs[0], schl)) if zs else
+                "kein Paar im Satz lesbar; Rangzeile %s, Rang 1: %s" % (schl, "; ".join(
+                    _rang_txt(e) for e in d["rangzeilen"].get(schl, {}).get("eintraege", [])
+                    if "rang" in e and e["rang"] == 1) or "—"))
+        p.pruefen.append("%s: „%s“ — Absolutformel: „%s“ sagt mehr, als ein Orb tragen kann — %s; "
+                         "Orb oder Rang nennen" % (ort, _kurz(satz, 140), m.group(0), wert))
+        n += 1
+    for m in _P18_KAUM_ENGER_RE.finditer(satz):
+        zs = _p18_formel_zeilen(d, satz, vorher, m.start())
+        if not zs:
+            continue
+        p.geprueft += 1
+        # die guenstigste Lesart: traegt EIN Paar des Satzes die Formel, bleibt es still
+        if any(z["orb"] <= P18_NAEHE_ORB and _p18_rang_nr(d, z, schl) == 1 for z in zs):
+            continue
+        z = zs[0]
+        p.pruefen.append("%s: „%s“ — Absolutformel: „%s“ — %s, %s (trägt die Formel nur bis 1° und auf "
+                         "Rang 1)" % (ort, _kurz(satz, 140), m.group(0), _p18_zeile_txt(z),
+                                      _p18_rangtext(d, z, schl)))
+        n += 1
+    return n
+
+
+# --- Rang mit dem ganzen Untergrund (a4) und strenge Rangwoerter ----------------------
+_P18_ALLE_GEZAEHLT_RE = re.compile(
+    _P18_GRENZ + r"(?:(?:dein(?:es|em)?|des|im)\s+ganzen\s+(?:Bild(?:es|s)?|Horoskops?|Geburtsbild(?:es|s)?)"
+    r"|alle[n]?\s+(?:Faktoren|Punkte|Verbindungen|Aspekte)\s+(?:gezählt|mitgezählt|mitgerechnet)"
+    r"|unter\s+allen\s+(?:gerechneten|berechneten)|alle\s+(?:gerechneten|berechneten))" + _P18_ENDE, re.I)
+_P18_STRIKT_RE = re.compile(
+    _P18_GRENZ + r"(?:enger\s+als\s+(?:jede|jeder|jedes|alle)\s+(?:andere[nrs]?\s+)?"
+    r"(?:Verbindung|Aspekt|Kontakt|Paar|Winkel)\w*"
+    r"|so\s+(?:eng|genau|dicht)\s*,?\s+wie\s+(?:es\s+)?(?:[\wäöüß]+\s+){0,8}?(?:sonst\s+nirgends|nirgends\s+sonst"
+    r"|sonst\s+nirgendwo)"
+    r"|(?:sonst\s+nirgends|nirgends\s+sonst)\s+(?:[\wäöüß]+\s+){0,4}?so\s+(?:eng|genau|dicht)"
+    r"|keine\s+(?:andere\s+|weitere\s+)?(?:(?:Verbindung|davon)\s+)?(?:[\wäöüß]+\s+){0,3}?(?:ist\s+)?so\s+eng\s+wie"
+    r"|kein\s+(?:anderer\s+|weiterer\s+)?(?:Aspekt|Kontakt|Winkel)\s+(?:[\wäöüß]+\s+){0,3}?(?:ist\s+)?"
+    r"so\s+eng\s+wie)" + _P18_ENDE, re.I)
+_P18_RANG_KONTEXT_RE = re.compile(_P18_GRENZ + r"(?:Verbindung|Aspekt|Kontakt|Winkel)\w*" + _P18_ENDE)
+_P18_HART = ("Quadrat", "Opposition", "Halbquadrat", "Anderthalbquadrat")
+
+
+def _p18_rang_filter(nachtext):
+    """Einschraenkungen aus den Woertern hinter einem Rangwort bis zum Gliedende (wie P12):
+    Aspektart, harmonisch, Spannung, Achse/Winkel, voll -> [Pruefung(art, a, b, stufe)]."""
+    glied = re.split(r"[,;:.!?]|\s[—–]\s", nachtext or "", maxsplit=1)[0]
+    worte = re.findall(r"[\wäöüÄÖÜß-]+", glied)[:8]
+    arten = {_art(w) for w in worte if w in _ASP_WORT}
+    out = []
+    if arten:
+        out.append(lambda art, a, b, st: art in arten)
+    if any(w.lower().startswith("harmonisch") for w in worte):
+        out.append(lambda art, a, b, st: art in ("Trigon", "Sextil"))
+    if any(re.match(r"(?:Winkel-)?(?:Spannung|Reibung)|spannungsvoll", w, re.I) for w in worte):
+        out.append(lambda art, a, b, st: art in _P18_HART)
+    if any(re.fullmatch(r"(?:Achse|Achsen|Winkel|Winkeln)", w, re.I) for w in worte):
+        out.append(lambda art, a, b, st: a in ACHSEN or b in ACHSEN)
+    if any(w.lower() in ("voll", "volle", "vollen", "voller", "volles", "vollem") for w in worte):
+        out.append(lambda art, a, b, st: st == "voll")
+    return out
+
+
+def _p18_rang_basis(d, satz, vorher, filt=()):
+    """(Rangzeilen-Schluessel, Liste, Untergrund-Zeilen nach a4, Eintrag des Paars oder None,
+    Paare). Untergrund: mit „deines ganzen Bildes“ u. a. JEDER gerechnete (auch ungedeutet),
+    sonst keiner; nennt der Satz den Untergrund, keiner. filt: _p18_rang_filter()."""
+    planeten = bool(_P12_PLANETENMENGE_RE.search(satz))
+    schl = _p18_rang_schl(satz)
+    ls = _rang_einmal([e for e in d["rangzeilen"].get(schl, {}).get("eintraege", []) if "rang" in e
+                       and all(f(e["aspekt"], kanon(e["a"]), kanon(e["b"]), e.get("staerke")) for f in filt)])
+    ganz = bool(_P18_ALLE_GEZAEHLT_RE.search(satz)) and not re.search(r"Untergrund", satz, re.I)
+    ug = [z for z in d["tabelle"] if ganz and z["stufe"] == "untergrund" and
+          (not planeten or (z["a"] in _P18_PLANETEN and z["b"] in _P18_PLANETEN))
+          and all(f(z["art"], z["a"], z["b"], "untergrund") for f in filt)]
+    fak = [f for _a, _e, f in _faktoren_im_satz(satz)]
+    paare = _paare_von(fak) or _paare_von(fak + [f for _a, _e, f in _faktoren_im_satz(vorher or "")])
+    treffer = [e for e in ls if _rang_paar(e) in paare]
+    e = min(treffer, key=lambda x: x["orb_min"]) if treffer else None
+    return schl, ls, ug, e, paare
+
+
+def _p18_teilmenge(satz, m):
+    """Rang innerhalb einer Gruppe („innerhalb dieser Ballung“, „unter ihren Gliedern“) — P12."""
+    k0 = satz.rfind(";", 0, m.start()) + 1
+    k1 = satz.find(";", m.end())
+    return bool(_P12_TEILMENGE_RE.search(satz[k0:] if k1 < 0 else satz[k0:k1]))
+
+
+def _p18_rang_ganz(p, d, satz, vorher, ort):
+    """a4: „die (zweit)engste … deines ganzen Bildes“ — der Rang mit JEDEM gerechneten
+    Untergrund-Aspekt. Nur, wenn die Rangzeile die Aussage traegt (sonst meldet P12)."""
+    if not d["rangzeilen"] or not _P18_ALLE_GEZAEHLT_RE.search(satz) or re.search(r"Untergrund", satz, re.I):
+        return 0
+    n = 0
+    for m in _RANG_MUSTER[0][1].finditer(satz):
+        if _p18_teilmenge(satz, m):
+            continue
+        g = m.groupdict()
+        nw = g.get("n") or g.get("n2")
+        grenze = (2 if nw.lower() == "beiden" else _zahl_wert(nw)) if nw else None
+        eine = bool(g.get("eine")) or bool(g.get("n2"))
+        k = {"zweit": 2, "dritt": 3, "viert": 4}.get((g.get("ord") or "").lower(), 1)
+        schl, ls, ug, e, _paare = _p18_rang_basis(d, satz, vorher, _p18_rang_filter(satz[m.end():]))
+        if not e:
+            continue                                     # P12 meldet
+        r = 1 + sum(1 for x in ls if x["orb_min"] < e["orb_min"])
+        gleich_basis = [x for x in ls if x["orb_min"] == e["orb_min"] and x is not e]
+        if (eine and grenze is not None and r > grenze) or (not eine and (r != k or gleich_basis)):
+            continue                                     # P12 meldet
+        p.geprueft += 1
+        enger = [z for z in ug if z["orb"] < e["orb_min"]]
+        gleich = [z for z in ug if z["orb"] == e["orb_min"]]
+        r_ganz = r + len(enger)
+        if (eine and (grenze is None or r_ganz <= grenze)) or (not eine and r_ganz == k and not gleich):
+            continue
+        p.pruefen.append("%s: „%s“ — Rang: „%s“ zählt jeden gerechneten Untergrund-Aspekt mit — %s; "
+                         "damit steht %s %s %s %s auf Rang %d%s (die Rangzeile %s zählt den Untergrund "
+                         "nicht)" % (ort, _kurz(satz, 140), _P18_ALLE_GEZAEHLT_RE.search(satz).group(0),
+                                     "; ".join(_p18_zeile_txt(z) for z in enger + gleich), e["a"], e["aspekt"],
+                                     e["b"], e["orb"], e["rang"] + len(enger),
+                                     " (gleichauf)" if gleich and not enger else "", schl))
+        n += 1
+    return n
+
+
+def _p18_rang_strikt(p, d, satz, vorher, ort):
+    """„enger als jede andere Verbindung“, „so eng, wie es … sonst nirgends vorkommt“,
+    „keine so eng wie diese“ — Rang 1 ohne Gleichstand; den Untergrund nach a4; die
+    Einschraenkungen hinter dem Wort („… zu einer deiner Achsen“) und ein Rang innerhalb
+    einer Gruppe wie bei P12."""
+    if not d["rangzeilen"]:
+        return 0
+    n = 0
+    for m in _P18_STRIKT_RE.finditer(satz):
+        if m.group(0).casefold().startswith("kein") and not _P18_RANG_KONTEXT_RE.search(satz):
+            continue
+        if _p18_teilmenge(satz, m):
+            continue
+        schl, ls, ug, e, paare = _p18_rang_basis(d, satz, vorher, _p18_rang_filter(satz[m.end():]))
+        if not ls or not paare:
+            continue
+        if not e:
+            # das Paar steht in der Aspekttabelle, aber unter keinem der genannten Raenge
+            roh = [x for x in d["rangzeilen"].get(schl, {}).get("eintraege", []) if "rang" in x]
+            zs = [z for z in d["tabelle"] if not z["spiegel"] and z["stufe"] != "untergrund"
+                  and frozenset((_achs_norm(z["a"]), _achs_norm(z["b"]))) in paare]
+            if not zs or not roh:
+                continue
+            p.geprueft += 1
+            p.pruefen.append("%s: „%s“ — Rang: „%s“ — %s steht nicht unter den ersten %d Rängen der "
+                             "Rangzeile %s (Rang 1: %s)"
+                             % (ort, _kurz(satz, 140), m.group(0), _p18_zeile_txt(min(zs, key=lambda z: z["orb"])),
+                                max(x["rang"] for x in roh), schl,
+                                "; ".join(_rang_txt(x) for x in roh if x["rang"] == 1) or "—"))
+            n += 1
+            continue
+        p.geprueft += 1
+        vor = [x for x in ls if x["orb_min"] < e["orb_min"]]
+        gl = [x for x in ls if x["orb_min"] == e["orb_min"] and x is not e]
+        ug_vor = [z for z in ug if z["orb"] <= e["orb_min"]]
+        if not vor and not gl and not ug_vor:
+            continue
+        teile = []
+        if vor or gl:
+            teile.append("Rangzeile %s: %s" % (schl, "; ".join(_rang_txt(x) for x in (vor + gl)[:3])))
+        if ug_vor:
+            teile.append("mit dem Untergrund („%s“): %s" % (_P18_ALLE_GEZAEHLT_RE.search(satz).group(0),
+                                                            "; ".join(_p18_zeile_txt(z) for z in ug_vor)))
+        p.pruefen.append("%s: „%s“ — Rang: „%s“ verlangt Rang 1 ohne Gleichstand — %s %s %s %s; %s"
+                         % (ort, _kurz(satz, 140), m.group(0), e["a"], e["aspekt"], e["b"], e["orb"],
+                            " · ".join(teile)))
+        n += 1
+    return n
+
+
+# --- Subjekt einer Lagewendung ----------------------------------------------------------
+_P18_KOORD_RE = re.compile(r"\s*(?:,|und|sowie)\s*(?:(?:dein\w*|der|die|das|den|dem)\s+)?", re.I)
+_P18_EINSCHUB_RE = re.compile(r",\s*(?:wie|weil|da|wenn|als|obwohl|während|was|der|die|das|dem|den|deren|dessen)"
+                              r"(?![\wäöüß])[^,]*,", re.I)
+_P18_PRONOMEN_ANF_RE = re.compile(r"^\W*(?:und\s+)?(?:er|sie|es)(?![\wäöüß])", re.I)
+_P18_LAGEVERB_RE = re.compile(_P18_GRENZ + r"(?:steht|stehen|stand|standen|sitzt|sitzen|saß|saßen|liegt|liegen|"
+                              r"lag|lagen|befindet|befinden|thront|thronen|ruht|ruhen)" + _P18_ENDE, re.I)
+
+
+def _p18_ohne_einschub(text):
+    """Einschuebe „, wie …,“ / „, der …,“ durch Leerzeichen ersetzt (Positionen bleiben)."""
+    return _P18_EINSCHUB_RE.sub(lambda mm: " " * len(mm.group(0)), text or "")
+
+
+def _p18_subjekte(satz, a, pos, ende, vorher, ohne=()):
+    """Die Faktoren, denen eine Wendung an `pos` gilt: die Gruppe direkt davor im Teilsatz
+    [a, pos) — durch „und“/Komma verbunden, ein Einschub („, wie …,“, „, der …,“) zaehlt
+    nicht; sonst der erste Faktor dahinter im Teilsatz [pos, ende); sonst, bei einem Pronomen
+    am Teilsatzanfang, der letzte Faktor des Satzes davor. [] heisst: nicht sicher lesbar."""
+    vor_text = _p18_ohne_einschub(satz[a:pos])
+    fs = [(x, e, f) for x, e, f in _p18_faktoren(vor_text) if f not in ohne]
+    if fs:
+        gruppe = [fs[-1]]
+        for vorig in reversed(fs[:-1]):
+            if _P18_KOORD_RE.fullmatch(vor_text[vorig[1]:gruppe[0][0]]):
+                gruppe.insert(0, vorig)
+            else:
+                break
+        return list(dict.fromkeys(f for _x, _e, f in gruppe))
+    nach = [f for _x, _e, f in _p18_faktoren(satz[pos:ende]) if f not in ohne]
+    if nach:
+        return [nach[0]]
+    if _P18_PRONOMEN_ANF_RE.match(satz[a:pos]):
+        fv = [f for _x, _e, f in _p18_faktoren(vorher or "") if f not in ohne]
+        if fv:
+            return [fv[-1]]
+    return []
+
+
+# --- Naehe bis 1° (a1) ---------------------------------------------------------------
+_P18_GENAU_WORT = r"(?:genau|exakt|punktgenau|gradgenau|auf\s+den\s+Grad(?:\s+genau)?)"
+_P18_ARTIKEL = r"(?:(?:dem|deinem|deiner|deinen|der|den|die|das|dein|deine)\s+)?"
+_P18_UNGEFAEHR_RE = re.compile(r"(?:fast|nahezu|beinahe|ziemlich|annähernd|ungefähr|nicht|nicht\s+ganz|"
+                               r"so\s+gut\s+wie)\s+$", re.I)
+_P18_NAH_KONJ_RE = re.compile(
+    _P18_GRENZ + r"(?:" + _P18_GENAU_WORT + r"\s+(?:am|an|auf)\s+"
+    r"|(?:am|an)\s+(?:selben|demselben|gleichen)\s+(?:Punkt|Grad|Fleck)\s+wie\s+"
+    r"|an\s+(?:derselben|der\s+gleichen|der\s+selben)\s+Stelle\s+wie\s+)" + _P18_ARTIKEL, re.I)
+_P18_NAH_ASPEKT_RE = re.compile(
+    _P18_GRENZ + _P18_GENAU_WORT + r"\s+(?:im|in\s+(?:einem|einer|der))\s+(?P<art>Konjunktion|Opposition|"
+    r"Quadrat|Trigon|Sextil|Quincunx|Halbsextil|Halbquadrat|Anderthalbquadrat)" + _P18_ENDE, re.I)
+_P18_NAH_GEGEN_RE = re.compile(_P18_GRENZ + _P18_GENAU_WORT + r"\s+gegenüber(?:steht|stehen|stand|standen|liegt|"
+                               r"liegen)?" + _P18_ENDE, re.I)
+_P18_NAH_PUNKT_RE = re.compile(_P18_GRENZ + r"(?:verschmilzt|verschmelzen|verschmolzen|verschmolz)\s+"
+                               r"(?:[\wäöüß]+\s+){0,4}?zu\s+einem\s+(?:einzigen\s+)?Punkt" + _P18_ENDE, re.I)
+_P18_NAH_SPITZE_RE = re.compile(
+    _P18_GRENZ + r"(?:(?:genau|exakt)\s+(?:dort|da|an\s+der\s+Stelle)\s*,?\s+wo\s+(?:sich\s+)?"
+    r"(?:(?:diese|die|zwei|beide)\s+)?(?:beiden\s+|zwei\s+)?(?:Bereiche|Häuser|Felder|Lebensbereiche|Räume)"
+    r"(?:\s+(?:von|des|der)\s+[\wäöüß]+(?:\s+und\s+(?:von\s+|des\s+|der\s+)?[\wäöüß]+)?)?\s+"
+    r"(?:sich\s+)?(?:berühren|aneinandergrenzen|aneinanderstoßen|treffen|begegnen|überlappen)"
+    r"|(?:genau|exakt)\s+auf\s+der\s+(?:Hausspitze|(?:Grenze|Schwelle|Spitze)(?=\s+(?:[\wäöüß]+\s+){0,4}?"
+    r"(?:Haus|Hauses|Häuser|Häusern)(?![\wäöüß]))))" + _P18_ENDE, re.I)
+_P18_ZIELLISTE_NAH_RE = re.compile(r"\s*(?:,|und|sowie)\s*(?:(?:zu|zum|zur|mit)\s+)?" + _P18_ARTIKEL + r"$", re.I)
+
+
+def _p18_ungefaehr(satz, pos):
+    return bool(_P18_UNGEFAEHR_RE.search(satz[max(0, pos - 25):pos]))
+
+
+def _p18_ziel_nach(satz, pos, weit=4, mit_ende=False):
+    """Faktor, der an `pos` beginnt (hoechstens `weit` Zeichen Luft); mit_ende: (Faktor, Ende)."""
+    for a, e, f in _p18_faktoren(satz):
+        if pos <= a <= pos + weit:
+            return (f, e) if mit_ende else f
+    return (None, pos) if mit_ende else None
+
+
+def _p18_nah_zielliste(satz, pos):
+    """[(Faktor, Ende)] ab `pos`: das erste Ziel und die mit „und“/Komma angereihten."""
+    ziel, ende = _p18_ziel_nach(satz, pos, mit_ende=True)
+    if not ziel:
+        return []
+    out = [(ziel, ende)]
+    for a, e, f in _p18_faktoren(satz):
+        if a < ende:
+            continue
+        if _P18_ZIELLISTE_NAH_RE.match(satz[out[-1][1]:a]):
+            out.append((f, e))
+        else:
+            break
+    return out
+
+
+def _p18_zeilen_paar(d, art, x, y):
+    return [z for z in d["tabelle"] if z["art"] == art and {z["a"], z["b"]} == {x, y}]
+
+
+def _p18_nah_zeilen(d, art, ziel, satz, vorher):
+    """Zeilen der Art `art` zwischen dem Ziel und einem anderen Faktor des Satzes (sonst
+    des Satzes davor); ohne Ziel: zwischen zwei Faktoren des Satzes (sonst einer davor)."""
+    im = [f for _a, _e, f in _p18_faktoren(satz)]
+    davor = [f for _a, _e, f in _p18_faktoren(vorher or "")]
+    zeilen = [z for z in d["tabelle"] if z["art"] == art]
+    if ziel:
+        for menge in (im, davor):
+            ks = [z for z in zeilen if (z["a"] == ziel and z["b"] in menge and z["b"] != ziel)
+                  or (z["b"] == ziel and z["a"] in menge and z["a"] != ziel)]
+            if ks:
+                return ks
+        return []
+    ks = [z for z in zeilen if z["a"] in im and z["b"] in im]
+    if not ks:
+        ks = [z for z in zeilen if (z["a"] in im and z["b"] in davor) or (z["b"] in im and z["a"] in davor)]
+    return ks
+
+
+def _p18_nah_melde(p, ort, satz, wort, ks):
+    """Lesart „irgendein Paar“: still, wenn EINE Zeile die Wendung traegt."""
+    p.geprueft += 1
+    if not ks or any(z["orb"] <= P18_NAEHE_ORB for z in ks):
+        return 0
+    p.pruefen.append("%s: „%s“ — Nähe: „%s“ trägt höchstens 1° — %s"
+                     % (ort, _kurz(satz, 140), wort.strip(), "; ".join(_p18_zeile_txt(z) for z in ks)))
+    return 1
+
+
+def _p18_nah_je_subjekt(p, d, ort, satz, wort, art, subjekte, ziele, abstand=False):
+    """Lesart „jedes genannte Paar“: Subjekte und Ziele sind sicher gelesen, also traegt JEDES
+    Paar die Wendung. Ohne Zeile der Art: mit abstand=True (Konjunktion) der Laengenabstand,
+    sonst still (P13 haelt erfundene Aspekte)."""
+    p.geprueft += 1
+    weit = []
+    for s in subjekte:
+        for t in ziele:
+            if s == t:
+                continue
+            ks = _p18_zeilen_paar(d, art, s, t)
+            if ks:
+                if all(z["orb"] > P18_NAEHE_ORB for z in ks):
+                    weit.append("; ".join(_p18_zeile_txt(z) for z in ks))
+            elif abstand and s in d["lon"] and t in d["lon"] and \
+                    _p18_bogen(d["lon"][s], d["lon"][t]) * 60 > P18_NAEHE_ORB:
+                weit.append("keine Konjunktion %s–%s (Abstand %s)" % (
+                    ANZEIGE.get(s, s), ANZEIGE.get(t, t), _p18_grad_txt(_p18_bogen(d["lon"][s], d["lon"][t]))))
+    if not weit:
+        return 0
+    p.pruefen.append("%s: „%s“ — Nähe: „%s“ trägt höchstens 1° — %s"
+                     % (ort, _kurz(satz, 140), wort.strip(), "; ".join(weit)))
+    return 1
+
+
+def _p18_naehe_orb(p, d, satz, vorher, ort):
+    n = 0
+    for m in _P18_NAH_KONJ_RE.finditer(satz):
+        if _p18_ungefaehr(satz, m.start()):
+            continue
+        ziel, z_ende = _p18_ziel_nach(satz, m.end(), mit_ende=True)
+        if not ziel:
+            continue
+        a, b = _p18_teilsatz(satz, m.start())
+        # eine Lage, kein Hinsehen: „steht/sitzt/liegt“ im Satz davor oder im Teilsatz, oder
+        # die Wendung als Einschub direkt hinter dem Faktor („Neptun — genau an deinem Saturn —“)
+        if not (_P18_LAGEVERB_RE.search(satz[:m.start()]) or _P18_LAGEVERB_RE.search(satz[m.start():b])
+                or any(re.fullmatch(r"\s*[—–,]\s*", satz[e_:m.start()]) for _a, e_, _f in _p18_faktoren(satz[:m.start()]))):
+            continue
+        wort = satz[m.start():z_ende]
+        subj = _p18_subjekte(satz, a, m.start(), b, vorher, ohne={ziel})
+        if subj:
+            n += _p18_nah_je_subjekt(p, d, ort, satz, wort, "Konjunktion", subj, [ziel], abstand=True)
+        else:
+            ks = _p18_nah_zeilen(d, "Konjunktion", ziel, satz, vorher)
+            if ks:
+                n += _p18_nah_melde(p, ort, satz, wort, ks)
+    for m in _P18_NAH_ASPEKT_RE.finditer(satz):
+        if _p18_ungefaehr(satz, m.start()):
+            continue
+        art = m.group("art").capitalize()
+        a, b = _p18_teilsatz(satz, m.start())
+        mz = re.match(r"\s+(?:zu|mit)\s+" + _P18_ARTIKEL, satz[m.end():], re.I)
+        ziele = [f for f, _e in _p18_nah_zielliste(satz, m.end() + mz.end())] if mz else []
+        subj = _p18_subjekte(satz, a, m.start(), b, vorher, ohne=set(ziele)) if ziele else []
+        if ziele and subj:
+            n += _p18_nah_je_subjekt(p, d, ort, satz, m.group(0), art, subj, ziele)
+        else:
+            ks = _p18_nah_zeilen(d, art, ziele[0] if ziele else None, satz, vorher)
+            if ks:
+                n += _p18_nah_melde(p, ort, satz, m.group(0), ks)
+    for m in _P18_NAH_GEGEN_RE.finditer(satz):
+        if _p18_ungefaehr(satz, m.start()):
+            continue
+        a, _b = _p18_teilsatz(satz, m.start())
+        vor = list(dict.fromkeys(f for _x, _e, f in _p18_faktoren(satz[a:m.start()])))
+        if len(vor) >= 2:
+            ks = [z for z in d["tabelle"] if z["art"] == "Opposition" and z["a"] in vor and z["b"] in vor]
+            if ks:
+                p.geprueft += 1
+                weit = [z for z in ks if z["orb"] > P18_NAEHE_ORB]
+                if weit:
+                    p.pruefen.append("%s: „%s“ — Nähe: „%s“ trägt höchstens 1° — %s"
+                                     % (ort, _kurz(satz, 140), m.group(0), "; ".join(_p18_zeile_txt(z) for z in weit)))
+                    n += 1
+                continue
+        ks = _p18_nah_zeilen(d, "Opposition", None, satz, vorher)
+        if ks:
+            n += _p18_nah_melde(p, ort, satz, m.group(0), ks)
+    for m in _P18_NAH_PUNKT_RE.finditer(satz):
+        a, b = _p18_teilsatz(satz, m.start())
+        im_teil = list(dict.fromkeys(f for _x, _e, f in _p18_faktoren(satz[a:b])))
+        if len(im_teil) >= 2:
+            ks = [z for z in d["tabelle"] if z["art"] == "Konjunktion" and z["a"] in im_teil and z["b"] in im_teil]
+            if ks:
+                p.geprueft += 1
+                weit = [z for z in ks if z["orb"] > P18_NAEHE_ORB]
+                if weit:
+                    p.pruefen.append("%s: „%s“ — Nähe: „%s“ trägt höchstens 1° — %s"
+                                     % (ort, _kurz(satz, 140), m.group(0), "; ".join(_p18_zeile_txt(z) for z in weit)))
+                    n += 1
+                continue
+        ks = _p18_nah_zeilen(d, "Konjunktion", None, satz, vorher)
+        if ks:
+            n += _p18_nah_melde(p, ort, satz, m.group(0), ks)
+    if d.get("spitzen"):
+        for m in _P18_NAH_SPITZE_RE.finditer(satz):
+            a, b = _p18_teilsatz(satz, m.start())
+            subj = [f for f in _p18_subjekte(satz, a, m.start(), b, vorher) if f in d["lon"]]
+            if not subj:
+                continue
+            p.geprueft += 1
+            weit = []
+            for f in subj:
+                ab, h = min((_p18_bogen(d["lon"][f], s), i + 1) for i, s in enumerate(d["spitzen"]))
+                if ab * 60 > P18_NAEHE_ORB + 0.5:
+                    weit.append("%s %s, nächste Hausspitze %d (%s), Abstand %s"
+                                % (ANZEIGE.get(f, f), _p18_lage_txt(d["lon"][f]), h,
+                                   _p18_lage_txt(d["spitzen"][h - 1]), _p18_grad_txt(ab)))
+            if weit:
+                p.pruefen.append("%s: „%s“ — Nähe: „%s“ trägt höchstens 1° bis zur Hausspitze — %s"
+                                 % (ort, _kurz(satz, 140), m.group(0), "; ".join(weit)))
+                n += 1
+    return n
+
+
+# --- Beieinander und Ballung (a2) ----------------------------------------------------
+_P18_BEIEINANDER_RE = re.compile(_P18_GRENZ + r"(?:eng|dicht)\s+beieinander\w*" + _P18_ENDE, re.I)
+_P18_MITTEN_RE = re.compile(
+    _P18_GRENZ + r"mitten\s+(?:in|innerhalb)\s+(?:(?P<nomen>(?:der|einer|dieser|deiner|seiner|ihrer|dem|einem|"
+    r"diesem)\s+(?:[\wäöüß-]+\s+){0,2}?(?P<w>Ballung|Stellium|Gruppe|Häufung|Ansammlung)\w*)"
+    r"|(?P<pron>ihr|ihm|ihnen))" + _P18_ENDE, re.I)
+
+
+def _p18_konj(d, x, y):
+    return any(z["art"] == "Konjunktion" and {z["a"], z["b"]} == {x, y} for z in d["tabelle"])
+
+
+def _p18_beieinander(p, d, satz, ort):
+    n = 0
+    for m in _P18_BEIEINANDER_RE.finditer(satz):
+        a, b = _p18_teilsatz(satz, m.start())
+        fs = []
+        for teil in (_p18_ohne_einschub(satz[a:m.start()]), _p18_ohne_einschub(satz[:m.start()]),
+                     satz[m.end():b]):
+            fs = list(dict.fromkeys(f for _x, _e, f in _p18_faktoren(teil)))
+            if len(fs) >= 2:
+                break
+        if len(fs) < 2:
+            continue
+        p.geprueft += 1
+        fehlt = []
+        for i, x in enumerate(fs):
+            for y in fs[i + 1:]:
+                if not _p18_konj(d, x, y):
+                    ab = (" (Abstand %s)" % _p18_grad_txt(_p18_bogen(d["lon"][x], d["lon"][y]))
+                          if x in d["lon"] and y in d["lon"] else "")
+                    fehlt.append("%s–%s%s" % (ANZEIGE.get(x, x), ANZEIGE.get(y, y), ab))
+        if fehlt:
+            p.pruefen.append("%s: „%s“ — Beieinander: „%s“ verlangt eine Konjunktion je Paar — keine "
+                             "Konjunktion: %s" % (ort, _kurz(satz, 140), m.group(0), "; ".join(fehlt)))
+            n += 1
+    return n
+
+
+def _p18_stellium_genannt(d, st, text):
+    """Die Stellien aus `st`, die der Text nennt (Zeichen oder Hausnummer); [] ohne Nennung."""
+    zs = {_zeichen_norm(mz.group("z")) for mz in _P18_ZEICHEN_IM_RE.finditer(text or "")}
+    hs = set()
+    for _a, _e, h in _p18_haeuser_in(text or ""):
+        hs |= set(h)
+    out = []
+    for name, gl in st:
+        mh = re.fullmatch(r"Haus\s+(\d{1,2})", name)
+        if (mh and int(mh.group(1)) in hs) or (not mh and _zeichen_norm(name) in zs):
+            out.append((name, gl))
+    return out
+
+
+def _p18_ballung(p, d, satz, vorher, ort):
+    n = 0
+    for m in _P18_MITTEN_RE.finditer(satz):
+        umfeld = satz[:m.start()] + " " + (vorher or "")
+        if m.group("pron") and not re.search(r"Ballung|Stellium", umfeld):
+            continue
+        # „mitten in einer Gruppe (von Menschen)“ ist keine Ballung — nur mit Ballung/Stellium davor
+        if m.group("w") and m.group("w").casefold() not in ("ballung", "stellium") and \
+                not re.search(r"Ballung|Stellium", umfeld):
+            continue
+        a, b = _p18_teilsatz(satz, m.start())
+        for f in _p18_subjekte(satz, a, m.start(), b, vorher):
+            st = [(name, gl) for name, gl in d["stellien"] if f in gl]
+            st = _p18_stellium_genannt(d, st, satz[m.end():b]) or st
+            if not st or not all(g in d["lon"] for _n, gl in st for g in gl):
+                continue
+            p.geprueft += 1
+            reihen = [(name, _p18_reihe([(d["lon"][g], g) for g in gl])) for name, gl in st]
+            if any(r[0] != f and r[-1] != f for _n, r in reihen):
+                continue
+
+            def lage(g, r):
+                # das Zeichen nur, wenn die Gruppe ueber eine Zeichengrenze reicht
+                t = _p18_lage_txt(d["lon"][g])
+                return t if len({int(d["lon"][x] // 30) for x in r}) > 1 else t.split(" ")[0]
+            p.pruefen.append("%s: „%s“ — Ballung: „%s“ — %s ist Randglied: %s"
+                             % (ort, _kurz(satz, 140), m.group(0), ANZEIGE.get(f, f), " · ".join(
+                                 "Stellium in %s: %s" % (name, ", ".join("%s %s" % (ANZEIGE.get(g, g), lage(g, r))
+                                                                         for g in r)) for name, r in reihen)))
+            n += 1
+    return n
+
+
+# --- Leere Haelfte, leerer Bogen; Knotenachse ------------------------------------------
+_P18_LEERFLAECHE_RE = re.compile(_P18_GRENZ + r"(?:leere|freie)[nrs]?\s+(?P<w>Hälfte|Bogens?|Halbkreis(?:es)?)"
+                                 + _P18_ENDE, re.I)
+_P18_IN_DER_VOR_RE = re.compile(r"(?:\bin|\bim|\bins|\bauf|\baus|\bvon|\bzur|\bzum|\bbis)\s+(?:der|dem|den|einer|"
+                                r"einem|dieser|diesem|deiner|deinem|ihrer|seiner)?\s*(?:ganz\s+|großen\s+)?$", re.I)
+_P18_LIEGT_RE = re.compile(_P18_GRENZ + r"(?:liegt|liegen|lag|lagen|steht|stehen|fällt|fallen|befindet|befinden)"
+                           + _P18_ENDE)
+_P18_ORT = (r"(?:im|in\s+(?:der|den|dem)|ins)\s+(?:(?:%s)(?:n|en|s|es)?%s|%s\s+Haus%s"
+            r"|(?:Feld|Bereich|Haus)(?:es|s)?\s+(?:des|der|von|deines|deiner)\s+[\wäöüß]+"
+            r"|Zeichen\s+(?:des|der)\s+(?:%s)(?:n|en|s|es)?%s)"
+            % (ZEICHEN_RE, _P18_ENDE, _P18_ORD_RE, _P18_ENDE, ZEICHEN_RE, _P18_ENDE))
+_P18_ORTSANGABE_RE = re.compile(_P18_GRENZ + _P18_ORT)
+_P18_ORT_VORAN_RE = re.compile(r"(?:^|[,;:]\s*)" + _P18_ORT + r"\s+(?:liegt|liegen|lag|lagen)\s+"
+                               r"(?:die|der|deine|dein|eine|ein)\s+$", re.I)
+_P18_MITTE_LEER_RE = re.compile(r"Mitte der leeren Hälfte\s+(\d{1,2}°\d{2}′\s+%s(?:\s*[^\s,;)]{1,2})?"
+                                r"(?:,\s*Haus\s+[\d/=]+)?)" % ZEICHEN_RE)
+_P18_SCHUESSEL_RE = re.compile(r"(?:Schüssel|Spanne)\s+(\d{1,3})°(\d{2})′\s+von\s+([A-ZÄÖÜ][a-zäöüß]+)\s+\([^)]*\)"
+                               r"\s+bis\s+([A-ZÄÖÜ][a-zäöüß]+)")
+_P18_MUSTER_RE = re.compile(r"Muster nach Jones:\s*([A-ZÄÖÜ][\wäöüß]+)")
+
+
+def _p18_leere_mitte(d):
+    """Mitte der leeren Haelfte als Text: aus §8, sonst aus der Schuessel in §8 (Mitte der
+    Schuessel + 180°, auch beim Eimer — der Henkel zaehlt nicht); None ohne Schuessel."""
+    if d.get("mitte_leer"):
+        return "%s (§8)" % d["mitte_leer"]
+    sch = d.get("schuessel")
+    if sch and sch[1] in d["lon"]:
+        mitte = (d["lon"][sch[1]] + sch[0] / 2.0 + 180.0) % 360.0
+        h = _p18_haus_von(mitte, d["spitzen"]) if d.get("spitzen") else None
+        return "%s%s (aus der Schüssel in §8)" % (_p18_lage_txt(mitte), ", Haus %d" % h if h else "")
+    return None
+
+
+def _p18_leere_flaeche(p, d, satz, ort):
+    if re.search(_P18_GRENZ + r"(?:Mitte|Mittelpunkt\w*|Zentrum)" + _P18_ENDE, satz):
+        return 0
+    n = 0
+    for m in _P18_LEERFLAECHE_RE.finditer(satz):
+        mo_voran = _P18_ORT_VORAN_RE.search(satz[:m.start()])
+        if not mo_voran and _P18_IN_DER_VOR_RE.search(satz[max(0, m.start() - 30):m.start()]):
+            continue
+        rest = satz[m.end():]
+        mo = mo_voran or _P18_ORTSANGABE_RE.search(rest)
+        if not mo_voran and (not mo or not _P18_LIEGT_RE.search(rest) or _p18_faktoren(rest[:mo.start()]) or
+                             re.search(r"Rand|reicht|zwischen", rest[:mo.start()])):
+            continue
+        pl = sorted((d["lon"][f], f) for f in _P18_PLANETEN if f in d["lon"])
+        if len(pl) < 3:
+            continue
+        p.geprueft += 1
+        k = len(pl)
+        g, i = max(((pl[(j + 1) % k][0] - pl[j][0]) % 360.0, j) for j in range(k))
+        mitte = (pl[i][0] + g / 2.0) % 360.0
+        h = _p18_haus_von(mitte, d["spitzen"]) if d.get("spitzen") else None
+        bogen = ("der leere Bogen umfasst %s (von %s %s bis %s %s); in einem Zeichen oder Haus liegt nur "
+                 "seine Mitte: %s%s" % (_p18_grad_txt(g), ANZEIGE.get(pl[i][1], pl[i][1]), _p18_lage_txt(pl[i][0]),
+                                        ANZEIGE.get(pl[(i + 1) % k][1], pl[(i + 1) % k][1]),
+                                        _p18_lage_txt(pl[(i + 1) % k][0]), _p18_lage_txt(mitte),
+                                        ", Haus %d" % h if h else ""))
+        if m.group("w").casefold().startswith("hälfte"):
+            mt = _p18_leere_mitte(d)
+            wert = ("die leere Hälfte umfasst 180°; in einem Zeichen oder Haus liegt nur ihre Mitte: %s" % mt
+                    if mt else "§8 nennt keine leere Hälfte (Muster: %s); %s" % (d.get("muster") or "—", bogen))
+        else:
+            wert = bogen
+        p.pruefen.append("%s: „%s“ — Leere Fläche: „%s … %s“ — %s"
+                         % (ort, _kurz(satz, 140), m.group(0), mo.group(0).strip(" ,;:"), wert))
+        n += 1
+    return n
+
+
+_P18_ACHSE_GEGEN_RE = re.compile(_P18_GRENZ + r"(?:(?:der|die)\s+(?:Mond)?[Kk]notenachse\s+gegenüber"
+                                 r"|gegenüber\s+der\s+(?:Mond)?[Kk]notenachse)" + _P18_ENDE, re.I)
+
+
+def _p18_achse_gegenueber(p, d, satz, vorher, ort):
+    n = 0
+    for m in _P18_ACHSE_GEGEN_RE.finditer(satz):
+        a, b = _p18_teilsatz(satz, m.start())
+        # eine Lage („steht … gegenüber“), kein Verhaeltnis („verhält sich gegenüber …“)
+        if not _P18_LAGEVERB_RE.search(satz[a:b]):
+            continue
+        for f in _p18_subjekte(satz, a, m.start(), b, vorher, ohne={"MONDKNOTEN", "SUEDKNOTEN"}):
+            p.geprueft += 1
+            zs = [z for z in d["tabelle"] if {z["a"], z["b"]} == {f, "MONDKNOTEN"} and not z["spiegel"]]
+            opp = [z for z in zs if z["art"] == "Opposition"]
+            konj = [z for z in zs if z["art"] == "Konjunktion"]
+            wert = ("%s — gegenüber liegt der Nordknoten (Mondknoten); der Südknoten liegt auf derselben Seite"
+                    % _p18_zeile_txt(opp[0]) if opp else
+                    "%s — gegenüber liegt der Südknoten; der Nordknoten liegt auf derselben Seite"
+                    % _p18_zeile_txt(konj[0]) if konj else
+                    "%s steht weder in Opposition noch in Konjunktion zum Mondknoten%s"
+                    % (ANZEIGE.get(f, f), (" (%s)" % "; ".join(_p18_zeile_txt(z) for z in zs)) if zs else ""))
+            p.pruefen.append("%s: „%s“ — Knotenachse: einer Achse steht kein Faktor gegenüber, nur einem ihrer "
+                             "Enden — %s" % (ort, _kurz(satz, 140), wert))
+            n += 1
+    return n
+
+
+def _p18_naehe(p, d, satz, vorher, ort):
+    """Strang 2 (2026-10-13): Naehe-, Lage- und Rangwoerter ausserhalb der Zeit-Kapitel."""
+    return (_p18_absolut(p, d, satz, vorher, ort) + _p18_rang_ganz(p, d, satz, vorher, ort)
+            + _p18_rang_strikt(p, d, satz, vorher, ort) + _p18_naehe_orb(p, d, satz, vorher, ort)
+            + _p18_beieinander(p, d, satz, ort) + _p18_ballung(p, d, satz, vorher, ort)
+            + _p18_leere_flaeche(p, d, satz, ort) + _p18_achse_gegenueber(p, d, satz, vorher, ort))
+
 
 def _p18_daten(chapters, typ, txt, themen, tabelle, events):
     herr, eigen = _p18_hausherrscher(txt)
@@ -8108,29 +10281,57 @@ def _p18_daten(chapters, typ, txt, themen, tabelle, events):
          "tabelle": tabelle or [], "thema": thema, "kap2thema": k2t,
          "thema2kap": (lambda n: n + (ab - 1)), "rangzeilen": _rangzeilen_lesen(txt),
          "ev": {}, "frueher": {}, "jetzt": {}, "stationen": [], "zeichen": [],
-         "start": None, "ende": None, "stichtag": None}
+         "start": None, "ende": None, "stichtag": None,
+         "haeuser_durch": [], "zusatz": {}, "quartal_grenzen": [], "dicht": {}, "kap_dicht": {}}
+    # 2026-10-13 (Strang 2): Laengen, Hausspitzen, Stellien (§6) und die Mitte der leeren
+    # Haelfte (§8) fuer die Naehe- und Lagewoerter
+    m8 = _P18_MITTE_LEER_RE.search(txt or "")
+    ms = _P18_SCHUESSEL_RE.search(txt or "")
+    mm = _P18_MUSTER_RE.search(txt or "")
+    d.update({"lon": _p18_laengen(txt), "spitzen": _p18_spitzen(txt), "stellien": _p18_stellien(txt),
+              "mitte_leer": m8.group(1).strip() if m8 else None,
+              "schuessel": ((int(ms.group(1)) + int(ms.group(2)) / 60.0, kanon(ms.group(3)), kanon(ms.group(4)))
+                            if ms else None),
+              "muster": mm.group(1) if mm else None,
+              # zwei Bilder (Beziehungshoroskop): Staende je Person, die Tabelle fuehrt nur
+              # Aspekte ZWISCHEN beiden — Naehe innerhalb eines Bildes laesst sich nicht halten
+              "zwei_bilder": bool(re.search(r"\n## St[äa]nde\s*\n+### |^## Aspekte zwischen beiden",
+                                            txt or "", re.M))})
+    # 2026-10-13 (Strang 1): die dichten Kapitel je Quartal aus der @@ZEITLEISTE
+    for mq in re.finditer(r"^Q(\d+)\s*\|\s*dicht=([\d,\s]*)", txt or "", re.M):
+        ks = {int(x) for x in re.findall(r"\d+", mq.group(2))}
+        d["dicht"][int(mq.group(1))] = ks
+        for k in ks:
+            d["kap_dicht"].setdefault(k, set()).add(int(mq.group(1)))
     if events:
         d.update({"ev": _p18_ev_index(events), "frueher": _p18_frueher_index(events),
+                  "ev_spiegel": _p18_ev_index_spiegel(events),
                   "jetzt": events.get("jetzt") or {}, "stationen": events.get("stations") or [],
                   "zeichen": events.get("zeichenaufenthalt") or [],
                   "start": events.get("start"), "ende": events.get("end"),
                   "lookback": events.get("lookback_start"),
-                  "stichtag": events.get("asof") or (events.get("jetzt") or {}).get("stichtag")})
+                  "stichtag": events.get("asof") or (events.get("jetzt") or {}).get("stichtag"),
+                  "haeuser_durch": events.get("hausdurchgang") or [],
+                  "zusatz": events.get("zusatz") or {},
+                  "quartal_grenzen": events.get("quarter_bounds") or []})
     return d
 
 
 def _p18_satzarten(chapters, typ, txt, themen, tabelle, events=None, sprache_analyse="de"):
     """P18 Satzarten (2026-10-04) — s. Kommentar am Abschnittsanfang. Nur PRUEFEN,
     nur bei Widerspruch zu den Daten, jeder Hinweis mit dem Datenwert."""
-    p = _Probe("P18", "Satzarten (Leere, Herrscher, Verweise, Dokument, Rang, Anteil; "
-                      "Transit: Zeit, Zugleich, Station, Anzahl, Wiederholung)")
+    p = _Probe("P18", "Satzarten (Leere, Herrscher, Verweise, Dokument, Rang, Anteil, Nähe, Absolutformel, "
+                      "Beieinander, Ballung, leere Fläche, Knotenachse; "
+                      "Transit: Zeit, Zugleich, Station, Anzahl, Wiederholung, Grenze, Wechsel, "
+                      "Abstand, Bündel, Genau, Kapitelzeit, Dauer)")
     p.einheit = "Aussagen"
     if sprache_analyse != "de":
         return p.uebersprungen("englische Fassung — die Satzmuster sind deutsch")
     d = _p18_daten(chapters, typ, txt, themen, tabelle, events)
     transit = (typ == "transit")
     if transit and not events:
-        p.teilweise.append("Transit-Satzarten (Zeit, Zugleich, Station, Anzahl, Wiederholung) — "
+        p.teilweise.append("Transit-Satzarten (Zeit, Zugleich, Station, Anzahl, Wiederholung, Grenze, "
+                           "Wechsel, Abstand, Bündel, Genau, Kapitelzeit, Dauer) — "
                            "ohne events.json nicht gegen die Rechnung gehalten (--events)")
     satzliste = _p18_satzliste(chapters)
     absaetze = {}
@@ -8147,15 +10348,37 @@ def _p18_satzarten(chapters, typ, txt, themen, tabelle, events=None, sprache_ana
         _p18_kapitelverweis(p, d, satz, ort, eigenes, chapters)
         _p18_modulwort(p, chapters, satz, ort)
         _p18_dokument(p, d, satz, ort, vorher)
-        _p18_rang(p, d, satz, vorher, ort)
         _p18_anteil(p, d, satz, ort)
-        if transit and events:
+        # 2026-10-13 (Strang 1): die Zeit-Satzarten auch im Kapitel „Die Zeit“ einer
+        # Vertiefung (dort laeuft die Probe mit typ='geburt' und der events.json)
+        zeit_kap = transit or _ist_kicker(ch, "Die Zeit", "The Time")
+        # 2026-10-13 (Strang 2): Naehe-, Lage- und Rangwoerter der Radix — nicht dort, wo
+        # „genau“ das Exaktdatum meint
+        if not zeit_kap and not d["zwei_bilder"]:
+            _p18_naehe(p, d, satz, vorher, ort)
+        if zeit_kap and events:
             _p18_zeit(p, d, satz, ort, absaetze.get(i_b))
             _p18_zugleich(p, d, satz, ort, kapitel_kontakte)
             _p18_station(p, d, satz, ort, vorher)
             _p18_anzahl(p, d, satz, ort, kapitel_kontakte)
             _p18_wiederholung(p, d, satz, vorher, ort, kapitel_kontakte)
             _p18_nie_seit_geburt(p, d, satz, vorher, ort, kapitel_kontakte)
+            fuehrt_k = next(((t_, a_, z_) for (t_, a_, z_, f_) in kapitel_kontakte if f_ == "fuehrt"), None)
+            frueher = [x[4] for x in satzliste[max(0, i - 6):i] if x[2] == i_b]
+            _p18_grenze(p, d, satz, ort)
+            _p18_wechsel(p, d, satz, ort)
+            frueher_kap = [x[4] for x in satzliste[max(0, i - 8):i] if x[0] is ch]
+            _p18_abstand(p, d, satz, ort, vorher, fuehrt_k, frueher_kap)
+            _p18_buendel(p, d, satz, ort)
+            _p18_genau(p, d, satz, ort, kapitel_kontakte)
+            _p18_kapitelzeit(p, d, satz, ort, eigenes)
+            _p18_dauer(p, d, satz, ort)
+            _p18_dieselben(p, d, satz, ort, frueher, kapitel_kontakte)
+    # 2026-10-13 (Strang 1): Buendel auch in der Signatur der Zeit-Kapitel
+    if events:
+        for ch in chapters:
+            if (transit or _ist_kicker(ch, "Die Zeit", "The Time")) and ch.get("signatur"):
+                _p18_buendel(p, d, _ws(ch["signatur"]), "%s · Signatur" % _bezeichnung(ch), True)
     _p18_signatur(p, d, chapters)
     if p.geprueft == 0 and not p.pruefen:
         p.hinweise.append("keine Aussage der geprüften Satzarten im Text gefunden")
@@ -8897,7 +11120,7 @@ def _transit_fall():
         "start": d[0], "end": d[730], "asof": d[45], "months": 24, "lookback_start": d[0],
         "orb_wirk": 1.5, "orb_weit": 3.0, "zeitzone": "UT", "zusatz": {},
         "events": [ev("Saturn", "Quadrat", "Sonne", (60, 200, 330), 0.5712, 20, 360),
-                   ev("Saturn", "Quadrat", "Merkur", (75, 190), 0.9340, 30, 230),
+                   ev("Saturn", "Quadrat", "Merkur", (75, 190), 0.9340, 30, 190),   # Wirkorb-Ende = letzter Monat im Register (2026-10-13)
                    ev("Jupiter", "Trigon", "Mond", (150,), 2.3987, 110, 190),
                    ev("Neptun", "Sextil", "Mars", (400,), 2.8810, 300, 520),
                    ev("Knoten", "Konjunktion", "Merkur", (), 1.2034, 200, 300,
@@ -10287,7 +12510,9 @@ def _selbsttest(still=False):
                  ["In der Aspekttabelle findest du zwei Verbindungen: zwischen Sonne und Merkur "
                   "und zwischen Mond und Saturn."],
                  ["Mehr dazu sagt im Kapitel Hauptthemen der Abschnitt „Was trägt“."])
-    r12 = lauf(c12.replace("| 0°20′ | ja |", "| 0°20′ | nein |"), a12ok)["proben"]["P18"]
+    # 2026-10-13 (a4): mit dem GEDEUTETEN Untergrund (0°20′, ja) bleibt „die engste Verbindung
+    # zwischen zwei Planeten in deinem Bild“ still — ohne Zusatz gilt die Rangzeile
+    r12 = lauf(c12, a12ok)["proben"]["P18"]
     assert r12["status"] == "OK" and r12["geprueft"] >= 6, ("Lauf 12: P18 nicht still", r12["geprueft"],
                                                             r12["pruefen"])
     a12 = _a12(["Die offene Ecke des Dreiecks fällt in den Widder und ins erste Haus; dort steht nichts.",
@@ -10301,6 +12526,8 @@ def _selbsttest(still=False):
                 "zwischen Mond und Saturn und zwischen Mond und Mars."],
                ["Mehr dazu sagt im Kapitel Hauptthemen der Abschnitt „Was fehlt“."])
     a12 = ersetze(a12, "**Signatur:** Zusammenführung der Kapitel 2 und 3", "**Signatur:** Zusammenführung von Kapitel 2")
+    # 2026-10-13 (a4): erst „in deinem ganzen Bild“ zaehlt den Untergrund mit
+    a12 = ersetze(a12, "zwischen zwei Planeten in deinem Bild", "zwischen zwei Planeten in deinem ganzen Bild")
     r12f = lauf(c12, a12)
     erwarte(r12f, (("P18", "pruefen", "„dort steht nichts“ — Haus 1: Sonne, Merkur (am Punkt selbst laut §6: nichts)"),
                    ("P18", "pruefen", "„ist leer“ — Häuser 4–6: Mars (4/3), Saturn"),
@@ -10313,8 +12540,8 @@ def _selbsttest(still=False):
                    ("P18", "pruefen", "Abschnitt „Was fehlt“ — im Kapitel Hauptthemen: „Was trägt“"),
                    ("P18", "pruefen", "Anteil: „alles andere … fix“"),
                    ("P18", "pruefen", "Mond Anderthalbquadrat Mars 1°30′ steht nur im Untergrund"),
-                   ("P18", "pruefen", "(Merkur Halbquadrat Saturn 0°20′) stünde Sonne Konjunktion Merkur 1°10′ "
-                                      "auf Rang 2"),
+                   ("P18", "pruefen", "Merkur Halbquadrat Saturn 0°20′; damit steht Sonne Konjunktion Merkur "
+                                      "1°10′ auf Rang 2"),
                    ("P18", "pruefen", "die Signatur nennt Kapitel 2")), "Lauf 12 (P18)")
     assert len(r12f["proben"]["P18"]["pruefen"]) == 12, r12f["proben"]["P18"]["pruefen"]
     assert all(z.split(" — ", 1)[1:] for z in r12f["proben"]["P18"]["pruefen"]), "P18 ohne Datenwert"
@@ -10517,6 +12744,378 @@ def _selbsttest(still=False):
     berichte.append("Lauf 14b (P19, 2026-10-13): das Register „Mitlaufendes“ zählt nicht mit, "
                     "deutsch und englisch; dieselben Zeilen in einem Kapitel gemeldet")
 
+    # Lauf 15 (P18 Transit, 2026-10-13, Strang 1 des Wartungslaufs „Proben fuer Zeit,
+    # Naehe, Register und Fundstellen“): Grenze, Wechsel, Abstand, Buendel (Fliesstext
+    # und Signatur), Genau, Kapitelzeit, Dauer, Zugleich mit EINEM Laeufer und „In
+    # dieselben Wochen“ — je Satzart eine stimmige Fassung (still) und eine
+    # widerspruechliche (gemeldet, mit dem Datenwert). Saetze erfunden, Daten konstruiert.
+    w = w13
+    tev15 = json.loads(json.dumps(tev13))
+    _vorlage15 = json.dumps(tev15["events"][0])
+
+    def _ev15(t, a, z, ex, von, bis):
+        e = json.loads(_vorlage15)
+        exs = [w["d%d" % x] for x in ex]
+        e.update({"transit": t, "aspekt": a, "ziel": z, "exakt": exs, "exakt_im_fenster": exs,
+                  "exakt_gesamt": exs, "fenster_von": w["d%d" % von], "fenster_bis": w["d%d" % bis],
+                  "weit_von": w["d%d" % von], "weit_bis": w["d%d" % bis],
+                  "perioden": [[w["d%d" % von], w["d%d" % bis]]],
+                  "wirkorb_perioden": [[w["d%d" % von], w["d%d" % bis]]],
+                  "kontakte": len(exs), "mehrfach": len(exs) > 1})
+        return e
+    tev15["events"] += [_ev15("Neptun", "Quadrat", "Mond", (201,), 200, 230),
+                        _ev15("Neptun", "Trigon", "Sonne", (500,), 500, 520)]
+    tev15["hausdurchgang"] = [{"transit": "Saturn", "haus": 4, "von": w["d250"], "bis": w["d730"],
+                               "laeuft_weiter": True}]
+    tev15["zusatz"] = {"sonnenbogen": [{"punkt": "Mars", "aspekt": "Konjunktion", "ziel": "Mond",
+                                        "exakt": w["d100"]}]}
+    tev15["quarter_bounds"] = [w["d0"], w["d100"], w["d200"], w["d300"], _p18_plus(w["d730"], 1)]
+    tev15["stations"] = _st13(0.2)
+    tc15 = ersetze(tc13, "@@SELEKTOR", "@@ZEITLEISTE\nQ1 | dicht=1 | marke=\nQ2 | dicht=1,2 | marke=\n"
+                   "Q3 | dicht=1 | marke=\nQ4 | dicht=1 | marke=\n@@ENDE\n\n@@SELEKTOR")
+
+    def _a15(basis, saetze):
+        return ersetze(basis, "und macht das Denken vorsichtiger.",
+                       "und macht das Denken vorsichtiger.\n\n" + "\n\n".join(saetze))
+    ok15 = ["Saturn steht bis in den %s im Quadrat zu deiner Sonne." % w["m360"],
+            "Saturn rückt im %s in den Krebs." % w["m300"],
+            "Ab %s steht Saturn in deinem vierten Haus." % w["m250"],
+            "Im %s steht Saturn im Quadrat zu deinem Merkur, gut zwei Wochen nach dem Kontakt zu deiner "
+            "Sonne." % w["m75"],
+            "Im %s, rund sechs Wochen nach dem ersten Durchgang, erreicht dein Mars im Sonnenbogen "
+            "deinen Mond." % w["m100"],
+            "Im %s steht Saturn im Quadrat zu deiner Sonne, mit dem Merkur im Gefolge." % w["m60"],
+            "Saturn steht im %s und im %s im Quadrat zu deiner Sonne. Dazwischen steht Saturn im Quadrat zu "
+            "deinem Merkur, genau im %s und im %s." % (w["m60"], w["m330"], w["m75"], w["m190"]),
+            "Saturn steht im Quadrat zu deiner Sonne und deinem Merkur.",
+            "Saturn steht genau im %s, im %s und im %s im Quadrat zu deiner Sonne."
+            % (w["m60"], w["m200"], w["m330"]),
+            "Im %s laufen zwei Kapitel nebeneinander." % w["m150"],
+            "Im %s läuft auch Kapitel 2 mit." % w["m150"],
+            "Im %s ist der Auftakt von Kapitel 1." % w["m20"],
+            "Saturn bleibt den größten Teil der Zeit im vierten Haus deines Bildes.",
+            "Saturn steht im Quadrat zu deiner Sonne und zugleich im Quadrat zu deinem Merkur.",
+            "Saturn steht im %s im Quadrat zu deiner Sonne. In dieselben Wochen steht Neptun im Quadrat zu "
+            "deinem Mond." % w["m200"]]
+    r15 = lauf(tc15, _a15(ta13, ok15), tev15)["proben"]["P18"]
+    assert r15["status"] == "OK" and r15["geprueft"] >= 15, ("Lauf 15: P18 nicht still", r15["geprueft"],
+                                                             r15["pruefen"])
+    falsch15 = ["Saturn steht bis in den %s im Quadrat zu deiner Sonne." % w["m200"],
+                "Jupiter steht im Trigon zu deinem Mond über das Ende dieses Fensters hinaus.",
+                "Saturn rückt im %s in den Krebs." % w["m110"],
+                "Ab %s steht Saturn in deinem vierten Haus." % w["m110"],
+                "Im %s steht Saturn im Quadrat zu deinem Merkur, eine Woche nach dem Kontakt zu deiner "
+                "Sonne." % w["m75"],
+                "Im %s, gut eine Woche nach dem ersten Durchgang, erreicht dein Mars im Sonnenbogen "
+                "deinen Mond." % w["m100"],
+                "Im %s steht Saturn im Quadrat zu deiner Sonne, mit dem Merkur im Gefolge." % w["m200"],
+                "Saturn steht im %s und im %s im Quadrat zu deiner Sonne. Dazwischen steht Saturn im Quadrat "
+                "zu deinem Merkur, genau im %s und im %s." % (w["m200"], w["m330"], w["m75"], w["m190"]),
+                "Saturn und Jupiter stehen im Quadrat zu deiner Sonne und deinem Merkur.",
+                "Saturn steht genau im %s, im %s und im %s im Quadrat zu deiner Sonne."
+                % (w["m60"], w["m150"], w["m330"]),
+                "Im %s geht der Mondknoten über deinen Merkur." % w["m250"],
+                "Im %s laufen drei Kapitel nebeneinander." % w["m150"],
+                "Im %s läuft auch Kapitel 2 mit." % w["m330"],
+                "Im %s ist der Auftakt von Kapitel 1." % w["m110"],
+                "Saturn bleibt fast die ganzen zwei Jahre im vierten Haus deines Bildes.",
+                "Neptun steht im Sextil zu deinem Mars und zugleich im Quadrat zu deinem Mond.",
+                "Saturn steht im %s im Quadrat zu deinem Merkur. In dieselben Wochen steht Neptun im Quadrat "
+                "zu deinem Mond." % w["m75"]]
+    ta15f = ersetze(ta13, "**Signatur:** Saturn im Quadrat zu deiner Sonne — mitklingend",
+                    "**Signatur:** Saturn und Jupiter im Quadrat zu deiner Sonne — mitklingend")
+    r15f = lauf(tc15, _a15(ta15f, falsch15), tev15)
+    erwarte(r15f, (("P18", "pruefen", "„bis %s“ — Saturn Quadrat Sonne: Wirkorb bis %s" % (w["m200"], w["e360"])),
+                   ("P18", "pruefen", "Jupiter Trigon Mond: am Fensterende (%s) nicht im Wirkorb" % w["e730"]),
+                   ("P18", "pruefen", "Wechsel: „%s“ — Saturn in Krebs ab %s (Zeichenaufenthalt)"
+                    % (w["m110"], w["e300"])),
+                   ("P18", "pruefen", "„ab %s“ — Saturn in Haus 4 ab %s (Hausdurchgang)" % (w["m110"], w["e250"])),
+                   ("P18", "pruefen", "„eine Woche nach“ (6–8 Tage nach) — Saturn–Merkur: %s (Bezug Saturn–Sonne: "
+                                      "%s, +15 Tage)" % (w["e75"], w["e60"])),
+                   ("P18", "pruefen", "Sonnenbogen: %s (Bezug Saturn Quadrat Sonne: %s, +40 Tage)"
+                    % (w["e100"], w["e60"])),
+                   ("P18", "pruefen", "Reihenfolge: Saturn–Merkur %s vor Saturn–Sonne %s" % (w["e190"], w["e200"])),
+                   ("P18", "pruefen", "„Dazwischen“ — %s, %s außerhalb" % (w["e75"], w["e190"])),
+                   ("P18", "pruefen", "Jupiter Quadrat Sonne: kein solcher Kontakt in der Rechnung · "
+                                      "Jupiter Quadrat Merkur: kein solcher Kontakt"),
+                   ("P18", "pruefen", "Genau: „%s“ — kein Exaktdatum in" % w["m150"]),
+                   ("P18", "pruefen", "Mondknoten Konjunktion Merkur: kein Nulldurchgang in"),
+                   ("P18", "pruefen", "„drei Kapitel“ (%s) — dicht in Q2: Kapitel 1, 2 (2)" % w["m150"]),
+                   ("P18", "pruefen", "Kapitel 2 in %s — dicht nur in Q2" % w["m330"]),
+                   ("P18", "pruefen", "Kapitel 1 läuft schon: Saturn Quadrat Sonne im Wirkorb ab %s" % w["e20"]),
+                   ("P18", "pruefen", "Saturn in Haus 4: 481 von 731 Tagen des Fensters (66 %)"),
+                   ("P18", "pruefen", "Neptun Quadrat Mond und Neptun an Mars: kein gemeinsamer Tag im Wirkorb"),
+                   ("P18", "pruefen", "„In dieselben Wochen“ — Neptun Quadrat Mond: Wirkorb")), "Lauf 15 (P18)")
+    _p15 = r15f["proben"]["P18"]["pruefen"]
+    assert any("· Signatur:" in z and "Bündel: Jupiter Quadrat Sonne: kein solcher Kontakt" in z for z in _p15), \
+        ("Lauf 15: Bündel in der Signatur nicht gemeldet", _p15)
+    assert len(_p15) == len(falsch15) + 1, ("Lauf 15: Zahl der Hinweise", len(_p15), _p15)
+    berichte.append("Lauf 15 (P18 Transit, 2026-10-13, Strang 1): stimmige Sätze still, je Satzart der "
+                    "Widerspruch mit Datenwert gemeldet (Grenze „bis“ und Fensterende, Wechsel in Zeichen "
+                    "und Haus, Abstand mit Bezugskontakt und Sonnenbogen, Gefolge, Dazwischen, Bündel in "
+                    "Fließtext und Signatur, Genau und „geht über“, Kapitelzeit dreifach, Dauer, Zugleich "
+                    "mit einem Läufer, „In dieselben Wochen“)")
+    # 15b) Gegenpruefung 2026-10-13: Lesarten, die vorher falsch meldeten, bleiben still
+    #      — „Bis …“ am Satzanfang, Teilstrecke, Wechsel vor dem Fenster und mit fremdem
+    #      Subjekt, zwei Ziele mit je eigener Zeit, „danach“ im selben Satz, Dazwischen
+    #      ohne Zeit, „folgt“ ohne „genau“, Kapitel als Verweis, Dauer über zwei Häuser,
+    #      Buendel an der Spiegelachse —, und die neuen Widersprueche werden gemeldet.
+    tev15b = json.loads(json.dumps(tev15))
+    tev15b["hausdurchgang"].append({"transit": "Saturn", "haus": 3, "von": w["d0"], "bis": w["d250"],
+                                    "angeschnitten": True})
+    tev15b["zeichenaufenthalt"].append({"transit": "Jupiter", "zeichen": "Stier", "von": w["d0"],
+                                        "bis": w["d730"], "angeschnitten": True})
+    _um = _ev15("Uranus", "Quadrat", "MC", (250,), 230, 300)
+    _ui = _ev15("Uranus", "Quadrat", "IC", (250,), 230, 300)
+    _ui["spiegel"] = True
+    tev15b["events"] += [_um, _ui]
+    ok15b = ["Bis in den %s steht Saturn im Quadrat zu deiner Sonne." % w["m360"],
+             "Die zweite Welle des Quadrats von Saturn zu deiner Sonne reicht bis in den %s." % w["m360"],
+             "Jupiter trat im %s in den Stier." % w["mM2500"],
+             "Während Saturn noch im Quadrat zu deiner Sonne steht, wechselt der progressive Mond im %s "
+             "in den Krebs." % w["m110"],
+             "Saturn wechselt im %s in dein viertes Haus und im %s in den Krebs." % (w["m250"], w["m300"]),
+             "Im %s steht Saturn im Quadrat zu deiner Sonne und gut zwei Wochen danach im Quadrat zu deinem "
+             "Merkur." % w["m60"],
+             "Saturn steht im %s und im %s im Quadrat zu deiner Sonne. Dazwischen steht Saturn im Quadrat zu "
+             "deinem Merkur." % (w["m60"], w["m330"]),
+             "Im %s folgt Jupiter im Trigon zu deinem Mond." % w["m110"],
+             "Im %s kehrt die Frage aus Kapitel 2 zurück." % w["m330"],
+             "Die nächsten zwei Kapitel erzählen, was im %s dazukommt." % w["m150"],
+             "Saturn steht die ganzen zwei Jahre im dritten und dann im vierten Haus.",
+             "Uranus steht im Quadrat zu deinem MC und deinem IC."]
+    r15b = lauf(tc15, _a15(ta13, ok15b), tev15b)["proben"]["P18"]
+    assert r15b["status"] == "OK", ("Lauf 15b: P18 nicht still", r15b["pruefen"])
+    falsch15b = ["Bis in den %s steht Saturn im Quadrat zu deiner Sonne." % w["m200"],
+                 "Die zweite Welle des Quadrats von Saturn zu deiner Sonne reicht bis in den %s." % w["m200"],
+                 "Jupiter tritt im %s in den Stier." % w["m100"],
+                 "Im %s steht Saturn im Quadrat zu deinem Merkur, mit der Sonne im Gefolge." % w["m75"],
+                 "Saturn steht im %s im Quadrat zu deiner Sonne und im %s im Quadrat zu deinem Merkur. "
+                 "Dazwischen steht Neptun im Quadrat zu deinem Mond." % (w["m60"], w["m75"]),
+                 "Saturn und Jupiter stehen deiner Sonne und deinem Merkur gegenüber."]
+    r15bf = lauf(tc15, _a15(ta13, falsch15b), tev15b)
+    erwarte(r15bf, (("P18", "pruefen", "„bis %s“ — Saturn Quadrat Sonne: Wirkorb bis %s" % (w["m200"], w["e360"])),
+                    ("P18", "pruefen", "keine Wirkorb-Strecke endet darin"),
+                    ("P18", "pruefen", "Jupiter steht schon ab Fensteranfang (%s) in Stier" % w["e0"]),
+                    ("P18", "pruefen", "Reihenfolge: Saturn–Sonne %s vor Saturn–Merkur %s" % (w["e60"], w["e75"])),
+                    ("P18", "pruefen", "„Dazwischen“ — kein Wirkorb zwischen %s–%s" % (w["e60"], w["e75"])),
+                    ("P18", "pruefen", "Saturn Opposition Sonne: kein solcher Kontakt in der Rechnung (nur Quadrat)")),
+            "Lauf 15b (P18)")
+    berichte.append("Lauf 15b (P18, Gegenprüfung 2026-10-13): „Bis …“ am Satzanfang, Teilstrecke, Wechsel vor "
+                    "dem Fenster, fremdes Subjekt, zwei Ziele mit eigener Zeit, „danach“ im selben Satz, "
+                    "Dazwischen ohne Zeit, „folgt“ ohne „genau“, Kapitel als Verweis, Dauer über zwei Häuser "
+                    "und Spiegelachse still; dieselben Formen mit Widerspruch gemeldet")
+
+    # Lauf 16 (P5 Kapitelangaben, 2026-10-13, Strang 3 des Wartungslaufs): die
+    # Registerzeilen des Geburtshoroskops beidseitig gegen Themenliste und Kapiteltext,
+    # Achsen eingeschlossen, dazu der Satz „Mit dem MC haben Kapitel … zu tun“; im
+    # Transit die Kapitelangabe eines `klingt=`-Kontakts und eine leere
+    # Angabe. Saetze erfunden, Daten konstruiert.
+    c16 = ersetze(_TEST_CHART, "  | klingt=Merkur Widder Haus 1\n", "  | klingt=Merkur Widder Haus 1, MC Steinbock\n")
+    c16 = ersetze(c16, "  | aspekte=Mond △ Saturn\n", "  | aspekte=Mond △ Saturn, Saturn △ MC\n")
+    a16 = ersetze(_TEST_ANALYSE, "sucht den ersten Schritt, weil dort die Kraft ist.",
+                  "sucht den ersten Schritt, weil dort die Kraft ist. Dein MC im Steinbock zeigt, wohin das will.")
+    a16 = ersetze(a16, "Was Saturn dazugibt, ist Form:", "Saturn stützt leise dein MC. "
+                  "Was Saturn dazugibt, ist Form:")
+    a16 = ersetze(a16, "Es hält, was einmal da ist.", "Es hält, was einmal da ist. Mit dem MC haben "
+                  "Kapitel 2 und Kapitel 3 zu tun.")
+    a16 = ersetze(a16, "3. Saturn, Jungfrau, sechstes Haus — die Ordnung im Alltag. Klingt mit in Kapitel 3.",
+                  "3. Saturn, Jungfrau, sechstes Haus — die Ordnung im Alltag. Klingt mit in Kapitel 3.\n\n"
+                  "4. MC, Steinbock — das Ziel nach außen. Klingt mit in Kapitel 2 und Kapitel 3.")
+    r16 = lauf(c16, a16)["proben"]["P5"]
+    assert not r16["pruefen"] and not r16["fehler"], ("Lauf 16: P5 nicht still", r16)
+    a16f = ersetze(a16, "Klingt mit in Kapitel 2 und Kapitel 3.", "Klingt mit in Kapitel 2.")
+    a16f = ersetze(a16f, "das schnelle Wort. Klingt mit in Kapitel 2.",
+                   "das schnelle Wort. Klingt mit in Kapitel 2 und Kapitel 3.")
+    a16f = ersetze(a16f, "die Ordnung im Alltag. Klingt mit in Kapitel 3.", "die Ordnung im Alltag.")
+    a16f = ersetze(a16f, "Mit dem MC haben Kapitel 2 und Kapitel 3 zu tun.",
+                   "Mit dem MC haben Kapitel 2 zu tun.")
+    r16f = lauf(c16, a16f)
+    erwarte(r16f, (("P5", "pruefen", "MC — die Registerzeile nennt Kapitel 3 nicht, obwohl MC dort mitklingt "
+                                     "(THEMA 2 aspekte=: Saturn △ MC"),
+                   ("P5", "pruefen", "Merkur — die Registerzeile nennt Kapitel 3, aber dort steht Merkur weder"),
+                   ("P5", "pruefen", "Saturn — die Registerzeile nennt Kapitel 3 nicht, obwohl Saturn dort "
+                                     "mitklingt (THEMA 2 klingt=: Saturn Jungfrau Haus 6"),
+                   ("P5", "pruefen", "„Mit dem MC haben Kapitel 2 zu tun“ — es fehlt Kapitel 3")),
+            "Lauf 16 (P5)")
+    assert len(r16f["proben"]["P5"]["pruefen"]) == 4, ("Lauf 16: Zahl", r16f["proben"]["P5"]["pruefen"])
+    # Transit: klingt=-Kontakt mit Satz im Kapitel, Registerzeile ohne Kapitel; leere Angabe
+    tc16 = ersetze(tc13, "  | aspekte=T-Saturn □ R-Merkur\n", "  | aspekte=T-Saturn □ R-Merkur\n"
+                   "  | klingt=T-Neptun ⚹ R-Mars\n")
+    ta16 = ersetze(ta13, "und macht das Denken vorsichtiger.", "und macht das Denken vorsichtiger. "
+                   "Später steht Neptun im Sextil zu deinem Mars und nimmt dem Druck die Kante.")
+    ta16 = ersetze(ta16, "2. Neptun im Sextil zu deinem Mars, im {m400}: die Kraft wird weicher.".format(**w13),
+                   "2. Neptun im Sextil zu deinem Mars, im {m400}: die Kraft wird weicher. "
+                   "Klingt in Kapitel 1 mit.".format(**w13))
+    r16t = lauf(tc16, ta16, dict(tev13, stations=_st13(0.2)))["proben"]["P5"]
+    assert not r16t["pruefen"] and not r16t["fehler"], ("Lauf 16: Transit-P5 nicht still", r16t)
+    ta16f = ersetze(ta16, "die Kraft wird weicher. Klingt in Kapitel 1 mit.", "die Kraft wird weicher.")
+    ta16f = ersetze(ta16f, "eine Frage der Richtung im Denken.", "eine Frage der Richtung im Denken. "
+                    "Klingt in Kapitel 2 mit.")
+    r16tf = lauf(tc16, ta16f, dict(tev13, stations=_st13(0.2)))
+    erwarte(r16tf, (("P5", "pruefen", "T-Neptun Sextil R-Mars — klingt in Kapitel 1 mit (`klingt=` von THEMA 1; "
+                                      "das Kapitel nennt ihn: „Später steht Neptun im Sextil zu deinem Mars"),
+                    ("P5", "pruefen", "T-Mondknoten Konjunktion R-Merkur — die Registerzeile nennt Kapitel 2, "
+                                      "aber dort steht kein Satz mit Mondknoten und Merkur")), "Lauf 16 (P5 Transit)")
+    assert len(r16tf["proben"]["P5"]["pruefen"]) == 2, ("Lauf 16: Transit-Zahl", r16tf["proben"]["P5"]["pruefen"])
+    berichte.append("Lauf 16 (P5 Kapitelangaben, 2026-10-13, Strang 3): stimmige Registerzeilen und "
+                    "Instrument-Satz still; fehlende Kapitelangabe (klingt= und aspekte=, auch an einer "
+                    "Achse), leere Kapitelangabe und unvollständiger „Mit dem MC haben Kapitel … zu "
+                    "tun“ gemeldet; im Transit der klingt=-Kontakt ohne Kapitel und eine leere Angabe")
+
+    # Lauf 17 (P18 Naehe, Lage und Rang, 2026-10-13, Strang 2 des Wartungslaufs): das
+    # konstruierte Datenblatt aus Lauf 12 (Untergrund ungedeutet) bekommt Venus, Chiron und
+    # den Mondknoten, zwei Aspektzeilen, gleiche Hausspitzen (je 0° eines Zeichens), zwei
+    # Stellien in §6 und die Mitte der leeren Haelfte in §8. Saetze erfunden, je Absatz einer.
+    c17 = ersetze(_c12b, "| Saturn | 22°05′ | Jungfrau ♍ | 6 | direkt |",
+                  "| Saturn | 22°05′ | Jungfrau ♍ | 6 | direkt |\n| Venus | 19°00′ | Widder ♈ | 1 | direkt |\n"
+                  "| Chiron | 29°30′ | Stier ♉ | 2 | direkt |\n| Mondknoten | 12°00′ | Waage ♎ | 7 | rückläufig |")
+    c17 = ersetze(c17, "## Aspekte (konstruiert)", "## Eigene Koch-Hausspitzen\n\n| Haus | Spitze |\n|---|---|\n"
+                  + "".join("| %d | 0°00′ %s |\n" % (i + 1, z) for i, z in enumerate(
+                      ("Widder", "Stier", "Zwillinge", "Krebs", "Löwe", "Jungfrau", "Waage", "Skorpion",
+                       "Schütze", "Steinbock", "Wassermann", "Fische")))
+                  + "\n## Aspekte (konstruiert)")
+    c17 = ersetze(c17, "| Mars | □ Quadrat | AC | 0°40′ | rot | Quadrat DC |",
+                  "| Mars | □ Quadrat | AC | 0°40′ | rot | Quadrat DC |\n| Sonne | ☍ Opposition | Mondknoten | 2°00′ | rot |  |")
+    c17 = ersetze(c17, "| Mars | ☍ Opposition | MC | 0°40′ | rot | Konjunktion IC |",
+                  "| Mars | ☍ Opposition | MC | 0°40′ | rot | Konjunktion IC |\n"
+                  "| Merkur | ☌ Konjunktion | Venus | 7°50′ | konj |  |")
+    c17 = ersetze(c17, "leere Spitze 25°00′ Widder, Haus 1; dort: nichts\n",
+                  "leere Spitze 25°00′ Widder, Haus 1; dort: nichts\n- Stellium in Widder: Merkur, Sonne, Venus\n"
+                  "- Stellium in Haus 1: Merkur, Sonne, Venus\n\n### 8 · Verteilung\n- Muster nach Jones: Schüssel — "
+                  "Spanne 162°05′ von Sonne (Widder, Haus 1) bis Saturn (Jungfrau, Haus 6); Mitte der leeren "
+                  "Hälfte 1°02′ Steinbock, Haus 10.\n")
+    _neu17 = ("— Nähe:", "— Absolutformel:", "— Rang: „", "— Beieinander:", "— Ballung:", "— Leere Fläche:",
+              "— Knotenachse:")
+
+    def _p18_17(saetze):
+        r_ = lauf(c17, _a12(saetze, [], [], [], []))["proben"]["P18"]
+        return [z for z in r_["pruefen"] if any(w in z for w in _neu17)]
+    still17 = ["Mars steht genau am IC, am tiefsten Punkt deines Bildes.",
+               "Mars steht gradgenau im Quadrat zu deinem Aszendenten.",
+               "Merkur steht fast genau an deiner Sonne.",
+               "Mars und MC stehen einander genau gegenüber.",
+               "Mars steht im Quadrat zum AC, so eng, wie man es selten sieht.",
+               "Mars steht im Quadrat zum AC, eine Verbindung, die kaum enger sein könnte.",
+               "Sonne und Merkur stehen dicht beieinander.",
+               "Merkur steht mitten in der Ballung im Widder.",
+               "Die Mitte der freien Hälfte liegt im Steinbock.",
+               "Saturn steht in der freien Hälfte, im sechsten Haus.",
+               "Dein Mars steht dem Nordknoten gegenüber.",
+               "Sonne und Merkur verschmelzen so eng, wie man es zwischen zwei Planeten sonst nirgends findet.",
+               "Die Verbindung von Sonne und Merkur ist die engste zwischen zwei Planeten in deinem ganzen Bild, "
+               "sieht man vom Untergrund ab.",
+               "Chiron steht genau dort, wo diese beiden Bereiche sich berühren.",
+               "Zwischen zwei Planeten ist keine Verbindung so eng wie die von Sonne und Merkur.",
+               "Genau dort, wo du anfängst, steht deine Sonne.",
+               "Die Sonne steht genau auf deinem Weg."]
+    _r17 = _p18_17(still17)
+    assert not _r17, ("Lauf 17: stimmige Sätze nicht still", _r17)
+    melde17 = [("Merkur steht genau an deiner Sonne.", "Nähe: „genau an deiner Sonne“ trägt höchstens 1° — "
+                                                       "Sonne Konjunktion Merkur 1°10′"),
+               ("Merkur steht am selben Punkt wie deine Sonne.", "„am selben Punkt wie deine Sonne“"),
+               ("Mond steht exakt im Trigon zu Saturn.", "„exakt im Trigon“ trägt höchstens 1° — Mond Trigon "
+                                                         "Saturn 2°05′"),
+               ("Mit Merkur verschmilzt die Sonne zu einem Punkt.", "„verschmilzt die Sonne zu einem Punkt“"),
+               ("Dein Mars steht genau dort, wo diese beiden Bereiche sich berühren.",
+                "Mars 5°00′ Krebs, nächste Hausspitze 4 (0°00′ Krebs), Abstand 5°00′"),
+               ("Mond und Saturn stehen im Trigon, so eng, wie es überhaupt vorkommen kann.",
+                "Absolutformel: „wie es überhaupt vorkommen kann“ sagt mehr, als ein Orb tragen kann — "
+                "Mond Trigon Saturn 2°05′, Rang 4 der Rangzeile engste-aspekte"),
+               ("Sonne und Merkur verschmelzen, und enger geht es nicht.", "Absolutformel: „enger geht es nicht“"),
+               ("Sonne und Merkur bilden eine Konjunktion, die kaum enger sein könnte.",
+                "„kaum enger sein könnte“ — Sonne Konjunktion Merkur 1°10′, Rang 3 der Rangzeile engste-aspekte"),
+               ("Sonne und Merkur verschmelzen — die engste Verbindung zwischen zwei Planeten in deinem ganzen Bild.",
+                "Rang: „deinem ganzen Bild“ zählt jeden gerechneten Untergrund-Aspekt mit — Merkur Halbquadrat "
+                "Saturn 0°20′; damit steht Sonne Konjunktion Merkur 1°10′ auf Rang 2"),
+               ("Sonne und Merkur verschmelzen so eng, wie sie in deinem ganzen Bild zwischen zwei Planeten sonst "
+                "nirgends stehen.", "mit dem Untergrund („deinem ganzen Bild“): Merkur Halbquadrat Saturn 0°20′"),
+               ("Mond und Saturn stehen im Trigon, enger als jede andere Verbindung in deinem Bild.",
+                "„enger als jede andere Verbindung“ verlangt Rang 1 ohne Gleichstand — Mond Trigon Saturn 2°05′"),
+               ("Mars steht im Quadrat zum AC, enger als jede andere Verbindung in deinem Bild.",
+                "Mars Quadrat AC 0°40′; Rangzeile engste-aspekte: 1. Mars Opposition MC 0°40′"),
+               ("Sonne, Merkur und Venus stehen eng beieinander.",
+                "Beieinander: „eng beieinander“ verlangt eine Konjunktion je Paar — keine Konjunktion: "
+                "Sonne–Venus (Abstand 9°00′)"),
+               ("Venus steht mitten in der Ballung im Widder.",
+                "Ballung: „mitten in der Ballung“ — Venus ist Randglied: Stellium in Widder: Sonne 10°00′, "
+                "Merkur 11°10′, Venus 19°00′"),
+               ("Die freie Hälfte deines Bildes liegt im Steinbock.",
+                "nur ihre Mitte: 1°02′ Steinbock, Haus 10 (§8)"),
+               ("Der leere Bogen deines Bildes liegt im zehnten Haus.",
+                "der leere Bogen umfasst 197°55′ (von Saturn 22°05′ Jungfrau bis Sonne 10°00′ Widder); in einem "
+                "Zeichen oder Haus liegt nur seine Mitte: 1°03′ Steinbock, Haus 10"),
+               ("Die Sonne steht der Knotenachse gegenüber.",
+                "Knotenachse: einer Achse steht kein Faktor gegenüber, nur einem ihrer Enden — Sonne Opposition "
+                "Mondknoten 2°00′ — gegenüber liegt der Nordknoten")]
+    _r17 = _p18_17([s for s, _w in melde17])
+    fehlt17 = [w for _s, w in melde17 if not any(w in z for z in _r17)]
+    assert not fehlt17 and len(_r17) == len(melde17), ("Lauf 17: Meldungen", fehlt17, len(_r17), _r17)
+    assert all(z.split(" — ", 1)[1:] for z in _r17), "Lauf 17: Hinweis ohne Datenwert"
+    # Lauf 17b (Gegenprüfung 2026-10-13): Satzanfang groß, Subjekt dahinter oder als Pronomen,
+    # mehrere Subjekte und Ziele je Paar, „genau an“ ohne Konjunktion, Einschübe, Wendungen
+    # ohne Lageaussage, Zeichen- und Untergrund-Formen, P12 bei „keine andere … so eng wie“
+    still17b = ["Schreib so genau wie möglich auf, was Sonne und Merkur in dir auslösen.",
+                "Wenn Merkur wankt, achte genau auf deine Sonne.",
+                "Der Mond steht genau auf der Spitze dieses Dreiecks.",
+                "Dein Mond fühlt sich mitten in einer Gruppe von Menschen wohl.",
+                "Bei dir liegen, wie Mond und Saturn zeigen, Nähe und Krise eng beieinander.",
+                "Saturn verhält sich gegenüber der Knotenachse wie ein Wächter.",
+                "Deine Sonne steht nicht genau am Mondknoten, aber nah bei ihm.",
+                "Anders als deine Sonne steht Chiron genau dort, wo diese beiden Bereiche sich berühren.",
+                "Innerhalb dieser Ballung ist die Verbindung von Sonne und Merkur enger als jede andere Verbindung.",
+                "Mars, der deinem MC genau gegenübersteht, hält den Rahmen."]
+    _r17 = _p18_17(still17b)
+    assert not _r17, ("Lauf 17b: stimmige Sätze nicht still", _r17)
+    melde17b = [("Genau an deinem IC steht Venus.", "keine Konjunktion Venus–IC (Abstand 71°00′)"),
+                ("Eng beieinander stehen Sonne, Merkur und Venus.", "keine Konjunktion: Sonne–Venus (Abstand 9°00′)"),
+                ("Mitten in dieser Ballung steht deine Venus.", "Venus ist Randglied: Stellium in Widder"),
+                ("Der Knotenachse gegenüber steht deine Sonne.", "Sonne Opposition Mondknoten 2°00′ — gegenüber "
+                                                                  "liegt der Nordknoten"),
+                ("Keine andere Verbindung deines Bildes ist so eng wie die von Mond und Saturn.",
+                 "verlangt Rang 1 ohne Gleichstand — Mond Trigon Saturn 2°05′"),
+                ("Unter allen gerechneten Verbindungen ist die von Sonne und Merkur zwischen zwei Planeten die "
+                 "engste.", "Merkur Halbquadrat Saturn 0°20′; damit steht Sonne Konjunktion Merkur 1°10′ auf "
+                            "Rang 2"),
+                ("Mars und Venus stehen genau am IC.", "„genau am IC“ trägt höchstens 1° — keine Konjunktion "
+                                                       "Venus–IC"),
+                ("Mond steht exakt im Trigon zu Saturn und Mars.", "„exakt im Trigon“ trägt höchstens 1° — Mond "
+                                                                  "Trigon Saturn 2°05′"),
+                ("Die Sonne steht dem Mondknoten genau gegenüber, so wie Mars dem MC.",
+                 "„genau gegenüber“ trägt höchstens 1° — Sonne Opposition Mondknoten 2°00′"),
+                ("Die Sonne, die dem Mondknoten genau gegenübersteht, sucht ihren Weg.",
+                 "„genau gegenübersteht“ trägt höchstens 1° — Sonne Opposition Mondknoten 2°00′"),
+                ("Im Steinbock liegt die freie Hälfte deines Bildes.", "nur ihre Mitte: 1°02′ Steinbock, Haus 10 (§8)"),
+                ("Die freie Hälfte deines Bildes steht im Zeichen des Steinbocks.", "„freie Hälfte … im Zeichen des "
+                                                                                    "Steinbocks“"),
+                ("Sonne und Merkur verschmelzen. Enger kann eine Verbindung gar nicht sein.",
+                 "„Enger kann eine Verbindung gar nicht sein“ sagt mehr, als ein Orb tragen kann — Sonne "
+                 "Konjunktion Merkur 1°10′"),
+                ("Mond steht exakt im Anderthalbquadrat zu Mars.", "Mond Anderthalbquadrat Mars 1°30′"),
+                ("Und die Sonne? Sie steht genau dort, wo diese beiden Bereiche sich berühren.",
+                 "Sonne 10°00′ Widder, nächste Hausspitze 1 (0°00′ Widder), Abstand 10°00′"),
+                ("Merkur — genau an deiner Sonne — hält die Form.", "„genau an deiner Sonne“ trägt höchstens 1° — "
+                                                                    "Sonne Konjunktion Merkur 1°10′"),
+                ("Sonne und Merkur verschmelzen zu einem einzigen Punkt.", "„verschmelzen zu einem einzigen Punkt“ "
+                                                                           "trägt höchstens 1° — Sonne Konjunktion "
+                                                                           "Merkur 1°10′")]
+    r17b = lauf(c17, _a12([s for s, _w in melde17b], [], [], [], []))
+    _r17 = [z for z in r17b["proben"]["P18"]["pruefen"] if any(w in z for w in _neu17)]
+    fehlt17 = [w for _s, w in melde17b if not any(w in z for z in _r17)]
+    assert not fehlt17 and len(_r17) == len(melde17b), ("Lauf 17b: Meldungen", fehlt17, len(_r17), _r17)
+    _p12 = [z for z in r17b["proben"]["P12"]["pruefen"] if "Keine andere Verbindung" in z or "einzigen Punkt" in z]
+    assert not _p12, ("Lauf 17b: P12 meldet Formen, die P18 hält", _p12)
+    berichte.append("Lauf 17 (P18 Nähe, Lage und Rang, 2026-10-13, Strang 2): stimmige Sätze still („fast "
+                    "genau“, bis 1°, Rang 1 ohne Untergrund, Untergrund genannt, Mitte der Hälfte, Glied in der "
+                    "Mitte, figürliches „genau dort“); je Form der Widerspruch mit Datenwert gemeldet (Nähe über "
+                    "1°, Hausspitze, Absolutformel, „kaum enger“, Rang mit dem ganzen Untergrund, „enger als "
+                    "jede andere“ bei Rang 4 und bei Gleichstand, eng beieinander, Randglied, leere Hälfte und "
+                    "leerer Bogen, Knotenachse); 17b nach der Gegenprüfung: Satzanfang groß, Subjekt dahinter, "
+                    "als Pronomen und im Einschub, jedes Paar mehrerer Subjekte und Ziele, „genau an“ ohne "
+                    "Konjunktion, Untergrund-Aspekt, „im Zeichen des …“ und vorangestellter Ort gemeldet; "
+                    "Anleitung, Hinsehen, Dreiecksspitze, Menschengruppe, Einschub, Verhältnis-„gegenüber“, "
+                    "Verneinung, Vergleichsglied, Teilmenge still; P12 still bei Formen, die P18 hält")
+
     if not still:
         print("\n".join(berichte))
         print("[Selbsttest bestanden: Einzelproben der Muster; Lauf 1 ohne Befund (nur der "
@@ -10526,7 +13125,9 @@ def _selbsttest(still=False):
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
               "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; Lauf 10 „um die N“; "
               "Lauf 11 Altersreihe; Lauf 12 und 13 P18 Satzarten mit erfundenen Sätzen; "
-              "Lauf 14 und 14b P19 Wiederholung; P16 und P17 als Einzelproben]")
+              "Lauf 14 und 14b P19 Wiederholung; Lauf 15 P18 Zeitangaben im Transit; "
+              "Lauf 16 P5 Kapitelangaben im Register; Lauf 17 P18 Nähe, Lage und Rang; "
+              "P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):
@@ -10575,7 +13176,7 @@ def _main(argv):
 # Geburtshoroskop 1+2 vom 23.09.: 15 Aufrufe/77.349 B): Die Modultexte sagen, WAS die
 # Proben pruefen, nicht, WORAN sie es erkennen. Das steht hier, an einer Stelle:
 # `inhaltsprobe.hilfe('LESEFORMATE')`. Wer einen Leser aendert, zieht diesen Text nach.
-LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-10-12).
+LESEFORMATE = """Woran die Proben den Text erkennen (Stand 2026-10-13).
 
 THEMENLISTE (chart_data) — P3, P6, P7, P15; build.aspekt_heimat() liest gleich.
   Beginn an der ersten Zeile `THEMA <n> |`; Ende am ersten Vorkommen von
@@ -10606,6 +13207,19 @@ REGISTER im Transit (`Mitlaufendes`) — P5.
   Soll-Menge mit events.json aus build.kontakt_heimat(); ohne sie aus dem Block
   `TRANSIT-RECHENSCHAFT:` (Ende an Überschrift, `@@`, `THEMA n |` oder
   `GESTRICHEN:`/`RECHENSCHAFT:`/`REGISTER:`).
+  Seit 2026-10-13: Ein `klingt=`-Kontakt einer THEMA-Zeile, den sein Kapitel nennt (ein
+  Satz mit Transiter und Ziel), trägt in seiner Zeile `Kapitel n`; nennt eine Zeile ein
+  Kapitel, muss dort ein Satz mit beiden stehen.
+
+RECHENSCHAFT im Geburtshoroskop — P5, seit 2026-10-13.
+  Die Zeile beginnt mit dem Faktor (ein Artikel davor zählt nicht). Kapitelangaben sind
+  alle `Kapitel n` / `Kapiteln n, m und k` der Zeile; ein Mitklingen behauptet nur der
+  Satzteil ab „klingt …“ bis Semikolon oder Punkt. Soll ist jedes Kapitel, dessen
+  THEMA-Zeile den Faktor unter `klingt=` (erster Faktor des Eintrags) oder `aspekte=`
+  (einer der beiden) führt UND dessen Signatur oder Text ihn nennt — auch eine Achse;
+  „Himmelstiefe“ und „tiefster/höchster Punkt deines Bildes“ gelten für IC und MC,
+  „Knotenachse“ für den Südknoten. Dasselbe gilt für den Satz „Mit dem <Faktor> haben
+  Kapitel … zu tun“ außerhalb der Rechenschaft. Wer ein Thema führt, ist ausgenommen.
 
 DEUTUNGSORT (Ressourcen-Block) — P15.
   Zeile `… — Deutungsort: Thema n` | `Ressource n` | `Was trägt`; im Transit auch
@@ -10756,6 +13370,49 @@ P18 SATZARTEN (analyse gegen chart_data und events.json) — nur PRÜFEN (2026-1
   Ein Satzteil über eine Rückkehr („Rückkehr", „Wiederkehr", „kehrt … zurück") ohne
   eigenes Paar aus Transiter und Ziel bleibt still — Selbst-Transite wie die
   Knotenrückkehr führt die Liste nicht (seit 2026-10-09).
+  Seit 2026-10-13 (Transit und „Die Zeit“ einer Vertiefung): „bis <Zeit>“ und „von … bis
+  …“ gelten je Paar aus Läufer und Ziel des Teilsatzes, eine Sammelform („in mehreren
+  Wellen“, „nacheinander“) für alle zusammen. Monatsdrittel 1.–10. / 11.–20. / 21.–Ende,
+  Jahresdrittel Januar–April / Mai–August / September–Dezember, „eine Woche“ 6–8 Tage,
+  „gut eine Woche“ 8–10; an Exaktdaten und an Haus- und Zeichenwechseln keine Toleranz.
+  Wechsel („rückt … in den Widder“, „ab … im fünften Haus“) gegen Zeichenaufenthalt und
+  Hausdurchgang; Abstände („einen Tag nach“, „eine Woche später“, „im Gefolge“) gegen die
+  Exaktdaten des Bezugskontakts; ein Bündel aus Läufer- und Zielliste verlangt JEDES
+  Paar, auch in der Signatur; „genau <Zeiten>“ gegen die Exaktdaten; „n Kapitel laufen
+  …“ gegen `dicht=` der @@ZEITLEISTE; „(fast) die ganzen n Jahre“ gegen die Summe der
+  Hausdurchgänge.
+  Seit 2026-10-13 (Geburtshoroskop und Vertiefung außerhalb der Zeit-Kapitel, nicht im
+  Beziehungshoroskop; Groß- und Kleinschreibung zählen nicht): Wem eine Lagewendung gilt —
+  den Faktoren direkt davor im Teilsatz, mit „und“/Komma verbunden (ein Einschub „, wie …,“
+  oder „, der …,“ zählt nicht); sonst dem ersten Faktor dahinter im Teilsatz; sonst bei
+  „er/sie/es“ am Teilsatzanfang dem letzten Faktor des Satzes davor. Dann muss JEDES dieser
+  Paare stimmen; ist niemand so lesbar, genügt ein Paar des Satzes (sonst des Satzes davor).
+  „genau am/an/auf X“ und „am selben Punkt wie X“ nur mit „steht/sitzt/liegt“ im Satz oder
+  als Einschub hinter dem Faktor („Neptun — genau an deinem Saturn —“): Konjunktion bis 1°,
+  ohne Konjunktion mit dem Abstand der Längen. „exakt/gradgenau/auf den Grad im <Aspekt> zu
+  X (und Y)“ (auch Untergrund-Aspekte), „genau gegenüber(steht)“, „zu einem (einzigen)
+  Punkt“: bis 1°. „fast/nahezu/nicht genau“ bleibt frei. „genau dort, wo diese beiden
+  Bereiche/Häuser (von … und …) sich berühren“ und „genau auf der Hausspitze“ (oder Grenze,
+  Schwelle, Spitze mit „Haus“ dahinter): bis 1° zur nächsten Hausspitze (Tabelle „## …
+  Hausspitzen“, sonst `cusps = […]`).
+  Absolutformeln („wie es überhaupt vorkommen kann“, „enger geht es nicht“, „so eng wie
+  möglich“ hinter einer Aspektart) immer mit Orb und Rang, wie ihn §10 druckt (mit „zwischen
+  zwei Planeten“ die Planetenzeile); „kaum enger“ nur, wenn kein Paar des Satzes bis 1° auf
+  Rang 1 steht. Rang: Mit „deines ganzen Bildes“, „alle Faktoren gezählt“, „unter allen
+  gerechneten“ zählt jeder Untergrund-Aspekt mit, auch ungedeutet; „Untergrund“ im Satz nimmt
+  ihn aus; ohne Zusatz gilt die Rangzeile (P12). „enger als jede andere“, „sonst nirgends“,
+  „keine (andere Verbindung …) so eng wie“: Rang 1 ohne Gleichstand, mit den Einschränkungen
+  dahinter (Aspektart, harmonisch, Spannung, Achse, voll); ein Rang innerhalb einer Gruppe
+  („innerhalb dieser Ballung“) bleibt still wie bei P12.
+  „eng/dicht beieinander“: Konjunktion je Paar der Faktoren davor (sonst dahinter).
+  „mitten in der Ballung / im Stellium“ („Gruppe“ und „in ihr“ nur mit „Ballung“ oder
+  „Stellium“ im Satz oder davor): kein Randglied nach der Länge — im Stellium aus §6, das der
+  Satz mit Zeichen oder Haus nennt, sonst in jedem, das den Faktor enthält.
+  Die leere Hälfte, der leere Bogen, der „im <Zeichen|Haus|Feld des …|Zeichen des …> liegt“
+  (auch „Im Widder liegt die leere Hälfte“), ohne „Mitte“ im Satz: gemeldet mit der Mitte —
+  §8 „Mitte der leeren Hälfte …“, sonst aus der Schüssel in §8 (ihre Mitte + 180°, auch beim
+  Eimer), beim Bogen die größte Lücke der zehn Planeten. „der Knotenachse gegenüber“ mit
+  „steht/liegt“: mit der Opposition oder Konjunktion zum Mondknoten.
 """
 
 

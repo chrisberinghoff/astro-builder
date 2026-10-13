@@ -2876,7 +2876,8 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     und seit 2026-09-27 'fuehrend_nr' / 'mitklingend_nr' — Listen von
     (Kontakt, THEMA-Nummer), gelesen wie inhaltsprobe P5 (fuehrend: erster
     Kontakt in fuehrt=; mitklingend: jeder weitere Kontakt des Themas, der
-    nirgends fuehrt). Grundlage von mitlaufendes_zeilen().
+    nirgends fuehrt) — und seit 2026-10-13 'klingt_nr' (die Kontakte aus
+    `klingt=`, keine Heimat). Grundlage von mitlaufendes_zeilen().
     """
     import json as _json
     import re as _re2
@@ -2933,6 +2934,12 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
     # Registerzeile sucht. Rein additiv: ok, ohne_heimat und doppelt bleiben,
     # wie sie waren.
     fuehrend_nr, mitklingend_nr = {}, {}
+    # 2026-10-13 (Wartungslauf „Proben fuer Zeit, Naehe, Register und Fundstellen“,
+    # Strang 3; Chris-Entscheidung 2026-10-13, Frage b: `klingt=` heisst „wird im Kapitel
+    # erwaehnt, nicht gedeutet“): die klingt=-Kontakte je THEMA. Keine Heimat — ok,
+    # ohne_heimat und doppelt bleiben, wie sie waren; nur mitlaufendes_zeilen() gibt
+    # ihnen die Kapitelangabe mit.
+    klingt_nr = {}
 
     def _kh_schluessel(feld):
         out = []
@@ -2962,6 +2969,9 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
                 for _k in _fk[1:] + _kh_schluessel(_themen_feld(blk, "aspekte")):
                     if _k in soll and _k not in fuehrend_nr:
                         mitklingend_nr.setdefault(_k, _nr)
+                for _k in _kh_schluessel(_themen_feld(blk, "klingt")):
+                    if _k in soll:
+                        klingt_nr.setdefault(_k, _nr)
             felder = [f for f in (_themen_feld(blk, "fuehrt"),
                                   _themen_feld(blk, "aspekte")) if f]
             if not felder:
@@ -3054,6 +3064,8 @@ def kontakt_heimat(chart_data_pfad: str, events_json_pfad: str,
         # 2026-09-27: s. o. — (Kontakt, THEMA-Nummer), rein additiv.
         "fuehrend_nr": sorted(fuehrend_nr.items()),
         "mitklingend_nr": sorted(mitklingend_nr.items()),
+        # 2026-10-13: (Kontakt, THEMA-Nummer) aus klingt=, rein additiv
+        "klingt_nr": sorted(klingt_nr.items()),
     }
 
 
@@ -3589,7 +3601,9 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
       * Der engste Orb ist der IM FENSTER (`min_orb_im_fenster`), nicht der der
         Passage, der im Rückblick liegen kann; die Wirkorb-Perioden stehen mit
         Datum, ein Beginn vor dem Fenster und ein Ende danach ausdrücklich.
-      * Grund jeder Zeile: „ohne eigenes Kapitel, Zeile in ‚Mitlaufendes'".
+      * Grund jeder Zeile: „ohne eigenes Kapitel, Zeile in ‚Mitlaufendes'"; mit dem
+        Schalter unten auch „klingt mit in Kapitel n …“ (aspekte=/fuehrt=) und seit
+        2026-10-13 „klingt mit in Kapitel n (klingt=) …“.
         typ: 'transit' oder None (gleichbedeutend); 'ea' und 'ultimativ'
         sind seit dem 2026-09-23 ausgemustert und brechen ab.
 
@@ -3598,9 +3612,10 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     Kapitel mitklingt, ohne es zu fuehren — Grund „klingt mit in Kapitel n".
     Der Block TRANSIT-RECHENSCHAFT ruft ohne den Schalter und bleibt, wie er ist.
 
-    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'mitklingend',
+    Rückgabe: {'zeilen', 'kontakte', 'in_themen', 'offen', 'mitklingend', 'klingt',
                'fuehrend', 'stichtag', 'typ', 'fenster'} — 'offen' zaehlt die
-    Zeilen ohne Kapitel, 'mitklingend' die mit Kapitelangabe (0 ohne Schalter).
+    Zeilen ohne Kapitel, 'mitklingend' die mit Kapitelangabe (0 ohne Schalter), 'klingt'
+    davon die aus `klingt=` (seit 2026-10-13).
     """
     import json as _json
 
@@ -3615,6 +3630,14 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     fuehr = {tuple(k) for k, _n in r.get("fuehrend_nr", [])}
     mitkl = ({tuple(k): n for k, n in r.get("mitklingend_nr", [])
               if tuple(k) not in fuehr} if mit_mitklingenden else {})
+    # 2026-10-13 (Chris-Entscheidung, Frage b): ein klingt=-Kontakt bekommt die
+    # Kapitelangabe — die Zeile nennt sie, wenn das Kapitel den Kontakt nennt (P5 prueft
+    # beide Richtungen). Vorher stand er als „ohne eigenes Kapitel“ da, und der
+    # Zweitleser trug die Angabe von Hand nach (Transit 12.10., fuenf Zeilen).
+    klingt = ({tuple(k): n for k, n in r.get("klingt_nr", [])
+               if tuple(k) not in fuehr and tuple(k) not in mitkl and tuple(k) in rest}
+              if mit_mitklingenden else {})
+    offen = len(rest - set(klingt))
     rest = rest | set(mitkl)
 
     daten = _json.load(open(events_json_pfad, encoding="utf-8"))
@@ -3646,6 +3669,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
         grund = _kontakt_zeit_text(z, start, end) + (
             " — klingt mit in Kapitel %d, Zeile in „Mitlaufendes“ mit "
             "Kapitelangabe" % mitkl[k] if k in mitkl
+            else " — klingt mit in Kapitel %d (klingt=), Zeile in „Mitlaufendes“ mit "
+            "Kapitelangabe, wenn das Kapitel den Kontakt nennt" % klingt[k] if k in klingt
             else " — ohne eigenes Kapitel, Zeile in „Mitlaufendes“")
         zeile = "- T-%s %s R-%s — %s" % (_vertragsname(k[0]),
                                             ASPEKT_ZU_GLYPH.get(k[1], k[1]),
@@ -3661,7 +3686,8 @@ def transit_rechenschaft(chart_data_pfad: str, events_json_pfad: str,
     zeilen = [z for _, z in sortier]
     return {"zeilen": zeilen, "kontakte": r["kontakte"],
             "in_themen": r["in_themen"], "offen": offen,
-            "mitklingend": len(mitkl), "fuehrend": len(fuehr & soll),
+            "mitklingend": len(mitkl) + len(klingt), "klingt": len(klingt),
+            "fuehrend": len(fuehr & soll),
             "stichtag": stichtag, "typ": typ, "fenster": (start, end)}
 
 
@@ -3723,7 +3749,9 @@ def mitlaufendes_zeilen(chart_data_pfad: str, events_json_pfad: str,
     Block TRANSIT-RECHENSCHAFT bleibt, wie er ist (die Heimat-Probe liest ihn).
     Je Zeile Transiter, Aspekt, Ziel und dieselben Zeitangaben wie im Block,
     dahinter „ohne eigenes Kapitel" oder „klingt mit in Kapitel n" — n ist die
-    THEMA-Nummer, genau die Zahl, die P5 in der Registerzeile sucht. Fuehrende
+    THEMA-Nummer, genau die Zahl, die P5 in der Registerzeile sucht. Seit
+    2026-10-13 (Chris-Entscheidung, Frage b) auch fuer die Kontakte aus `klingt=`,
+    mit dem Zusatz, dass die Angabe gilt, wenn das Kapitel den Kontakt nennt. Fuehrende
     Kontakte (erster Kontakt in fuehrt=) bekommen keine Zeile. Sortiert nach dem
     ersten Exaktdatum wie der Block. Den Wortlaut der Registerzeilen schreibt
     der Lauf (Transit-Modul, Struktur 5: knapp, nicht abschaetzig).
@@ -3732,9 +3760,12 @@ def mitlaufendes_zeilen(chart_data_pfad: str, events_json_pfad: str,
                              orb_wirk, mit_mitklingenden=True)
     kopf = ("MITLAUFENDES (Grundlage des Registers in Schritt 2, nicht in die "
             "chart_data): %d Zeilen — %d ohne eigenes Kapitel, %d klingen in "
-            "einem Kapitel mit und nennen es; die %d fuehrenden Kontakte stehen "
+            "einem Kapitel mit und nennen es%s; die %d fuehrenden Kontakte stehen "
             "nicht im Register. Fenster %s–%s, Stichtag %s."
-            % (len(r["zeilen"]), r["offen"], r["mitklingend"], r["fuehrend"],
+            % (len(r["zeilen"]), r["offen"], r["mitklingend"],
+               # 2026-10-13: die klingt=-Kontakte nennen das Kapitel nur, wenn es sie nennt
+               (" (davon %d aus klingt=: die Angabe gilt, wenn das Kapitel den Kontakt "
+                "nennt)" % r["klingt"]) if r.get("klingt") else "", r["fuehrend"],
                _datum_de(r["fenster"][0]), _datum_de(r["fenster"][1]),
                _datum_de(r["stichtag"])))
     return "\n".join([kopf, ""] + r["zeilen"])
@@ -5427,14 +5458,18 @@ def _selbsttest():
         # der Block ohne Schalter unveraendert.
         ml, _ = still(mitlaufendes_zeilen, t1, evj)
         mz = [x for x in ml.splitlines() if x.startswith("- T-")]
+        # 2026-10-13 (Chris-Entscheidung, Frage b): der klingt=-Kontakt Neptun ⚹ MC
+        # nennt sein Kapitel; der Block TRANSIT-RECHENSCHAFT fuehrt ihn weiter ohne.
         pruefe(len(mz) == 7 and ml.startswith("MITLAUFENDES (")
-               and "7 Zeilen — 5 ohne eigenes Kapitel, 2 klingen" in ml
+               and "7 Zeilen — 4 ohne eigenes Kapitel, 3 klingen" in ml
                and "die 1 fuehrenden" in ml
                and not any(x.startswith("- T-Saturn □ R-Sonne") for x in mz)
                and any(x.startswith("- T-Jupiter △ R-Mond") and "Kapitel 1," in x
                        for x in mz)
                and any(" ☌ R-Mondknoten" in x and "Kapitel 2," in x for x in mz)
-               and sum("ohne eigenes Kapitel" in x for x in mz) == 5,
+               and any(x.startswith("- T-Neptun ⚹ R-MC") and "Kapitel 1 (klingt=)" in x
+                       for x in mz)
+               and sum("ohne eigenes Kapitel" in x for x in mz) == 4,
                "T12-27: mitlaufendes_zeilen(): %s" % ml[:500])
         pruefe(block.count("\n- T-") == 5 and "klingt mit" not in block,
                "T12-27: Block TRANSIT-RECHENSCHAFT veraendert: %s" % block[:300])

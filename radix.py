@@ -5356,6 +5356,229 @@ def verteilungsmuster(factors, cusps=None):
     return out
 
 
+# --- Wuerden und Jahrgangskontakte (2026-10-13) ------------------------------
+# Wartungslauf „Proben fuer Zeit, Naehe, Register und Fundstellen“, Strang 4
+# (Startprompt `claude/STARTPROMPT_Probenlauf_2026-10-13.md`). Warum: Die Texte
+# sagten wahre Dinge ohne Fundstelle im Datenblatt — „im besten Licht“, „auf fremdem
+# Boden“ (die Uebersetzungstabelle des Klartext-Moduls bietet die Wuerden an, §3
+# kannte nur „im eigenen Zeichen“ bei den Enddispositoren), „viele Menschen deines
+# Jahrgangs“, „eine ganze Generation“. Jeder Zweitleser meldete sie, jeder
+# Design-Lauf trug sie von Hand nach, und in der Vertiefung vom 13.10. wurde ein
+# vermutlich richtiger Halbsatz gestrichen.
+#   WUERDEN   Domizil und Exil nach HERRSCHER (modern) und HERRSCHER_KLASSISCH —
+#             eine Wuerde, die nur in einer der beiden Tabellen gilt, heisst so
+#             („nur klassisch“, „nur modern“); Exil ist das Gegenzeichen eines
+#             Domizils. Erhoehung und Fall nach Ptolemaeus, nur fuer die sieben
+#             klassischen Planeten (Fall = Gegenzeichen der Erhoehung); Uranus,
+#             Neptun, Pluto ohne Erhoehung und Fall. Gewertet wird das ZEICHEN.
+#   JAHRGANG  je Aspekt der Aspekttabelle zwischen zwei langsamen Faktoren
+#             (Jupiter bis Pluto, Chiron, Pholus, Mondknoten): an wie vielen Tagen
+#             des Kalenderjahrs der Geburt er im Orbis stand (Tagesschritt 0 Uhr UT,
+#             Orben wie huber_aspects()), und die zusammenhaengende Spanne der
+#             Jahre um das Geburtsjahr, in denen er an mindestens einem Tag im
+#             Orbis stand — Fundstelle fuer „Jahrgang“ (Anteil) und „Generation“
+#             (Spanne). Braucht pyswisseph und jd_geburt.
+# Chris-Entscheidung 2026-10-13 (Fragenblock des Wartungslaufs, Fragen c und d2: „ja“):
+# die Wuerden-Tabelle wie oben (Erhoehung/Fall nur fuer die sieben klassischen
+# Planeten, Domizil/Exil nach den Herrschertabellen dieses Blatts) und der Jahrgang als
+# Kalenderjahr der Geburt, gezaehlt in Tagen.
+ERHOEHUNG = {'Sonne': 'Widder', 'Mond': 'Stier', 'Merkur': 'Jungfrau', 'Venus': 'Fische',
+             'Mars': 'Steinbock', 'Jupiter': 'Krebs', 'Saturn': 'Waage'}
+_GEGENZEICHEN = {z: SIGN_NAMES[(i + 6) % 12] for i, z in enumerate(SIGN_NAMES)}
+_ZEICHEN_GENITIV = {'Widder': 'des Widders', 'Stier': 'des Stiers', 'Zwillinge': 'der Zwillinge',
+                    'Krebs': 'des Krebses', 'Löwe': 'des Löwen', 'Jungfrau': 'der Jungfrau',
+                    'Waage': 'der Waage', 'Skorpion': 'des Skorpions', 'Schütze': 'des Schützen',
+                    'Steinbock': 'des Steinbocks', 'Wassermann': 'des Wassermanns',
+                    'Fische': 'der Fische'}
+
+
+def wuerden(factors):
+    """Die Wuerden der zehn klassischen Planeten nach Zeichen -> Liste in der
+    Reihenfolge von _PLANETEN: {'name', 'zeichen', 'wuerden': [(art, zusatz)]},
+    art in 'Domizil', 'Exil', 'Erhöhung', 'Fall'; zusatz z. B. 'nur klassisch'
+    oder 'Gegenzeichen des Stiers'. Leere Liste = weder Wuerde noch Schwaeche."""
+    lon = {f['name']: f['lon'] for f in factors}
+    out = []
+    for nm in _PLANETEN:
+        if nm not in lon:
+            continue
+        z = zeichen_name(lon[nm])
+        dom_m = {s for s, h in HERRSCHER.items() if h == nm}
+        dom_k = {s for s, h in HERRSCHER_KLASSISCH.items() if h == nm}
+        w = []
+        if z in dom_m or z in dom_k:
+            w.append(('Domizil', None if (z in dom_m and z in dom_k) else
+                      ('nur modern' if z in dom_m else 'nur klassisch')))
+        ex_m = {_GEGENZEICHEN[s]: s for s in dom_m}
+        ex_k = {_GEGENZEICHEN[s]: s for s in dom_k}
+        if z in ex_m or z in ex_k:
+            heim = ex_m.get(z) or ex_k.get(z)
+            nur = '' if (z in ex_m and z in ex_k) else ('nur modern, ' if z in ex_m else 'nur klassisch, ')
+            w.append(('Exil', f"{nur}Gegenzeichen {_ZEICHEN_GENITIV[heim]}"))
+        if ERHOEHUNG.get(nm) == z:
+            w.append(('Erhöhung', None))
+        if nm in ERHOEHUNG and _GEGENZEICHEN[ERHOEHUNG[nm]] == z:
+            w.append(('Fall', f"Gegenzeichen der Erhöhung in {ERHOEHUNG[nm]}"))
+        out.append({'name': nm, 'zeichen': z, 'wuerden': w})
+    return out
+
+
+def _wuerden_zeile(wl):
+    """§3-Zeile der Wuerden aus wuerden()."""
+    mit = []
+    for e in wl:
+        if not e['wuerden']:
+            continue
+        arten = [a for a, _z in e['wuerden']]
+        txt = ' und '.join(arten)
+        zus = [z for _a, z in e['wuerden'] if z]
+        mit.append(f"{e['name']} in {e['zeichen']} — {txt}" + (f" ({'; '.join(zus)})" if zus else ''))
+    ohne = [e['name'] for e in wl if not e['wuerden']]
+    return ("- Würden (Domizil und Exil nach den Herrschern dieses Blatts, modern — „nur klassisch“/„nur "
+            "modern“, wo nur eine Tabelle sie trägt; Erhöhung und Fall nach Ptolemäus, nur Sonne bis "
+            "Saturn; nach Zeichen): " + (' · '.join(mit) or 'keine') + '.'
+            + (f" Ohne Würde und ohne Schwäche: {', '.join(ohne)}." if ohne else ''))
+
+
+JAHRGANG_FAKTOREN = ('Jupiter', 'Saturn', 'Uranus', 'Neptun', 'Pluto', 'Chiron', 'Pholus',
+                     'Mondknoten', 'Knoten', 'Nordknoten')
+JAHRGANG_SPANNE_MAX = 120          # Jahre je Richtung, hoechstens
+_JG_KOERPER = {'Jupiter': 'JUPITER', 'Saturn': 'SATURN', 'Uranus': 'URANUS', 'Neptun': 'NEPTUNE',
+               'Pluto': 'PLUTO', 'Chiron': 'CHIRON', 'Pholus': 'PHOLUS', 'Mondknoten': 'TRUE_NODE',
+               'Knoten': 'TRUE_NODE', 'Nordknoten': 'TRUE_NODE'}
+
+
+def _jg_grenzen(a, b, angle):
+    """(voll, einseitig) oder (neben, None) in Grad — dieselbe Regel wie huber_aspects()."""
+    o1, o2 = HUBER_ORB.get(a, 3), HUBER_ORB.get(b, 3)
+    if a in KNOTEN_ERBT and b not in KNOTEN_ERBT:
+        o1 = o2
+    elif b in KNOTEN_ERBT and a not in KNOTEN_ERBT:
+        o2 = o1
+    neben = dict((x, n) for x, _c, n in _ASPECT_DEFS).get(angle)
+    if angle in _MAIN_ANGLES:
+        return min(o1, o2), max(o1, o2)
+    return min(neben, o1, o2), None
+
+
+def jahrgangskontakte(factors, aspects, jd_geburt):
+    """Je Aspekt zwischen zwei langsamen Faktoren (JAHRGANG_FAKTOREN): Tage im Orbis
+    im Kalenderjahr der Geburt und die Jahrspanne um das Geburtsjahr (s. Kommentar
+    oben). -> {'jahr', 'tage_im_jahr', 'kontakte': [{'a','b','name','angle',
+    'strength','orb','tage_voll','tage_einseitig','grenze_voll','grenze_einseitig',
+    'spanne': (von, bis), 'spanne_offen': (bool, bool)}]} oder None ohne pyswisseph."""
+    try:
+        import swisseph as swe
+    except Exception:
+        return None
+    _ephe_pfad_setzen(swe)
+    flag = swe.FLG_SWIEPH
+    jahr = swe.revjul(jd_geburt, swe.GREG_CAL)[0]
+    jd0 = swe.julday(jahr, 1, 1, 0.0, swe.GREG_CAL)
+    tage = int(round(swe.julday(jahr + 1, 1, 1, 0.0, swe.GREG_CAL) - jd0))
+    cache = {}
+
+    def lon(nm, jd):
+        k = (nm, jd)
+        if k not in cache:
+            cache[k] = swe.calc_ut(jd, getattr(swe, _JG_KOERPER[nm]), flag)[0][0]
+        return cache[k]
+
+    def dev(a, b, angle, jd):
+        d = abs(lon(a, jd) - lon(b, jd)) % 360.0
+        d = 360.0 - d if d > 180.0 else d
+        return abs(d - angle)
+
+    out = []
+    for asp in aspects or []:
+        a, b = asp['a'], asp['b']
+        if a not in _JG_KOERPER or b not in _JG_KOERPER or _JG_KOERPER[a] == _JG_KOERPER[b]:
+            continue
+        angle = asp['angle']
+        g1, g2 = _jg_grenzen(a, b, angle)
+        if g2 is not None and g2 == g1:
+            g2 = None                               # beide Orben gleich: eine Grenze
+        try:
+            devs = [dev(a, b, angle, jd0 + i) for i in range(tage)]
+        except Exception as ex:                     # dieses Paar nicht rechenbar, die anderen schon
+            out.append({'a': a, 'b': b, 'name': asp['name'], 'angle': angle,
+                        'strength': asp.get('strength'), 'orb': asp.get('orb'),
+                        'fehler': '%s: %s' % (type(ex).__name__, ex)})
+            continue
+        t1 = sum(1 for x in devs if x <= g1)
+        t2 = sum(1 for x in devs if x <= g2) if g2 is not None else None
+        grenze = g2 if asp.get('strength') == 'einseitig' and g2 is not None else g1
+
+        def im_jahr(y):
+            j0 = swe.julday(y, 1, 1, 0.0, swe.GREG_CAL)
+            n = int(round(swe.julday(y + 1, 1, 1, 0.0, swe.GREG_CAL) - j0))
+            return any(dev(a, b, angle, j0 + i) <= grenze for i in range(0, n, 2))
+
+        von, bis = jahr, jahr
+        try:
+            while von - 1 >= jahr - JAHRGANG_SPANNE_MAX and im_jahr(von - 1):
+                von -= 1
+            while bis + 1 <= jahr + JAHRGANG_SPANNE_MAX and im_jahr(bis + 1):
+                bis += 1
+        except Exception as ex:
+            out.append({'a': a, 'b': b, 'name': asp['name'], 'angle': angle,
+                        'strength': asp.get('strength'), 'orb': asp.get('orb'),
+                        'fehler': '%s: %s' % (type(ex).__name__, ex)})
+            continue
+        out.append({'a': a, 'b': b, 'name': asp['name'], 'angle': angle,
+                    'strength': asp.get('strength'), 'orb': asp.get('orb'),
+                    'tage_voll': t1, 'tage_einseitig': t2, 'grenze_voll': g1,
+                    'grenze_einseitig': g2, 'spanne': (von, bis),
+                    'spanne_offen': (von <= jahr - JAHRGANG_SPANNE_MAX,
+                                     bis >= jahr + JAHRGANG_SPANNE_MAX)})
+    # Das Jahr ist das der Weltzeit; liegt die Geburt naeher als einen Tag an einem
+    # Jahreswechsel, kann es nach Ortszeit das Nachbarjahr sein (Gegenpruefung 2026-10-13).
+    rand = min(jd_geburt - jd0, swe.julday(jahr + 1, 1, 1, 0.0, swe.GREG_CAL) - jd_geburt)
+    return {'jahr': jahr, 'tage_im_jahr': tage, 'kontakte': out, 'jahresrand': rand < 1.0}
+
+
+def _jahrgang_text(jg):
+    """§11 als Zeilenliste."""
+    L = ['### 11 · Jahrgang und Generation (langsame Paare)']
+    if jg is None:
+        L.append('- Nicht gerechnet (ohne jd_geburt oder ohne pyswisseph).')
+        return L
+    L.append(f"- Je Aspekt der Aspekttabelle zwischen Jupiter, Saturn, Uranus, Neptun, Pluto, Chiron, "
+             f"Pholus und Mondknoten: Tage im Orbis im Kalenderjahr der Geburt ({jg['jahr']} nach Weltzeit, "
+             f"{jg['tage_im_jahr']} Tage, Tagesschritt 0 Uhr UT) und die Jahre um das Geburtsjahr, "
+             f"in denen er an mindestens einem Tag im Orbis stand (Orbis wie in der Aspekttabelle; "
+             f"Swiss Ephemeris). Fundstelle für „Jahrgang“ (Anteil der Tage) und „Generation“ (Spanne).")
+    if jg.get('jahresrand'):
+        L.append('- ⚠ Die Geburt liegt weniger als einen Tag vor oder nach einem Jahreswechsel (Weltzeit) — '
+                 'nach Ortszeit kann das Geburtsjahr das Nachbarjahr sein; dann gelten die Zahlen für dieses '
+                 'nur ungefähr.')
+    if not jg['kontakte']:
+        L.append('- Kein Aspekt zwischen zwei langsamen Faktoren in der Aspekttabelle.')
+        return L
+    for k in jg['kontakte']:
+        if k.get('fehler'):
+            L.append(f"- {_FAKTOR_ANZEIGE.get(k['a'], k['a'])} {k['name']} {_FAKTOR_ANZEIGE.get(k['b'], k['b'])}: "
+                     f"nicht gerechnet ({k['fehler']}).")
+            continue
+        glyph = {'Konjunktion': '☌', 'Opposition': '☍', 'Quadrat': '□', 'Trigon': '△',
+                 'Sextil': '⚹', 'Quincunx': '⚻', 'Halbsextil': '⚺'}.get(k['name'], k['name'])
+        if k['grenze_einseitig'] is not None:
+            tage = (f"an {k['tage_voll']} von {jg['tage_im_jahr']} Tagen im vollen Orbis (bis "
+                    f"{k['grenze_voll']:g}°), an {k['tage_einseitig']} im einseitigen (bis "
+                    f"{k['grenze_einseitig']:g}°)")
+        else:
+            tage = f"an {k['tage_voll']} von {jg['tage_im_jahr']} Tagen im Orbis (bis {k['grenze_voll']:g}°)"
+        von, bis = k['spanne']
+        o_v, o_b = k['spanne_offen']
+        spanne = (f"in jedem Jahr von {'vor ' if o_v else ''}{von} bis {bis}{' und weiter' if o_b else ''}"
+                  if von != bis else f"nur im Jahr {von}")
+        L.append(f"- {_FAKTOR_ANZEIGE.get(k['a'], k['a'])} {glyph} {_FAKTOR_ANZEIGE.get(k['b'], k['b'])} "
+                 f"({k['strength']}, Orb {_gr(k['orb'])}): im Geburtsjahr {tage}; im Orbis "
+                 f"{'der Aspekttabelle ' if k['strength'] == 'einseitig' else ''}an mindestens einem Tag "
+                 f"{spanne} (zusammenhängend um das Geburtsjahr).")
+    return L
+
+
 # --- Mondphase ---------------------------------------------------------------
 
 def mondphase(factors):
@@ -5787,7 +6010,9 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     2026-09-30, K9: unter FUEHRUNG_OFFEN fuehrt keins der beiden Haeuser) —
     und seit dem 2026-09-29 zeitscan
     (das Bild bis ±ZEITSCAN_FENSTER Minuten neu gerechnet; nur wenn
-    zeitscan_faellig(), sonst None).
+    zeitscan_faellig(), sonst None) — und seit dem 2026-10-13 wuerden (§3,
+    wuerden()) und jahrgang (§11, jahrgangskontakte(); nur mit jd_geburt,
+    sonst None).
     """
     if aspects is None:
         aspects = huber_aspects(factors)
@@ -5913,6 +6138,10 @@ def strukturbild(factors, cusps, aspects=None, zusatz=None, alter=None,
     sb['enddispositor_streuung'] = (
         len(sb['ketten']['eigenes_zeichen']) if not sb['ketten']['kreise'] else 0)
     sb['rang'] = _rang_daten(factors, aspects, zusatz, sb)     # U2, §10
+    # 2026-10-13 (Strang 4 des Wartungslaufs): Wuerden (§3) und Jahrgang (§11)
+    sb['wuerden'] = wuerden(factors)
+    sb['jahrgang'] = (jahrgangskontakte(factors, aspects, jd_geburt)
+                      if jd_geburt is not None else None)
     return sb
 
 
@@ -6157,6 +6386,8 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     if nur_kl:
         L.append(f"- Nur klassisch: "
                  f"{', '.join(a + '↔' + b for a, b in nur_kl)}.")
+    if sb.get('wuerden'):                       # 2026-10-13 (Strang 4)
+        L.append(_wuerden_zeile(sb['wuerden']))
     L.append('- Hausherrscher (Spitzenzeichen → Herrscher → wo er steht; die vier '
              + ('Sonderfälle' if transit else 'Sonderfälle des Typmoduls')
              + ' stehen hinter ⟵):')
@@ -7046,6 +7277,29 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
                      + '; '.join(f"{z.get('rang', _r)}. {z['muster']} "
                                  f"({z['grund']})" for _r, z in
                                  enumerate(vm['auch_lesbar'], 1)) + '.')
+        # 2026-10-13 (Strang 4): das Material der Nebenlesarten — bis dahin
+        # stand nur der Grund („zwei Lücken von …"), und die Gruppen einer Wippe,
+        # der Henkel eines Eimers oder der Lokführer einer Lokomotive, die der
+        # Text nennt, hatten keine Fundstelle.
+        for z in vm['auch_lesbar']:
+            d2 = z.get('details') or {}
+            mat = None
+            if z['muster'] == 'Wippe' and d2.get('gruppen'):
+                mat = (f"Gruppen {', '.join(d2['gruppen'][0])} gegen "
+                       f"{', '.join(d2['gruppen'][1])}; Lücken "
+                       + ' und '.join(f"{x['von']} → {x['bis']} {_gr(x['grad'])}"
+                                      for x in d2.get('luecken', [])))
+            elif z['muster'] == 'Eimer' and d2.get('henkel'):
+                mat = (f"Henkel {' + '.join(_pl(h) for h in d2['henkel'])}; Schüssel von "
+                       f"{_pl(d2['schuessel_raender'][0])} bis {_pl(d2['schuessel_raender'][1])}")
+            elif z['muster'] == 'Lokomotive' and d2.get('rand_nach_luecke'):
+                mat = (f"leerer Bogen {_gr(d2['leerer_bogen'])}; {_pl(d2['rand_nach_luecke'])} folgt "
+                       f"dem leeren Bogen (Lokführer nach Deutungsregel), "
+                       f"{_pl(d2['rand_vor_luecke'])} geht ihm voraus (Schlusslicht)")
+            elif z['muster'] in ('Bündel', 'Schüssel') and d2.get('raender'):
+                mat = f"von {_pl(d2['raender'][0])} bis {_pl(d2['raender'][1])}"
+            if mat:
+                L.append(f"- Nebenlesart {z.get('rang', '')} ({z['muster']}): {mat}.")
         if transit:
             L.append('- Befund: <eine Zeile — was Hemisphäre und Muster als '
                      'Statik heißen; Henkelplanet oder Lokführer benennen>')
@@ -7096,6 +7350,10 @@ def strukturbild_text(sb, typ='geburtshoroskop'):
     rg = sb.get('rang')
     if rg:
         L.extend(_rangzeilen_text(rg))
+        L.append('')
+    # §11 JAHRGANG UND GENERATION (neu 2026-10-13, Strang 4)
+    if 'jahrgang' in sb:
+        L.extend(_jahrgang_text(sb['jahrgang']))
         L.append('')
     return '\n'.join(L)
 
@@ -8689,3 +8947,85 @@ if __name__ == '__main__':
     assert GEWICHT['AC'] == GEWICHT['MC'] == GEWICHT['Sonne'] == 2.0 \
         and GEWICHT['DC'] == GEWICHT['IC'] == 0.0 and GEWICHT['Chiron'] == 0.5, GEWICHT
     print('Etikett-Test §1 (2026-10-08): OK — Gewichte und Beschriftung stimmen ueberein')
+    # Strang 4 (2026-10-13, Wartungslauf „Proben fuer Zeit, Naehe, Register und
+    # Fundstellen“): Wuerden nach Zeichen (§3), Material der Nebenlesarten (§8),
+    # Jahrgang und Generation (§11). Konstruierte Laengen, synthetisches Datum
+    # (1950-01-01 0 Uhr UT), keine Klientendaten.
+    _wf = [dict(name='Sonne', lon=100.0), dict(name='Mond', lon=40.0),
+           dict(name='Merkur', lon=165.0), dict(name='Venus', lon=215.0),
+           dict(name='Mars', lon=40.0), dict(name='Jupiter', lon=335.0),
+           dict(name='Saturn', lon=5.0), dict(name='Uranus', lon=310.0),
+           dict(name='Neptun', lon=160.0), dict(name='Pluto', lon=40.5)]
+    _w = {e['name']: e['wuerden'] for e in wuerden(_wf)}
+    assert _w['Sonne'] == [], _w['Sonne']
+    assert _w['Mond'] == [('Erhöhung', None)], _w['Mond']
+    assert _w['Merkur'] == [('Domizil', None), ('Erhöhung', None)], _w['Merkur']
+    assert _w['Venus'] == [('Exil', 'Gegenzeichen des Stiers')], _w['Venus']
+    assert _w['Mars'] == [('Exil', 'nur klassisch, Gegenzeichen des Skorpions')], _w['Mars']
+    assert _w['Jupiter'] == [('Domizil', 'nur klassisch')], _w['Jupiter']
+    assert _w['Saturn'] == [('Fall', 'Gegenzeichen der Erhöhung in Waage')], _w['Saturn']
+    assert _w['Uranus'] == [('Domizil', 'nur modern')], _w['Uranus']
+    assert _w['Neptun'] == [('Exil', 'nur modern, Gegenzeichen der Fische')], _w['Neptun']
+    assert _w['Pluto'] == [('Exil', 'nur modern, Gegenzeichen des Skorpions')], _w['Pluto']
+    _wz = _wuerden_zeile(wuerden(_wf))
+    assert 'Merkur in Jungfrau — Domizil und Erhöhung' in _wz \
+        and _wz.endswith('Ohne Würde und ohne Schwäche: Sonne.'), _wz
+    _t3s = strukturbild_text(_sb).split('### 3')[1].split('### 4')[0]
+    assert '- Würden (Domizil und Exil' in _t3s, _t3s
+    # §8: eine Wippe als Nebenlesart traegt ihre Gruppen (konstruiert)
+    import copy as _copy
+    _sbw = _copy.deepcopy(_sb)
+    _sbw['verteilungsmuster']['auch_lesbar'] = [
+        {'muster': 'Wippe', 'grund': 'zwei Lücken von 70°00′ und 65°00′ (je ≥ 60°)', 'strikt': True,
+         'rang': 1, 'details': {'gruppen': [['Sonne', 'Mond'], ['Mars', 'Jupiter', 'Saturn']],
+                                'luecken': [{'von': 'Mond', 'bis': 'Mars', 'grad': 70.0},
+                                            {'von': 'Saturn', 'bis': 'Sonne', 'grad': 65.0}]}}]
+    _t8 = strukturbild_text(_sbw).split('### 8')[1].split('### 9')[0]
+    assert '- Nebenlesart 1 (Wippe): Gruppen Sonne, Mond gegen Mars, Jupiter, Saturn; Lücken ' \
+        'Mond → Mars 70°00′ und Saturn → Sonne 65°00′.' in _t8, _t8
+    # §11: ohne jd_geburt nicht gerechnet; mit synthetischem Datum stimmig
+    _t11 = strukturbild_text(_sb).split('### 11')[1]
+    assert 'Nicht gerechnet (ohne jd_geburt oder ohne pyswisseph).' in _t11, _t11
+    try:
+        import swisseph as _swe11
+    except Exception:
+        _swe11 = None
+    if _swe11 is not None:
+        _ephe_pfad_setzen(_swe11)
+        _jd11 = _swe11.julday(1950, 1, 1, 0.0, _swe11.GREG_CAL)
+        _fj = [{'name': n, 'lon': _swe11.calc_ut(_jd11, getattr(_swe11, b), _swe11.FLG_SWIEPH)[0][0]}
+               for n, b in (('Jupiter', 'JUPITER'), ('Saturn', 'SATURN'), ('Uranus', 'URANUS'),
+                            ('Neptun', 'NEPTUNE'), ('Pluto', 'PLUTO'), ('Chiron', 'CHIRON'),
+                            ('Mondknoten', 'TRUE_NODE'))]
+        _aj = huber_aspects(_fj)
+        _jg = jahrgangskontakte(_fj, _aj, _jd11)
+        assert _jg['jahr'] == 1950 and _jg['tage_im_jahr'] == 365, _jg
+        assert len(_jg['kontakte']) == len(_aj) and _jg['kontakte'], (_aj, _jg)
+        for _k in _jg['kontakte']:
+            _v, _b = _k['spanne']
+            assert _v <= 1950 <= _b and 0 <= _k['tage_voll'] <= 365, _k
+            assert _k['tage_einseitig'] is None or _k['tage_einseitig'] >= _k['tage_voll'], _k
+        # Gegenrechnung des ersten Kontakts mit eigener Schleife
+        _k0 = _jg['kontakte'][0]
+        _bo = dict((n, b) for n, b in (('Jupiter', 'JUPITER'), ('Saturn', 'SATURN'), ('Uranus', 'URANUS'),
+                                       ('Neptun', 'NEPTUNE'), ('Pluto', 'PLUTO'), ('Chiron', 'CHIRON'),
+                                       ('Mondknoten', 'TRUE_NODE')))
+        _n0 = 0
+        for _i in range(365):
+            _l1 = _swe11.calc_ut(_jd11 + _i, getattr(_swe11, _bo[_k0['a']]), _swe11.FLG_SWIEPH)[0][0]
+            _l2 = _swe11.calc_ut(_jd11 + _i, getattr(_swe11, _bo[_k0['b']]), _swe11.FLG_SWIEPH)[0][0]
+            _d = abs(_l1 - _l2) % 360.0
+            _d = 360.0 - _d if _d > 180.0 else _d
+            _n0 += abs(_d - _k0['angle']) <= _k0['grenze_voll']
+        assert _n0 == _k0['tage_voll'], (_n0, _k0)
+        _tj = '\n'.join(_jahrgang_text(_jg))
+        # 1950-01-01 0 Uhr UT liegt am Jahreswechsel: die ⚠-Zeile muss stehen
+        assert _jg['jahresrand'] is True and '⚠ Die Geburt liegt weniger als einen Tag' in _tj, _tj
+        assert _tj.count('\n- ') == len(_jg['kontakte']) + 2 and 'im Geburtsjahr an' in _tj, _tj
+        _jg2 = jahrgangskontakte(_fj, _aj, _jd11 + 180.0)
+        assert _jg2['jahresrand'] is False and '⚠' not in '\n'.join(_jahrgang_text(_jg2)), _jg2
+        print('Strang-4-Test (2026-10-13): OK — Würden nach Zeichen (zehn Planeten, nur klassisch/'
+              'nur modern, Fall), Wippe als Nebenlesart mit Gruppen, §11 mit %d Kontakten am '
+              'synthetischen Datum gegengerechnet' % len(_jg['kontakte']))
+    else:
+        print('Strang-4-Test (2026-10-13): OK — Würden und §8; §11 ohne pyswisseph nicht geprüft')
