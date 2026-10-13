@@ -5954,9 +5954,13 @@ STRUKTURBILD_TYPEN = ('geburtshoroskop', 'transit')   # EA/Ultimativ ausgemuster
 # Information ohne Handlungsmoeglichkeit verunsichert den Leser mehr, als sie nuetzt.
 # Damit entfaellt die Frage, welches Kapitel eine Stelle „traegt" (Pruefberichte vom
 # 30.09., K4). Die Warnung bleibt im Datenblatt und als Entscheidung im Handlungsblock.
+# 2026-10-13: „Schritt 1+2“ -> „Schritt 1“ — seit dem Umbau vom 01.10. laufen Schritt 1
+# und 2 in eigenen Chats; der alte Wortlaut liess offen, in welchen Handlungsblock die
+# Frage gehoert (Pruefberichte Geburtshoroskop 1 und Transit 2 vom 12.10., sechsmal in
+# der Sammelliste).
 _KIPP_WOHIN = ('Gehört in den ⚠-Block und den Kopf der chart_data, neben die '
                'Zeitunsicherheit aus der Mond-Zeitprobe, und als Entscheidung '
-               'in den Handlungsblock am Ende von Schritt 1+2. Ins PDF kommt '
+               'in den Handlungsblock am Ende von Schritt 1. Ins PDF kommt '
                'davon nichts — kein Satz im Text, keine Fußnote; einzige '
                'Ausnahme ist der AC mit Gegenprobe-Blatt (Zeitscan, AC-Zeile; '
                'Gegenprobe g, Chris-Entscheidung 2026-10-01).')

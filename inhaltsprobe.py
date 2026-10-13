@@ -273,8 +273,8 @@ P19 Wiederholung     (2026-10-11, Chris-Entscheidung 2026-10-11: „höchstens z
                      gleich“) Ein Satz, der wortgleich mehr als zweimal im Dokument
                      steht, oder ein Satzanfang, der an derselben Stelle (Bewegung)
                      in mehr als zwei Kapiteln steht. Ausgenommen sind die Wegweiser,
-                     die gleich bleiben (WEGWEISER_RE), und die Rechenschaft. Nur
-                     PRUEFEN; in einer englischen Fassung nur der wortgleiche Satz.
+                     die gleich bleiben (WEGWEISER_RE), und die Register (Rechenschaft,
+                     im Transit „Mitlaufendes“). Nur PRUEFEN; in einer englischen Fassung nur der wortgleiche Satz.
                      Dieselbe Zaehlung fuer andere Builder: wiederholungen().
 
 Selbsttest: `python3 inhaltsprobe.py --selbsttest` laeuft gegen einen KONSTRUIERTEN
@@ -8273,7 +8273,10 @@ def _p19_wiederholung(chapters, typ, sprache_analyse="de"):
     p.einheit = "Sätze"
     einheiten = []
     for ch in chapters:
-        if _ist_kicker(ch, "Rechenschaft", "Account"):
+        # 2026-10-13: auch das Register des Transits (`Mitlaufendes`) zaehlt nicht mit — seine
+        # Zeilen sind ein Register wie die Rechenschaft (Pruefberichte Transit 2 und 3+4 vom
+        # 12.10.: sieben Fehlalarme auf „Klingt in Kapitel n mit.“, in 3+4 eine Rueckfrage).
+        if _ist_kicker(ch, "Rechenschaft", "Account", "Mitlaufendes"):
             continue
         bew = None
         for b in ch["blocks"]:
@@ -10500,6 +10503,19 @@ def _selbsttest(still=False):
                     "und wortgleicher Satz dreimal gemeldet; Wegweiser und eine Formel in zwei "
                     "Kapiteln still; Ressourcen-Formen, Transit-Wiederholungshinweis und "
                     "Kinder-Vorlage ausgenommen, Etikett mit Zusatz nicht")
+    # Lauf 14b (P19, 2026-10-13): Das Register `Mitlaufendes` zaehlt nicht mit, wie die
+    # Rechenschaft — deutsch und englisch; dieselben Zeilen in einem Kapitel werden
+    # gemeldet. Saetze erfunden.
+    _z14b = [{"type": "p", "text": "Jupiter im Sextil zu deinem Mond, Mai 2027. Klingt in Kapitel 3 mit."},
+             {"type": "p", "text": "Saturn im Trigon zu deiner Venus, Juni 2027. Klingt in Kapitel 3 mit."},
+             {"type": "p", "text": "Uranus im Quadrat zu deinem Mars, Juli 2027. Klingt in Kapitel 3 mit."}]
+    for _kick in ("Mitlaufendes", "Running alongside"):
+        _p14b = _p19_wiederholung([{"kicker": _kick, "title": "T", "blocks": _z14b}], "transit")
+        assert _p14b.status == "OK" and not _p14b.pruefen, ("Lauf 14b: Register gemeldet", _kick, _p14b.pruefen)
+    _p14c = _p19_wiederholung([{"kicker": "Kapitel 3", "title": "T", "blocks": _z14b}], "transit")
+    assert _p14c.pruefen, ("Lauf 14b: Wiederholung im Kapitel nicht gemeldet", _p14c.status)
+    berichte.append("Lauf 14b (P19, 2026-10-13): das Register „Mitlaufendes“ zählt nicht mit, "
+                    "deutsch und englisch; dieselben Zeilen in einem Kapitel gemeldet")
 
     if not still:
         print("\n".join(berichte))
@@ -10510,7 +10526,7 @@ def _selbsttest(still=False):
               "Lauf 7 dieselbe Analyse mit dem Kicker `Getriebe` und der neuen Zählung, 7b ohne ihn; "
               "Lauf 8 Deutungsort über dem Deckel; Lauf 9 offene Führung; Lauf 10 „um die N“; "
               "Lauf 11 Altersreihe; Lauf 12 und 13 P18 Satzarten mit erfundenen Sätzen; "
-              "Lauf 14 P19 Wiederholung; P16 und P17 als Einzelproben]")
+              "Lauf 14 und 14b P19 Wiederholung; P16 und P17 als Einzelproben]")
     return True
 
 def _main(argv):
