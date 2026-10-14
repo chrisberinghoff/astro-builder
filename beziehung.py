@@ -487,6 +487,80 @@ def _koordinaten_lesen(text):
     return None, None
 
 
+# 2026-10-15 (FFU, Auswertung der Pruefberichte vom 14.10., Teil d, Punkt 2): Woerter, die in
+# der H1 eines Personen-Datenblatts den Dokumenttyp nennen, sind nie der Vorname. Die H1 von
+# Mitte September „# Datenblatt — Geburtshoroskop <Vorname> <Nachname>“ gab „Geburtshoroskop“
+# als Vornamen — ohne Meldung in Kopf, Spaltenkoepfen, PERSON_A und @@SELEKTOR. Gegengeprueft
+# ueber alle Personen-Datenblaetter der Klientenordner (109 lesbare: 98 gleich, 11 vorher
+# falsch, danach keins).
+_DOKWORT_RE = re.compile(
+    r'(?i)(horoskop|datenblatt|datengrundlage|^chart|^daten$|ultimativ|^modul|schritt|'
+    r'leitfaden|^transit|^ea$|^ea-|^radix|^kombi|^standard|^evolution|^beziehung|'
+    r'^freundschaft|^vertiefung)')
+
+
+def _vorname_tok(s):
+    """Das erste Wort aus `s`, das ein Vorname sein kann: gross geschrieben, mit
+    Kleinbuchstaben, nur Buchstaben (Bindestrich und Apostroph innen erlaubt), kein Wort
+    des Dokumenttyps (_DOKWORT_RE). Klammerzusaetze und alles hinter „·“ zaehlen nicht.
+    -> str oder None."""
+    s = re.sub(r'\([^)]*\)', ' ', s or '').split('·')[0].replace('**', ' ')
+    for tok in re.split(r'[\s,„“"‚‘]+', s.strip()):
+        if (tok and tok[:1].isupper() and any(c.islower() for c in tok)
+                and re.fullmatch(r"[^\W\d_]+(?:[-'’][^\W\d_]+)*", tok)
+                and not _DOKWORT_RE.search(tok)):
+            return tok
+    return None
+
+
+def _vorname_lesen(text, vorspann, pfad):
+    """Vorname eines Personen-Datenblatts (seit 2026-10-15): zuerst hinter dem LETZTEN
+    Gedankenstrich der H1 („# Geburtshoroskop — Datenblatt — <Name>“), dann aus dem
+    Namensfeld des Kopfes (Tabellenzeile „| Name | … |“ oder Zeile „Name: …“), zuletzt aus
+    dem Dateinamen `<Vorname>_…_chart_data.md` — je das erste Wort, das _vorname_tok()
+    gelten laesst. -> str oder None (rechnung() haelt dann an)."""
+    h1 = re.search(r'^# [^\n]* — ([^\n—]+)$', text, re.M)
+    if h1:
+        v = _vorname_tok(h1.group(1))
+        if v:
+            return v
+    z = (re.search(r'^\|[ \t]*\**Name\**[ \t]*\|([^|\n]+)\|', vorspann, re.M)
+         or re.search(r'Name:\**[ \t]*([^\n]+)', vorspann))
+    if z:
+        v = _vorname_tok(z.group(1))
+        if v:
+            return v
+    b = re.split(r'[_\s.]', os.path.basename(pfad))[0]
+    return _vorname_tok(b[:1].upper() + b[1:])
+
+
+def _offen_eigen_lesen(text, namen):
+    """Faktoren mit OFFENER FUEHRUNG im eigenen Bild (seit 2026-10-15; FFU, Auswertung
+    14.10. d, Punkt 1): die FAKTOR-Zeilen des @@SELEKTOR-Blocks mit `fuehrung=offen` —
+    dieselbe Quelle, aus der die Konstellationstabelle des Geburtshoroskops „11=12“ setzt
+    (radix.haus_spalte(offen=True)); den Block begrenzt wie selektor.parse_chart() die
+    Zeile `@@SELEKTOR` und die naechste @@-Zeile. `namen` sind die Faktornamen des
+    factors-Blocks; zurueck kommen die davon, deren Zeile `fuehrung=offen` traegt,
+    sortiert. Ein Datenblatt von vor dem 2026-09-30 traegt keine — dann stehen die Haeuser
+    wie in seinem eigenen Horoskop, ohne offene Fuehrung."""
+    schl = {radix._offen_schluessel(n): n for n in namen}
+    out, im_block = set(), False
+    for ln in text.split('\n'):
+        z = ln.strip()
+        if z == '@@SELEKTOR':
+            im_block = True
+            continue
+        if z.startswith('@@'):
+            im_block = False
+            continue
+        if not im_block:
+            continue
+        m = re.match(r'(?i:faktor)\s+(\S+)\s.*\bfuehrung=offen\b', z)
+        if m and schl.get(radix._offen_schluessel(m.group(1))):
+            out.add(schl[radix._offen_schluessel(m.group(1))])
+    return sorted(out)
+
+
 def lies_datenblatt(pfad):
     """Liest ein Datenblatt (`<klient>_chart_data.md`) einer Person.
 
@@ -497,7 +571,8 @@ def lies_datenblatt(pfad):
        (float oder None), 'factors' (Liste wie im factors-Block, ohne
        Ausgemustertes), 'cusps' (zwoelf Laengen), 'leitachse' (Wortlaut der
        Themenzeile mit leitachse=ja oder None; rechnung() haelt ohne sie an),
-       'kinder_baustein' (bool),
+       'kinder_baustein' (bool), 'offen_eigen' (seit 2026-10-15: die Faktoren mit
+       `fuehrung=offen` im @@SELEKTOR-Block, _offen_eigen_lesen()),
        'hinweise' (Liste).
 
     Gelesen wird der Python-Block mit `factors = [...]` (beide Schreibweisen
@@ -508,6 +583,8 @@ def lies_datenblatt(pfad):
     seit 2026-10-14b auch als Tabellenzeile („| Geburtsdatum | … |“, Format von Mitte
     September) und aus der Zeile „**Geburt:** TT.MM.JJJJ, <Zeit> · Geburtsort: …“;
     das Datum auch als „T. Monat JJJJ“, das Geschlecht auch gross geschrieben.
+    Der Vorname seit 2026-10-15 ueber _vorname_lesen(): H1 ohne Woerter des Dokumenttyps,
+    sonst das Namensfeld, sonst der Dateiname; ohne Vornamen „?“ und ANHALTEN in rechnung().
     BeziehungFehler bei einem Transit-Datenblatt (H1 nennt „Transit“): Seine
     Themenliste und Leitachse gehoeren zum Transit, nicht zum Geburtsbild
     (Chris-Entscheidung 2026-10-14: vorher Schritt 1 Geburtshoroskop).
@@ -554,6 +631,8 @@ def lies_datenblatt(pfad):
             lon = (fac[namen.index(ax)]['lon'] + 180.0) % 360.0
             fac.append({'name': geg, 'glyph': geg, 'lon': lon, 'retro': False})
     out['factors'] = fac
+    # 2026-10-15 (FFU, Auswertung 14.10. d, Punkt 1): offene Fuehrung des eigenen Bildes
+    out['offen_eigen'] = _offen_eigen_lesen(text, [f['name'] for f in fac])
     mc = re.search(r'(?im)^\s*cusps\s*=\s*(\[[^\]]*\])', text)
     if not mc:
         raise BeziehungFehler('%s: keine Hausspitzen (CUSPS = [...]).'
@@ -571,16 +650,10 @@ def lies_datenblatt(pfad):
     vorspann = text.split('\n## Stände', 1)[0]
     # 2026-10-14: der Name steht hinter dem LETZTEN Gedankenstrich der H1
     # („# Geburtshoroskop — Datenblatt — <Name>“); vorher hinter dem ersten.
-    h1 = re.search(r'^# [^\n]* — ([^\n—]+)$', text, re.M)
-    name = None
-    if h1:
-        name = h1.group(1).strip()
-    if not name:
-        n2 = re.search(r'Name:\**\s*([^\s(—,*]+)', vorspann)
-        name = n2.group(1) if n2 else None
-    if name:
-        name = re.split(r'[\s(,]', name.replace('**', '').strip())[0]
-    out['vorname'] = name or '?'
+    # 2026-10-15 (FFU, Auswertung 14.10. d, Punkt 2): Woerter des Dokumenttyps zaehlen
+    # nicht („# Datenblatt — Geburtshoroskop <Vorname> <Nachname>“ gab „Geburtshoroskop“);
+    # ohne Namen in der H1 das Namensfeld, zuletzt der Dateiname (_vorname_lesen()).
+    out['vorname'] = _vorname_lesen(text, vorspann, pfad) or '?'
     # 2026-10-14b (FFU, Auswertung 14.10. c): auch gross geschrieben („Weiblich, Anrede …“).
     g = re.search(r'\b(weiblich|männlich|divers)\b', vorspann, re.I)
     out['geschlecht'] = g.group(1).lower() if g else None
@@ -789,6 +862,16 @@ def _faktoren(fx):
     by = {f['name']: f for f in fx}
     return [by[n] for n in FAKTOR_REIHE if n in by] + \
         [f for f in fx if f['name'] not in FAKTOR_REIHE]
+
+
+
+def _haus_eigen(p, name, lon):
+    """Haus-Spalte eines Faktors im EIGENEN Bild ('7', '11/12', '11=12'): offene
+    Fuehrung, wenn sein Datenblatt sie fuehrt (lies_datenblatt(): 'offen_eigen') — wie
+    die Konstellationstabelle des Geburtshoroskops. Seit 2026-10-15 (FFU, Auswertung
+    14.10. d, Punkt 1); vorher stand hier die Stufe allein, auf Staendeseite und in den
+    Staenden des Datenblatts der Beziehung „12/11“ gegen „11=12“ im eigenen Horoskop."""
+    return radix.haus_spalte(lon, p['cusps'], offen=name in set(p.get('offen_eigen') or ()))
 
 
 def kreuzaspekte(fa, fb, orbs=None):
@@ -1327,6 +1410,13 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
                 'dem Strukturvergleich fehlt das eigene Geburtsbild. Chris fragen: vorher '
                 'Schritt 1 des Geburtshoroskops für %s (ohne Aufpreis).'
                 % (p['vorname'], p['vorname']))
+    # 2026-10-15 (FFU, Auswertung 14.10. d, Punkt 2): ohne lesbaren Vornamen stuende „?“
+    # in Kopf, Tabellen und Belegen — anhalten statt still weiter.
+    for p in (pa, pb):
+        if p['vorname'] == '?':
+            r['anhalten'].append(
+                '%s: kein Vorname lesbar — weder in der H1 noch im Namensfeld noch im '
+                'Dateinamen (`<Vorname>_chart_data.md`). Chris fragen.' % p['datei'])
     if pa['vorname'] == pb['vorname']:
         r['anhalten'].append('Beide Datenblätter tragen denselben Vornamen „%s“ — '
                              'die Zuordnung in Belegen und Tabellen wäre '
@@ -1556,7 +1646,7 @@ def rechnung_text(r):
                 haus = radix.haus_und_grenzlage(f['lon'], p['cusps'], name=n)['haus']
                 lauf = '—'
             else:
-                haus = radix.haus_spalte(f['lon'], p['cusps'])
+                haus = _haus_eigen(p, n, f['lon'])
                 lauf = 'rückläufig' if f.get('retro') else 'direkt'
             L.append('| %s | %s | %s | %s | %s | %s |' % (
                 n, radix.gr_zeichen(f['lon']), zeichen_von(f['lon']), haus, lauf,
@@ -1683,7 +1773,7 @@ def rechnung_text(r):
         teile = []
         for n in ('Sonne', 'Mond'):
             teile.append('%s %s, Haus %s' % (n, stand_text(fx[n]['lon']),
-                                            radix.haus_spalte(fx[n]['lon'], p['cusps'])))
+                                            _haus_eigen(p, n, fx[n]['lon'])))
         for n in ('AC', 'MC'):
             teile.append('%s %s' % (n, stand_text(fx[n]['lon'])))
         L.append('- %s: %s' % (p['vorname'], ' · '.join(teile)))
@@ -1863,7 +1953,9 @@ def _maschinenblock(r):
     def _p(p):
         return {'vorname': p['vorname'], 'datei': p['datei'], 'sha8': p['sha8'],
                 'geschlecht': p['geschlecht'], 'alter': p['alter'],
-                'jd': p['jd'], 'lat': p['lat'], 'lon': p['lon']}
+                'jd': p['jd'], 'lat': p['lat'], 'lon': p['lon'],
+                # 2026-10-15: fuer die Staendeseite in Chat 2 (lies_beziehung)
+                'offen_eigen': sorted(p.get('offen_eigen') or ())}
     offen = {'A': sorted(r['zeit']['offen']['A']), 'B': sorted(r['zeit']['offen']['B'])}
     eng_k = sorted(r['zeit'].get('eng_kippt', ()))
     ueb_k = sorted(r['zeit'].get('ueb_kippt', ()))
@@ -2025,7 +2117,8 @@ def lies_beziehung(pfad):
     maschinenlesbaren Block alles neu (dieselben Funktionen wie beim Bau —
     die Tabellen werden nie zurueckgelesen).
 
-    -> dict wie rechnung() ('A', 'B' mit 'vorname', 'factors', 'cusps' …,
+    -> dict wie rechnung() ('A', 'B' mit 'vorname', 'factors', 'cusps',
+       'offen_eigen' (seit 2026-10-15; ein aelteres Datenblatt der Beziehung hat keins) …,
        'kreuz', 'achsen', 'ueb_b_in_a', 'ueb_a_in_b', 'verteilung', 'rang',
        'art', 'eltern', 'kind', 'kind_minderjaehrig', 'datum', 'zeit' mit
        'offen', 'eng_kippt' und 'ueb_kippt' aus der Zeitprobe des Baus — sie
@@ -2803,7 +2896,7 @@ def staende_page(r, kicker=None, titel=None, anker='PG_staende', skala=1.0, lead
             if n in ACHSEN:
                 haus = str(radix.haus_und_grenzlage(f['lon'], p['cusps'], name=n)['haus'])
             else:
-                haus = radix.haus_spalte(f['lon'], p['cusps'])
+                haus = _haus_eigen(p, n, f['lon'])
             z = zeichen_von(f['lon'])
             zeilen.append('<tr><td>%s%s</td><td>%s %s</td><td>%s</td><td>%s</td></tr>' % (
                 _gy(n, farbe_b), ' ℞' if f.get('retro') and n not in ACHSEN else '',
@@ -3197,7 +3290,7 @@ def probe(analyse_pfad, datenblatt_pfad):
                     if f_ in ACHSEN:
                         hs = str(radix.haus_und_grenzlage(lon, pp['cusps'], name=f_)['haus'])
                     else:
-                        hs = radix.haus_spalte(lon, pp['cusps'])
+                        hs = _haus_eigen(pp, f_, lon)
                     geschrieben = m.group('h') + (m.group('s') + m.group('h2') if m.group('h2') else '')
                     if geschrieben != hs and m.group('h') not in re.split(r'[/=]', hs):
                         F('B5', '%s: „%s“ — Haus gerechnet %s' % (c['kicker'], s, hs))
@@ -4292,6 +4385,83 @@ def _selbsttest():
                                     '# Geburtshoroskop — Datenblatt — Vvv\n\n## Kopf\n\n'
                                     '- Geburtsdatum: %s' % _gd))['vorname'] == 'Vvv',
           'Vorname hinter dem letzten Gedankenstrich der H1')
+    # 2026-10-15 (FFU, Auswertung 14.10. d, Punkt 2): Kopf von Mitte September — H1
+    # „Datenblatt — Geburtshoroskop <Vorname> <Nachname>“, alles als Tabelle; geprueft wird
+    # JEDES Kopffeld, nicht nur das gemeldete (die Formatprobe vom 14.10. zaehlte nur jd
+    # und Koordinaten)
+    _o4 = _variante('Uuu_Nnn_chart_data.md',
+                    '# Datenblatt — Geburtshoroskop Uuu Nnn\n\n| Feld | Wert |\n|---|---|\n'
+                    '| Name | Uuu Nnn |\n| Geschlecht | weiblich |\n'
+                    '| Geburtsdatum | %s |\n| Geburtszeit | mittags (Selbsttest) |\n'
+                    '| Geburtsort | Prüfort (erfunden) |\n'
+                    '| Ortskoordinaten (Setzung dieses Laufs) | 50.0000 N / 10.0000 O |\n'
+                    '| Julianisches Datum (UT) | %.6f |\n| Fassung | Fassung 1 (Selbsttest) |\n'
+                    '| Zeitunsicherheit | eine Minute (Selbsttest) |' % (_gd, _jd_t))
+    pu = lies_datenblatt(_o4)
+    check(pu['vorname'] == 'Uuu' and pu['geschlecht'] == 'weiblich'
+          and pu['geburtsdatum'] == _gd_n and pu['geburtszeit'] == 'mittags (Selbsttest)'
+          and pu['geburtsort'] == 'Prüfort (erfunden)' and pu['fassung'].startswith('1')
+          and pu['zeitunsicherheit'].startswith('eine Minute')
+          and abs(pu['jd'] - _jd_t) < 1e-6 and (pu['lat'], pu['lon']) == (50.0, 10.0),
+          'Datenblatt von Mitte September (H1 „Datenblatt — Geburtshoroskop <Name>“, Kopf '
+          'als Tabelle): jedes Kopffeld, Vorname nicht „Geburtshoroskop“')
+    for _datei, _kopf, _soll in (
+            ('Www_Nnn_chart_data.md', '# Geburtshoroskop — Datenblatt (Schritt 1)\n\n'
+             '- **Name:** Www Nnn', 'Www'),
+            ('Ttt_Nnn_chart_data.md', '# Datenblatt — Ultimativ-Horoskop\n\n| Name | Ttt Nnn |',
+             'Ttt'),
+            ('Kkk_chart_data.md', '# Datenblatt — Kombi-Horoskop Kkk', 'Kkk'),
+            ('Eee_chart_data.md', '# Datenblatt — Eee · Standard-Geburtshoroskop', 'Eee'),
+            ('Ddd_chart_data.md', '# Chart-Datenblatt — Ddd Nnn (Ultimativ-Horoskop)', 'Ddd'),
+            ('Mmm_chart_data.md', '# Datenblatt Modul III — Datenblatt Modul III\n\n'
+             'Name: Mmm Nnn', 'Mmm'),
+            ('fff_nnn_chart_data.md', '# Geburtshoroskop — Datenblatt (Schritt 1)', 'Fff'),
+            ('chart_data.md', '# Geburtshoroskop — Datenblatt', '?')):
+        check(lies_datenblatt(_variante(_datei, '%s\n- Geburtsdatum: %s' % (_kopf, _gd)))
+              ['vorname'] == _soll, 'Vorname „%s“: %s' % (_soll, _kopf.split('\n')[0]))
+    with redirect_stdout(io.StringIO()):
+        _rx = rechnung(os.path.join(tmp, 'chart_data.md'), _s, 'Paar', datum=heute,
+                       einwilligung='beide (Selbsttest)')
+        _ry = rechnung(_o4, _s, 'Paar', datum=heute, einwilligung='beide (Selbsttest)')
+    check(any('kein Vorname lesbar' in x for x in _rx['anhalten'])
+          and not any('kein Vorname' in x for x in _ry['anhalten']),
+          'ohne lesbaren Vornamen -> ANHALTEN, mit Vornamen nicht')
+    # 2026-10-15 (FFU, Auswertung 14.10. d, Punkt 1): offene Fuehrung des eigenen Hauses aus
+    # `fuehrung=offen` des Personen-Datenblatts — Staende und Staendeseite „2=3“ wie im
+    # Geburtshoroskop (vorher „3/2“, die Stufe allein); ein aelteres Datenblatt der Beziehung
+    # ohne das Feld bleibt lesbar
+    _po = os.path.join(tmp, 'Bbb_offen_chart_data.md')
+    with open(_po, 'w', encoding='utf-8') as f:
+        f.write(open(pp, encoding='utf-8').read() + '\n## @@SELEKTOR-Block\n\n```\n@@SELEKTOR\n'
+                'FAKTOR MONDKNOTEN zeichen=%s haus=2 nebenhaus=3 abstand=2.00 fuehrung=offen\n'
+                'FAKTOR SATURN zeichen=%s haus=11 nebenhaus=12 abstand=3.50\n@@ENDE\n'
+                '@@DECKBLATT\nFAKTOR SONNE fuehrung=offen\n@@ENDE\n```\n'
+                % (zeichen_von(_T_B['Mondknoten']), zeichen_von(_T_B['Saturn'])))
+    check(lies_datenblatt(_po)['offen_eigen'] == ['Mondknoten']
+          and lies_datenblatt(pp)['offen_eigen'] == [],
+          'offene Führung des eigenen Hauses aus fuehrung=offen gelesen, nur im @@SELEKTOR-Block')
+    with redirect_stdout(io.StringIO()):
+        zo = os.path.join(tmp, 'Aaa_Beziehung_Bbbo_chart_data.md')
+        datenblatt(pa, _po, zo, 'Paar', themen=th, deckblatt=db, datum=heute,
+                   einwilligung='beide (Selbsttest)')
+    _ot = open(zo, encoding='utf-8').read()
+    _ro = lies_beziehung(zo)
+    check(re.search(r'^\| Mondknoten \|[^|\n]*\|[^|\n]*\| 2=3 \|', _ot, re.M)
+          and re.search(r'^\| Saturn \|[^|\n]*\|[^|\n]*\| 11/12 \|', _ot, re.M)
+          and _ro['B'].get('offen_eigen') == ['Mondknoten'] and _ro['A'].get('offen_eigen') == [],
+          'Stände: offene Führung des eigenen Hauses „2=3“, sonst „11/12“; maschinenlesbar')
+    _alt = _ot.replace(", 'offen_eigen': ['Mondknoten']", '')
+    check(_alt != _ot, 'Selbsttest: PERSON_B trägt offen_eigen')
+    za = os.path.join(tmp, 'Aaa_Beziehung_Bbba_chart_data.md')
+    open(za, 'w', encoding='utf-8').write(_alt)
+    _ra = lies_beziehung(za)
+    try:
+        import chartdoc  # noqa: F401
+        check('<td>2=3</td>' in staende_page(_ro) and '<td>2=3</td>' not in staende_page(_ra)
+              and _ra['B'].get('offen_eigen') is None,
+              'Ständeseite: „2=3“ aus dem Datenblatt der Beziehung; älteres ohne Feld lesbar')
+    except ImportError:
+        aus.append('Ständeseite offene Führung (chartdoc fehlt)')
     with redirect_stdout(io.StringIO()):
         _r0 = rechnung(pa, pp, 'Paar', datum=heute, einwilligung='beide (Selbsttest)')
         _r1 = rechnung(_g, _s, 'Paar', datum=heute, einwilligung='beide (Selbsttest)')
