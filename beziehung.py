@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 """beziehung.py — Rechnung, Datenblatt der Beziehung, Referenzschnitt, Doppelrad,
 Seiten und Proben des Beziehungshoroskops (Erweiterung Beziehung, neu 2026-10-11).
+Drei Arten (ARTEN): Paar, Eltern-Kind und seit 2026-10-14 Freundschaft — deren
+Dokument heisst „Freundschaftshoroskop“ (DOKUMENTTYP, dateiname()).
 
 Grundlage sind IMMER die Datenblaetter beider Personen aus der Pipeline — ihre
 `factors`-Bloecke (ekliptikale Laengen samt Achsen) und Hausspitzen. Nichts wird
@@ -50,11 +52,13 @@ Schnittstelle (Einzelheiten: hilfe('<name>')):
     doppelrad(pfad_oder_r, out_path, ...) -> str   PNG
     staende_page / kreuz_page (r, ...) -> str      HTML im Hausstil
     belege_en(analyse_pfad, namen) -> dict         englische Belege (Sprachfassung)
-    probe(analyse_pfad, datenblatt_pfad) -> str    die Beziehung-Probe
+    probe(analyse_pfad, datenblatt_pfad) -> str    die Beziehung-Probe (Pruefmuster:
+                                                   hilfe('probe'))
+    dateiname(art, a, b, datum, teil, ...) -> str  Dateinamen samt PDF je Art und Sprache
     python3 beziehung.py --selbsttest | --hilfe [<name>]
 
-Personen: A ist immer die bestellende Person (Anrede „du“; beim Paar „ihr“ fuer
-beide), B die zweite. Im Datenblatt, in Rangzeilen und Belegen steht ein Faktor
+Personen: A ist immer die bestellende Person (Anrede „du“; beim Paar und bei
+Freundschaft „ihr“ fuer beide), B die zweite. Im Datenblatt, in Rangzeilen und Belegen steht ein Faktor
 mit seiner Person: „Venus (<Vorname>)“, in Rangzeilen ohne Leerzeichen
 „Venus(<Vorname>)“.
 
@@ -84,8 +88,21 @@ OFFEN_MINUTEN = radix.FUEHRUNG_OFFEN  # offene Fuehrung unter so vielen Minuten 
 ZEIT_SCHRITT = 0.05       # Minuten; Rasterweite, danach Bisektion
 RANG_ENGSTE = 10
 RANG_ENGSTE_PLANETEN = 5
-ERWACHSEN = 18            # Paar nur mit zwei Erwachsenen; Kinder-Regeln unter 18
-ARTEN = ('paar', 'eltern-kind')
+ERWACHSEN = 18            # Paar und Freundschaft nur mit zwei Erwachsenen; Kinder-Regeln unter 18
+# 2026-10-14c (Wartungslauf „Art Freundschaft“; Chris-Entscheidungen 14.10.: nur
+# Erwachsene, Vorrang 11. und 3. Haus, eigener Name „Freundschaftshoroskop“, englisch
+# gleich mit): Freundschaft liest sich wie das Paar — beide lesen („ihr“), beide gleich
+# gewichtet, nur Erwachsene — und wie Eltern-Kind ohne romantische oder sexuelle
+# Lesart (Referenzschnitt gefiltert, Romantik-Probe B11).
+ARTEN = ('paar', 'eltern-kind', 'freundschaft')
+ART_TITEL = {'paar': 'Paar', 'eltern-kind': 'Eltern-Kind', 'freundschaft': 'Freundschaft'}
+IHR_ARTEN = ('paar', 'freundschaft')            # beide lesen: „ihr“, B9, B12, nur Erwachsene
+OHNE_ROMANTIK = ('eltern-kind', 'freundschaft')  # Filter im Referenzschnitt, Romantik-Probe B11
+DOKUMENTTYP = {'paar': 'Beziehungshoroskop', 'eltern-kind': 'Beziehungshoroskop',
+               'freundschaft': 'Freundschaftshoroskop'}
+DOKUMENTTYP_EN = {'paar': 'Relationship Horoscope', 'eltern-kind': 'Relationship Horoscope',
+                  'freundschaft': 'Friendship Horoscope'}
+KUERZEL = {'paar': 'Beziehung', 'eltern-kind': 'Beziehung', 'freundschaft': 'Freundschaft'}
 
 PLANETEN = ('Sonne', 'Mond', 'Merkur', 'Venus', 'Mars', 'Jupiter', 'Saturn',
             'Uranus', 'Neptun', 'Pluto')
@@ -125,6 +142,7 @@ BEWEGUNGEN = {
              'Die zwei Formen und das Dazwischen',
              'Womit ihr arbeiten könnt', 'Wohin das gehört'),
 }
+BEWEGUNGEN['freundschaft'] = BEWEGUNGEN['paar']   # 2026-10-14c: beide lesen, wie beim Paar
 BEWEGUNGEN_EN = ('How you notice it', 'What is at work',
                  'How something like this becomes a rule',
                  'The part of you that does not want to give this up',
@@ -147,15 +165,16 @@ KICKER_EN = {'On Reading This': 'Zur Lesart', 'Framework': 'Getriebe',
              'What Carries': 'Was trägt', 'Fields of Learning': 'Lernfelder',
              'Account': 'Rechenschaft', 'Closing Word': 'Schlusswort'}
 
-# Woerter, die im Referenzschnitt fuer Eltern-Kind einen Satz (Prosa) bzw. eine
-# Zeile (Listen) entfernen: nichts Sexuelles, nichts Romantisches
-# (Startprompt, Bau 3). Bewusst weit — ein Satz zu viel weg ist billiger als
-# einer zu viel drin.
+# Woerter, die im Referenzschnitt fuer Eltern-Kind und (seit 2026-10-14c) Freundschaft
+# einen Satz (Prosa) bzw. eine Zeile (Listen) entfernen: nichts Sexuelles, nichts
+# Romantisches (Startprompt, Bau 3). Bewusst weit — ein Satz zu viel weg ist billiger
+# als einer zu viel drin. 2026-10-14c: „Ehe“ nur gross geschrieben — die Konjunktion
+# „ehe“ („ehe die Zeit reif ist“) nahm ganze Saetze mit.
 FILTER_ELTERN_KIND = re.compile(
     r'erot|sexu|sinnlich|begehr|begierde|leidenschaft|\blust\b|lüstern|hure|'
     r'verführ|verlieb|liebhaber|geliebte|liebesbezieh|liebesleben|liebesglück|'
     r'romanz|romantisch|flirt|partnerwahl|wahl des partners|\bpartner|'
-    r'anderen geschlecht|\behe\b|ehepartner|bettgeflüster|intim|zärtlich|'
+    r'anderen geschlecht|(?-i:\bEhen?\b)|ehepartner|bettgeflüster|intim|zärtlich|'
     r'hingabe|eroberer|anziehungskraft|befriedig',
     re.I)
 
@@ -197,6 +216,80 @@ PASSUNG_RE = re.compile(
     r'(?:passt|passen)\s+nicht\s+mit\s+[^.;:!?]{1,80}?\s+zusammen|'
     r'(?:passt|passen)\s+nicht\s+zueinander|nicht\s+zusammen(?:zu)?pass\w*|'
     r'(?:gute|schlechte) Partie|meant to be|soulmate', re.I)
+
+# Pruefmuster der Probe als Konstanten (2026-10-14c, Wartungslauf „Art Freundschaft“,
+# Punkt b): probe() prueft mit genau diesen Objekten, hilfe('probe') druckt ihre
+# Muster — Chat 1 muss den Quelltext dafuer nicht mehr lesen (vorher 20 bis 41 KB je
+# Lauf). Die Muster sind wortgleich die frueher in probe() stehenden.
+# B9 Anrede: „du“ bei Paar und Freundschaft, das Nomen „Du“ ausgenommen …
+B9_DU_RE = re.compile(r'\b(?:[Dd]u|[Dd]ich|[Dd]ir|[Dd]ein\w*)\b')
+B9_DU_NOMEN_RE = re.compile(
+    r'\b(?:im|ins|das|ein|dem|zum|vom|am|ans|ihr|sein|ihrem|seinem)\s+Du\b')
+# … und „ihr“ bei Eltern-Kind (die dritte Person wird nicht angeredet)
+B9_IHR_RE = re.compile(
+    r'\b(?:[Ee]uch|[Ee]uer|[Ee]ure[nmrs]?)\b|\b[Ii]hr beide\b|'
+    r'\b[Ii]hr (?:seid|habt|könnt|wollt|müsst|dürft|sollt|werdet|wisst|'
+    r'merkt|kennt|braucht|lebt|spürt|teilt)\b')
+# B10 dritte Person (Eltern-Kind); <VORNAME> steht fuer die nicht angeredete Person
+B10_MUSTER = (
+    r'diagnos|störung|trauma|therap|somatis|parentifiz|krank|symptom|\w+-kind\b|'
+    r'faul|träg\b|bequem|stur|egoist|manipul|übertreib|'
+    r'\b<VORNAME> (?:ist|wird|war)\b|'
+    r'eines tages|später wird|sorg dafür|bring (?:ihr|ihm) bei|lass (?:sie|ihn) nicht|'
+    r'verbiet|zwing|streng\w*|\borb\b|\d+°\d+′')
+
+
+def _b10_re(vorname):
+    """B10_MUSTER mit dem Vornamen der nicht angeredeten Person (Gross/klein egal)."""
+    return re.compile(B10_MUSTER.replace('<VORNAME>', re.escape(vorname)), re.I)
+
+
+# B11: romantische oder sexuelle Lesart (Eltern-Kind in jedem Alter und Freundschaft);
+# bei einem Kind unter 18 dazu Alterswoerter
+ROMANTIK_RE = re.compile(
+    r'verliebt|verlieb|liebhaber|flirt|erot|sexu|sinnlich|begehr|leidenschaft|'
+    r'romantisch|romanz|partnerwahl|liebesleben', re.I)
+B11_KIND_RE = re.compile(
+    ROMANTIK_RE.pattern + r'|\bjährig|\bJahre alt\b|'
+    r'\b(?:zwölf|dreizehn|vierzehn|fünfzehn|sechzehn|siebzehn|elf|zehn|neun|acht|'
+    r'sieben|sechs)\b(?! (?:Kapitel|Verbindungen|von))|\bAlter\b|Pubertät', re.I)
+# B15 Rang, Zahl, Einzigkeit — und was vorher gestrichen wird (keine Rangaussage)
+B15_RANG_RE = re.compile(
+    r'(eng|dicht|stärk|schwäch|wenig)[a-zäöüß]*ste|einzig|die meisten|überhaupt vorkommt|'
+    r'\b(zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|beide|[0-9]+) '
+    r'(von|Verbindungen|Kontakte|Fäden|Planeten|Faktoren)|Hälfte|Drittel|'
+    r'\b(?:zwei|drei|vier|fünf|sechs)mal\b')
+B15_NICHT_RANG_RE = re.compile(
+    r'\bein(?:e|en|em|er|es)? einzig\w*|\beine Hälfte\b|'
+    r'\bHälfte (?:eines|des) Spiegels\b|\bein- oder zweimal\b|'
+    r'\b(?:zwei|drei|vier|fünf|sechs)mal (?:in der Woche|im Monat|am Tag|'
+    r'pro Woche|die Woche)\b')
+
+
+def dateiname(art, a, b, datum, teil, englisch=False):
+    """Dateiname im Klientenordner (Modul, „Dateinamen und Ablage“) — fuer jede Art.
+
+    art      'paar' | 'eltern-kind' | 'freundschaft' (Gross/klein egal)
+    a, b     Vornamen: a bestellt, b ist die zweite Person
+    datum    'JJJJ-MM-TT' (Tag von Chat 1)
+    teil     'chart_data' | 'analyse' | 'referenz' -> `<A>_<KÜRZEL>_<B>_<Datum>[_EN]_<teil>.md`
+             (KÜRZEL `Beziehung`, bei Freundschaft `Freundschaft`); 'pdf' ->
+             `<Dokumenttyp>_<A>_und_<B>_<Datum>.pdf`, englisch
+             `<Document_Type>_<A>_and_<B>_<Datum>.pdf` (Leerzeichen als _).
+    englisch die englische Fassung (`_EN` hinter dem Datum bzw. englischer PDF-Name)
+    Ein Zusatz `_b`, `_c` fuer einen schon belegten Namen kommt danach von Hand.
+    """
+    art = (art or '').strip().lower().replace(' ', '-')
+    if art not in ARTEN:
+        raise BeziehungFehler('Art „%s“ unbekannt — erlaubt: %s.'
+                              % (art, ', '.join(ART_TITEL[x] for x in ARTEN)))
+    if teil == 'pdf':
+        if englisch:
+            return '%s_%s_and_%s_%s.pdf' % (DOKUMENTTYP_EN[art].replace(' ', '_'), a, b, datum)
+        return '%s_%s_und_%s_%s.pdf' % (DOKUMENTTYP[art], a, b, datum)
+    if teil not in ('chart_data', 'analyse', 'referenz'):
+        raise BeziehungFehler("teil: 'chart_data', 'analyse', 'referenz' oder 'pdf'.")
+    return '%s_%s_%s_%s%s_%s.md' % (a, KUERZEL[art], b, datum, '_EN' if englisch else '', teil)
 
 
 class BeziehungFehler(Exception):
@@ -1178,7 +1271,8 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
     """Die ganze Rechnung des Beziehungshoroskops — ohne Deutung.
 
     a_pfad, b_pfad  Datenblaetter: A = bestellende Person, B = zweite Person.
-    art             'paar' | 'eltern-kind'.
+    art             'paar' | 'eltern-kind' | 'freundschaft' (seit 2026-10-14c;
+                    Gross/klein egal).
     datum           Tag von Chat 1 (datetime.date oder 'JJJJ-MM-TT'); Vorgabe
                     heute in Berlin. Alter heute richten sich danach.
     eltern          bei Eltern-Kind: 'A' (Vorgabe: der Elternteil bestellt) oder
@@ -1190,8 +1284,8 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
     grundlage       {'A': '…', 'B': '…'} optional: Vermerk, dass ein Datenblatt nur als
                     Grundlage dieses Beziehungshoroskops entstanden ist.
 
-    Haelt an (BeziehungFehler): unbekannte Art; Paar mit einer Person unter 18;
-    Eltern-Kind, in dem ein Kind unter 18 selbst bestellt.
+    Haelt an (BeziehungFehler): unbekannte Art; Paar oder Freundschaft mit einer
+    Person unter 18; Eltern-Kind, in dem ein Kind unter 18 selbst bestellt.
 
     -> dict mit 'art', 'datum', 'A', 'B' (lies_datenblatt + 'alter'),
        'kreuz', 'achsen', 'ueb_b_in_a', 'ueb_a_in_b', 'zeit' (zeitprobe),
@@ -1200,8 +1294,8 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
     """
     art = (art or '').strip().lower().replace(' ', '-')
     if art not in ARTEN:
-        raise BeziehungFehler('Art „%s“ unbekannt — erlaubt: Paar, Eltern-Kind.'
-                              % art)
+        raise BeziehungFehler('Art „%s“ unbekannt — erlaubt: %s.'
+                              % (art, ', '.join(ART_TITEL[x] for x in ARTEN)))
     if datum is None:
         datum = _heute_berlin()
     elif isinstance(datum, str):
@@ -1243,14 +1337,17 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
     if not ew or ew.lower() == 'nicht angegeben' or re.search(r'[|<\[]', ew):
         r['anhalten'].append('Einwilligung nicht vermerkt (leer oder Vorlagenzeile mit '
                              'mehreren Werten) — ohne Vermerk wird nichts geschrieben.')
-    if art == 'paar':
+    if art in IHR_ARTEN:
+        # 2026-10-14c: Freundschaft wie das Paar nur mit zwei Erwachsenen (Chris 14.10.)
         for p in (pa, pb):
             if p['alter'] is None:
-                r['anhalten'].append('%s: kein Geburtsdatum im Datenblatt — das '
-                                     'Paar braucht zwei Erwachsene.' % p['vorname'])
+                r['anhalten'].append('%s: kein Geburtsdatum im Datenblatt — %s '
+                                     'braucht zwei Erwachsene.'
+                                     % (p['vorname'], 'das Paar' if art == 'paar'
+                                        else 'die Freundschaft'))
             elif p['alter'] < ERWACHSEN:
-                raise BeziehungFehler('Paar nur mit zwei Erwachsenen: %s ist %d.'
-                                      % (p['vorname'], p['alter']))
+                raise BeziehungFehler('%s nur mit zwei Erwachsenen: %s ist %d.'
+                                      % (ART_TITEL[art], p['vorname'], p['alter']))
     else:
         if eltern not in ('A', 'B'):
             raise BeziehungFehler("eltern='A' oder 'B'.")
@@ -1312,8 +1409,9 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
 
 def _anrede(r):
     na, nb = r['A']['vorname'], r['B']['vorname']
-    if r['art'] == 'paar':
-        return 'Paar — beide sind Leser: „ihr“; Sätze über einen von beiden nennen ihn beim Namen'
+    if r['art'] in IHR_ARTEN:
+        return ('%s — beide sind Leser: „ihr“; Sätze über einen von beiden nennen ihn '
+                'beim Namen' % ART_TITEL[r['art']])
     eltern = r['auftrag']['eltern']
     kind = nb if eltern == 'A' else na
     elternteil = na if eltern == 'A' else nb
@@ -1401,8 +1499,8 @@ def rechnung_text(r):
     L.append('')
     L.append('## Kopf')
     L.append('')
-    L.append('- Beziehungshoroskop: %s und %s' % (na, nb))
-    L.append('- Art: %s' % ('Paar' if r['art'] == 'paar' else 'Eltern-Kind'))
+    L.append('- %s: %s und %s' % (DOKUMENTTYP[r['art']], na, nb))
+    L.append('- Art: %s' % ART_TITEL[r['art']])
     L.append('- Bestellt von: %s · Anrede: %s' % (na, _anrede(r)))
     if r['art'] == 'eltern-kind':
         kind = r[r['kind']]
@@ -2126,31 +2224,152 @@ def _prinzip(bundle, faktor):
     return 'PRINZIP_%s' % kopf, ''
 
 
-def _filtern(text):
-    """Eltern-Kind-Filter: entfernt Saetze (Prosa) bzw. Zeilen (Listen,
-    Gegenueberstellung, Archetyp/Schatten), die FILTER_ELTERN_KIND treffen.
-    -> (text, Zahl der entfernten Stuecke)."""
+# 2026-10-14c (Wartungslauf „Art Freundschaft“, Punkt a): Hilfen des satzweisen Filters
+_DEKOR_RE = re.compile(r'^\s*[─━=\-_~·•*]{4,}\s*$')
+_LISTE_RE = re.compile(r'^\s*(?:[-•*]\s|\d{1,2}[.)]\s)')
+# Feldkopf am Zeilenanfang: in Versalien („THEMA:“, „KONJUNKTION AM NORDKNOTEN – …“)
+# oder in gemischter Schreibung mit bis zu vier Woertern („Als Kind – …“, „Inneres
+# Mutterbild:“, „Skorpion (Erhöhung):“, „Stier 1874/75–1887/88:“) — ohne Punkt im Kopf,
+# sonst laese er ueber eine Satzgrenze („Begegnung. Ressource:“).
+_KOPF_START_RE = re.compile(
+    r'^\s*(?:[A-ZÄÖÜ][A-ZÄÖÜ0-9 /(),=☊☋-]*[A-ZÄÖÜ)]\s*(?::|\s–\s)'
+    r'|[A-ZÄÖÜ][\wäöüß]+(?:[ -][\wÄÖÜäöüß/–()]+){0,3}\s*(?::|\s–\s))')
+# Ueberschrift in Versalien ohne Doppelpunkt („FÜHLEN“, „MONDKNOTEN ☊“)
+_VERSAL_ZEILE_RE = re.compile(r'^\s*[A-ZÄÖÜ][^a-zäöüß:]{1,60}$')
+# Kopf einer Prosa-Einheit: „FELD – Titel␣␣“, „Feld – Titel: “ oder „FELD: “ / „Feld: “
+_KOPF_TITEL_RE = re.compile(
+    r'^\s*(?:[A-ZÄÖÜ]{2}[A-ZÄÖÜ0-9]*(?:\s[\wÄÖÜäöüß()/=☊☋-]+){0,10}'
+    r'|[A-ZÄÖÜ][\wäöüß()/-]*(?:\s[\wÄÖÜäöüß()/-]+){0,4})\s–\s[^.!?:\n]{1,80}?(?:\s{2,}|:\s+)')
+_KOPF_FELD_RE = re.compile(r'^\s*[A-ZÄÖÜ][\wÄÖÜäöüß()–/-]*(?:\s[\wÄÖÜäöüß()–/-]+){0,3}:\s+')
+_FELD_VERSAL_RE = re.compile(r'^\s*([A-ZÄÖÜ][A-ZÄÖÜ ]*[A-ZÄÖÜ])(?=\s*(?::|\s–\s|\s\())')
+_ABK = {'ca', 'bzw', 'vgl', 'usw', 'etc', 'evtl', 'ggf', 'bspw', 'inkl', 'sog', 'hrsg',
+        'nr', 'jh', 'jhd', 'dr', 'prof', 'st', 'abb', 'bd', 'ff', 'chr'}
+_GRENZE_RE = re.compile(r'([.!?…])(["“”»)]*)(\s+)(?=[A-ZÄÖÜ„"»(0-9])')
+_UMBRUCH = (55, 95)       # Zeilenlaenge eines Umbruchs in der Bibliothek (Zeichen)
+
+
+def _saetze_bibliothek(text):
+    """Saetze eines Bibliothekstextes — ohne Grenze nach einer Abkuerzung („ca.“,
+    „bzw.“) oder einem einzelnen Buchstaben („u. a.“, „M. Kelley“)."""
+    out, start = [], 0
+    for m in _GRENZE_RE.finditer(text):
+        vor = re.search(r'([\wÄÖÜäöüß]+)$', text[start:m.start()])
+        wort = vor.group(1) if vor else ''
+        if m.group(1) == '.' and (len(wort) == 1 or wort.lower() in _ABK):
+            continue
+        out.append(text[start:m.end(2)])
+        start = m.end()
+    out.append(text[start:])
+    return [s for s in out if s.strip()]
+
+
+def _einheiten(zeilen):
+    """Zeilen eines Absatzes -> Einheiten (Listen von Zeilen). Eine umbrochene Zeile
+    (Laenge im Band _UMBRUCH) setzt sich in der naechsten fort, wenn sie mitten im
+    Satz endet — auch vor einem Wort mit Doppelpunkt („Der besonders betonte /
+    Umschlagpunkt: …“) — oder wenn die naechste nicht mit einem Feldkopf beginnt.
+    Rahmen, Versalueberschriften, Listenzeilen und kurze Zeilen stehen fuer sich."""
+    einheiten = []
+    for i, z in enumerate(zeilen):
+        v = zeilen[i - 1].rstrip() if i else ''
+        if (i == 0 or not z.strip() or not v.strip() or _DEKOR_RE.match(z)
+                or _DEKOR_RE.match(v) or _VERSAL_ZEILE_RE.match(z)
+                or _VERSAL_ZEILE_RE.match(v) or _LISTE_RE.match(z)
+                or not (_UMBRUCH[0] <= len(v) <= _UMBRUCH[1])):
+            neu = True
+        elif re.search(r'[.!?:;…]["“”»)]*$', v):
+            neu = bool(_KOPF_START_RE.match(z))      # Umbruch an einer Satzgrenze
+        elif re.search(r'(?:^|\s)[a-zäöüß][\wäöüß]*$|[,–—-]$', v):
+            neu = False                  # mitten im Satz umbrochen („Der besonders betonte“)
+        else:
+            neu = bool(_KOPF_START_RE.match(z))      # Tabellenzeile („… Aszendent: Skorpion“)
+        if neu:
+            einheiten.append([z])
+        else:
+            einheiten[-1].append(z)
+    return einheiten
+
+
+def _verbinden(einheit):
+    """Zeilen einer Einheit zu einem Text; „Dreiecks-“ / „Charakter“ ohne Leerzeichen."""
+    out = einheit[0].strip()
+    for z in einheit[1:]:
+        z = z.strip()
+        out += ('' if re.search(r'[A-Za-zÄÖÜäöüß]-$', out) else ' ') + z
+    return out
+
+
+def _filtern(text, filter_re=None):
+    """Filter fuer Eltern-Kind und Freundschaft (FILTER_ELTERN_KIND): entfernt, was
+    nichts Romantisches und nichts Sexuelles tragen darf. -> (text, Zahl der
+    entfernten Stuecke).
+
+    2026-10-14c (Pruefbericht Beziehung Text 14.10. b, Rubrik 2; Wartungslauf „Art
+    Freundschaft“, Punkt a): satzweise statt zeilenweise. Vorher fiel jede Zeile unter
+    90 Zeichen mit einem Treffer ganz weg — in der umbrochenen Prosa der Bibliothek
+    blieben Satzreste stehen („Wegs oder Nebel und Flucht.“) und Abschnittskoepfe
+    gingen verloren (FLUSS, SPANNUNG). Jetzt: Absaetze ohne Treffer bleiben, wie sie
+    sind; sonst werden umbrochene Zeilen zu Einheiten zusammengefasst (_einheiten),
+    der Kopf einer Einheit („FLUSS ZUR ACHSE – die tragende Hingabe␣␣“, „THEMA:“,
+    „Als Kind – …:“) abgetrennt und nur die SAETZE (bei „ / “-Reihen die Glieder) mit
+    Treffer entfernt; der Kopf bleibt, traegt er selbst den Treffer, nur sein Feldname
+    in Versalien. „[…]“ markiert, dass am Anfang etwas fehlt, „[gefiltert]“ eine leer
+    gewordene Einheit. Listen-, Bild- und Ueberschriftzeilen (Archetyp, Schatten,
+    Gegenueberstellung „Fürsorge – Erotik“, Tabellenzeilen) fallen weiterhin ganz weg.
+    Eine gekuerzte Einheit steht danach ohne Umbruch in EINER Zeile."""
+    filter_re = FILTER_ELTERN_KIND if filter_re is None else filter_re
     n = 0
     out = []
-    for zeile in text.split('\n'):
-        if not FILTER_ELTERN_KIND.search(zeile):
-            out.append(zeile)
+    for teil in re.split(r'(\n[ \t]*\n)', text):
+        if not teil.strip() or not filter_re.search(teil):
+            out.append(teil)
             continue
-        if len(zeile) < 90 or re.match(r'\s*(ARCHETYP|SCHATTEN|[^\s:]+ – )', zeile):
-            n += 1
-            continue
-        satz = re.split(r'(?<=[.!?])\s+', zeile)
-        rest = [s for s in satz if not FILTER_ELTERN_KIND.search(s)]
-        n += len(satz) - len(rest)
-        # Ein Feldkopf („EINKLANG: der Sinnliche  Sinnlich-…“) bleibt stehen.
-        kopf = re.match(r'^([A-ZÄÖÜ]+:)\s', zeile)
-        if rest:
-            if kopf and not rest[0].startswith(kopf.group(1)):
-                rest[0] = kopf.group(1) + ' […] ' + rest[0]
-            out.append(' '.join(rest))
-        elif kopf:
-            out.append(kopf.group(1) + ' [gefiltert]')
-    return '\n'.join(out), n
+        neu = []
+        for einheit in _einheiten(teil.split('\n')):
+            ganz = _verbinden(einheit)
+            if not filter_re.search(ganz):
+                neu.extend(einheit)                      # unberuehrt, im alten Umbruch
+                continue
+            feld = _FELD_VERSAL_RE.match(ganz)
+            if feld and filter_re.search(feld.group(1)):
+                feld = None                              # „IDEE DER PARTNERSCHAFT:“ faellt mit
+            m = _KOPF_TITEL_RE.match(ganz) or _KOPF_FELD_RE.match(ganz)
+            if len(einheit) == 1 and (
+                    _DEKOR_RE.match(ganz) or _VERSAL_ZEILE_RE.match(ganz)
+                    or re.match(r'(?i)(?:archetyp|schatten)\b', ganz) or _LISTE_RE.match(ganz)
+                    or (not m and len(ganz) < 90 and not re.search(r'[.!?…]\s', ganz))):
+                # Listen-, Bild- und Ueberschriftzeile ohne Feldkopf („Fürsorge – Erotik“,
+                # Archetyp, Schatten): ganz weg; ein Feldname in Versalien bleibt stehen.
+                n += 1
+                if feld and not re.match(r'(?i)(?:archetyp|schatten)\b', ganz):
+                    neu.append(feld.group(1) + ': [gefiltert]')
+                continue
+            kopf, rumpf = (ganz[:m.end()], ganz[m.end():]) if m else ('', ganz)
+            kopf_weg = bool(kopf and filter_re.search(kopf))
+            if kopf_weg:
+                n += 1
+                kopf = (feld.group(1) + ': ') if feld else ''
+            rest, vorn_weg = [], False
+            for i, satz in enumerate(_saetze_bibliothek(rumpf)):
+                teile = re.split(r'\s+/\s+', satz)
+                bleibt = [t.strip() for t in teile if not filter_re.search(t)]
+                n += len(teile) - len(bleibt)
+                if i == 0 and filter_re.search(teile[0]):
+                    vorn_weg = True
+                if bleibt:
+                    rest.append(' / '.join(bleibt))
+            if rest:
+                neu.append(kopf + ('[…] ' if (kopf and (vorn_weg or kopf_weg)) else '')
+                           + ' '.join(rest))
+            elif kopf:
+                neu.append(kopf.rstrip() + ' [gefiltert]')
+            else:
+                neu.append('[gefiltert]')
+        out.append('\n'.join(neu))
+    text_neu = ''.join(out)
+    if n:
+        text_neu = re.sub(r'\n[ \t]*\n(?:[ \t]*\n)+', '\n\n', text_neu)
+    return text_neu, n
 
 
 def _mond_teil(text, abschnitt):
@@ -2171,8 +2390,10 @@ def referenzschnitt(pfad, bundle_pfad, ziel):
     Prinzip“); je UEBERLAGERUNG-Zeile HAUS_n_ALLG (bei Grenzlage beide) und das
     Prinzip des Faktors; je KERN-Zeile SONNE_IN_x, MOND_IN_x und ASZENDENT_x.
     Eltern-Kind: Mond des Kindes nur „Als Kind …“, des Elternteils nur „Als
-    Mutter …“ (fuer einen Vater sinngemaess); alle Paar- und Prinzipblöcke
-    durch den Filter (nichts Sexuelles, nichts Romantisches), gezaehlt.
+    Mutter …“ (fuer einen Vater sinngemaess). Eltern-Kind und (seit 2026-10-14c)
+    Freundschaft: alle Paar-, Prinzip- und Kernbloecke durch den Filter (_filtern:
+    nichts Sexuelles, nichts Romantisches, satzweise), gezaehlt; Hausbloecke und die
+    Mond-Schnitte ungefiltert. Paar: kein Filter.
     Jeder Block steht einmal; ein Kopf nennt, wofuer er gebraucht wird.
 
     -> {'ziel', 'bytes', 'bloecke', 'fehlstellen', 'gefiltert'}; eine
@@ -2188,11 +2409,12 @@ def referenzschnitt(pfad, bundle_pfad, ziel):
     namen = {'A': na, 'B': nb}
     bundle = selektor.load_bundle(bundle_pfad)
     elternkind = r['art'] == 'eltern-kind'
+    filter_art = r['art'] in OHNE_ROMANTIK          # 2026-10-14c: auch Freundschaft
     kind = r['kind']
     bloecke, reihen, fehl = {}, [], []
     gefiltert = [0]
 
-    def nimm(schl, txt, wozu, filtern=elternkind):
+    def nimm(schl, txt, wozu, filtern=filter_art):
         if not (txt or '').strip():
             fehl.append('%s — %s fehlt in der Bibliothek' % (wozu, schl))
             return
@@ -2275,10 +2497,10 @@ def referenzschnitt(pfad, bundle_pfad, ziel):
             else:
                 nimm('%s · %s' % (k, wer) if f != 'Sonne' else k, t, wozu)
     L = ['# Referenzschnitt der Beziehung — %s und %s' % (na, nb), '',
-         '- Art: %s%s' % ('Eltern-Kind' if elternkind else 'Paar',
+         '- Art: %s%s' % (ART_TITEL.get(r['art'], r['art']),
                           (' — Filter: nichts Sexuelles, nichts Romantisches; %d '
                            'Sätze oder Zeilen entfernt' % gefiltert[0])
-                          if elternkind else ''),
+                          if filter_art else ''),
          '- Quelle: nur die Bibliothek (blocks_bundle.txt), keine Netzquellen. Ein '
          'Paarblock beschreibt die Verbindung zweier Prinzipien IN EINEM Bild: '
          'zwischen zwei Menschen gilt er als Grundton (ALLGEMEIN, '
@@ -2303,7 +2525,7 @@ def referenzschnitt(pfad, bundle_pfad, ziel):
     by = len(out.encode('utf-8'))
     print('%s %d B · %d Blöcke · %d Fehlstellen%s' % (
         os.path.basename(ziel), by, len(reihen), len(fehl),
-        (' · gefiltert %d' % gefiltert[0]) if elternkind else ''))
+        (' · gefiltert %d' % gefiltert[0]) if filter_art else ''))
     return {'ziel': ziel, 'bytes': by, 'bloecke': reihen, 'fehlstellen': fehl,
             'gefiltert': gefiltert[0]}
 
@@ -2827,8 +3049,9 @@ def probe(analyse_pfad, datenblatt_pfad):
     enge Achsenkontakte ohne Thema im Getriebe, „Ohne Deutungs-Heimat“ in der
     Rechenschaft) · B7 Leitsatz im Schlusswort ·
     B8 Verwerfungs-Erlaubnis genau zweimal · B9 Anrede · B10 dritte Person ·
-    B11 Kind unter 18 · B12 Gleichgewicht beim Paar · B13 Satz zum realen
-    Problem · B14 Wortscan (Regexe aus inhaltsprobe) · B15 Rang-, Zahl- und
+    B11 Kind unter 18, bei Eltern-Kind und Freundschaft romantische oder sexuelle
+    Lesart (seit 2026-10-14c) · B12 Gleichgewicht beim Paar und bei Freundschaft ·
+    B13 Satz zum realen Problem · B14 Wortscan (Regexe aus inhaltsprobe) · B15 Rang-, Zahl- und
     Einzigkeitsaussagen (PRUEFEN gegen die Rangzeilen) · B16 Nichtwissens-Satz
     der Wurzel · B17 kein Urteil ueber die Passung · B18 eng* fuehrt kein Thema ·
     B19 Laengen-Gegenprobe (Mittel der letzten drei Themenkapitel unter 60 %
@@ -2859,12 +3082,15 @@ def probe(analyse_pfad, datenblatt_pfad):
     except Exception as e:
         return 'B1 Schema: FEHLER — %s\nBEZIEHUNGSPROBE: 1 FEHLER · 0 PRÜFEN' % e
     doctype = (parsed.get('doctype') or '').strip()
-    if doctype not in ('Beziehungshoroskop', 'Relationship Horoscope'):
-        F('B1', 'H1-Dokumenttyp „%s“ statt „Beziehungshoroskop“' % doctype)
+    # 2026-10-14c: der Dokumenttyp haengt an der Art (Freundschaft: Freundschaftshoroskop)
+    soll_de = DOKUMENTTYP.get(art, 'Beziehungshoroskop')
+    soll_en = DOKUMENTTYP_EN.get(art, 'Relationship Horoscope')
+    if doctype not in (soll_de, soll_en):
+        F('B1', 'H1-Dokumenttyp „%s“ statt „%s“' % (doctype, soll_de))
     client = (parsed.get('client') or '').strip()
     if client not in ('%s und %s' % (na, nb), '%s and %s' % (na, nb)):
         F('B1', 'H1-Name „%s“ statt „%s und %s“' % (client, na, nb))
-    englisch = doctype == 'Relationship Horoscope'
+    englisch = doctype == soll_en
     kap = parsed['chapters']
     arten = [_kicker_art(c['kicker']) for c in kap]
     # B2 Skelett
@@ -3049,46 +3275,41 @@ def probe(analyse_pfad, datenblatt_pfad):
         for b in text_von(c):
             for s in _saetze(_ohne_zitate(b['text'])):
                 # 2026-10-11 (W3): das Nomen „Du“ („sich im Du findet“) ist keine Anrede
-                s_nomen = re.sub(r'\b(?:im|ins|das|ein|dem|zum|vom|am|ans|ihr|sein|ihrem|seinem)\s+Du\b',
-                                 '', s)
-                if art == 'paar' and not englisch and re.search(
-                        r'\b(?:[Dd]u|[Dd]ich|[Dd]ir|[Dd]ein\w*)\b', s_nomen):
-                    P('B9', '%s: „du“ beim Paar: %s' % (c['kicker'], s[:120]))
-                if art == 'eltern-kind' and not englisch and re.search(
-                        r'\b(?:[Ee]uch|[Ee]uer|[Ee]ure[nmrs]?)\b|\b[Ii]hr beide\b|'
-                        r'\b[Ii]hr (?:seid|habt|könnt|wollt|müsst|dürft|sollt|werdet|wisst|'
-                        r'merkt|kennt|braucht|lebt|spürt|teilt)\b', s):
+                s_nomen = B9_DU_NOMEN_RE.sub('', s)
+                if art in IHR_ARTEN and not englisch and B9_DU_RE.search(s_nomen):
+                    P('B9', '%s: „du“ %s: %s' % (c['kicker'], 'beim Paar' if art == 'paar'
+                                                 else 'bei Freundschaft', s[:120]))
+                if art == 'eltern-kind' and not englisch and B9_IHR_RE.search(s):
                     P('B9', '%s: „ihr“ bei Eltern-Kind (die dritte Person wird nicht '
                       'angeredet): %s' % (c['kicker'], s[:120]))
     # B10 dritte Person (Eltern-Kind)
     if art == 'eltern-kind':
         dritte = r[r['kind']]['vorname'] if (r.get('eltern') or 'A') == 'A' \
             else r['B' if r['kind'] == 'A' else 'A']['vorname']
-        drit_re = re.compile(
-            r'diagnos|störung|trauma|therap|somatis|parentifiz|krank|symptom|\w+-kind\b|'
-            r'faul|träg\b|bequem|stur|egoist|manipul|übertreib|'
-            r'\b' + re.escape(dritte) + r' (?:ist|wird|war)\b|'
-            r'eines tages|später wird|sorg dafür|bring (?:ihr|ihm) bei|lass (?:sie|ihn) nicht|'
-            r'verbiet|zwing|streng\w*|\borb\b|\d+°\d+′', re.I)
+        drit_re = _b10_re(dritte)
         for c in kap:
             for b in text_von(c):
                 for s in _saetze(b['text']):
                     if drit_re.search(s) and not REALPROBLEM_RE.search(s):
                         P('B10', '%s: %s' % (c['kicker'], s[:140]))
-    # B11 Kind unter 18
+    # B11 Kind unter 18 — seit 2026-10-14c ausserdem die romantische oder sexuelle
+    # Lesart bei Eltern-Kind in jedem Alter und bei Freundschaft (Modul, „Über wen der
+    # Text spricht“); nur deutsch, wie B9
     if r.get('kind_minderjaehrig'):
-        kind_re = re.compile(
-            r'verliebt|verlieb|liebhaber|flirt|erot|sexu|sinnlich|begehr|leidenschaft|'
-            r'romantisch|romanz|partnerwahl|liebesleben|\bjährig|\bJahre alt\b|'
-            r'\b(?:zwölf|dreizehn|vierzehn|fünfzehn|sechzehn|siebzehn|elf|zehn|neun|acht|'
-            r'sieben|sechs)\b(?! (?:Kapitel|Verbindungen|von))|\bAlter\b|Pubertät', re.I)
         for c in kap:
             for b in text_von(c):
                 for s in _saetze(b['text']):
-                    if kind_re.search(s):
+                    if B11_KIND_RE.search(s):
                         P('B11', '%s: %s' % (c['kicker'], s[:140]))
-    # B12 Gleichgewicht beim Paar
-    if art == 'paar':
+    elif art in OHNE_ROMANTIK and not englisch:
+        for c in kap:
+            for b in text_von(c):
+                for s in _saetze(b['text']):
+                    if ROMANTIK_RE.search(s):
+                        P('B11', '%s: romantische oder sexuelle Lesart? %s'
+                          % (c['kicker'], s[:140]))
+    # B12 Gleichgewicht beim Paar und (seit 2026-10-14c) bei Freundschaft
+    if art in IHR_ARTEN:
         alle = ' '.join(b['text'] for c in kap for b in text_von(c))
         # 2026-10-11 (W3): der Genitiv auf -s zaehlt mit („<A>s“); vorher
         # 95 : 205 statt 311 : 302 im Paar-Pruefffall
@@ -3175,18 +3396,11 @@ def probe(analyse_pfad, datenblatt_pfad):
                         continue
                     (F if stufe == 'F' else P)('B14', '%s · %s: %s' % (c['kicker'], name, s[:130]))
     # B15 Rang, Zahl, Einzigkeit
-    rang_re = re.compile(
-        r'(eng|dicht|stärk|schwäch|wenig)[a-zäöüß]*ste|einzig|die meisten|überhaupt vorkommt|'
-        r'\b(zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn|elf|zwölf|beide|[0-9]+) '
-        r'(von|Verbindungen|Kontakte|Fäden|Planeten|Faktoren)|Hälfte|Drittel|'
-        r'\b(?:zwei|drei|vier|fünf|sechs)mal\b')
+    rang_re = B15_RANG_RE
     # 2026-10-11 (W3): „ein einziges Mal“, „eine einzige Übung“ (Pflichtsatz in „Zur
     # Lesart“) und „die eine Hälfte eines Spiegels“ sind keine Rang- oder
     # Anteilsaussagen; „zweimal“ ist eine Zahlaussage und kam vorher nicht.
-    nicht_rang = re.compile(r'\bein(?:e|en|em|er|es)? einzig\w*|\beine Hälfte\b|'
-                            r'\bHälfte (?:eines|des) Spiegels\b|\bein- oder zweimal\b|'
-                            r'\b(?:zwei|drei|vier|fünf|sechs)mal (?:in der Woche|im Monat|am Tag|'
-                            r'pro Woche|die Woche)\b')
+    nicht_rang = B15_NICHT_RANG_RE
     for c in kap:
         for b in text_von(c):
             for s in _saetze(b['text']):
@@ -3215,8 +3429,8 @@ def probe(analyse_pfad, datenblatt_pfad):
                 if PASSUNG_RE.search(s):
                     F('B17', '%s: Urteil über die Passung? %s' % (c['kicker'], s[:140]))
                 if re.search(r'Composit|Transit', s):
-                    P('B17', '%s: Composit/Transit gehören nicht zum Beziehungshoroskop: %s'
-                      % (c['kicker'], s[:120]))
+                    P('B17', '%s: Composit/Transit gehören nicht zum %s: %s'
+                      % (c['kicker'], soll_de, s[:120]))
     # B18 eng* fuehrt kein Thema
     kipp = _kipp_ids(r) if r.get('zeit', {}).get('eng_kippt') else set()
     for t in r['themen']['themen']:
@@ -3308,6 +3522,101 @@ def probe(analyse_pfad, datenblatt_pfad):
     zeilen += ['  %s' % x for x in fuer_chris] or ['  keine']
     zeilen.append('BEZIEHUNGSPROBE: %d FEHLER · %d PRÜFEN' % (len(fehler), len(pruefen)))
     return '\n'.join(zeilen)
+
+
+def _pruefmuster_text():
+    """Anhang an den Docstring von probe(): was die Probe genau liest — gebaut aus
+    denselben Objekten, mit denen sie prueft (2026-10-14c, Punkt b), damit
+    hilfe('probe') die Pruefgrammatik nennt und Chat 1 den Quelltext nicht liest."""
+    def m(rx):
+        return rx.pattern if hasattr(rx, 'pattern') else rx
+    folgen = '\n'.join('      %s: %s' % (ART_TITEL[a], ' · '.join(BEWEGUNGEN[a]))
+                       for a in ARTEN)
+    T = """
+
+PRUEFMUSTER — was die Probe genau liest (gebaut aus denselben Objekten, mit
+denen sie prueft; einzeln: hilfe('<NAME>')):
+
+Belege (B5, B6): Segmente, getrennt durch „ · “, in einer von drei Formen.
+  Stand       <Vorname>: <Faktor> [Symbol] <G°MM′> <Zeichen> [Symbol][, <n>. Haus]
+              — Grenzlage „, 11./12. Haus“, offene Fuehrung „, 9.=10. Haus“.
+              Beispiel: „Aaa: Venus ♀ 13°00′ Stier ♉, 11. Haus“
+  Verbindung  <Vorname>: <Faktor> [Symbol] <Aspekt> [Symbol] <Vorname>: <Faktor>
+              [Symbol], Orb <G°MM′> — dahinter erlaubt „, eng“ und „, voll“ |
+              „, einseitig“ | „, Nebenaspekt“; Orb, „eng“ und Stufe werden gegen die
+              Rechnung gehalten. Beispiel: „Aaa: Venus ♀ Konjunktion ☌ Bbb: Mond ☽,
+              Orb 1°48′“
+  Stellung    <Vorname>: <Faktor> [Symbol] in <Vorname>s <n>. Haus — Genitiv mit
+              Apostroph bei s, ß, x, z („<Vorname>’“), Grenzlage „11./12. Haus“.
+              Beispiel: „Bbb: Mond ☽ in Aaas 11. Haus“
+  Faktor: Sonne … Pholus, Aszendent (AC), Medium Coeli (MC), Deszendent (DC), Imum
+  Coeli (IC) oder das Kuerzel allein. In Themenkapiteln, „Was trägt“ und Anlagen ist
+  ein Segment ohne eine der drei Formen FEHLER B5; im Getriebe sind Segmente frei
+  (Struktur-Befunde), geprueft werden dort nur Verbindungen und Stellungen.
+  Muster: SEG_STAND_RE, SEG_ASP_RE, SEG_UEB_RE.
+B6: jede Verbindung aus aspekte= steht im Beleg ihres Kapitels (PRUEFEN); jede
+  Ressource mit Deutungsort „Was trägt“ im Beleg von „Was trägt“, jeder enge
+  Achsenkontakt ohne Thema im Beleg des Getriebes (FEHLER); jede Zeile „Ohne
+  Deutungs-Heimat“ mit beiden Faktoren in der Rechenschaft (PRUEFEN).
+B4 Bewegungsfolge: In jedem Themenkapitel und in „Was trägt“ stehen als ### nur
+  die Wortlaute der Art, in dieser Folge, jeder hoechstens einmal; fehlen duerfen
+  nur Bewegung 3 und 4. Andere Kapitel tragen keinen davon. Englisch BEWEGUNGEN_EN.
+%(folgen)s
+B8 Verwerfungs-Erlaubnis genau an zwei Stellen, „Zur Lesart“ und das erste
+  Themenkapitel (Treffer unter 400 Zeichen Abstand sind EINE Stelle; nur deutsch):
+      VERWERF_RE = %(verwerf)s
+B9 Anrede (nur deutsch, PRUEFEN je Satz, Zitate „…“ ausgenommen):
+  Paar und Freundschaft, „du“:  B9_DU_RE = %(du)s
+      — vorher gestrichen, das Nomen „Du“: B9_DU_NOMEN_RE = %(du_nomen)s
+  Eltern-Kind, „ihr“:  B9_IHR_RE = %(ihr)s
+B10 dritte Person (Eltern-Kind, PRUEFEN je Satz, Gross/klein egal; ein Satz mit
+  dem Satz zum realen Problem zaehlt nicht; <VORNAME> = die nicht angeredete Person):
+      B10_MUSTER = %(b10)s
+B11 (PRUEFEN je Satz, Gross/klein egal) — Kind unter 18:
+      B11_KIND_RE = %(b11)s
+  sonst bei Eltern-Kind und Freundschaft (nur deutsch):
+      ROMANTIK_RE = %(rom)s
+B12 Gleichgewicht (Paar und Freundschaft, PRUEFEN): Nennungen der Vornamen samt
+  Genitiv im Verhaeltnis ueber 1,5; seite= der Themenliste mehr als 1 auseinander;
+  Schuldsaetze „wegen/weil/durch <Vorname>“ (ohne Genitiv), „<Vorname> ist/trägt
+  schuld“, „schuld ist/hat/trägt <Vorname>“.
+B13 Satz zum realen Problem, in „Zur Lesart“ (FEHLER ohne) und hoechstens EINEM
+  Themenkapitel, dort als erster Absatz von „Was da arbeitet“:
+      REALPROBLEM_RE = %(real)s
+B14 Wortscan mit den Mustern der Inhaltsprobe: FEHLER KLINISCH_RE (ausser verneint,
+  KLINISCH_VERNEINT_RE) und BESTAETIGUNG_RE; PRUEFEN FRIST_RE, SUPERLATIV_RE,
+  FACHBEGRIFF_RE, GRADZAHL_RE — Muster: inhaltsprobe.hilfe('<NAME>').
+B15 Rang, Zahl, Einzigkeit (PRUEFEN je Satz, gegen die Rangzeilen halten):
+      B15_RANG_RE = %(rang)s
+  vorher gestrichen (keine Rangaussage):
+      B15_NICHT_RANG_RE = %(nicht_rang)s
+B16 „Wie so etwas zur Regel wird“ traegt den Nichtwissens-Satz (FEHLER ohne):
+  inhaltsprobe.NICHTWISSEN_RE.
+B17 Urteil ueber die Passung (FEHLER): PASSUNG_RE = %(passung)s
+  „Composit“ oder „Transit“ im Text: PRUEFEN.
+B18 fuehrt= traegt eine enge Verbindung ohne eng* (FEHLER).
+B19 Laengen-Gegenprobe: Mittel der letzten drei Themenkapitel unter 60 %% der ersten
+  drei, ohne form=kurz oder form=ressource dort: FEHLER.
+B20 Subjekt-Probe (nur deutsch, PRUEFEN): „Was da arbeitet“ und „Wohin das gehört“
+  sind frei; in den uebrigen Bewegungen wird jeder Planet und Punkt als Satzsubjekt
+  gemeldet, in Text ohne Bewegung (Getriebe, Anlagen, Lernfelder …) nur mit einem
+  handelnden Verb (inhaltsprobe._p17_handelt). Der Genitiv eines Vornamens („<B>s
+  Saturn“) gilt wie ein Possessiv; ein Satz „Der MC ist der …“ ohne Bewegung ist
+  frei. Satzmuster: inhaltsprobe._p17_kandidaten.
+B21 Wiederholung (PRUEFEN; Rechenschaft ausgenommen): derselbe Satz (ab 12 Zeichen,
+  ausser Wegweisern, inhaltsprobe.WEGWEISER_RE) mehr als zweimal; derselbe Satzanfang
+  in derselben Bewegung in mehr als zwei Kapiteln. Satzanfang = das Etikett vor einem
+  Doppelpunkt in den ersten sechs Woertern, sonst die ersten vier Woerter, klein
+  geschrieben; englisch zaehlt nur der ganze Satz.""" % {
+        'folgen': folgen, 'verwerf': m(VERWERF_RE), 'du': m(B9_DU_RE),
+        'du_nomen': m(B9_DU_NOMEN_RE), 'ihr': m(B9_IHR_RE), 'b10': B10_MUSTER,
+        'b11': m(B11_KIND_RE), 'rom': m(ROMANTIK_RE), 'real': m(REALPROBLEM_RE),
+        'rang': m(B15_RANG_RE), 'nicht_rang': m(B15_NICHT_RANG_RE),
+        'passung': m(PASSUNG_RE)}
+    return T
+
+
+probe.__doc__ = (probe.__doc__ or '').rstrip() + '\n' + _pruefmuster_text() + '\n'
 
 
 # ---------------------------------------------------------------------------
@@ -3751,13 +4060,79 @@ def _selbsttest():
     check('Erotik' in open(rsp['ziel'], encoding='utf-8').read() and rsp['gefiltert'] == 0,
           'Paar: kein Filter')
 
+    # 3b Freundschaft (2026-10-14c, Wartungslauf „Art Freundschaft“): Kopf, Anrede,
+    # Filter ohne Mond-Schnitt, Dateinamen
+    with redirect_stdout(io.StringIO()):
+        zf = os.path.join(tmp, 'Aaa_Freundschaft_Bbb_chart_data.md')
+        fr = datenblatt(pa, pp, zf, 'Freundschaft', themen=th, deckblatt=db, datum=heute,
+                        beziehung='Freunde', einwilligung='beide (Selbsttest)')
+        rsf = referenzschnitt(zf, bp, os.path.join(tmp, 'fr_referenz.md'))
+    ftext = open(zf, encoding='utf-8').read()
+    check(fr['r']['art'] == 'freundschaft' and '- Art: Freundschaft' in ftext and
+          '- Freundschaftshoroskop: Aaa und Bbb' in ftext and
+          'Freundschaft — beide sind Leser: „ihr“' in ftext and
+          "ART = 'freundschaft'" in ftext and 'ELTERN = None' in ftext and
+          not any('Erwachsen' in x or 'Geburtsdatum' in x for x in fr['r']['anhalten'])
+          and lies_beziehung(zf)['kind'] is None,
+          'Freundschaft: Kopf, Anrede „ihr“, maschinenlesbarer Block, kein Kind')
+    frt = open(rsf['ziel'], encoding='utf-8').read()
+    check('Erotik' not in frt and 'verlieben' not in frt and 'Verführerisch' not in frt
+          and 'Hingabe' not in frt and rsf['gefiltert'] >= 5 and
+          '- Art: Freundschaft — Filter:' in frt,
+          'Freundschaft: Referenzschnitt mit dem Filter (nichts Romantisches, nichts Sexuelles)')
+    check('Als Kind – das ausgleichende Kind' in frt and 'Als Mutter – die Nährende' in frt
+          and 'Bild der Frau – die Charmante: [gefiltert]' in frt,
+          'Freundschaft: Mond-Blöcke ganz, ohne den Schnitt „Als Kind“/„Als Mutter“')
+    check(dateiname('Freundschaft', 'Aaa', 'Bbb', 'JJJJ-MM-TT', 'pdf') ==
+          'Freundschaftshoroskop_Aaa_und_Bbb_JJJJ-MM-TT.pdf' and
+          dateiname('freundschaft', 'Aaa', 'Bbb', 'JJJJ-MM-TT', 'pdf', englisch=True) ==
+          'Friendship_Horoscope_Aaa_and_Bbb_JJJJ-MM-TT.pdf' and
+          dateiname('paar', 'Aaa', 'Bbb', 'JJJJ-MM-TT', 'pdf', englisch=True) ==
+          'Relationship_Horoscope_Aaa_and_Bbb_JJJJ-MM-TT.pdf' and
+          dateiname('eltern-kind', 'Aaa', 'Bbb', 'JJJJ-MM-TT', 'analyse') ==
+          'Aaa_Beziehung_Bbb_JJJJ-MM-TT_analyse.md' and
+          dateiname('freundschaft', 'Aaa', 'Bbb', 'JJJJ-MM-TT', 'chart_data', englisch=True)
+          == 'Aaa_Freundschaft_Bbb_JJJJ-MM-TT_EN_chart_data.md',
+          'dateiname: Kürzel, PDF-Name und _EN je Art')
+
+    # 3c Filter satzweise (2026-10-14c, Punkt a): umbrochene Prosa, Feldköpfe, Listen
+    _roh = ('THEMA: Wärme und Hingabe (♀) treffen auf die Achse — Verfeinerung des\n'
+            'Wegs oder Ruhe im Vertrauten.\n\n'
+            'FLUSS ZUR ACHSE – die tragende Hingabe  Feines Gespür stützt die\n'
+            'Richtung mühelos; Gefahr der Trägheit.\n\n'
+            'SPANNUNG ZUR ACHSE – Wille und Ziel als Brennpunkt  Der besonders betonte\n'
+            'Umschlagpunkt: Kraft gegen Stillstand. Die Lust am Wettstreit treibt\n'
+            'voran, ehe die Zeit reif ist.\n\n'
+            'GEGENÜBERSTELLUNG:\nFürsorge – Erotik\nGemüt – Wärme\n\n'
+            'EINKLANG: der Sinnliche\nRuhe und Takt. Ein Leben in Fülle.\n\n'
+            'Waage: freie Partnerwahl und die Freiheit in der Partnerschaft; das '
+            'Gleichgewicht / Problem: Unentschlossenheit')
+    _neu, _n = _filtern(_roh)
+    check(not FILTER_ELTERN_KIND.search(_neu) and _n == 6 and
+          'THEMA: [gefiltert]' in _neu and 'Wegs oder' not in _neu and
+          'FLUSS ZUR ACHSE: […] Feines Gespür stützt die Richtung mühelos; Gefahr der '
+          'Trägheit.' in _neu and
+          'SPANNUNG ZUR ACHSE – Wille und Ziel als Brennpunkt  Der besonders betonte '
+          'Umschlagpunkt: Kraft gegen Stillstand.' in _neu and 'treibt' not in _neu and
+          'Gemüt – Wärme' in _neu and 'Fürsorge' not in _neu and
+          'EINKLANG: [gefiltert]\nRuhe und Takt. Ein Leben in Fülle.' in _neu and
+          'Waage: […] Problem: Unentschlossenheit' in _neu,
+          'Filter satzweise: keine Satzreste, Feldköpfe bleiben, Listenzeilen ganz')
+    check(_filtern('Ruhe, ehe der Sturm kommt. Wärme.')[1] == 0 and
+          _filtern('In Ehe und Freundschaft.')[1] == 1 and
+          _saetze_bibliothek('Nach M. Kelley Hunter u. a. gilt das. Ca. 9 Jahre. Gut.') ==
+          ['Nach M. Kelley Hunter u. a. gilt das.', 'Ca. 9 Jahre.', 'Gut.'],
+          'Filter: „ehe“ ist keine Ehe; Satzgrenzen nicht nach Initialen und Abkürzungen')
+
     # 4 Haltegruende
     for fn, text_ in ((lambda: rechnung(pa, pk, 'Paar', datum=heute),
                        'Paar mit einer Person unter 18 hält an'),
                       (lambda: rechnung(pk, pa, 'Eltern-Kind', datum=heute, eltern='B'),
                        'Kind unter 18 bestellt nicht selbst'),
-                      (lambda: rechnung(pa, pp, 'Freundschaft', datum=heute),
-                       'unbekannte Art hält an')):
+                      (lambda: rechnung(pa, pp, 'Kollegen', datum=heute),
+                       'unbekannte Art hält an'),
+                      (lambda: rechnung(pa, pk, 'Freundschaft', datum=heute),
+                       'Freundschaft mit einer Person unter 18 hält an')):
         try:
             with redirect_stdout(io.StringIO()):
                 fn()
@@ -4038,6 +4413,31 @@ def _selbsttest():
         check(all(len(z) > 0 for z in pr.split('FÜR CHRIS', 1)[1].splitlines()[1:3])
               and '…' not in pr.split('FÜR CHRIS', 1)[1],
               'Probe: „FÜR CHRIS“ ungekürzt')
+        # 2026-10-14c: Freundschaft — H1 je Art (B1), „ihr“-Wortlaute (B4), kein „du“
+        # (B9), romantische oder sexuelle Lesart (B11)
+        fr_an = gut.replace('# Beziehungshoroskop — ', '# Freundschaftshoroskop — ', 1).replace(
+            'Du bringst eine ruhige Wärme mit', 'Du bringst eine ruhige, sinnliche Wärme mit', 1)
+        check(fr_an.count('Freundschaftshoroskop') == 1 and 'sinnliche' in fr_an,
+              'Selbsttest: Einfügestellen der Freundschafts-Analyse fehlen')
+        ap5 = os.path.join(tmp, 'freundschaft_analyse.md')
+        open(ap5, 'w', encoding='utf-8').write(fr_an)
+        pr5 = probe(ap5, zf)
+        check('FEHLER B1' not in pr5 and 'FEHLER B4' in pr5 and
+              '„du“ bei Freundschaft' in pr5 and
+              'PRÜFEN B11: Anlagen: romantische oder sexuelle Lesart?' in pr5,
+              'Probe Freundschaft: Wortlaute „ihr“, kein „du“, Romantik-Probe (B4, B9, B11)')
+        pr6 = probe(ap, zf)
+        check('FEHLER B1: H1-Dokumenttyp „Beziehungshoroskop“ statt „Freundschaftshoroskop“'
+              in pr6, 'Probe Freundschaft: H1 „Freundschaftshoroskop“ verlangt (B1)')
+        # 2026-10-14c (Punkt b): hilfe('probe') nennt die Pruefmuster
+        _h = io.StringIO()
+        with redirect_stdout(_h):
+            hilfe('probe')
+        _h = _h.getvalue()
+        check('PRUEFMUSTER' in _h and B9_DU_RE.pattern in _h and ROMANTIK_RE.pattern in _h
+              and B15_RANG_RE.pattern in _h and 'SEG_ASP_RE' in _h and
+              'Freundschaft: ' + BEWEGUNGEN['freundschaft'][0] in _h,
+              "hilfe('probe') nennt Segmentformen, Bewegungsfolgen und Wortlisten")
     # 2026-10-11 (F5/K-a, W3, W4): Muster ohne Datei
     check(REALPROBLEM_RE.search('Ob zwei Menschen zusammenpassen, sagt es nicht; das kann '
                                 'kein Horoskop.') is None

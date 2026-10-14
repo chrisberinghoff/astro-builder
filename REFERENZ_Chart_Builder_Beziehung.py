@@ -3,7 +3,8 @@
 """REFERENZ: Chart-Builder fuer das PDF des Beziehungshoroskops (neu 2026-10-11).
 
 Das Beziehungshoroskop legt die Geburtsbilder zweier Menschen nebeneinander —
-ein Paar oder Elternteil und Kind (Erweiterung Beziehung,
+ein Paar, Elternteil und Kind oder (seit 2026-10-14) zwei Freunde; die Art
+Freundschaft heisst „Freundschaftshoroskop“ (Erweiterung Beziehung,
 `claude/Projektanweisung_Erweiterung_Beziehung.md`). Diese Vorlage traegt nur,
 was der Typ braucht:
 
@@ -55,6 +56,7 @@ Verfahren: Modul Sprachfassung.
 Aufruf:  python3 <a>_beziehung_builder.py
 Geprueft wird beim Rendern automatisch: build.PFLICHT_BAUSTEINE fuer DOCTYPE.
 """
+import os
 import sys
 
 sys.path.insert(0, '/home/claude')
@@ -67,6 +69,9 @@ A_VORNAME = '<Vorname der bestellenden Person>'
 B_VORNAME = '<Vorname der zweiten Person>'
 KLIENT = '<Name aus der H1 der analyse.md, z. B. „<A> und <B>“>'
 DATUM = '<JJJJ-MM-TT>'    # das Datum im Namen der Dateien aus Chat 1 — PDF, Analyse und Datenblatt tragen dasselbe
+# Namen der Dateien je Art und Sprache: beziehung.dateiname() — Kuerzel `Beziehung`, bei
+# Freundschaft `Freundschaft`; das PDF Beziehungshoroskop_… bzw. Freundschaftshoroskop_…,
+# englisch Relationship_Horoscope_… bzw. Friendship_Horoscope_… (__main__ prueft OUT).
 CHARTDATA = f'/home/claude/<A>_Beziehung_<B>_{DATUM}_chart_data.md'
 ANALYSE = f'/home/claude/<A>_Beziehung_<B>_{DATUM}_analyse.md'
 RADPNG = '<A>_Beziehung_<B>_doppelrad.png'     # muss auf _doppelrad.png enden (PFLICHT_BAUSTEINE)
@@ -147,7 +152,8 @@ chartdoc.konfiguriere(pal=PAL, part_kicker=PART_KICKER, glyphen=dict(radix.FAKTO
                       sprache=SPRACHE, signaturen_en=SIGNATUR_EN, belege_en=BELEG_EN,
                       # 2026-10-11 (F3): Paar „ihr“ — die Datenschutz-Zeile der
                       # Inhaltsseite heisst dann „zu eurem Horoskop“. Nicht aendern.
-                      anrede='ihr' if R['art'] == 'paar' else 'du')
+                      # 2026-10-14c: Freundschaft ebenso (beziehung.IHR_ARTEN).
+                      anrede='ihr' if R['art'] in beziehung.IHR_ARTEN else 'du')
 # 2026-10-14 (Auswertung 14.10., F3): Quincunx-Zeile der Aspekt-Legende nach Regel 5
 # des Beziehungsmoduls („zwingt zu ständigem Nachjustieren“) — gleich nach
 # konfiguriere(), das die Legende der Sprache setzt. Nicht ändern.
@@ -345,8 +351,11 @@ parsed = build.parse_analyse(ANALYSE, client=KLIENT)
 items = build.prepare_chapters(parsed)
 colon_pairs = build.make_colon_pairs(items)
 KICKER = parsed['doctype'].upper()          # Cover-Kickerzeile = Dokumenttyp der H1
-INHALT_KOPF = {'de': 'Beziehungshoroskop für {a} und {b}',
-               'en': 'Relationship Horoscope for {a} and {b}'}[SPRACHE]
+# 2026-10-14c: Kopf der Inhaltsseite aus dem Dokumenttyp der H1 („Beziehungshoroskop
+# für …“, „Freundschaftshoroskop für …“, „Relationship Horoscope for …“, „Friendship
+# Horoscope for …“) — die Beziehung-Probe (B1) haelt die H1 gegen die Art.
+INHALT_KOPF = parsed['doctype'] + {'de': ' für {a} und {b}',
+                                   'en': ' for {a} and {b}'}[SPRACHE]
 
 
 def _t(de):
@@ -394,6 +403,14 @@ if __name__ == '__main__':
         if '<' in _v and '>' in _v:
             raise SystemExit('REFERENZ-Vorlage: %s traegt noch den Platzhalter — '
                              'aus den Datenblaettern eintragen.' % _n)
+    # 2026-10-14c: der PDF-Name folgt Art und Sprache (Freundschaft: Freundschaftshoroskop_…)
+    _stamm = beziehung.dateiname(R['art'], A_VORNAME, B_VORNAME, DATUM, 'pdf',
+                                 englisch=(SPRACHE == 'en'))[:-len('.pdf')]
+    if _stamm not in os.path.basename(OUT):
+        raise SystemExit('REFERENZ-Vorlage: OUT heisst %s — fuer diese Art und Sprache '
+                         'heisst das PDF %s.pdf (ein Zusatz _b, _c ist erlaubt; '
+                         'beziehung.dateiname, Modul „Dateinamen und Ablage“).'
+                         % (os.path.basename(OUT), _stamm))
 
     # 1. Doppelrad (und ein Vollbild-Cover) IMMER selbst zeichnen.
     rad_zeichnen()
