@@ -288,6 +288,10 @@ def _abschnitt(text, titel_re):
 # Formate auf, die in den Datenblaettern der Pipeline seit September stehen; was sie
 # nicht lesen, bleibt None und haelt in rechnung() an.
 _MINUS = str.maketrans({'\u2212': '-', '\u2013': '-'})
+# 2026-10-14b: Monatsnamen fuer ein Geburtsdatum „T. Monat JJJJ“ im Kopf
+_MONATE = {'Januar': 1, 'Jänner': 1, 'Februar': 2, 'Feber': 2, 'März': 3, 'Maerz': 3,
+           'April': 4, 'Mai': 5, 'Juni': 6, 'Juli': 7, 'August': 8, 'September': 9,
+           'Oktober': 10, 'November': 11, 'Dezember': 12}
 
 
 def _jd_lesen(text):
@@ -407,6 +411,10 @@ def lies_datenblatt(pfad):
     `CUSPS`/`cusps`); jd und Koordinaten ueber _jd_lesen() und _koordinaten_lesen()
     aus dem Block oder dem Kopf — alle Formate der Pipeline seit September (seit
     2026-10-14). Was dort nicht steht, bleibt None; rechnung() haelt dann an.
+    Die uebrigen Kopfangaben (Geburtsdatum, -zeit, -ort, Fassung, Zeitunsicherheit)
+    seit 2026-10-14b auch als Tabellenzeile („| Geburtsdatum | … |“, Format von Mitte
+    September) und aus der Zeile „**Geburt:** TT.MM.JJJJ, <Zeit> · Geburtsort: …“;
+    das Datum auch als „T. Monat JJJJ“, das Geschlecht auch gross geschrieben.
     BeziehungFehler bei einem Transit-Datenblatt (H1 nennt „Transit“): Seine
     Themenliste und Leitachse gehoeren zum Transit, nicht zum Geburtsbild
     (Chris-Entscheidung 2026-10-14: vorher Schritt 1 Geburtshoroskop).
@@ -480,29 +488,68 @@ def lies_datenblatt(pfad):
     if name:
         name = re.split(r'[\s(,]', name.replace('**', '').strip())[0]
     out['vorname'] = name or '?'
-    g = re.search(r'\b(weiblich|männlich|divers)\b', vorspann)
-    out['geschlecht'] = g.group(1) if g else None
-    gd = re.search(r'Geburtsdatum:\**\s*(\d{1,2})\.(\d{1,2})\.(\d{4})', kopf)
-    out['geburtsdatum'] = (datetime.date(int(gd.group(3)), int(gd.group(2)),
-                                         int(gd.group(1))) if gd else None)
+    # 2026-10-14b (FFU, Auswertung 14.10. c): auch gross geschrieben („Weiblich, Anrede …“).
+    g = re.search(r'\b(weiblich|männlich|divers)\b', vorspann, re.I)
+    out['geschlecht'] = g.group(1).lower() if g else None
 
     def _zeile(muster):
         # Listenzeilen des Kopfes: „- Geburtszeit: …“, „- **Geburtszeit:** …“; seit
         # 2026-10-14 auch ohne Spiegelstrich und als Teil einer Zeile mit „·“
         # („**Geburtsdatum:** … · **Geburtszeit:** … · JD …“, Format von Mitte September).
+        # 2026-10-14b (FFU, Auswertung 14.10. c): auch als Tabellenzeile des Vorspanns
+        # („| Geburtsdatum | … |“, ebenfalls Mitte September) und ohne Fettdruck hinter
+        # „·“ („**Geburt:** … · Geburtsort: …“). Vorher stand dort „nicht angegeben“ —
+        # beim Paar mit falschem ANHALTEN „kein Geburtsdatum“, bei Eltern-Kind still.
         z = re.search(r'^\s*-\s*\**' + muster + r'[^:\n]*:\**\s*([^\n]+)$', kopf,
                       re.M)
         if not z:
             z = re.search(r'(?:^|·)[ \t]*(?:-[ \t]*)?\*\*' + muster
                           + r'\b[^:\n·*]*:\**[ \t]*([^\n·]+)', kopf, re.M)
+        if not z:
+            z = re.search(r'^\|[ \t]*\**' + muster + r'\b[^|\n]*\|[ \t]*'
+                          r'([^|\n]*[^|\s][^|\n]*?)[ \t]*\|', vorspann, re.M)
+        if not z:
+            z = re.search(r'·[ \t]*' + muster + r'\b[^:\n·*|]*:[ \t]*([^\n·]+)', vorspann)
+        if not z:                           # schlichte Zeile „Geburtszeit: …“ (Mitte September)
+            z = re.search(r'^[ \t]*' + muster + r'\b[^:\n·*|]*:[ \t]*([^\n]+)$', kopf, re.M)
         return z.group(1).replace('**', '').strip() if z else 'nicht angegeben'
+
+    def _datum(s):
+        # „TT.MM.JJJJ“ oder (2026-10-14b) „T. Monat JJJJ“ -> datetime.date, sonst None
+        m = re.search(r'\b(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})\b', s or '')
+        t = None
+        if m:
+            t = (int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        else:
+            m = re.search(r'\b(\d{1,2})\.\s*(%s)\s+(\d{4})\b' % '|'.join(_MONATE), s or '')
+            if m:
+                t = (int(m.group(3)), _MONATE[m.group(2)], int(m.group(1)))
+        try:
+            return datetime.date(*t) if t else None
+        except ValueError:
+            return None
+
+    gd = re.search(r'Geburtsdatum:\**\s*(\d{1,2})\.(\d{1,2})\.(\d{4})', kopf)
+    out['geburtsdatum'] = (datetime.date(int(gd.group(3)), int(gd.group(2)),
+                                         int(gd.group(1))) if gd else None)
+    # 2026-10-14b: Tabellenzeile, „T. Monat JJJJ“ und die Zeile „**Geburt:** …“
+    geburt = re.search(r'\*\*Geburt:\**[ \t]*([^\n]+)', vorspann)
+    if out['geburtsdatum'] is None:
+        out['geburtsdatum'] = _datum(_zeile(r'Geburtsdatum'))
+    if out['geburtsdatum'] is None and geburt:
+        out['geburtsdatum'] = _datum(geburt.group(1).split('·')[0])
     out['geburtszeit'] = _zeile(r'Geburtszeit')
+    if out['geburtszeit'] == 'nicht angegeben' and geburt:
+        zt = re.match(r'[^·\n]*?\d{4}[ \t]*,[ \t]*([^·\n]+)', geburt.group(1))
+        if zt:
+            out['geburtszeit'] = zt.group(1).replace('**', '').strip()
     out['geburtsort'] = _zeile(r'Geburtsort')
     out['fassung'] = _zeile(r'Fassung')
     if out['fassung'] == 'nicht angegeben':          # „**Fassung 2**“, „- Fassung 2“
         fz = re.search(r'(?:^|·)[ \t]*(?:-[ \t]*)?\**Fassung[ \t]+(\d+)\b', kopf, re.M)
         if fz:
             out['fassung'] = fz.group(1)
+    out['fassung'] = re.sub(r'^Fassung[ \t]+(?=\d)', '', out['fassung'])  # „| Fassung | Fassung 1 |“
     out['zeitunsicherheit'] = _zeile(r'Zeitunsicherheit')
     out['kinder_baustein'] = 'KINDER-BAUSTEIN' in vorspann
     # Leitachse aus der Themenliste
@@ -1022,7 +1069,10 @@ def rangzeilen(r):
          'heißt Gleichstand. Maschinenlesbar über radix.rangzeilen_lesen().']
     L.append(_zeile('engste-zwischen-beiden',
                     'Zeilen der Tabelle „Aspekte zwischen beiden“, %d Zeilen, davon %d '
-                    'eng: ein Achsen-Spiegel ist eine Zeile, die Achsen zueinander '
+                    'eng: ein Achsen-Spiegel (Konjunktion/Opposition oder Quadrat zu '
+                    'beiden Enden einer Achse) ist eine Zeile, Trigon/Sextil und '
+                    'Quincunx/Halbsextil zu beiden Enden sind zwei (eine Berührung, '
+                    'zweimal gezählt), die Achsen zueinander '
                     'stehen eigens; Rang nach dem Orb in Bogenminuten; die ersten %d '
                     'Ränge' % (len(z), n_eng, RANG_ENGSTE), _liste(zeilen, RANG_ENGSTE)))
     pl = [x for x in zeilen if x['a'] in PLANETEN and x['b'] in PLANETEN]
@@ -1046,8 +1096,10 @@ def rangzeilen(r):
     for seite, name, slug, ander in (('a', na, sa, nb), ('b', nb, sb, na)):
         L.append(_zeile('verbindungen-eng-%s' % slug,
                         'enge Zeilen der Tabelle je Faktor von %s, gezählt; ohne '
-                        'eng* (kippt in der Zeitprobe); ein Achsen-Spiegel zählt '
-                        'einmal; Faktoren ohne enge Zeile fehlen'
+                        'eng* (kippt in der Zeitprobe); ein Achsen-Spiegel '
+                        '(Konjunktion/Opposition, Quadrat/Quadrat) zählt einmal, '
+                        'Trigon/Sextil und Quincunx/Halbsextil zu beiden Enden zweimal; '
+                        'Faktoren ohne enge Zeile fehlen'
                         % name, _je_faktor(seite, True)))
         L.append(_zeile('verbindungen-alle-%s' % slug,
                         'alle Zeilen der Tabelle je Faktor von %s (voll, einseitig, '
@@ -1300,6 +1352,16 @@ def _aspekt_zeile_md(e, na, nb, kipp_ids=()):
         _gr(e['orb']), eng_text(e, kipp_ids))
 
 
+def _schwaechstes_element(v):
+    """Schwaechstes Element (gewichtet) aus einem Verteilungs-dict; bei Gleichstand
+    alle am Ende der Rangfolge mit „gleichauf“ (2026-10-14b, Auswertung 14.10. c, F4:
+    radix nimmt bei Gleichstand das erste — im Datenblatt eine falsche Einzigkeit)."""
+    el = v['gewichtet']['elemente']
+    tief = min(el[n] for n in radix._ELEM_NAMES)
+    alle = [n for n in radix._ELEM_NAMES if el[n] == tief]
+    return (' und '.join(alle) + ' gleichauf') if len(alle) > 1 else alle[0]
+
+
 def rechnung_text(r):
     """Die gerechneten Abschnitte des Datenblatts der Beziehung (Markdown) —
     ⚠-Hinweise, Kopf, Staende, Spitzen, Aspekte zwischen beiden, Achsen
@@ -1415,8 +1477,10 @@ def rechnung_text(r):
     L.append('## Aspekte zwischen beiden')
     L.append('')
     L.append('Linke Spalte %s, rechte Spalte %s. %d Verbindungen, davon %d eng. Ein '
-             'Achsen-Spiegel ist eine Zeile.' % (na, nb, len(z),
-                                                 sum(1 for x in z if x['eng'])))
+             'Achsen-Spiegel (Konjunktion/Opposition oder Quadrat zu beiden Enden einer '
+             'Achse) ist eine Zeile; Trigon/Sextil und Quincunx/Halbsextil zu beiden Enden '
+             'stehen als zwei Zeilen — eine Berührung der Achse, zweimal gezählt.'
+             % (na, nb, len(z), sum(1 for x in z if x['eng'])))
     for st in ('voll', 'einseitig', 'neben'):
         grp = [x for x in z if x['strength'] == st]
         L.append('')
@@ -1512,8 +1576,7 @@ def rechnung_text(r):
     L.append('')
     L.append('Gewichtet: alle Faktoren nach radix.GEWICHT; gezählt: zehn klassische '
              'Planeten, je 1. Schwächstes Element gewichtet: %s %s, %s %s.' % (
-                 na, va['gewichtet']['schwaechstes_element'], nb,
-                 vb['gewichtet']['schwaechstes_element']))
+                 na, _schwaechstes_element(va), nb, _schwaechstes_element(vb)))
     L.append('')
     L.append('### Kernanlagen und Leitachsen')
     L.append('')
@@ -1543,6 +1606,16 @@ ASP_TOKEN_RE = re.compile(
 UEB_TOKEN_RE = re.compile(
     r'(?P<f>' + _FNAME + r') \((?P<p>[^()]+)\) in Haus (?P<h>\d{1,2})'
     r'(?:[/=](?P<h2>\d{1,2}))? von (?P<q>[^\s,|]+)')
+
+
+def _tok_schluessel(tok):
+    """Ungeordneter Schluessel eines Verbindungs-Tokens — beide Faktoren samt
+    Person und die Aspektglyphe — oder None (2026-10-14b)."""
+    m = ASP_TOKEN_RE.fullmatch((tok or '').strip())
+    if not m:
+        return None
+    return (frozenset({(m.group('fa'), m.group('pa').strip()),
+                       (m.group('fb'), m.group('pb').strip())}), m.group('g'))
 
 
 def lies_themen(text):
@@ -1581,6 +1654,13 @@ def lies_themen(text):
              'praxis': felder.get('praxis', ''),
              'leitachse': felder.get('leitachse', '').lower() == 'ja',
              'roh': blk}
+        # 2026-10-14b (Auswertung 14.10. c, F5): Die fuehrende Verbindung hat ihren Ort
+        # im eigenen Thema — fehlt sie in aspekte=, zaehlt sie dort mit. Vorher meldete
+        # die Heimat-Probe sie „ohne Ort“, und eine harmonische lief still in den
+        # Ressourcen-Block mit Deutungsort „Was trägt“.
+        kf = _tok_schluessel(t['fuehrt'])
+        if kf and not any(_tok_schluessel(x) == kf for x in t['aspekte']):
+            t['aspekte'].insert(0, t['fuehrt'].strip())
         out['themen'].append(t)
     m = re.search(r'^### Ohne Deutungs-Heimat[^\n]*\n(.*?)(?=^## |^### |^@@|\Z)', th,
                   re.M | re.S)
@@ -1924,7 +2004,9 @@ def heimat(pfad):
             if e is None:
                 unbekannt.append('Thema %d: %s' % (t['nr'], tok))
                 continue
-            thema.setdefault(id(e), []).append(t['nr'])
+            if t['nr'] in thema.setdefault(id(e), []):
+                continue                    # 2026-10-14b: zweimal im selben Thema ist EIN Ort
+            thema[id(e)].append(t['nr'])
             if not e['eng']:
                 nicht_eng.append('Thema %d: %s (%s, nicht eng)' % (t['nr'], tok,
                                                                     _gr(e['orb'])))
@@ -2417,6 +2499,9 @@ table.bz-st { width:100%; border-collapse:collapse; }
 table.bz-st td, table.bz-st th { padding:0.07cm 0.1cm; border-bottom:0.4pt solid #d8cfbd;
   text-align:left; }
 table.bz-st th { font-weight:normal; font-style:italic; color:#6d6252; }
+/* 2026-10-14b: Grad und Zeichen in einer Zeile — englisch verengte die Kopfzelle
+   „in <A>'s chart“ die Spalte, Grad und Zeichen brachen um (13. und 14.10.). */
+table.bz-st td:nth-child(2) { white-space:nowrap; }
 .bz-asp { column-count:2; column-gap:0.7cm; }
 .bz-asp .asp-grp { break-after:avoid; }
 .bz-asp table.aspt { width:100%; }
@@ -2520,7 +2605,7 @@ def kreuz_page(r, kicker=None, titel=None, anker='PG_kreuz', skala=1.0, lead=Non
                sprache='de'):
     """Seite mit allen Verbindungen zwischen beiden Bildern: nach Stufe
     gruppiert, links der Faktor von A, rechts der von B, Orb, ● = eng; dazu
-    die Achsen zueinander und die Aspekt-Legende (chartdoc.aspekt_legende).
+    die Achsen zueinander (die Aspekt-Legende steht auf der Doppelrad-Seite).
     Die Zahl der Orb-Eintraege ist len(r['kreuz']) + len(r['achsen']) —
     die Sollzahl fuer build.verify(aspect_rows=…, aspect_section=(KREUZ_TITEL,
     <naechster Titel>)). Die Aspekt-Legende steht auf der Doppelrad-Seite
@@ -3773,6 +3858,61 @@ def _selbsttest():
     po = lies_datenblatt(_o)
     check(abs(po['jd'] - _jd_t) < 1e-6 and (po['lat'], po['lon']) == (50.0, 10.0),
           'Datenblatt mit Tabellenkopf: Ortskoordinaten als Tabellenzeile')
+    # 2026-10-14b (FFU, Auswertung 14.10. c): der ganze Kopf als Tabelle, das Geschlecht
+    # gross geschrieben, die Zeile „**Geburt:** …“, ein Datum mit Monatsnamen
+    _gd_n = vor_jahren(40)
+    _o2 = _variante('Ppp_chart_data.md',
+                    '# Chart-Datenblatt — Ppp\n\n**Klientin: Ppp** (erfunden). Weiblich, '
+                    'Anrede „du“.\n\n| Angabe | Wert |\n|---|---|\n'
+                    '| Geburtsdatum | %s (Selbsttest) |\n| Geburtszeit | mittags (Selbsttest) |\n'
+                    '| Geburtsort | Prüfort (erfunden) |\n'
+                    '| Ortskoordinaten (Setzung dieses Laufs) | 50.0000 N / 10.0000 O |\n'
+                    '| Julianisches Datum (UT) | %.6f |\n| Fassung | Fassung 1 (Selbsttest) | — |\n'
+                    '| Zeitunsicherheit | eine Minute (Selbsttest) |' % (_gd, _jd_t))
+    pp2 = lies_datenblatt(_o2)
+    check(pp2['geburtsdatum'] == _gd_n and pp2['geburtszeit'] == 'mittags (Selbsttest)'
+          and pp2['geburtsort'] == 'Prüfort (erfunden)' and pp2['fassung'].startswith('1')
+          and pp2['zeitunsicherheit'].startswith('eine Minute')
+          and pp2['geschlecht'] == 'weiblich',
+          'Datenblatt mit Tabellenkopf: alle Kopfangaben, Geschlecht groß geschrieben')
+    _o3 = _variante('Qqq_chart_data.md',
+                    '# Chart-Datenblatt — Qqq\n\n**Chart-Subjekt:** Qqq (männlich)\n'
+                    '**Geburt:** %s, mittags (Selbsttest) = vormittags UT · Geburtsort: '
+                    'Prüfort (erfunden)\n- JD (UT): %.6f' % (_gd, _jd_t))
+    pq = lies_datenblatt(_o3)
+    check(pq['geburtsdatum'] == _gd_n and pq['geburtszeit'].startswith('mittags')
+          and pq['geburtsort'] == 'Prüfort (erfunden)' and pq['geschlecht'] == 'männlich',
+          'Kopfzeile „**Geburt:** Datum, Zeit · Geburtsort: …“')
+    _pz = lies_datenblatt(_variante('Zzz_chart_data.md',
+                                    '# Chart-Datenblatt — Zzz\n\nGeburtsdatum: %s\n'
+                                    'Geburtszeit: mittags (Selbsttest)\nGeburtsort: Prüfort (erfunden)\n'
+                                    '- JD (UT): %.6f' % (_gd, _jd_t)))
+    check(_pz['geburtsdatum'] == _gd_n and _pz['geburtszeit'] == 'mittags (Selbsttest)'
+          and _pz['geburtsort'] == 'Prüfort (erfunden)', 'Kopf in schlichten Zeilen „Geburtszeit: …“')
+    _mon = [k for k, v in _MONATE.items() if v == _gd_n.month][0]
+    check(lies_datenblatt(_variante('Rrr_chart_data.md',
+                                    '# Chart-Datenblatt — Rrr\n\n- **Geburtsdatum:** %d. %s %d'
+                                    '\n- JD (UT): %.6f' % (_gd_n.day, _mon, _gd_n.year, _jd_t))
+                          )['geburtsdatum'] == _gd_n, 'Geburtsdatum mit Monatsnamen')
+    # 2026-10-14b (F4): Gleichstand am Ende der Elemente
+    _el = {n: 3.0 for n in radix._ELEM_NAMES}
+    _el[radix._ELEM_NAMES[1]] = _el[radix._ELEM_NAMES[3]] = 5.0
+    check(_schwaechstes_element({'gewichtet': {'elemente': _el}}) == '%s und %s gleichauf'
+          % (radix._ELEM_NAMES[0], radix._ELEM_NAMES[2]) and
+          _schwaechstes_element({'gewichtet': {'elemente': dict(_el, **{radix._ELEM_NAMES[0]:
+                                                                       4.0})}})
+          == radix._ELEM_NAMES[2], 'schwächstes Element: Gleichstand benannt, sonst eines')
+    # 2026-10-14b (F5): die führende Verbindung zählt in aspekte= mit, ohne Doppelung
+    _lt = lies_themen('## Themenliste der Beziehung\n\n'
+                      'THEMA 1 | titel=Probe | fuehrt=Sonne (Aaa) △ Mond (Bbb) | '
+                      'aspekte=Venus (Aaa) □ Mars (Bbb) | leitachse=ja\n'
+                      'THEMA 2 | titel=Probe zwei | fuehrt=Mond (Bbb) △ Sonne (Aaa) | '
+                      'aspekte=Sonne (Aaa) △ Mond (Bbb)\n')['themen']
+    check(_lt[0]['aspekte'] == ['Sonne (Aaa) △ Mond (Bbb)', 'Venus (Aaa) □ Mars (Bbb)']
+          and _lt[1]['aspekte'] == ['Sonne (Aaa) △ Mond (Bbb)'],
+          'führende Verbindung in aspekte= mitgezählt, gleiche Verbindung nicht doppelt')
+    check('table.bz-st td:nth-child(2) { white-space:nowrap; }' in BEZIEHUNG_CSS,
+          'Ständetabelle: Grad und Zeichen bleiben in einer Zeile')
     check(lies_datenblatt(_variante('Vvv_chart_data.md',
                                     '# Geburtshoroskop — Datenblatt — Vvv\n\n## Kopf\n\n'
                                     '- Geburtsdatum: %s' % _gd))['vorname'] == 'Vvv',

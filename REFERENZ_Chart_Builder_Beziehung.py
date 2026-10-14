@@ -14,7 +14,8 @@ was der Typ braucht:
     3. CHARTDATA / ANALYSE / OUT / DATUM / GEBURTSZEILE / RAD_NOTE
 
 Die Seitenfolge hinter dem Cover ist fest: Inhalt, Doppelrad, Staende beider
-Bilder, Verbindungen zwischen beiden (samt Legende und Orbis-Zeile), dann die
+Bilder, Verbindungen zwischen beiden (samt Orbis-Zeile; die Aspekt-Legende steht
+beim Doppelrad, 2026-10-14b), dann die
 Kapitel. Doppelrad, Staende- und Verbindungsseite baut beziehung.py aus dem
 maschinenlesbaren Block des Datenblatts der Beziehung (lies_beziehung) —
 gelesen, nie abgetippt; nichts wird aus Geburtsdaten neu gerechnet.
