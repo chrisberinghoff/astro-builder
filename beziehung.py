@@ -39,6 +39,7 @@ Was gerechnet wird (Startprompt `claude/STARTPROMPT_Beziehungshoroskop_einbauen_
 
 Schnittstelle (Einzelheiten: hilfe('<name>')):
     lies_datenblatt(pfad) -> dict
+    legende_beziehung(chartdoc) -> tuple            Quincunx-Zeile der Legende (Regel 5)
     kreuzaspekte(fa, fb) / achsenkontakte(fa, fb) / ueberlagerung(fx, cusps_y)
     zeitprobe(pa, pb) -> dict
     rechnung(a_pfad, b_pfad, art, ...) -> dict      alles Gerechnete
@@ -278,6 +279,117 @@ def _abschnitt(text, titel_re):
     return rest[:e.start()] if e else rest
 
 
+# 2026-10-14 (Auswertung der Pruefberichte vom 14.10., F2): Die Funktion las jd und
+# Koordinaten nur aus `JD_UT`/`LAT, LON` und zwei Kopfformen. Die Kopfzeile des
+# Geruests („Koordinaten der Rechnung: <Breite>° N, <Länge>° O“, build.datenblatt_geruest)
+# und das Tupel `JD_GEBURT, LAT, LON, ALTER = …` der Datenblaetter von Mitte September
+# fielen durch — bei 17 von 20 Geburtshoroskop-Datenblaettern aus dem Oktober fehlten
+# die Koordinaten, und die Zeitprobe lief still leer. Die Lesehilfen unten nehmen die
+# Formate auf, die in den Datenblaettern der Pipeline seit September stehen; was sie
+# nicht lesen, bleibt None und haelt in rechnung() an.
+_MINUS = str.maketrans({'\u2212': '-', '\u2013': '-'})
+
+
+def _jd_lesen(text):
+    """Julianisches Datum (UT) der Geburt aus einem Personen-Datenblatt -> float
+    oder None. Reihenfolge: `JD_UT = …`, `JD_GEBURT = …` bzw. das Tupel
+    `JD_GEBURT, LAT, LON[, …] = …` im Python-Block, dann die Kopfzeilen
+    „Julianisches Datum (UT): …“, „JD (UT): …“ und „· JD …“."""
+    for muster in (r'JD_UT\s*=\s*([0-9]+\.[0-9]+)',
+                   r'JD_GEBURT\s*(?:,\s*[A-Z_]+\s*)*=\s*([0-9]+\.[0-9]+)',
+                   r'Julianisch\w*\s+Datum[^\n]*?([0-9]{7}[.,][0-9]+)',
+                   r'\bJD\s*\(UT\)[^\n0-9]*([0-9]{7}[.,][0-9]+)',
+                   r'(?:^|·)\s*\**JD\**\s+([0-9]{7}[.,][0-9]+)'):
+        m = re.search(muster, text, re.M)
+        if m:
+            return _zahl(m.group(1))
+    return None
+
+
+def _koord_aus_zeile(zeile):
+    """(lat, lon) aus EINER Koordinatenzeile des Kopfes oder (None, None).
+
+    Liest Grad mit Himmelsrichtung — dezimal („50,0000° N“) oder in Grad, Minuten
+    und Sekunden („50°00′00″ N“) — und ein Dezimalpaar ohne Richtung („(50.00000,
+    10.00000; …)“, „Dezimal 10.50 / -60.25“); Sued und West negativ. Von mehreren
+    Schreibweisen derselben Koordinate gilt die genaueste; weichen sie um mehr als
+    ihre Rundung voneinander ab, gilt keine."""
+    z = zeile.replace('**', '').translate(_MINUS)
+    kand = {'lat': [], 'lon': []}
+    vorz = {'lat': None, 'lon': None}
+    for m in re.finditer(r'(?<![\d.,])(\d{1,3})\s*°\s*(\d{1,2}(?:[.,]\d+)?)\s*[′\']'
+                         r'(?:\s*(\d{1,2}(?:[.,]\d+)?)\s*[″"])?\s*([NSOEW])\b', z):
+        w = (int(m.group(1)) + _zahl(m.group(2)) / 60.0
+             + (_zahl(m.group(3)) / 3600.0 if m.group(3) else 0.0))
+        h = m.group(4)
+        k = 'lat' if h in 'NS' else 'lon'
+        vorz[k] = -1.0 if h in 'SW' else 1.0
+        kand[k].append((vorz[k] * w, (1 / 3600.0) if m.group(3) else (1 / 60.0)))
+    for m in re.finditer(r'(?<![\d.,])(\d{1,3}[.,](\d+))\s*°?\s*([NSOEW])\b', z):
+        h = m.group(3)
+        k = 'lat' if h in 'NS' else 'lon'
+        vorz[k] = -1.0 if h in 'SW' else 1.0
+        kand[k].append((vorz[k] * _zahl(m.group(1)), 10.0 ** -len(m.group(2))))
+    for m in re.finditer(r'(?<![\d.,])(-?\d{1,3}[.,](\d{2,}))\s*(?:/|,(?=\s))\s*'
+                         r'(-?\d{1,3}[.,](\d{2,}))(?![\d°′])', z):
+        for k, wert, nachk in (('lat', m.group(1), m.group(2)), ('lon', m.group(3),
+                                                                 m.group(4))):
+            w = _zahl(wert)
+            if not wert.startswith('-') and vorz[k] is not None:
+                w = vorz[k] * w
+            kand[k].append((w, 10.0 ** -len(nachk)))
+    aus = []
+    for k in ('lat', 'lon'):
+        if not kand[k]:
+            return None, None
+        best = min(kand[k], key=lambda x: x[1])
+        if any(abs(w - best[0]) > max(r, best[1]) + 1e-6 for w, r in kand[k]):
+            return None, None
+        aus.append(best[0])
+    if not (-90.0 <= aus[0] <= 90.0 and -180.0 <= aus[1] <= 180.0):
+        return None, None
+    return aus[0], aus[1]
+
+
+def _koordinaten_lesen(text):
+    """Breite und Laenge der Rechnung (Dezimalgrad, Nord und Ost positiv) aus einem
+    Personen-Datenblatt -> (lat, lon) oder (None, None).
+
+    Zuerst der Python-Block (`JD_GEBURT, LAT, LON[, …] = …`, `LAT, LON = …`,
+    `LAT = …` mit `LON = …`), dann die Kopfzeilen „… / … Dezimalgrad“ und
+    „dezimal …, …“, zuletzt die Koordinatenzeile des Kopfes — „Koordinaten der
+    Rechnung: …“, sonst die erste Zeile oder Tabellenzeile, die mit „Koordinaten“
+    oder „Ortskoordinaten“ beginnt, sonst die Zeile des Geburtsorts
+    (_koord_aus_zeile). Andere Koordinaten im Text (etwa ein Vergleichsort in einer
+    Gegenprobe) liest die Funktion nicht."""
+    t = text.translate(_MINUS)
+    m = re.search(r'JD_GEBURT\s*,\s*LAT\s*,\s*LON(?:\s*,\s*[A-Z_]+)*\s*=\s*[0-9]+\.[0-9]+'
+                  r'\s*,\s*(-?[0-9]+(?:\.[0-9]+)?)\s*,\s*(-?[0-9]+(?:\.[0-9]+)?)', t)
+    if not m:
+        m = re.search(r'\bLAT\s*,\s*LON\s*=\s*(-?[0-9]+\.[0-9]+)\s*,\s*(-?[0-9]+\.[0-9]+)', t)
+    if m:
+        return _zahl(m.group(1)), _zahl(m.group(2))
+    m1 = re.search(r'^\s*LAT\s*=\s*(-?[0-9]+\.[0-9]+)', t, re.M)
+    m2 = re.search(r'^\s*LON\s*=\s*(-?[0-9]+\.[0-9]+)', t, re.M)
+    if m1 and m2:
+        return _zahl(m1.group(1)), _zahl(m2.group(1))
+    m = re.search(r'(-?[0-9]+[.,][0-9]+)\s*/\s*(-?[0-9]+[.,][0-9]+)\s*Dezimalgrad', t)
+    if not m:
+        m = re.search(r'dezimal\s+(-?[0-9]+[.,][0-9]+)\s*,\s*(-?[0-9]+[.,][0-9]+)', t, re.I)
+    if m:
+        return _zahl(m.group(1)), _zahl(m.group(2))
+    vorspann = t.split('\n## Stände', 1)[0]
+    # Die erste vorhandene Beschriftung gilt, auch als Tabellenzeile („| Ortskoordinaten
+    # (Setzung dieses Laufs) | 50,0000° N / 10,0000° O |“, Format von Mitte September);
+    # die Zeile des Geburtsorts nur, wenn keine Koordinatenzeile da ist.
+    for muster in (r'Koordinaten der Rechnung', r'(?:Orts)?[Kk]oordinaten', r'Geburtsort'):
+        z = re.findall(r'^[ \t]*(?:[-|][ \t]*)?\**[ \t]*' + muster + r'[^:|\n]*[:|](.*)$',
+                       vorspann, re.M)
+        if z:
+            return _koord_aus_zeile(z[0])
+    return None, None
+
+
 def lies_datenblatt(pfad):
     """Liest ein Datenblatt (`<klient>_chart_data.md`) einer Person.
 
@@ -287,16 +399,31 @@ def lies_datenblatt(pfad):
        (je Wortlaut des Kopfes oder 'nicht angegeben'), 'jd', 'lat', 'lon'
        (float oder None), 'factors' (Liste wie im factors-Block, ohne
        Ausgemustertes), 'cusps' (zwoelf Laengen), 'leitachse' (Wortlaut der
-       Themenzeile mit leitachse=ja oder None), 'kinder_baustein' (bool),
+       Themenzeile mit leitachse=ja oder None; rechnung() haelt ohne sie an),
+       'kinder_baustein' (bool),
        'hinweise' (Liste).
 
     Gelesen wird der Python-Block mit `factors = [...]` (beide Schreibweisen
-    `CUSPS`/`cusps`); jd und Koordinaten aus `JD_UT`/`LAT, LON` im Block, sonst
-    aus dem Kopf („Julianisches Datum (UT)“, „… Dezimalgrad“ oder „dezimal …“).
+    `CUSPS`/`cusps`); jd und Koordinaten ueber _jd_lesen() und _koordinaten_lesen()
+    aus dem Block oder dem Kopf — alle Formate der Pipeline seit September (seit
+    2026-10-14). Was dort nicht steht, bleibt None; rechnung() haelt dann an.
+    BeziehungFehler bei einem Transit-Datenblatt (H1 nennt „Transit“): Seine
+    Themenliste und Leitachse gehoeren zum Transit, nicht zum Geburtsbild
+    (Chris-Entscheidung 2026-10-14: vorher Schritt 1 Geburtshoroskop).
     BeziehungFehler, wenn factors oder cusps fehlen oder nicht zwoelf Spitzen
     tragen — ohne sie gibt es keine Ueberlagerung.
     """
     text = open(pfad, encoding='utf-8').read()
+    # 2026-10-14 (F2): Ein Transit-Datenblatt traegt die Themen des Transits —
+    # seine „Leitachse“ ist ein Transit-Thema, und seine H1 hat zwei Gedankenstriche.
+    _h1 = re.search(r'^# [^\n]*$', text, re.M)
+    if _h1 and 'Transit' in _h1.group(0):
+        raise BeziehungFehler(
+            '%s ist ein Transit-Datenblatt — Themen und Leitachse gehören dort zum '
+            'Transit, nicht zum Geburtsbild. Für das Beziehungshoroskop das '
+            'Geburtshoroskop-Datenblatt der Person nehmen; gibt es keins, läuft vorher '
+            'Schritt 1 des Geburtshoroskops (ohne Aufpreis, Chris-Entscheidung '
+            '2026-10-14). Anhalten und Chris sagen.' % os.path.basename(pfad))
     out = {'pfad': pfad, 'datei': os.path.basename(pfad), 'sha8': _sha8(pfad),
            'hinweise': []}
     m = re.search(r'factors\s*=\s*(\[.*?\n\s*\])', text, re.S)
@@ -335,25 +462,15 @@ def lies_datenblatt(pfad):
         raise BeziehungFehler('%s: %d statt zwoelf Hausspitzen.'
                               % (out['datei'], len(cusps)))
     out['cusps'] = cusps
-    # jd, lat, lon
-    jd = re.search(r'JD_UT\s*=\s*([0-9]+\.[0-9]+)', text)
-    if not jd:
-        jd = re.search(r'Julianisches Datum[^:\n]*:\**\s*([0-9]+[.,][0-9]+)', text)
-    out['jd'] = _zahl(jd.group(1)) if jd else None
-    ll = re.search(r'LAT\s*,\s*LON\s*=\s*(-?[0-9]+\.[0-9]+)\s*,\s*(-?[0-9]+\.[0-9]+)',
-                   text)
-    if not ll:
-        ll = re.search(r'(-?[0-9]+[.,][0-9]+)\s*/\s*(-?[0-9]+[.,][0-9]+)\s*'
-                       r'Dezimalgrad', text)
-    if not ll:
-        ll = re.search(r'dezimal\s+(-?[0-9]+[.,][0-9]+)\s*,\s*(-?[0-9]+[.,][0-9]+)',
-                       text, re.I)
-    out['lat'], out['lon'] = ((_zahl(ll.group(1)), _zahl(ll.group(2)))
-                              if ll else (None, None))
+    # jd, lat, lon (2026-10-14: alle Formate der Pipeline seit September)
+    out['jd'] = _jd_lesen(text)
+    out['lat'], out['lon'] = _koordinaten_lesen(text)
     # Kopf: der Abschnitt „## Kopf“, sonst alles vor den Staenden
     kopf = _abschnitt(text, r'Kopf') or text.split('\n## Stände', 1)[0]
     vorspann = text.split('\n## Stände', 1)[0]
-    h1 = re.search(r'^# [^\n]*? — ([^\n]+)$', text, re.M)
+    # 2026-10-14: der Name steht hinter dem LETZTEN Gedankenstrich der H1
+    # („# Geburtshoroskop — Datenblatt — <Name>“); vorher hinter dem ersten.
+    h1 = re.search(r'^# [^\n]* — ([^\n—]+)$', text, re.M)
     name = None
     if h1:
         name = h1.group(1).strip()
@@ -370,13 +487,22 @@ def lies_datenblatt(pfad):
                                          int(gd.group(1))) if gd else None)
 
     def _zeile(muster):
-        # nur Listenzeilen des Kopfes: „- Geburtszeit: …“, „- **Geburtszeit:** …“
+        # Listenzeilen des Kopfes: „- Geburtszeit: …“, „- **Geburtszeit:** …“; seit
+        # 2026-10-14 auch ohne Spiegelstrich und als Teil einer Zeile mit „·“
+        # („**Geburtsdatum:** … · **Geburtszeit:** … · JD …“, Format von Mitte September).
         z = re.search(r'^\s*-\s*\**' + muster + r'[^:\n]*:\**\s*([^\n]+)$', kopf,
                       re.M)
+        if not z:
+            z = re.search(r'(?:^|·)[ \t]*(?:-[ \t]*)?\*\*' + muster
+                          + r'\b[^:\n·*]*:\**[ \t]*([^\n·]+)', kopf, re.M)
         return z.group(1).replace('**', '').strip() if z else 'nicht angegeben'
     out['geburtszeit'] = _zeile(r'Geburtszeit')
     out['geburtsort'] = _zeile(r'Geburtsort')
     out['fassung'] = _zeile(r'Fassung')
+    if out['fassung'] == 'nicht angegeben':          # „**Fassung 2**“, „- Fassung 2“
+        fz = re.search(r'(?:^|·)[ \t]*(?:-[ \t]*)?\**Fassung[ \t]+(\d+)\b', kopf, re.M)
+        if fz:
+            out['fassung'] = fz.group(1)
     out['zeitunsicherheit'] = _zeile(r'Zeitunsicherheit')
     out['kinder_baustein'] = 'KINDER-BAUSTEIN' in vorspann
     # Leitachse aus der Themenliste
@@ -1037,6 +1163,24 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
                      'einwilligung': einwilligung or 'nicht angegeben',
                      'sprache': sprache, 'eltern': eltern,
                      'grundlage': grundlage or {}}}
+    # 2026-10-14 (F2, Chris-Entscheidung 14.10.): ohne jd und Koordinaten fiele die
+    # Zeitprobe still aus — anhalten statt ⚠-Zeile.
+    for p in (pa, pb):
+        if p['jd'] is None or p['lat'] is None or p['lon'] is None:
+            r['anhalten'].append(
+                '%s: julianisches Datum oder Koordinaten im Datenblatt nicht lesbar — '
+                'ohne sie fällt die Zwei-Minuten-Prüfung aus. Chris fragen: vorher Schritt 1 '
+                'des Geburtshoroskops für %s (ohne Aufpreis) oder die Werte im Kopf '
+                'nachtragen.' % (p['vorname'], p['vorname']))
+    # 2026-10-14 (F2, Chris-Entscheidung 14.10.): ohne Themenzeile mit leitachse=ja
+    # fehlt dem Strukturvergleich das eigene Geburtsbild — anhalten statt leer.
+    for p in (pa, pb):
+        if p['leitachse'] is None:
+            r['anhalten'].append(
+                '%s: Datenblatt ohne Leitachse (keine Themenzeile mit leitachse=ja) — '
+                'dem Strukturvergleich fehlt das eigene Geburtsbild. Chris fragen: vorher '
+                'Schritt 1 des Geburtshoroskops für %s (ohne Aufpreis).'
+                % (p['vorname'], p['vorname']))
     if pa['vorname'] == pb['vorname']:
         r['anhalten'].append('Beide Datenblätter tragen denselben Vornamen „%s“ — '
                              'die Zuordnung in Belegen und Tabellen wäre '
@@ -2231,6 +2375,34 @@ def doppelrad(quelle, out_path, palette=None, dpi=210, linien='eng'):
     return out_path
 
 
+# 2026-10-14 (Auswertung der Pruefberichte vom 14.10., F3; Chris-Entscheidung 14.10.):
+# Die Aspekt-Legende der Radseite kommt aus chartdoc.LEGEND_ROWS; deren Quincunx-Zeile
+# („zwei Kräfte, die nicht zusammenpassen …“) liest sich zwischen zwei Menschen als
+# Urteil über die Passung (Beziehungsmodul, „Über wen der Text spricht“, Regel 5).
+QUINCUNX_LEGENDE = {'de': 'zwei Kräfte, die zu ständigem Nachjustieren zwingen.',
+                    'en': 'two forces that call for constant readjustment.'}
+
+
+def legende_beziehung(chartdoc_modul):
+    """Setzt in chartdoc.LEGEND_ROWS die Quincunx-Erklärung des Beziehungsmoduls
+    (Regel 5: „zwingt zu ständigem Nachjustieren“) — in der Vorlage gleich nach
+    chartdoc.konfiguriere(), weil konfiguriere() die Legende der Sprache setzt.
+    Ersetzt die Liste, statt sie zu ändern: setze_sprache() stellt danach den
+    Hausstil wieder her. Die Sprache erkennt die Funktion an der Zeile selbst.
+    -> die neue Quincunx-Zeile. BeziehungFehler ohne Quincunx-Zeile."""
+    neu, treffer = [], None
+    for n, w, t in chartdoc_modul.LEGEND_ROWS:
+        if n == 'Quincunx':
+            treffer = (n, w, QUINCUNX_LEGENDE['en' if 'forces' in t else 'de'])
+            neu.append(treffer)
+        else:
+            neu.append((n, w, t))
+    if treffer is None:
+        raise BeziehungFehler('chartdoc.LEGEND_ROWS ohne Quincunx-Zeile — Legende prüfen.')
+    chartdoc_modul.LEGEND_ROWS = neu
+    return treffer
+
+
 # ---------------------------------------------------------------------------
 # Seiten im Hausstil (HTML; Klassen aus chartdoc.struktur_css())
 # ---------------------------------------------------------------------------
@@ -3185,7 +3357,7 @@ Allgemein: Sicherheit, Werte, Besitz.
 
 
 def _t_person(pfad, name, geschlecht, geburtsdatum, lons, cusps, jd=None, lat=None,
-              lon=None, geburtszeit='nicht angegeben (Selbsttest)'):
+              lon=None, geburtszeit='nicht angegeben (Selbsttest)', leitachse=True):
     """Selbsttest: schreibt ein Personen-Datenblatt im Format der Pipeline
     (nur, was lies_datenblatt() liest)."""
     z = ['# Datenblatt — %s' % name, '', '## Kopf', '', '- Name: %s' % name,
@@ -3205,6 +3377,9 @@ def _t_person(pfad, name, geschlecht, geburtsdatum, lons, cusps, jd=None, lat=No
     z.append(']')
     z.append('CUSPS = %r' % [round(c, 6) for c in cusps])
     z.append('```')
+    if leitachse:
+        z += ['', '## Themenliste', '',
+              'THEMA 1 | titel=Selbsttest-Thema | fuehrt=Sonne | leitachse=ja']
     with open(pfad, 'w', encoding='utf-8') as f:
         f.write('\n'.join(z) + '\n')
     return pfad
@@ -3531,6 +3706,88 @@ def _selbsttest():
           open(qb, encoding='utf-8').read().strip() == _T_DECKBLATT.strip(),
           'quellen_aus: Themenliste und Deckblatt-Block wortgleich zurück')
 
+    # 2b Kopfformate echter Datenblaetter (2026-10-14, F2) — Platzhalter, erfundene Werte
+    _gd = vor_jahren(40).strftime('%d.%m.%Y')
+    _jd_t = 2451545.0 + 4321.375
+    _roh = open(pa, encoding='utf-8').read()
+    _fac = _roh[_roh.index('factors = ['):_roh.index('```', _roh.index('factors = ['))]
+
+    def _variante(datei, kopf, py=''):
+        p = os.path.join(tmp, datei)
+        with open(p, 'w', encoding='utf-8') as f:
+            f.write(kopf + '\n\n## Stände\n\n(im Selbsttest ohne Tabelle)\n\n'
+                    '## factors und cusps\n\n```python\n' + py + _fac + '```\n')
+        return p
+    _g = _variante('Ggg_chart_data.md',
+                   '# Chart-Datenblatt — Ggg\n\n## Kopf\n\n- **Name:** Ggg\n'
+                   '- **Geschlecht:** weiblich\n- **Geburtsdatum:** %s\n'
+                   '- **Geburtszeit:** mittags (Selbsttest), in UT eine Stunde früher\n'
+                   '- **Geburtsort:** Prüfort (erfunden)\n'
+                   '- **Koordinaten der Rechnung:** 50,0000° N, 10,0000° O (aus Fassung 1)\n'
+                   '- **Julianisches Datum (UT):** %.6f\n- **Fassung:** 2 — Selbsttest\n'
+                   '- (d) Achsen doppelt: mit den Koordinaten eines Vergleichsorts (51,0000° N, '
+                   '11,0000° O) ohne Differenz' % (_gd, _jd_t))
+    pg = lies_datenblatt(_g)
+    check(abs(pg['jd'] - _jd_t) < 1e-6 and (pg['lat'], pg['lon']) == (50.0, 10.0)
+          and pg['vorname'] == 'Ggg' and pg['fassung'].startswith('2'),
+          'Datenblatt im Gerüst-Format: jd und Koordinaten der Rechnung, nicht der Vergleichsort')
+    _s = _variante('Sss_chart_data.md',
+                   '# Datenblatt — Sss\n**Klientin:** Sss · **Geschlecht/Anrede:** weiblich, Du '
+                   '· **Fassung 1**  \n**Geburtsdatum:** %s · **Geburtszeit:** mittags (Selbsttest), '
+                   'Zone GMT +3 = vormittags UT · JD %.4f  \n**Geburtsort:** Prüfort (erfunden)'
+                   % (_gd, _jd_t),
+                   py='JD_GEBURT, LAT, LON, ALTER = %.6f, 10.5000, -60.2500, 40\n' % _jd_t)
+    ps = lies_datenblatt(_s)
+    check(abs(ps['jd'] - _jd_t) < 1e-6 and (ps['lat'], ps['lon']) == (10.5, -60.25)
+          and ps['geburtszeit'].startswith('mittags') and ps['geburtsort'] == 'Prüfort (erfunden)'
+          and ps['fassung'] == '1' and ps['vorname'] == 'Sss',
+          'Datenblatt im September-Format: Tupel JD_GEBURT, Kopfzeilen mit „·“, Fassung ohne Doppelpunkt')
+    for _k, _soll in (('Koordinaten der Rechnung: 50°00′00″ S, 10°30′00″ W', (-50.0, -10.5)),
+                      ('Koordinaten der Rechnung: 50.0000 N, 10.0000 O (50°00′ N / 10°00′ O)',
+                       (50.0, 10.0)),
+                      ('Koordinaten (Setzung des Laufs): 10°30′ N, 60°15′ W (Dezimal 10.5000 / '
+                       '\u221260.2500)', (10.5, -60.25)),
+                      ('Koordinaten der Rechnung: 50°00′00″ N, 10°00′00″ O (50.00000, 10.00000; '
+                       'Prüfort)', (50.0, 10.0)),
+                      ('Koordinaten der Rechnung: 50,0000° N, 10,0000° O (51.00000, 10.00000; '
+                       'Widerspruch)', (None, None)),
+                      ('Ortskoordinaten (Setzung dieses Laufs): Prüfort, 50°00′00″ N, 10°00′00″ O',
+                       (50.0, 10.0))):
+        check(_koord_aus_zeile(_k.split(':', 1)[1]) == _soll if _soll[0] is None else
+              all(abs(a - b) < 1e-9 for a, b in zip(_koord_aus_zeile(_k.split(':', 1)[1]), _soll)),
+              'Koordinatenzeile: %s' % _k[:60])
+    for _h1 in ('# Transit-Horoskop — Datenblatt — Ttt', '# Chart-Datenblatt Transit — Ttt'):
+        _t = _variante('Ttt_Transit_chart_data.md', _h1 + '\n\n## Kopf\n\n- Name: Ttt\n'
+                       '- JD (UT): %.6f' % _jd_t)
+        try:
+            lies_datenblatt(_t)
+            check(False, 'Transit-Datenblatt abgelehnt: %s' % _h1)
+        except BeziehungFehler as e:
+            check('Transit-Datenblatt' in str(e) and 'Schritt 1' in str(e),
+                  'Transit-Datenblatt abgelehnt: %s' % _h1)
+    _o = _variante('Ooo_chart_data.md',
+                   '# Chart-Datenblatt — Ooo\n\n| Feld | Wert |\n|---|---|\n'
+                   '| Geburtsdatum | %s |\n| Ortskoordinaten (Setzung dieses Laufs) | '
+                   '**50.0000 N / 10.0000 O** | erfunden |\n| Julianisches Datum (UT) | %.6f |'
+                   % (_gd, _jd_t))
+    po = lies_datenblatt(_o)
+    check(abs(po['jd'] - _jd_t) < 1e-6 and (po['lat'], po['lon']) == (50.0, 10.0),
+          'Datenblatt mit Tabellenkopf: Ortskoordinaten als Tabellenzeile')
+    check(lies_datenblatt(_variante('Vvv_chart_data.md',
+                                    '# Geburtshoroskop — Datenblatt — Vvv\n\n## Kopf\n\n'
+                                    '- Geburtsdatum: %s' % _gd))['vorname'] == 'Vvv',
+          'Vorname hinter dem letzten Gedankenstrich der H1')
+    with redirect_stdout(io.StringIO()):
+        _r0 = rechnung(pa, pp, 'Paar', datum=heute, einwilligung='beide (Selbsttest)')
+        _r1 = rechnung(_g, _s, 'Paar', datum=heute, einwilligung='beide (Selbsttest)')
+    check(sum(1 for x in _r0['anhalten'] if 'nicht lesbar' in x) == 2 and
+          not any('nicht lesbar' in x for x in _r1['anhalten']),
+          'ohne jd oder Koordinaten -> ANHALTEN, mit beiden nicht')
+    check(sum(1 for x in _r1['anhalten'] if 'ohne Leitachse' in x) == 2 and
+          not any('ohne Leitachse' in x for x in _r0['anhalten']) and
+          not any('nicht lesbar' in x for x in _r1['anhalten']),
+          'ohne Leitachse -> ANHALTEN, mit Leitachse nicht')
+
     # 5 Zeitprobe (pyswisseph)
     swe = _swe()
     if swe is None:
@@ -3560,6 +3817,28 @@ def _selbsttest():
               'Zeitprobe: „eng“ kippt, Spiegelzeile AC/DC zusammengezogen')
         check(any('Zeitprobe für Bbb nicht gerechnet' in w for w in z['warnungen']),
               'Zeitprobe ohne jd: Warnung')
+
+    # 6b Legende im Beziehungshoroskop (2026-10-14, F3)
+    try:
+        import chartdoc as _cd
+    except ImportError:
+        _cd = None
+    if _cd is None:
+        aus.append('Legende (chartdoc fehlt)')
+    else:
+        _cd.setze_sprache('de')
+        legende_beziehung(_cd)
+        _h = _cd.aspekt_legende()
+        check('zu ständigem Nachjustieren zwingen' in _h and 'nicht zusammenpassen' not in _h,
+              'Legende deutsch: Quincunx nach Regel 5')
+        _cd.setze_sprache('en')
+        legende_beziehung(_cd)
+        _h = _cd.aspekt_legende()
+        check('constant readjustment' in _h and 'do not fit together' not in _h,
+              'Legende englisch: Quincunx nach Regel 5')
+        _cd.setze_sprache('de')
+        check('nicht zusammenpassen' in _cd.aspekt_legende(),
+              'setze_sprache stellt danach die Hausstil-Legende wieder her')
 
     # 6 Doppelrad und Seiten
     try:

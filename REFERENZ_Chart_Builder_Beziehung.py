@@ -147,6 +147,10 @@ chartdoc.konfiguriere(pal=PAL, part_kicker=PART_KICKER, glyphen=dict(radix.FAKTO
                       # 2026-10-11 (F3): Paar „ihr“ — die Datenschutz-Zeile der
                       # Inhaltsseite heisst dann „zu eurem Horoskop“. Nicht aendern.
                       anrede='ihr' if R['art'] == 'paar' else 'du')
+# 2026-10-14 (Auswertung 14.10., F3): Quincunx-Zeile der Aspekt-Legende nach Regel 5
+# des Beziehungsmoduls („zwingt zu ständigem Nachjustieren“) — gleich nach
+# konfiguriere(), das die Legende der Sprache setzt. Nicht ändern.
+beziehung.legende_beziehung(chartdoc)
 esc = chartdoc.esc
 
 COVER_CSS = f"""
