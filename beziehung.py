@@ -248,7 +248,12 @@ def _b10_re(vorname):
 # bei einem Kind unter 18 dazu Alterswoerter
 ROMANTIK_RE = re.compile(
     r'verliebt|verlieb|liebhaber|flirt|erot|sexu|sinnlich|begehr|leidenschaft|'
-    r'romantisch|romanz|partnerwahl|liebesleben', re.I)
+    r'romantisch|romanz|partnerwahl|liebesleben|'
+    # 2026-10-16 (Auswertung 16.10., W8): Fundstellen der Freundschaften vom 15.10.,
+    # die nur der Zweitleser fand („Anziehung“, „was euch aneinander anzieht“) oder die
+    # der Filter stehen liess („Romantiker“, „die wahrhaft Liebenden“, „in Liebesdingen“)
+    r'romantik|(?-i:\bLiebende)|liebesding|anziehung|anziehend|(?:euch|einander)\s+anzieh',
+    re.I)
 B11_KIND_RE = re.compile(
     ROMANTIK_RE.pattern + r'|\bjährig|\bJahre alt\b|'
     r'\b(?:zwölf|dreizehn|vierzehn|fünfzehn|sechzehn|siebzehn|elf|zehn|neun|acht|'
@@ -561,6 +566,33 @@ def _offen_eigen_lesen(text, namen):
     return sorted(out)
 
 
+_FORTS_STOP_RE = re.compile(r'(?:[-*•|#>⚠]|\d{1,2}[.)]\s|[A-ZÄÖÜ][^:\n]{0,40}:\s)')
+_FORTS_SATZENDE_RE = re.compile(r'[.!?…)\]]["“”»*]*$')
+
+
+def _kopf_fortsetzung(text, ende, wert, hoechstens=4):
+    """Haengt an einen Kopfwert die Fortsetzungszeilen eines Umbruchs an (2026-10-16,
+    Auswertung 16.10., W10: die Kopfzeile „Zeitunsicherheit (wörtlich)“ im Datenblatt
+    der Beziehung brach bei einem umbrochenen Absatz mitten in der Klammer ab).
+    Fortsetzung ist eine Folgezeile, die eingerueckt ist, auf eine offene Klammer folgt
+    oder einen Satz zu Ende fuehrt, der am Zeilenende abbricht; Schluss bei einer
+    Leerzeile, einer Listen-, Tabellen-, Titel- oder ⚠-Zeile, einem neuen Feld
+    („Wort: …“) und nach hoechstens vier Zeilen. Endet der Treffer nicht am
+    Zeilenende (Feld vor einem „·“), bleibt der Wert, wie er ist."""
+    if text[ende:ende + 1] not in ('\n', '\r'):
+        return wert
+    for zeile in text[ende:].split('\n')[1:1 + hoechstens]:
+        s = zeile.strip()
+        if not s or _FORTS_STOP_RE.match(s):
+            break
+        if (zeile[:1] in (' ', '\t') or wert.count('(') > wert.count(')')
+                or not _FORTS_SATZENDE_RE.search(wert)):
+            wert = wert + ' ' + s.replace('**', '')
+        else:
+            break
+    return wert
+
+
 def lies_datenblatt(pfad):
     """Liest ein Datenblatt (`<klient>_chart_data.md`) einer Person.
 
@@ -658,7 +690,7 @@ def lies_datenblatt(pfad):
     g = re.search(r'\b(weiblich|männlich|divers)\b', vorspann, re.I)
     out['geschlecht'] = g.group(1).lower() if g else None
 
-    def _zeile(muster):
+    def _zeile(muster, weiter=False):
         # Listenzeilen des Kopfes: „- Geburtszeit: …“, „- **Geburtszeit:** …“; seit
         # 2026-10-14 auch ohne Spiegelstrich und als Teil einer Zeile mit „·“
         # („**Geburtsdatum:** … · **Geburtszeit:** … · JD …“, Format von Mitte September).
@@ -678,7 +710,11 @@ def lies_datenblatt(pfad):
             z = re.search(r'·[ \t]*' + muster + r'\b[^:\n·*|]*:[ \t]*([^\n·]+)', vorspann)
         if not z:                           # schlichte Zeile „Geburtszeit: …“ (Mitte September)
             z = re.search(r'^[ \t]*' + muster + r'\b[^:\n·*|]*:[ \t]*([^\n]+)$', kopf, re.M)
-        return z.group(1).replace('**', '').strip() if z else 'nicht angegeben'
+        if not z:
+            return 'nicht angegeben'
+        wert = z.group(1).replace('**', '').strip()
+        # 2026-10-16 (Auswertung 16.10., W10): ein umbrochener Wert geht weiter
+        return _kopf_fortsetzung(z.string, z.end(1), wert) if weiter else wert
 
     def _datum(s):
         # „TT.MM.JJJJ“ oder (2026-10-14b) „T. Monat JJJJ“ -> datetime.date, sonst None
@@ -716,7 +752,7 @@ def lies_datenblatt(pfad):
         if fz:
             out['fassung'] = fz.group(1)
     out['fassung'] = re.sub(r'^Fassung[ \t]+(?=\d)', '', out['fassung'])  # „| Fassung | Fassung 1 |“
-    out['zeitunsicherheit'] = _zeile(r'Zeitunsicherheit')
+    out['zeitunsicherheit'] = _zeile(r'Zeitunsicherheit', weiter=True)
     out['kinder_baustein'] = 'KINDER-BAUSTEIN' in vorspann
     # Leitachse aus der Themenliste
     th = _abschnitt(text, r'Themenliste')
@@ -1348,6 +1384,25 @@ def _ut_aus_jd(jd):
     return '%02d:%02d' % (minuten // 60, minuten % 60)
 
 
+def _beziehung_vorgabe(r):
+    """Wortlaut der Zeile „Beziehung“, wenn der Auftrag keine traegt (Beziehungsmodul,
+    „Der Auftrag“): Paar „Paar“, Freundschaft „Freunde“, Eltern-Kind „Mutter und
+    Tochter“, „Vater und Sohn“ und so fort nach dem Geschlecht in den Koepfen beider
+    Datenblaetter; ohne Geschlecht „Elternteil“ bzw. „Kind“. (2026-10-16, Auswertung
+    16.10., F1: vorher stand „nicht angegeben“ im Kopf, und der Lauf musste es merken.)"""
+    if r['art'] == 'paar':
+        return 'Paar'
+    if r['art'] == 'freundschaft':
+        return 'Freunde'
+    k = r.get('kind')
+    if k not in ('A', 'B'):
+        return 'nicht angegeben'
+    e = 'B' if k == 'A' else 'A'
+    wer_e = {'weiblich': 'Mutter', 'männlich': 'Vater'}.get(r[e].get('geschlecht'), 'Elternteil')
+    wer_k = {'weiblich': 'Tochter', 'männlich': 'Sohn'}.get(r[k].get('geschlecht'), 'Kind')
+    return '%s und %s' % (wer_e, wer_k)
+
+
 def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
              einwilligung=None, sprache='deutsch', auftrag_zeit=None,
              grundlage=None, orbs=None):
@@ -1361,7 +1416,8 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
     eltern          bei Eltern-Kind: 'A' (Vorgabe: der Elternteil bestellt) oder
                     'B' (ein erwachsenes Kind bestellt; der Elternteil steht dann
                     in der dritten Person).
-    beziehung, einwilligung, sprache  Wortlaute aus dem Auftrag.
+    beziehung, einwilligung, sprache  Wortlaute aus dem Auftrag; ohne beziehung
+                    gilt die Vorgabe der Art (_beziehung_vorgabe(), seit 2026-10-16).
     auftrag_zeit    {'A': 'HH:MM', 'B': 'HH:MM'}, nur wenn der Auftrag Geburtszeiten
                     nennt — Fassungsabgleich gegen den Kopf der Datenblaetter.
     grundlage       {'A': '…', 'B': '…'} optional: Vermerk, dass ein Datenblatt nur als
@@ -1490,6 +1546,10 @@ def rechnung(a_pfad, b_pfad, art, datum=None, eltern='A', beziehung=None,
                                     offen=r['zeit']['offen']['B'])
     r['verteilung'] = verteilung_beider(pa, pb)
     r['rang'] = rangzeilen(r)
+    # 2026-10-16 (Auswertung 16.10., F1): ohne Zeile „Beziehung“ gilt die Vorgabe der
+    # Art (Beziehungsmodul, „Der Auftrag“) — vorher stand „nicht angegeben“ im Kopf.
+    if not (beziehung or '').strip():
+        r['auftrag']['beziehung'] = _beziehung_vorgabe(r)
     return r
 
 
@@ -3128,6 +3188,21 @@ def _kicker_art(kicker):
     return k
 
 
+# B20 (2026-10-16, Auswertung 16.10., W9): Zaehlwoerter hinter einer Faktorenreihe
+# („Sonne, Mond, Aszendent und MC doppelt, die kleinen Punkte halb“) las die
+# Subjekt-Probe als Verb, die Redewendung „sich die Waage halten“ das Zeichen als
+# Subjekt — beides nur fuer die Probe entschaerft; gemeldet wird der Satz woertlich.
+_B20_ZAEHLWORT_RE = re.compile(r'\b(doppelt|halb)\b(?=\s*(?:[,;:)—–]|gezählt\b|gewichtet\b|$))')
+_B20_WAAGE_RE = re.compile(r'(\b(?:sich|einander)\b(?:\s+\w+){0,2}?\s+)die Waage\b')
+
+
+def _b20_entschaerft(s):
+    """Satz fuer die B20-Subjekt-Probe: Zaehlwort gross (kein Verb), Waage-Redewendung
+    ohne Zeichennamen. Nur fuer die Probe, nie fuer den gemeldeten Text."""
+    s = _B20_ZAEHLWORT_RE.sub(lambda m: m.group(1).capitalize(), s)
+    return _B20_WAAGE_RE.sub(r'\1die Balance', s)
+
+
 def probe(analyse_pfad, datenblatt_pfad):
     """Die Beziehung-Probe: haelt die Analyse gegen das Datenblatt der
     Beziehung und die Regeln des Moduls. -> Prueftext; letzte Zeile
@@ -3579,7 +3654,8 @@ def probe(analyse_pfad, datenblatt_pfad):
                                                 r'\bist (?:der|die|das) ', s):
                             continue
                         s = re.sub(r'\bdessen, was\b', 'davon, was', s)
-                        kand, tok = kand_f(gen_re.sub(lambda m: m.group(1) + 'ihr', s))
+                        kand, tok = kand_f(_b20_entschaerft(
+                            gen_re.sub(lambda m: m.group(1) + 'ihr', s)))
                         if not streng:
                             kand = [k for k in kand if handelt_f(tok, k[1], k[2])]
                         if kand:
@@ -3695,7 +3771,9 @@ B20 Subjekt-Probe (nur deutsch, PRUEFEN): „Was da arbeitet“ und „Wohin das
   gemeldet, in Text ohne Bewegung (Getriebe, Anlagen, Lernfelder …) nur mit einem
   handelnden Verb (inhaltsprobe._p17_handelt). Der Genitiv eines Vornamens („<B>s
   Saturn“) gilt wie ein Possessiv; ein Satz „Der MC ist der …“ ohne Bewegung ist
-  frei. Satzmuster: inhaltsprobe._p17_kandidaten.
+  frei. Satzmuster: inhaltsprobe._p17_kandidaten. Zaehlwoerter hinter einer
+  Faktorenreihe („… und MC doppelt, die kleinen Punkte halb“) und „sich die Waage
+  halten“ gelten nicht als Verb bzw. Subjekt (_b20_entschaerft, seit 2026-10-16).
 B21 Wiederholung (PRUEFEN; Rechenschaft ausgenommen): derselbe Satz (ab 12 Zeichen,
   ausser Wegweisern, inhaltsprobe.WEGWEISER_RE) mehr als zweimal; derselbe Satzanfang
   in derselben Bewegung in mehr als zwei Kapiteln. Satzanfang = das Etikett vor einem
@@ -4628,6 +4706,68 @@ def _selbsttest():
         _rr = re.compile(r'einzig|\b(?:zwei|drei|vier|fünf|sechs)mal\b')
         _nr = re.compile(r'\bein(?:e|en|em|er|es)? einzig\w*|\bein- oder zweimal\b')
         check(bool(_rr.search(_nr.sub('', _satz))) == _soll, 'B15-Muster: %s' % _satz)
+    # 2026-10-16 (Auswertung 16.10., F1): ohne Zeile „Beziehung“ gilt die Art
+    def _vg(art, kind=None, ga='weiblich', gb='weiblich'):
+        return _beziehung_vorgabe({'art': art, 'kind': kind, 'A': {'geschlecht': ga},
+                                   'B': {'geschlecht': gb}})
+    check(_vg('paar') == 'Paar' and _vg('freundschaft') == 'Freunde'
+          and _vg('eltern-kind', 'B') == 'Mutter und Tochter'
+          and _vg('eltern-kind', 'A', 'männlich', 'männlich') == 'Vater und Sohn'
+          and _vg('eltern-kind', 'B', 'männlich', None) == 'Vater und Kind'
+          and '- Beziehung aus dem Auftrag: Paar' in open(zp, encoding='utf-8').read(),
+          'Ohne Zeile „Beziehung“: Vorgabe der Art im Kopf (Paar, Freunde, Mutter und Tochter …)')
+    # 2026-10-16 (Auswertung 16.10., W10): umbrochene Kopfzeile „Zeitunsicherheit“
+    _kopf_z = ('# Chart-Datenblatt — Zzz\n\n## Kopf\n\n- **Name:** Zzz\n'
+               '- **Geschlecht:** weiblich\n- **Geburtsdatum:** %s\n'
+               '- **Julianisches Datum (UT):** %.6f\n%s\n- **Fassung:** 1 — Selbsttest\n')
+    for _zz, _soll in (
+            ('**Zeitunsicherheit:** ±0,55 Minuten (Mondgeschwindigkeit\n0,51′/min, '
+             'Selbsttest)\nEin Absatz danach.', '±0,55 Minuten (Mondgeschwindigkeit 0,51′/min, '
+             'Selbsttest)'),
+            ('- **Zeitunsicherheit:** eine Minute, weil die Quelle\n  auf ganze Minuten rundet',
+             'eine Minute, weil die Quelle auf ganze Minuten rundet'),
+            ('- **Zeitunsicherheit:** eine Minute (Selbsttest)\n  - Unterpunkt ohne Bezug',
+             'eine Minute (Selbsttest)'),
+            ('Zeitunsicherheit: eine Minute (Quelle\nGeburtsort: Prüfort (erfunden)',
+             'eine Minute (Quelle'),
+            ('- **Zeitunsicherheit:** ±0,4 Minuten. Keine Spitze\nkippt darin.\nNoch ein Satz.',
+             '±0,4 Minuten. Keine Spitze kippt darin.'),
+            ('**Zeitunsicherheit:** ±0,85 Minuten\n⚠ Hauswechsel: Selbsttest',
+             '±0,85 Minuten')):
+        _pz = lies_datenblatt(_variante('Zzz_chart_data.md', _kopf_z % (_gd, _jd_t, _zz)))
+        check(_pz['zeitunsicherheit'] == _soll,
+              'Zeitunsicherheit über den Umbruch: %r (gelesen %r)' % (_soll, _pz['zeitunsicherheit']))
+    # 2026-10-16 (Auswertung 16.10., W8): Fundstellen der Freundschaften vom 15.10. (B11)
+    for _satz, _soll in (('Neben der Reibung gibt es eine Anziehung, die bleibt.', True),
+                         ('Das ist es, was euch aneinander anzieht.', True),
+                         ('Ihr seid beide Romantiker.', True),
+                         ('Davon wissen die wahrhaft Liebenden.', True),
+                         ('In Liebesdingen seid ihr vorsichtig.', True),
+                         ('Eine liebende Mutter fragt nach.', False),
+                         ('Morgens hilfst du ihr, sich anzuziehen.', False)):
+        check(bool(ROMANTIK_RE.search(_satz)) == _soll, 'ROMANTIK_RE: %s' % _satz)
+    # 2026-10-16 (Auswertung 16.10., W9): Zaehlwoerter und „sich die Waage halten“ (B20)
+    try:
+        import inhaltsprobe as _ip
+    except Exception:                                   # pragma: no cover
+        _ip = None
+    if _ip is None:
+        aus.append('B20-Entschärfung (inhaltsprobe nicht ladbar)')
+    else:
+        def _hand(s):
+            k, t = _ip._p17_kandidaten(_b20_entschaerft(s))
+            return [x[0] for x in k if _ip._p17_handelt(t, x[1], x[2])]
+        check(_hand('Für das Bild von ihr — Sonne, Mond, Aszendent und MC doppelt, die '
+                    'kleinen Punkte halb — steht die Luft vorn.') == []
+              and _hand('Gewichtet — Sonne, Mond, Aszendent und MC doppelt, Mondknoten, '
+                        'Chiron, Lilith und Pholus halb — liegt die Luft vorn.') == []
+              and _hand('Es zeigt sich, dass Geben und Nehmen sich ungefähr die Waage '
+                        'halten.') == []
+              and _hand('Das Gespräch — dein Mars will dann sofort los — kippt schnell.')
+              == ['Mars']
+              and _hand('Die Waage hält in dir die Fäden zusammen.') == ['Waage'],
+              'B20: Zählwörter einer Faktorenreihe und „sich die Waage halten“ kein Subjekt, '
+              'ein handelnder Faktor im Einschub bleibt')
     print('beziehung.py Selbsttest: %d Proben bestanden%s' % (
         len(ok), (' · übersprungen: ' + '; '.join(aus)) if aus else ''))
     return True
